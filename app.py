@@ -193,11 +193,38 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 # -----------------------------
 # Configurazione accesso (login semplice)
 # -----------------------------
-USERS = {
-    # Puoi personalizzarli
+# NOTE:
+# - In Streamlit Cloud, NON mettere password nel codice: usa Settings → Secrets.
+#   Esempio (secrets):
+#   [auth]
+#   username = "theorganism"
+#   password = "PASSWORD_FORTE"
+#
+# Opzionale: più utenti
+#   [users]
+#   admin = "..."
+#   giuseppe = "..."
+
+LOCAL_USERS = {
+    # fallback locale (solo per uso in studio / test)
     "admin": "TheOrganism2025",
     "giuseppe": "TheOrganism!",
 }
+
+def load_users() -> dict:
+    """Ritorna dizionario {username: password}. Usa st.secrets se disponibili, altrimenti LOCAL_USERS."""
+    try:
+        # multi-user
+        if "users" in st.secrets:
+            u = dict(st.secrets["users"])
+            if u:
+                return u
+        # single-user
+        if "auth" in st.secrets and "username" in st.secrets["auth"] and "password" in st.secrets["auth"]:
+            return {st.secrets["auth"]["username"]: st.secrets["auth"]["password"]}
+    except Exception:
+        pass
+    return LOCAL_USERS
 
 def login() -> bool:
     """
@@ -223,7 +250,8 @@ def login() -> bool:
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
     if st.button("Entra"):
-        if user in USERS and USERS[user] == pwd:
+        users = load_users()
+        if user in users and users[user] == pwd:
             st.session_state["logged_in"] = True
             st.session_state["logged_user"] = user
             st.rerun()
