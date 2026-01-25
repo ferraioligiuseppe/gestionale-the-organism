@@ -193,38 +193,11 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 # -----------------------------
 # Configurazione accesso (login semplice)
 # -----------------------------
-# NOTE:
-# - In Streamlit Cloud, NON mettere password nel codice: usa Settings → Secrets.
-#   Esempio (secrets):
-#   [auth]
-#   username = "theorganism"
-#   password = "PASSWORD_FORTE"
-#
-# Opzionale: più utenti
-#   [users]
-#   admin = "..."
-#   giuseppe = "..."
-
-LOCAL_USERS = {
-    # fallback locale (solo per uso in studio / test)
+USERS = {
+    # Puoi personalizzarli
     "admin": "TheOrganism2025",
     "giuseppe": "TheOrganism!",
 }
-
-def load_users() -> dict:
-    """Ritorna dizionario {username: password}. Usa st.secrets se disponibili, altrimenti LOCAL_USERS."""
-    try:
-        # multi-user
-        if "users" in st.secrets:
-            u = dict(st.secrets["users"])
-            if u:
-                return u
-        # single-user
-        if "auth" in st.secrets and "username" in st.secrets["auth"] and "password" in st.secrets["auth"]:
-            return {st.secrets["auth"]["username"]: st.secrets["auth"]["password"]}
-    except Exception:
-        pass
-    return LOCAL_USERS
 
 def login() -> bool:
     """
@@ -239,6 +212,7 @@ def login() -> bool:
     if st.session_state["logged_in"]:
         # Già loggato
         st.sidebar.markdown(f"👤 Utente: **{st.session_state['logged_user']}**")
+        _sidebar_db_indicator()
         if st.sidebar.button("Logout"):
             st.session_state["logged_in"] = False
             st.session_state["logged_user"] = None
@@ -250,8 +224,7 @@ def login() -> bool:
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
     if st.button("Entra"):
-        users = load_users()
-        if user in users and users[user] == pwd:
+        if user in USERS and USERS[user] == pwd:
             st.session_state["logged_in"] = True
             st.session_state["logged_user"] = user
             st.rerun()
@@ -265,6 +238,77 @@ def login() -> bool:
 # -----------------------------
 
 DB_PATH = "the_organism_gestionale_v2.db"
+
+def _db_backend_label() -> tuple[str, str]:
+    """
+    Ritorna (label, details) del backend DB realmente usato.
+    - Prova ad aprire una connessione con get_connection()
+    - Se è sqlite3.Connection -> SQLite
+    - Altrimenti prova a mostrare "PostgreSQL" (es. Neon) e, se disponibile, host/db dai secrets
+    """
+    try:
+        conn = get_connection()
+        try:
+            is_sqlite = isinstance(conn, sqlite3.Connection)
+        except Exception:
+            is_sqlite = False
+
+        if is_sqlite:
+            # SQLite locale
+            details = f"DB file: {DB_PATH}"
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return "SQLite (locale)", details
+
+        # Fallback: se non è sqlite, assumiamo Postgres/altro
+        details = ""
+        try:
+            # prova a leggere la URL (secrets) per mostrare host/db in modo amichevole
+            db_url = None
+            try:
+                db_url = st.secrets.get("db", {}).get("DATABASE_URL")
+            except Exception:
+                db_url = None
+            if db_url:
+                # parse URL
+                try:
+                    import urllib.parse
+                    u = urllib.parse.urlparse(db_url)
+                    host = u.hostname or ""
+                    dbname = (u.path or "").lstrip("/")
+                    if host or dbname:
+                        details = f"{host} / {dbname}".strip(" /")
+                except Exception:
+                    details = ""
+        except Exception:
+            details = ""
+
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return "PostgreSQL (Neon/Cloud)", (details or "DB remoto")
+
+    except Exception as e:
+        return "DB (errore)", str(e)
+
+
+def _sidebar_db_indicator():
+    # cache semplice per non ricalcolare ad ogni widget
+    if "_db_backend_cached" not in st.session_state:
+        st.session_state["_db_backend_cached"] = _db_backend_label()
+
+    label, details = st.session_state["_db_backend_cached"]
+    st.sidebar.markdown("### 🗄️ Database")
+    if label.startswith("SQLite"):
+        st.sidebar.info(f"🟡 {label}\n\n{details}")
+    elif label.startswith("PostgreSQL"):
+        st.sidebar.success(f"🟢 {label}\n\n{details}")
+    else:
+        st.sidebar.warning(f"🔴 {label}\n\n{details}")
+
 
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
