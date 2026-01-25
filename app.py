@@ -193,24 +193,63 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 # -----------------------------
 # Configurazione accesso (login semplice)
 # -----------------------------
-USERS = {
-    # Puoi personalizzarli
-    "admin": "TheOrganism2025",
-    "giuseppe": "TheOrganism!",
-}
+
+# -----------------------------
+# AUTH (Streamlit Cloud + locale)
+# -----------------------------
+def _running_on_streamlit_cloud() -> bool:
+    # In Streamlit Cloud il codice gira sotto /mount/src/...
+    try:
+        return "/mount/src/" in os.getcwd()
+    except Exception:
+        return False
+
+def _load_users_from_secrets_strict() -> dict:
+    """
+    In Cloud: usa SOLO Secrets (nessun fallback hardcoded).
+    In locale: se Secrets assenti, usa fallback locale.
+    Supporta:
+      - [users] multi-utente
+      - [auth] username/password singolo utente
+    """
+    # Multi-utente
+    try:
+        users = dict(st.secrets["users"])
+        if users:
+            return users
+    except Exception:
+        pass
+
+    # Singolo utente
+    try:
+        u = st.secrets["auth"]["username"]
+        p = st.secrets["auth"]["password"]
+        if u and p:
+            return {u: p}
+    except Exception:
+        pass
+
+    # In cloud: NON fare fallback
+    if _running_on_streamlit_cloud():
+        st.error("🔒 Login non configurato: aggiungi [auth] o [users] in Streamlit Cloud → Settings → Secrets.")
+        st.stop()
+
+    # Fallback SOLO locale (studio)
+    return {"admin": "admin123"}
 
 def login() -> bool:
     """
     Login semplice con username/password.
-    Usa st.session_state["logged_in"] per ricordare la sessione.
+    In Streamlit Cloud legge SOLO dai Secrets.
     """
+    users = _load_users_from_secrets_strict()
+
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
     if "logged_user" not in st.session_state:
         st.session_state["logged_user"] = None
 
     if st.session_state["logged_in"]:
-        # Già loggato
         st.sidebar.markdown(f"👤 Utente: **{st.session_state['logged_user']}**")
         _sidebar_db_indicator()
         if st.sidebar.button("Logout"):
@@ -224,7 +263,7 @@ def login() -> bool:
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
     if st.button("Entra"):
-        if user in USERS and USERS[user] == pwd:
+        if user in users and users[user] == pwd:
             st.session_state["logged_in"] = True
             st.session_state["logged_user"] = user
             st.rerun()
@@ -232,82 +271,6 @@ def login() -> bool:
             st.error("Credenziali non valide. Riprova.")
 
     return False
-
-# -----------------------------
-# Database
-# -----------------------------
-
-DB_PATH = "the_organism_gestionale_v2.db"
-
-def _db_backend_label() -> tuple[str, str]:
-    """
-    Ritorna (label, details) del backend DB realmente usato.
-    - Prova ad aprire una connessione con get_connection()
-    - Se è sqlite3.Connection -> SQLite
-    - Altrimenti prova a mostrare "PostgreSQL" (es. Neon) e, se disponibile, host/db dai secrets
-    """
-    try:
-        conn = get_connection()
-        try:
-            is_sqlite = isinstance(conn, sqlite3.Connection)
-        except Exception:
-            is_sqlite = False
-
-        if is_sqlite:
-            # SQLite locale
-            details = f"DB file: {DB_PATH}"
-            try:
-                conn.close()
-            except Exception:
-                pass
-            return "SQLite (locale)", details
-
-        # Fallback: se non è sqlite, assumiamo Postgres/altro
-        details = ""
-        try:
-            # prova a leggere la URL (secrets) per mostrare host/db in modo amichevole
-            db_url = None
-            try:
-                db_url = st.secrets.get("db", {}).get("DATABASE_URL")
-            except Exception:
-                db_url = None
-            if db_url:
-                # parse URL
-                try:
-                    import urllib.parse
-                    u = urllib.parse.urlparse(db_url)
-                    host = u.hostname or ""
-                    dbname = (u.path or "").lstrip("/")
-                    if host or dbname:
-                        details = f"{host} / {dbname}".strip(" /")
-                except Exception:
-                    details = ""
-        except Exception:
-            details = ""
-
-        try:
-            conn.close()
-        except Exception:
-            pass
-        return "PostgreSQL (Neon/Cloud)", (details or "DB remoto")
-
-    except Exception as e:
-        return "DB (errore)", str(e)
-
-
-def _sidebar_db_indicator():
-    # cache semplice per non ricalcolare ad ogni widget
-    if "_db_backend_cached" not in st.session_state:
-        st.session_state["_db_backend_cached"] = _db_backend_label()
-
-    label, details = st.session_state["_db_backend_cached"]
-    st.sidebar.markdown("### 🗄️ Database")
-    if label.startswith("SQLite"):
-        st.sidebar.info(f"🟡 {label}\n\n{details}")
-    elif label.startswith("PostgreSQL"):
-        st.sidebar.success(f"🟢 {label}\n\n{details}")
-    else:
-        st.sidebar.warning(f"🔴 {label}\n\n{details}")
 
 
 def get_connection() -> sqlite3.Connection:
