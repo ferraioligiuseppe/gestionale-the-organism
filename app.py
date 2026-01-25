@@ -190,14 +190,7 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
         pass
 
 
-# -----------------------------
-# Configurazione accesso (login semplice)
-# -----------------------------
-USERS = {
-    # Puoi personalizzarli
-    "admin": "TheOrganism2025",
-    "giuseppe": "TheOrganism!",
-}
+
 
 def login() -> bool:
     """
