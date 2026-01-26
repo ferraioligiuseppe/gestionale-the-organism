@@ -202,7 +202,7 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 def _load_users():
     # 1) Multi-utente: [users]
     try:
-        users = dict(st.row_get(secrets, "users"))
+        users = dict(row_get(st.secrets, "users"))
         if users:
             return users
     except Exception:
@@ -210,8 +210,8 @@ def _load_users():
 
     # 2) Singolo utente: [auth]
     try:
-        u = st.row_get(secrets, "auth")["username"]
-        p = st.row_get(secrets, "auth")["password"]
+        u = row_get(st.secrets, "auth")["username"]
+        p = row_get(st.secrets, "auth")["password"]
         if u and p:
             return {str(u): str(p)}
     except Exception:
@@ -263,22 +263,26 @@ def _running_on_cloud() -> bool:
 def _get_database_url() -> str:
     # 1) Streamlit Secrets: [db].DATABASE_URL
     try:
-        v = st.row_get(secrets, "db")["DATABASE_URL"]
+        dbsec = st.secrets.get("db", {})
+        if isinstance(dbsec, dict):
+            v = dbsec.get("DATABASE_URL") or dbsec.get("database_url")
+        else:
+            v = None
         if v:
             return str(v)
     except Exception:
         pass
+
     # 2) Streamlit Secrets root: DATABASE_URL (se presente)
     try:
-        v = st.row_get(secrets, "DATABASE_URL")
+        v = st.secrets.get("DATABASE_URL") or st.secrets.get("database_url")
         if v:
             return str(v)
     except Exception:
         pass
-    # 3) env var
-    return os.getenv("DATABASE_URL", "") or ""
 
-_DB_URL = _get_database_url()
+    # 3) env var
+    return os.getenv("DATABASE_URL", "") or ""_DB_URL = _get_database_url()
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
 # In cloud: NON permettere SQLite (evita ricreazione .db e ambiguità)
