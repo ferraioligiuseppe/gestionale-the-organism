@@ -202,16 +202,16 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 def _load_users():
     # 1) Multi-utente: [users]
     try:
-        users = dict(row_get(st.secrets, "users"))
+        users = dict(st.secrets["users"])
         if users:
-            return users
+            return {str(k): str(v) for k, v in users.items()}
     except Exception:
         pass
 
     # 2) Singolo utente: [auth]
     try:
-        u = row_get(st.secrets, "auth")["username"]
-        p = row_get(st.secrets, "auth")["password"]
+        u = st.secrets["auth"]["username"]
+        p = st.secrets["auth"]["password"]
         if u and p:
             return {str(u): str(p)}
     except Exception:
@@ -219,10 +219,10 @@ def _load_users():
 
     # In cloud: NO fallback
     if _running_on_cloud():
-        st.error("🔒 Login non configurato: aggiungi [auth] o [users] in Streamlit Cloud → Settings → Secrets.")
+        st.error("🔒 Secrets mancanti: configura [auth] o [users] in Streamlit Cloud → Settings → Secrets.")
         st.stop()
 
-    # Fallback SOLO locale (studio)
+    # Fallback SOLO locale
     return {"admin": "admin123"}
 
 def login() -> bool:
@@ -263,11 +263,7 @@ def _running_on_cloud() -> bool:
 def _get_database_url() -> str:
     # 1) Streamlit Secrets: [db].DATABASE_URL
     try:
-        dbsec = st.secrets.get("db", {})
-        if isinstance(dbsec, dict):
-            v = dbsec.get("DATABASE_URL") or dbsec.get("database_url")
-        else:
-            v = None
+        v = st.secrets["db"]["DATABASE_URL"]
         if v:
             return str(v)
     except Exception:
@@ -275,7 +271,7 @@ def _get_database_url() -> str:
 
     # 2) Streamlit Secrets root: DATABASE_URL (se presente)
     try:
-        v = st.secrets.get("DATABASE_URL") or st.secrets.get("database_url")
+        v = st.secrets["DATABASE_URL"]
         if v:
             return str(v)
     except Exception:
@@ -283,7 +279,6 @@ def _get_database_url() -> str:
 
     # 3) env var
     return os.getenv("DATABASE_URL", "") or ""
-
 _DB_URL = _get_database_url()
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
