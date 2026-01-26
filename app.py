@@ -1893,7 +1893,15 @@ def ui_pazienti():
         options.append(label)
 
     selected = st.selectbox("Seleziona un paziente per modificare / archiviare", options)
-    sel_id = int(selected.split(" - ", 1)[0])
+        # Robust selezione ID (gestisce label non standard / None)
+    sel_id = None
+    try:
+        sel_id = int(str(selected).split(" - ", 1)[0].strip())
+    except Exception:
+        m = re.match(r"\s*(\d+)", str(selected))
+        if m:
+            sel_id = int(m.group(1))
+
     rec = next(r for r in rows if row_get(r, "ID") == sel_id)
 
     st.write(f"Stato attuale: **{rec['Stato_Paziente']}**")
