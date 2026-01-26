@@ -1,5 +1,6 @@
 import streamlit as st
 import sqlite3
+import psycopg2
 from datetime import date, datetime
 from typing import Optional, Dict
 import os
@@ -12,145 +13,14 @@ import textwrap  # per andare a capo nel referto
 
 
 # -----------------------------
-# Database backend: SQLite (locale) oppure PostgreSQL (Cloud/Neon)
-# -----------------------------
-
-def get_database_url() -> str | None:
-    """Ritorna DATABASE_URL da Streamlit Secrets o env var."""
-    # Secrets: [db].DATABASE_URL
-    try:
-        v = st.secrets["db"]["DATABASE_URL"]
-        if v:
-            return str(v)
-    except Exception:
-        pass
-    # Secrets: DATABASE_URL (root)
-    try:
-        v = st.secrets["DATABASE_URL"]
-        if v:
-            return str(v)
-    except Exception:
-        pass
-    # Env var
-    return os.getenv("DATABASE_URL")
-
-DATABASE_URL = get_database_url()
-DB_BACKEND = "postgres" if DATABASE_URL else "sqlite"
-
-# Path SQLite (solo se usi SQLite)
-DB_PATH = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_v2.db")
-
-def _sidebar_db_indicator():
-    """Mostra in sidebar quale DB è realmente in uso (SQLite vs Postgres/Neon)."""
-    try:
-        url = get_database_url()
-    except Exception:
-        url = None
-
-    # Default: SQLite
-    if not url:
-        st.sidebar.info(f"🟡 DB: SQLite ({DB_PATH})")
-        return
-
-    # Se c'è DATABASE_URL proviamo davvero la connessione (così non ci sono dubbi)
-    try:
-        import psycopg2  # type: ignore
-
-        conn = psycopg2.connect(url)
-        cur = conn.cursor()
-        cur.execute("SELECT current_database(), current_user")
-        dbname, dbuser = cur.fetchone()
-        conn.close()
-        st.sidebar.success(f"🟢 DB: PostgreSQL ({dbname})")
-        st.sidebar.caption(f"Utente DB: {dbuser}")
-    except Exception as e:
-        # Se fallisce, segnaliamo chiaramente e non facciamo finta di essere su Postgres
-        st.sidebar.error("🔴 DB: errore connessione Postgres → fallback SQLite")
-        st.sidebar.caption(str(e)[:180])
-        st.sidebar.info(f"🟡 DB: SQLite ({DB_PATH})")
-
-# Postgres driver (solo se necessario)
-if DB_BACKEND == "postgres":
-    try:
-        import psycopg2  # type: ignore
-        from psycopg2.extras import RealDictCursor  # type: ignore
-    except Exception as e:
-        st.error("❌ Driver PostgreSQL mancante. Aggiungi 'psycopg2-binary' in requirements.txt.")
-        st.stop()
-
-def _qmark_to_pg(sql_text: str) -> str:
-    """Converte i placeholder '?' (SQLite) in '%s' (psycopg2)."""
-    # Assunzione: nel gestionale i '?' sono solo placeholder, non parte di stringhe.
-    return sql_text.replace("?", "%s")
-
-class PGCursorShim:
-    def __init__(self, cur):
-        self._cur = cur
-
-    def execute(self, query, params=None):
-        q = _qmark_to_pg(query) if isinstance(query, str) else query
-        if params is None:
-            return self._cur.execute(q)
-        return self._cur.execute(q, params)
-
-    def executemany(self, query, seq_of_params):
-        q = _qmark_to_pg(query) if isinstance(query, str) else query
-        return self._cur.executemany(q, seq_of_params)
-
-    def fetchone(self):
-        return self._cur.fetchone()
-
-    def fetchall(self):
-        return self._cur.fetchall()
-
-    @property
-    def description(self):
-        return self._cur.description
-
-    def close(self):
-        return self._cur.close()
-
-class PGConnShim:
-    """Shim minimale per rendere psycopg2 simile a sqlite3 nel resto del codice."""
-    def __init__(self, conn):
-        self._conn = conn
-
-    def cursor(self):
-        return PGCursorShim(self._conn.cursor(cursor_factory=RealDictCursor))
-
-    def commit(self):
-        return self._conn.commit()
-
-    def close(self):
-        return self._conn.close()
-
-
-
-
-# -----------------------------
 # DB migrations helpers
 # -----------------------------
-def _table_has_column(cur, table: str, column: str) -> bool:
-    if DB_BACKEND == "postgres":
-        cur.execute(
-            """
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = %s AND column_name = %s
-            """,
-            (table.lower(), column.lower()),
-        )
-        return cur.fetchone() is not None
+def _table_has_column(cur: sqlite3.Cursor, table: str, column: str) -> bool:
     cur.execute(f"PRAGMA table_info({table})")
-    rows = cur.fetchall()
-    # sqlite3.Row o tuple
-    try:
-        cols = [r[1] for r in rows]
-    except Exception:
-        cols = [r.get("name") for r in rows]
+    cols = [r[1] for r in cur.fetchall()]
     return column in cols
 
-def ensure_column(cur, table: str, column: str, col_type_sql: str, default_sql: str | None = None):
+def ensure_column(cur: sqlite3.Cursor, table: str, column: str, col_type_sql: str, default_sql: str | None = None):
     """Aggiunge una colonna se manca (migrazione non distruttiva)."""
     if _table_has_column(cur, table, column):
         return
@@ -326,24 +196,10 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 # -----------------------------
 
 # -----------------------------
-# AUTH (Streamlit Cloud + locale)
+# Auth (Secrets in cloud, fallback locale)
 # -----------------------------
-def _running_on_streamlit_cloud() -> bool:
-    # In Streamlit Cloud il codice gira sotto /mount/src/...
-    try:
-        return "/mount/src/" in os.getcwd()
-    except Exception:
-        return False
-
-def _load_users_from_secrets_strict() -> dict:
-    """
-    In Cloud: usa SOLO Secrets (nessun fallback hardcoded).
-    In locale: se Secrets assenti, usa fallback locale.
-    Supporta:
-      - [users] multi-utente
-      - [auth] username/password singolo utente
-    """
-    # Multi-utente
+def _load_users():
+    # 1) Multi-utente: [users]
     try:
         users = dict(st.secrets["users"])
         if users:
@@ -351,17 +207,17 @@ def _load_users_from_secrets_strict() -> dict:
     except Exception:
         pass
 
-    # Singolo utente
+    # 2) Singolo utente: [auth]
     try:
         u = st.secrets["auth"]["username"]
         p = st.secrets["auth"]["password"]
         if u and p:
-            return {u: p}
+            return {str(u): str(p)}
     except Exception:
         pass
 
-    # In cloud: NON fare fallback
-    if _running_on_streamlit_cloud():
+    # In cloud: NO fallback
+    if _running_on_cloud():
         st.error("🔒 Login non configurato: aggiungi [auth] o [users] in Streamlit Cloud → Settings → Secrets.")
         st.stop()
 
@@ -371,50 +227,176 @@ def _load_users_from_secrets_strict() -> dict:
 def login() -> bool:
     """
     Login semplice con username/password.
-    In Streamlit Cloud legge SOLO dai Secrets.
+    In Streamlit Cloud usa SOLO i Secrets (nessun fallback).
     """
-    users = _load_users_from_secrets_strict()
+    users = _load_users()
 
     if "logged_in" not in st.session_state:
-        st.session_state["logged_in"] = False
+        st.session_state.logged_in = False
     if "logged_user" not in st.session_state:
-        st.session_state["logged_user"] = None
+        st.session_state.logged_user = None
 
-    if st.session_state["logged_in"]:
-        st.sidebar.markdown(f"👤 Utente: **{st.session_state['logged_user']}**")
-        _sidebar_db_indicator()
-        if st.sidebar.button("Logout"):
-            st.session_state["logged_in"] = False
-            st.session_state["logged_user"] = None
-            st.rerun()
+    if st.session_state.logged_in:
         return True
 
-    st.title("The Organism – Login")
-
+    st.title("The Organism — Login")
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
+
     if st.button("Entra"):
         if user in users and users[user] == pwd:
-            st.session_state["logged_in"] = True
-            st.session_state["logged_user"] = user
+            st.session_state.logged_in = True
+            st.session_state.logged_user = user
             st.rerun()
         else:
-            st.error("Credenziali non valide. Riprova.")
+            st.error("Credenziali non valide")
 
     return False
+def _running_on_cloud() -> bool:
+    # Streamlit Community Cloud monta il repo in /mount/src/...
+    try:
+        return "/mount/src/" in os.getcwd()
+    except Exception:
+        return False
+
+def _get_database_url() -> str:
+    # 1) Streamlit Secrets: [db].DATABASE_URL
+    try:
+        v = st.secrets["db"]["DATABASE_URL"]
+        if v:
+            return str(v)
+    except Exception:
+        pass
+    # 2) Streamlit Secrets root: DATABASE_URL (se presente)
+    try:
+        v = st.secrets["DATABASE_URL"]
+        if v:
+            return str(v)
+    except Exception:
+        pass
+    # 3) env var
+    return os.getenv("DATABASE_URL", "") or ""
+
+_DB_URL = _get_database_url()
+_DB_BACKEND = "postgres" if _DB_URL else "sqlite"
+
+# In cloud: NON permettere SQLite (evita ricreazione .db e ambiguità)
+if _running_on_cloud() and _DB_BACKEND != "postgres":
+    st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
+    st.stop()
+
+# Wrapper minimale per usare psycopg2 con SQL scritto in stile SQLite ("?" placeholders)
+# NB: init_db() crea/migra tabelle SOLO in SQLite. In Postgres si assume DB già migrato.
+class _PgCursor:
+    def __init__(self, cur):
+        self._cur = cur
+        self.lastrowid = None  # compatibilità
+
+    def execute(self, query, params=None):
+        if params is None:
+            params = ()
+        q = str(query)
+        # Converti placeholders SQLite (?) -> psycopg2 (%s)
+        if "?" in q:
+            q = q.replace("?", "%s")
+
+        # Auto-RETURNING per INSERT che usano ID autoincrement (per compatibilità con lastrowid)
+        q_strip = q.lstrip().upper()
+        if q_strip.startswith("INSERT INTO") and "RETURNING" not in q_strip:
+            # se inserisci in Pazienti e vuoi l'ID
+            # proviamo a capire se la tabella ha colonna "ID" e aggiungiamo RETURNING "ID"
+            try:
+                tbl = q_strip.split()[2].strip('"')
+            except Exception:
+                tbl = ""
+            if tbl in ("PAZIENTI",):
+                q = q.rstrip().rstrip(";") + ' RETURNING "ID"'
+                self._cur.execute(q, params)
+                try:
+                    row = self._cur.fetchone()
+                    if row is not None:
+                        # RealDictCursor ritorna dict; cursor standard tuple
+                        self.lastrowid = row.get("ID") if isinstance(row, dict) else row[0]
+                except Exception:
+                    pass
+                return self
+        self._cur.execute(q, params)
+        return self
+
+    def executemany(self, query, seq_of_params):
+        q = str(query)
+        if "?" in q:
+            q = q.replace("?", "%s")
+        self._cur.executemany(q, seq_of_params)
+        return self
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    def __iter__(self):
+        return iter(self._cur)
+
+    def close(self):
+        return self._cur.close()
+
+class _PgConn:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        return _PgCursor(self._conn.cursor())
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
+
+def _sidebar_db_indicator():
+    """Mostra quale DB sta usando davvero (SQLite vs PostgreSQL)."""
+    try:
+        if _DB_BACKEND == "postgres":
+            # prova reale
+            try:
+                import psycopg2
+                c = psycopg2.connect(_DB_URL)
+                cur = c.cursor()
+                cur.execute("SELECT current_database()")
+                dbname = cur.fetchone()[0]
+                c.close()
+            except Exception:
+                dbname = "postgres"
+            st.sidebar.success(f"🟢 DB: PostgreSQL ({dbname})")
+        else:
+            st.sidebar.warning(f"🟡 DB: SQLite ({DB_PATH})")
+    except Exception:
+        pass
 
 
 def get_connection():
-    """Connessione DB: SQLite in locale, Postgres in cloud (Neon)."""
-    if DB_BACKEND == "postgres":
-        return PGConnShim(psycopg2.connect(DATABASE_URL))
+    # Postgres (cloud)
+    if _DB_BACKEND == "postgres":
+        conn = psycopg2.connect(_DB_URL)
+        return _PgConn(conn)
+
+    # SQLite (locale)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+
 def init_db() -> None:
-    if DB_BACKEND == "postgres":
+    # In Postgres (Neon) si assume DB già migrato: non creare/migrare qui (SQL è SQLite-specifico).
+    if _DB_BACKEND == "postgres":
         return
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -487,10 +469,16 @@ def init_db() -> None:
     ensure_column(cur, "Valutazioni_Visive", "Creato_Il", "TEXT")
     ensure_column(cur, "Valutazioni_Visive", "Aggiornato_Il", "TEXT")
 
-    # Migrazioni aggiuntive (safe): aggiunge colonne nuove senza rompere DB esistenti
-    ensure_column(cur, "Valutazioni_Visive", "Anamnesi", "TEXT")
-    ensure_column(cur, "Valutazioni_Visive", "Esame", "TEXT")
-    ensure_column(cur, "Valutazioni_Visive", "Conclusioni", "TEXT")
+    # Migrazione soft: aggiunge colonne nuove senza rompere DB esistenti
+    cur.execute("PRAGMA table_info(Valutazioni_Visive)")
+    cols = {r[1] for r in cur.fetchall()}
+    if "Anamnesi" not in cols:
+        cur.execute("ALTER TABLE Valutazioni_Visive ADD COLUMN Anamnesi TEXT")
+
+    if "Esame" not in cols:
+        cur.execute("ALTER TABLE Valutazioni_Visive ADD COLUMN Esame TEXT")
+    if "Conclusioni" not in cols:
+        cur.execute("ALTER TABLE Valutazioni_Visive ADD COLUMN Conclusioni TEXT")
 
     # Sedute / Terapie
     cur.execute(
@@ -3510,6 +3498,9 @@ def main():
     # login obbligatorio
     if not login():
         return
+
+    st.sidebar.markdown(f"👤 Utente: **{st.session_state.get('logged_user','')}**")
+    _sidebar_db_indicator()
 
     # menu laterale
     st.sidebar.title("Navigazione")
