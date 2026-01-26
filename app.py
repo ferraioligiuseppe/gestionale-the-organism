@@ -921,6 +921,15 @@ def row_get(row, key: str, default=None):
     """Safe getter for sqlite3.Row or dict."""
     if row is None:
         return default
+
+
+def extract_leading_int(label, default=None):
+    """Estrae un ID numerico all'inizio di una stringa tipo '123 - Cognome Nome'.
+    Ritorna default se non trova un numero.
+    """
+    s = "" if label is None else str(label)
+    m = re.match(r"\s*(\d+)", s)
+    return int(m.group(1)) if m else default
     try:
         if isinstance(row, dict):
             return row.get(key, default)
@@ -2055,8 +2064,10 @@ def ui_anamnesi():
 
     options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
-
+    paz_id = extract_leading_int(sel)
+    if paz_id is None:
+        st.warning("Seleziona un paziente valido.")
+        return
     with st.form("nuova_anamnesi"):
         st.subheader("Nuova anamnesi")
 
@@ -2173,7 +2184,7 @@ Storia libera (narrazione):
         for r in rows
     ]
     sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
-    an_id = int(sel_an.split(" - ", 1)[0])
+    an_id = extract_leading_int(sel_an)
     rec = next(r for r in rows if row_get(r, "ID") == an_id)
 
     with st.form("modifica_anamnesi"):
@@ -2240,7 +2251,10 @@ def ui_valutazioni_visive():
 
     options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
+    paz_id = extract_leading_int(sel)
+    if paz_id is None:
+        st.warning("Seleziona un paziente valido.")
+        return
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
     cur.execute("SELECT * FROM Pazienti WHERE ID = ?", (paz_id,))
     paziente = cur.fetchone()
@@ -2503,7 +2517,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                     labels,
                     key=f"referto_a4_sel_{paz_id}",
                 )
-                val_id = int(sel_val.split(" - ", 1)[0])
+                val_id = extract_leading_int(sel_val)
                 valutazione = next(v for v in vals if row_get(v, "ID") == val_id)
 
                 st.caption(f"Stato: **{(row_get(valutazione, "Stato_Valutazione") or 'BOZZA')}**")
@@ -2657,7 +2671,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         for r in rows
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
-    val_id = int(sel_v.split(" - ", 1)[0])
+    val_id = extract_leading_int(sel_v)
     rec = next(r for r in rows if row_get(r, "ID") == val_id)
     st.markdown("#### Referto oculistico in PDF (A4)")
 
@@ -2973,8 +2987,10 @@ def ui_sedute():
 
     options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
-
+    paz_id = extract_leading_int(sel)
+    if paz_id is None:
+        st.warning("Seleziona un paziente valido.")
+        return
     with st.form("nuova_seduta"):
         st.subheader("Nuova seduta")
         data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
@@ -3036,7 +3052,7 @@ def ui_sedute():
         for r in rows
     ]
     sel_s = st.selectbox("Seleziona una seduta da modificare/cancellare", labels)
-    sed_id = int(sel_s.split(" - ", 1)[0])
+    sed_id = extract_leading_int(sel_s)
     rec = next(r for r in rows if row_get(r, "ID") == sed_id)
 
     with st.form("modifica_seduta"):
@@ -3119,8 +3135,10 @@ def ui_coupons():
 
     opt_paz = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
-    paz_id = int(sel.split(" - ", 1)[0])
-
+    paz_id = extract_leading_int(sel)
+    if paz_id is None:
+        st.warning("Seleziona un paziente valido.")
+        return
     st.markdown("### Aggiungi nuovo coupon")
 
     with st.form("form_nuovo_coupon"):
