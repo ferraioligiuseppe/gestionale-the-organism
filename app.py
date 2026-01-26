@@ -40,6 +40,35 @@ DB_BACKEND = "postgres" if DATABASE_URL else "sqlite"
 # Path SQLite (solo se usi SQLite)
 DB_PATH = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_v2.db")
 
+def _sidebar_db_indicator():
+    """Mostra in sidebar quale DB è realmente in uso (SQLite vs Postgres/Neon)."""
+    try:
+        url = get_database_url()
+    except Exception:
+        url = None
+
+    # Default: SQLite
+    if not url:
+        st.sidebar.info(f"🟡 DB: SQLite ({DB_PATH})")
+        return
+
+    # Se c'è DATABASE_URL proviamo davvero la connessione (così non ci sono dubbi)
+    try:
+        import psycopg2  # type: ignore
+
+        conn = psycopg2.connect(url)
+        cur = conn.cursor()
+        cur.execute("SELECT current_database(), current_user")
+        dbname, dbuser = cur.fetchone()
+        conn.close()
+        st.sidebar.success(f"🟢 DB: PostgreSQL ({dbname})")
+        st.sidebar.caption(f"Utente DB: {dbuser}")
+    except Exception as e:
+        # Se fallisce, segnaliamo chiaramente e non facciamo finta di essere su Postgres
+        st.sidebar.error("🔴 DB: errore connessione Postgres → fallback SQLite")
+        st.sidebar.caption(str(e)[:180])
+        st.sidebar.info(f"🟡 DB: SQLite ({DB_PATH})")
+
 # Postgres driver (solo se necessario)
 if DB_BACKEND == "postgres":
     try:
