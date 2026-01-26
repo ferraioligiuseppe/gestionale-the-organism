@@ -1,6 +1,5 @@
 import streamlit as st
 import sqlite3
-import psycopg2
 from datetime import date, datetime
 from typing import Optional, Dict
 import os
@@ -194,209 +193,57 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 # -----------------------------
 # Configurazione accesso (login semplice)
 # -----------------------------
-
-# -----------------------------
-# Auth (Secrets in cloud, fallback locale)
-# -----------------------------
-def _load_users():
-    # 1) Multi-utente: [users]
-    try:
-        users = dict(st.secrets["users"])
-        if users:
-            return users
-    except Exception:
-        pass
-
-    # 2) Singolo utente: [auth]
-    try:
-        u = st.secrets["auth"]["username"]
-        p = st.secrets["auth"]["password"]
-        if u and p:
-            return {str(u): str(p)}
-    except Exception:
-        pass
-
-    # In cloud: NO fallback
-    if _running_on_cloud():
-        st.error("🔒 Login non configurato: aggiungi [auth] o [users] in Streamlit Cloud → Settings → Secrets.")
-        st.stop()
-
-    # Fallback SOLO locale (studio)
-    return {"admin": "admin123"}
+USERS = {
+    # Puoi personalizzarli
+    "admin": "TheOrganism2025",
+    "giuseppe": "TheOrganism!",
+}
 
 def login() -> bool:
     """
     Login semplice con username/password.
-    In Streamlit Cloud usa SOLO i Secrets (nessun fallback).
+    Usa st.session_state["logged_in"] per ricordare la sessione.
     """
-    users = _load_users()
-
     if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
+        st.session_state["logged_in"] = False
     if "logged_user" not in st.session_state:
-        st.session_state.logged_user = None
+        st.session_state["logged_user"] = None
 
-    if st.session_state.logged_in:
+    if st.session_state["logged_in"]:
+        # Già loggato
+        st.sidebar.markdown(f"👤 Utente: **{st.session_state['logged_user']}**")
+        if st.sidebar.button("Logout"):
+            st.session_state["logged_in"] = False
+            st.session_state["logged_user"] = None
+            st.rerun()
         return True
 
-    st.title("The Organism — Login")
+    st.title("The Organism – Login")
+
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
-
     if st.button("Entra"):
-        if user in users and users[user] == pwd:
-            st.session_state.logged_in = True
-            st.session_state.logged_user = user
+        if user in USERS and USERS[user] == pwd:
+            st.session_state["logged_in"] = True
+            st.session_state["logged_user"] = user
             st.rerun()
         else:
-            st.error("Credenziali non valide")
+            st.error("Credenziali non valide. Riprova.")
 
     return False
-def _running_on_cloud() -> bool:
-    # Streamlit Community Cloud monta il repo in /mount/src/...
-    try:
-        return "/mount/src/" in os.getcwd()
-    except Exception:
-        return False
 
-def _get_database_url() -> str:
-    # 1) Streamlit Secrets: [db].DATABASE_URL
-    try:
-        v = st.secrets["db"]["DATABASE_URL"]
-        if v:
-            return str(v)
-    except Exception:
-        pass
-    # 2) Streamlit Secrets root: DATABASE_URL (se presente)
-    try:
-        v = st.secrets["DATABASE_URL"]
-        if v:
-            return str(v)
-    except Exception:
-        pass
-    # 3) env var
-    return os.getenv("DATABASE_URL", "") or ""
+# -----------------------------
+# Database
+# -----------------------------
 
-_DB_URL = _get_database_url()
-_DB_BACKEND = "postgres" if _DB_URL else "sqlite"
+DB_PATH = "the_organism_gestionale_v2.db"
 
-# In cloud: NON permettere SQLite (evita ricreazione .db e ambiguità)
-if _running_on_cloud() and _DB_BACKEND != "postgres":
-    st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
-    st.stop()
-
-# Wrapper minimale per usare psycopg2 con SQL scritto in stile SQLite ("?" placeholders)
-# NB: init_db() crea/migra tabelle SOLO in SQLite. In Postgres si assume DB già migrato.
-class _PgCursor:
-    def __init__(self, cur):
-        self._cur = cur
-        self.lastrowid = None  # compatibilità
-
-    def execute(self, query, params=None):
-        if params is None:
-            params = ()
-        q = str(query)
-        # Converti placeholders SQLite (?) -> psycopg2 (%s)
-        if "?" in q:
-            q = q.replace("?", "%s")
-
-        # Auto-RETURNING per INSERT che usano ID autoincrement (per compatibilità con lastrowid)
-        q_strip = q.lstrip().upper()
-        if q_strip.startswith("INSERT INTO") and "RETURNING" not in q_strip:
-            # se inserisci in Pazienti e vuoi l'ID
-            # proviamo a capire se la tabella ha colonna "ID" e aggiungiamo RETURNING "ID"
-            try:
-                tbl = q_strip.split()[2].strip('"')
-            except Exception:
-                tbl = ""
-            if tbl in ("PAZIENTI",):
-                q = q.rstrip().rstrip(";") + ' RETURNING "ID"'
-                self._cur.execute(q, params)
-                try:
-                    row = self._cur.fetchone()
-                    if row is not None:
-                        # RealDictCursor ritorna dict; cursor standard tuple
-                        self.lastrowid = row.get("ID") if isinstance(row, dict) else row[0]
-                except Exception:
-                    pass
-                return self
-        self._cur.execute(q, params)
-        return self
-
-    def executemany(self, query, seq_of_params):
-        q = str(query)
-        if "?" in q:
-            q = q.replace("?", "%s")
-        self._cur.executemany(q, seq_of_params)
-        return self
-
-    def fetchone(self):
-        return self._cur.fetchone()
-
-    def fetchall(self):
-        return self._cur.fetchall()
-
-    def __iter__(self):
-        return iter(self._cur)
-
-    def close(self):
-        return self._cur.close()
-
-class _PgConn:
-    def __init__(self, conn):
-        self._conn = conn
-
-    def cursor(self):
-        return _PgCursor(self._conn.cursor())
-
-    def commit(self):
-        return self._conn.commit()
-
-    def rollback(self):
-        return self._conn.rollback()
-
-    def close(self):
-        return self._conn.close()
-
-
-def _sidebar_db_indicator():
-    """Mostra quale DB sta usando davvero (SQLite vs PostgreSQL)."""
-    try:
-        if _DB_BACKEND == "postgres":
-            # prova reale
-            try:
-                import psycopg2
-                c = psycopg2.connect(_DB_URL)
-                cur = c.cursor()
-                cur.execute("SELECT current_database()")
-                dbname = cur.fetchone()[0]
-                c.close()
-            except Exception:
-                dbname = "postgres"
-            st.sidebar.success(f"🟢 DB: PostgreSQL ({dbname})")
-        else:
-            st.sidebar.warning(f"🟡 DB: SQLite ({DB_PATH})")
-    except Exception:
-        pass
-
-
-def get_connection():
-    # Postgres (cloud)
-    if _DB_BACKEND == "postgres":
-        conn = psycopg2.connect(_DB_URL)
-        return _PgConn(conn)
-
-    # SQLite (locale)
+def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def init_db() -> None:
-    # In Postgres (Neon) si assume DB già migrato: non creare/migrare qui (SQL è SQLite-specifico).
-    if _DB_BACKEND == "postgres":
-        return
-
     conn = get_connection()
     cur = conn.cursor()
 
@@ -1876,12 +1723,12 @@ def ui_pazienti():
     options = []
     for r in rows:
         nascita_it = ""
-        if r["Data_Nascita"]:
+        if row_get(r, "Data_Nascita"):
             try:
-                nascita_it = datetime.strptime(r["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+                nascita_it = datetime.strptime(row_get(r, "Data_Nascita"), "%Y-%m-%d").strftime("%d/%m/%Y")
             except Exception:
-                nascita_it = r["Data_Nascita"]
-        cf = (r["Codice_Fiscale"] or "").upper()
+                nascita_it = row_get(r, "Data_Nascita")
+        cf = (row_get(r, "Codice_Fiscale") or "").upper()
         label = f"{r['ID']} - {r['Cognome']} {r['Nome']}"
         extra = []
         if nascita_it:
@@ -1894,7 +1741,7 @@ def ui_pazienti():
 
     selected = st.selectbox("Seleziona un paziente per modificare / archiviare", options)
     sel_id = int(selected.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == sel_id)
+    rec = next(r for r in rows if row_get(r, "ID") == sel_id)
 
     st.write(f"Stato attuale: **{rec['Stato_Paziente']}**")
 
@@ -2164,7 +2011,7 @@ Storia libera (narrazione):
     ]
     sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
     an_id = int(sel_an.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == an_id)
+    rec = next(r for r in rows if row_get(r, "ID") == an_id)
 
     with st.form("modifica_anamnesi"):
         data_m = st.text_input(
@@ -2648,7 +2495,7 @@ ESAMI STRUTTURALI / FUNZIONALI
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
     val_id = int(sel_v.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == val_id)
+    rec = next(r for r in rows if row_get(r, "ID") == val_id)
     st.markdown("#### Referto oculistico in PDF (A4)")
 
     if not REPORTLAB_AVAILABLE:
@@ -3027,7 +2874,7 @@ def ui_sedute():
     ]
     sel_s = st.selectbox("Seleziona una seduta da modificare/cancellare", labels)
     sed_id = int(sel_s.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == sed_id)
+    rec = next(r for r in rows if row_get(r, "ID") == sed_id)
 
     with st.form("modifica_seduta"):
         data_m = st.text_input(
@@ -3297,7 +3144,7 @@ def ui_dashboard():
     cur.execute(query_v, params_v)
     vis = cur.fetchall()
 
-    incasso_vis = sum((r["Costo"] or 0.0) for r in vis if r["Pagato"])
+    incasso_vis = sum((row_get(r, "Costo") or 0.0) for r in vis if row_get(r, "Pagato"))
     st.write(f"**Totale incassi visite (periodo): € {incasso_vis:.2f}**")
 
     # --- Incassi da Sedute ---
@@ -3316,7 +3163,7 @@ def ui_dashboard():
     cur.execute(query_s, params_s)
     sed = cur.fetchall()
 
-    incasso_sed = sum((r["Costo"] or 0.0) for r in sed if r["Pagato"])
+    incasso_sed = sum((row_get(r, "Costo") or 0.0) for r in sed if row_get(r, "Pagato"))
     st.write(f"**Totale incassi sedute (periodo): € {incasso_sed:.2f}**")
 
     st.markdown("### Totale studio")
@@ -3498,9 +3345,6 @@ def main():
     # login obbligatorio
     if not login():
         return
-
-    st.sidebar.markdown(f"👤 Utente: **{st.session_state.get('logged_user','')}**")
-    _sidebar_db_indicator()
 
     # menu laterale
     st.sidebar.title("Navigazione")
