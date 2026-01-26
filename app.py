@@ -200,13 +200,6 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 # Auth (Secrets in cloud, fallback locale)
 # -----------------------------
 def _load_users():
-    """Carica credenziali da st.secrets.
-    Supporta:
-      - [users]  (multi-utente)
-      - [auth]   (username/password)
-      - root keys (USERS / AUTH / username/password) come fallback compatibile
-    In Streamlit Cloud: se non trovate credenziali -> stop (nessun fallback).
-    """
     # 1) Multi-utente: [users]
     try:
         users = dict(st.secrets["users"])
@@ -224,24 +217,9 @@ def _load_users():
     except Exception:
         pass
 
-    # 3) Root fallback compatibile (se qualcuno salva così)
-    try:
-        if "DATABASE_USERS" in st.secrets:
-            users = dict(st.secrets["DATABASE_USERS"])
-            if users:
-                return {str(k): str(v) for k, v in users.items()}
-    except Exception:
-        pass
-    try:
-        u = st.secrets.get("username")
-        p = st.secrets.get("password")
-        if u and p:
-            return {str(u): str(p)}
-    except Exception:
-        pass
-
+    # In cloud: NO fallback
     if _running_on_cloud():
-        st.error("🔒 Login non configurato: aggiungi [auth] o [users] in Streamlit Cloud → Settings → Secrets.")
+        st.error("🔒 Secrets mancanti: configura [auth] o [users] in Streamlit Cloud → Settings → Secrets.")
         st.stop()
 
     # Fallback SOLO locale
@@ -290,6 +268,7 @@ def _get_database_url() -> str:
             return str(v)
     except Exception:
         pass
+
     # 2) Streamlit Secrets root: DATABASE_URL (se presente)
     try:
         v = st.secrets["DATABASE_URL"]
@@ -297,9 +276,9 @@ def _get_database_url() -> str:
             return str(v)
     except Exception:
         pass
+
     # 3) env var
     return os.getenv("DATABASE_URL", "") or ""
-
 _DB_URL = _get_database_url()
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
@@ -309,67 +288,6 @@ if _running_on_cloud() and _DB_BACKEND != "postgres":
     st.stop()
 
 # Wrapper minimale per usare psycopg2 con SQL scritto in stile SQLite ("?" placeholders)
-
-# Normalizzazione nomi tabelle/colonne (PostgreSQL è case-sensitive sui nomi quotati).
-# Se sul server hai tabelle/colonne in lowercase (consigliato), riscriviamo qui le query legacy (CamelCase).
-_PG_IDENT_MAP = {
-    # tabelle
-    'Pazienti': 'pazienti',
-    'Anamnesi': 'anamnesi',
-    'Valutazioni_Visive': 'valutazioni_visive',
-    'Sedute': 'sedute',
-    'Coupons': 'coupons',
-    # colonne pazienti
-    'ID': 'id',
-    'Cognome': 'cognome',
-    'Nome': 'nome',
-    'Data_Nascita': 'data_nascita',
-    'Sesso': 'sesso',
-    'Telefono': 'telefono',
-    'Email': 'email',
-    'Indirizzo': 'indirizzo',
-    'CAP': 'cap',
-    'Citta': 'citta',
-    'Provincia': 'provincia',
-    'Codice_Fiscale': 'codice_fiscale',
-    'Stato_Paziente': 'stato_paziente',
-    # colonne comuni
-    'Paziente_ID': 'paziente_id',
-    'Data_Anamnesi': 'data_anamnesi',
-    'Data_Valutazione': 'data_valutazione',
-    'Tipo_Visita': 'tipo_visita',
-    'Professionista': 'professionista',
-    'Costo': 'costo',
-    'Pagato': 'pagato',
-    'Note': 'note',
-    'Data_Seduta': 'data_seduta',
-    'Terapia': 'terapia',
-    'Tipo_Coupon': 'tipo_coupon',
-    'Codice_Coupon': 'codice_coupon',
-    'Data_Assegnazione': 'data_assegnazione',
-    'Utilizzato': 'utilizzato',
-    # acuità (se presenti)
-    'Acuita_Nat_OD': 'acuita_nat_od',
-    'Acuita_Nat_OS': 'acuita_nat_os',
-    'Acuita_Nat_OO': 'acuita_nat_oo',
-    'Acuita_Corr_OD': 'acuita_corr_od',
-    'Acuita_Corr_OS': 'acuita_corr_os',
-    'Acuita_Corr_OO': 'acuita_corr_oo',
-    # campi workflow (se presenti)
-    'Stato_Valutazione': 'stato_valutazione',
-    'Creato_Il': 'creato_il',
-    'Aggiornato_Il': 'aggiornato_il',
-    # referto
-    'Anamnesi': 'anamnesi',
-    'Esame': 'esame',
-    'Conclusioni': 'conclusioni',
-}
-
-_PG_IDENT_RE = re.compile(r'\b(' + '|'.join(map(re.escape, sorted(_PG_IDENT_MAP.keys(), key=len, reverse=True))) + r')\b')
-
-def _pg_normalize_sql(q: str) -> str:
-    # sostituzione per token (evita sostituzioni parziali)
-    return _PG_IDENT_RE.sub(lambda m: _PG_IDENT_MAP.get(m.group(0), m.group(0)), q)
 # NB: init_db() crea/migra tabelle SOLO in SQLite. In Postgres si assume DB già migrato.
 class _PgCursor:
     def __init__(self, cur):
@@ -384,9 +302,6 @@ class _PgCursor:
         if "?" in q:
             q = q.replace("?", "%s")
 
-        # Normalizza nomi tabelle/colonne legacy -> lowercase (Postgres)
-        q = _pg_normalize_sql(q)
-
         # Auto-RETURNING per INSERT che usano ID autoincrement (per compatibilità con lastrowid)
         q_strip = q.lstrip().upper()
         if q_strip.startswith("INSERT INTO") and "RETURNING" not in q_strip:
@@ -396,14 +311,14 @@ class _PgCursor:
                 tbl = q_strip.split()[2].strip('"')
             except Exception:
                 tbl = ""
-            if tbl in ("PAZIENTI","PAZIENTI(", "PAZIENTI\n"):
-                q = q.rstrip().rstrip(";") + ' RETURNING id'
+            if tbl in ("PAZIENTI",):
+                q = q.rstrip().rstrip(";") + ' RETURNING "ID"'
                 self._cur.execute(q, params)
                 try:
                     row = self._cur.fetchone()
                     if row is not None:
                         # RealDictCursor ritorna dict; cursor standard tuple
-                        self.lastrowid = row.get("id") if isinstance(row, dict) else row[0]
+                        self.lastrowid = row.get("ID") if isinstance(row, dict) else row[0]
                 except Exception:
                     pass
                 return self
@@ -1006,6 +921,15 @@ def row_get(row, key: str, default=None):
     """Safe getter for sqlite3.Row or dict."""
     if row is None:
         return default
+
+
+def extract_leading_int(label, default=None):
+    """Estrae un ID numerico all'inizio di una stringa tipo '123 - Cognome Nome'.
+    Ritorna default se non trova un numero.
+    """
+    s = "" if label is None else str(label)
+    m = re.match(r"\s*(\d+)", s)
+    return int(m.group(1)) if m else default
     try:
         if isinstance(row, dict):
             return row.get(key, default)
@@ -2140,8 +2064,10 @@ def ui_anamnesi():
 
     options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
-
+    paz_id = extract_leading_int(sel)
+    if paz_id is None:
+        st.warning("Seleziona un paziente valido.")
+        return
     with st.form("nuova_anamnesi"):
         st.subheader("Nuova anamnesi")
 
@@ -2258,7 +2184,7 @@ Storia libera (narrazione):
         for r in rows
     ]
     sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
-    an_id = int(sel_an.split(" - ", 1)[0])
+    an_id = extract_leading_int(sel_an)
     rec = next(r for r in rows if row_get(r, "ID") == an_id)
 
     with st.form("modifica_anamnesi"):
@@ -2325,7 +2251,10 @@ def ui_valutazioni_visive():
 
     options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
+    paz_id = extract_leading_int(sel)
+    if paz_id is None:
+        st.warning("Seleziona un paziente valido.")
+        return
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
     cur.execute("SELECT * FROM Pazienti WHERE ID = ?", (paz_id,))
     paziente = cur.fetchone()
@@ -2588,7 +2517,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                     labels,
                     key=f"referto_a4_sel_{paz_id}",
                 )
-                val_id = int(sel_val.split(" - ", 1)[0])
+                val_id = extract_leading_int(sel_val)
                 valutazione = next(v for v in vals if row_get(v, "ID") == val_id)
 
                 st.caption(f"Stato: **{(row_get(valutazione, "Stato_Valutazione") or 'BOZZA')}**")
@@ -2742,7 +2671,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         for r in rows
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
-    val_id = int(sel_v.split(" - ", 1)[0])
+    val_id = extract_leading_int(sel_v)
     rec = next(r for r in rows if row_get(r, "ID") == val_id)
     st.markdown("#### Referto oculistico in PDF (A4)")
 
@@ -3058,8 +2987,10 @@ def ui_sedute():
 
     options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
-
+    paz_id = extract_leading_int(sel)
+    if paz_id is None:
+        st.warning("Seleziona un paziente valido.")
+        return
     with st.form("nuova_seduta"):
         st.subheader("Nuova seduta")
         data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
@@ -3121,7 +3052,7 @@ def ui_sedute():
         for r in rows
     ]
     sel_s = st.selectbox("Seleziona una seduta da modificare/cancellare", labels)
-    sed_id = int(sel_s.split(" - ", 1)[0])
+    sed_id = extract_leading_int(sel_s)
     rec = next(r for r in rows if row_get(r, "ID") == sed_id)
 
     with st.form("modifica_seduta"):
@@ -3204,8 +3135,10 @@ def ui_coupons():
 
     opt_paz = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
-    paz_id = int(sel.split(" - ", 1)[0])
-
+    paz_id = extract_leading_int(sel)
+    if paz_id is None:
+        st.warning("Seleziona un paziente valido.")
+        return
     st.markdown("### Aggiungi nuovo coupon")
 
     with st.form("form_nuovo_coupon"):
