@@ -458,37 +458,10 @@ def init_db() -> None:
     ensure_column(cur, "Valutazioni_Visive", "Creato_Il", "TEXT")
     ensure_column(cur, "Valutazioni_Visive", "Aggiornato_Il", "TEXT")
 
-    # Migrazione soft: aggiunge colonne nuove senza rompere DB esistenti
-    # Migrazioni "safe": aggiunge colonne nuove senza rompere DB esistenti
-if DB_BACKEND == "sqlite":
-    cur.execute("PRAGMA table_info(Valutazioni_Visive)")
-    rows = cur.fetchall()
-    # PRAGMA table_info -> (cid, name, type, notnull, dflt_value, pk)
-    cols = { (r[1] if not hasattr(r, "keys") else r["name"]) for r in rows }
-else:
-    cur.execute(
-        "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=%s",
-        ("valutazioni_visive",),
-    )
-    rows = cur.fetchall()
-    cols = { r[0] for r in rows }
-
-def _safe_add_col(sql_ddl: str):
-    try:
-        cur.execute(sql_ddl)
-    except Exception as e:
-        # SQLite: "duplicate column name" oppure Postgres: column already exists
-        msg = str(e).lower()
-        if "duplicate" in msg or "already exists" in msg:
-            return
-        raise
-
-if "Anamnesi" not in cols:
-    _safe_add_col("ALTER TABLE Valutazioni_Visive ADD COLUMN Anamnesi TEXT")
-if "Esame" not in cols:
-    _safe_add_col("ALTER TABLE Valutazioni_Visive ADD COLUMN Esame TEXT")
-if "Conclusioni" not in cols:
-    _safe_add_col("ALTER TABLE Valutazioni_Visive ADD COLUMN Conclusioni TEXT")
+    # Migrazioni aggiuntive (safe): aggiunge colonne nuove senza rompere DB esistenti
+    ensure_column(cur, "Valutazioni_Visive", "Anamnesi", "TEXT")
+    ensure_column(cur, "Valutazioni_Visive", "Esame", "TEXT")
+    ensure_column(cur, "Valutazioni_Visive", "Conclusioni", "TEXT")
 
     # Sedute / Terapie
     cur.execute(
