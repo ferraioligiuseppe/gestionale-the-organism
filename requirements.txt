@@ -3,3 +3,4 @@ reportlab
 openpyxl
 pandas
 psycopg2-binary
+
