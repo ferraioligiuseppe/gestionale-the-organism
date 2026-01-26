@@ -282,7 +282,9 @@ def _get_database_url() -> str:
         pass
 
     # 3) env var
-    return os.getenv("DATABASE_URL", "") or ""_DB_URL = _get_database_url()
+    return os.getenv("DATABASE_URL", "") or ""
+
+_DB_URL = _get_database_url()
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
 # In cloud: NON permettere SQLite (evita ricreazione .db e ambiguità)
