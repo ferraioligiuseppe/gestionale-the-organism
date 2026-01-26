@@ -306,19 +306,19 @@ class _PgCursor:
         q_strip = q.lstrip().upper()
         if q_strip.startswith("INSERT INTO") and "RETURNING" not in q_strip:
             # se inserisci in Pazienti e vuoi l'ID
-            # proviamo a capire se la tabella ha colonna "ID" e aggiungiamo RETURNING "ID"
+            # proviamo a capire se la tabella ha colonna "ID" e aggiungiamo RETURNING id
             try:
                 tbl = q_strip.split()[2].strip('"')
             except Exception:
                 tbl = ""
             if tbl in ("PAZIENTI",):
-                q = q.rstrip().rstrip(";") + ' RETURNING "ID"'
+                q = q.rstrip().rstrip(";") + ' RETURNING id'
                 self._cur.execute(q, params)
                 try:
                     row = self._cur.fetchone()
                     if row is not None:
                         # RealDictCursor ritorna dict; cursor standard tuple
-                        self.lastrowid = row.get("ID") if isinstance(row, dict) else row[0]
+                        self.lastrowid = row.get("id") if isinstance(row, dict) else row[0]
                 except Exception:
                     pass
                 return self
