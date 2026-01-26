@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 import psycopg2
+import re
 from datetime import date, datetime
 from typing import Optional, Dict
 import os
@@ -201,7 +202,7 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 def _load_users():
     # 1) Multi-utente: [users]
     try:
-        users = dict(st.secrets["users"])
+        users = dict(st.row_get(secrets, "users"))
         if users:
             return users
     except Exception:
@@ -209,8 +210,8 @@ def _load_users():
 
     # 2) Singolo utente: [auth]
     try:
-        u = st.secrets["auth"]["username"]
-        p = st.secrets["auth"]["password"]
+        u = st.row_get(secrets, "auth")["username"]
+        p = st.row_get(secrets, "auth")["password"]
         if u and p:
             return {str(u): str(p)}
     except Exception:
@@ -262,14 +263,14 @@ def _running_on_cloud() -> bool:
 def _get_database_url() -> str:
     # 1) Streamlit Secrets: [db].DATABASE_URL
     try:
-        v = st.secrets["db"]["DATABASE_URL"]
+        v = st.row_get(secrets, "db")["DATABASE_URL"]
         if v:
             return str(v)
     except Exception:
         pass
     # 2) Streamlit Secrets root: DATABASE_URL (se presente)
     try:
-        v = st.secrets["DATABASE_URL"]
+        v = st.row_get(secrets, "DATABASE_URL")
         if v:
             return str(v)
     except Exception:
@@ -966,27 +967,27 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 
     # Dati paziente
     c.setFont("Helvetica", 11)
-    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
+    nome_paz = f"{row_get(paziente, "Cognome")} {row_get(paziente, "Nome")}"
     c.drawString(left, y, f"Paziente: {nome_paz}")
     y -= 14
 
-    dn = _format_data_it_from_iso(paziente["Data_Nascita"])
+    dn = _format_data_it_from_iso(row_get(paziente, "Data_Nascita"))
     if dn:
         c.drawString(left, y, f"Data di nascita: {dn}")
         y -= 14
 
     # Dati visita
-    data_vis = _format_data_it_from_iso(valutazione["Data_Valutazione"])
+    data_vis = _format_data_it_from_iso(row_get(valutazione, "Data_Valutazione"))
     if data_vis:
         c.drawString(left, y, f"Data visita: {data_vis}")
         y -= 14
 
-    if valutazione["Tipo_Visita"]:
-        c.drawString(left, y, f"Tipo visita: {valutazione['Tipo_Visita']}")
+    if row_get(valutazione, "Tipo_Visita"):
+        c.drawString(left, y, f"Tipo visita: {row_get(valutazione, "Tipo_Visita")}")
         y -= 14
 
-    if valutazione["Professionista"]:
-        c.drawString(left, y, f"Professionista: {valutazione['Professionista']}")
+    if row_get(valutazione, "Professionista"):
+        c.drawString(left, y, f"Professionista: {row_get(valutazione, "Professionista")}")
         y -= 18
 
     # --- Anamnesi (solo se presente) ---
@@ -1014,19 +1015,19 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 
     # Acuità visiva solo se presenti
     av_lines = []
-    if valutazione["Acuita_Nat_OD"] or valutazione["Acuita_Nat_OS"] or valutazione["Acuita_Nat_OO"]:
+    if row_get(valutazione, "Acuita_Nat_OD") or row_get(valutazione, "Acuita_Nat_OS") or row_get(valutazione, "Acuita_Nat_OO"):
         av_lines.append(
             "Acuità visiva naturale: "
-            f"OD {valutazione['Acuita_Nat_OD'] or '-'}   "
-            f"OS {valutazione['Acuita_Nat_OS'] or '-'}   "
-            f"OO {valutazione['Acuita_Nat_OO'] or '-'}"
+            f"OD {row_get(valutazione, "Acuita_Nat_OD") or '-'}   "
+            f"OS {row_get(valutazione, "Acuita_Nat_OS") or '-'}   "
+            f"OO {row_get(valutazione, "Acuita_Nat_OO") or '-'}"
         )
-    if valutazione["Acuita_Corr_OD"] or valutazione["Acuita_Corr_OS"] or valutazione["Acuita_Corr_OO"]:
+    if row_get(valutazione, "Acuita_Corr_OD") or row_get(valutazione, "Acuita_Corr_OS") or row_get(valutazione, "Acuita_Corr_OO"):
         av_lines.append(
             "Acuità visiva corretta: "
-            f"OD {valutazione['Acuita_Corr_OD'] or '-'}   "
-            f"OS {valutazione['Acuita_Corr_OS'] or '-'}   "
-            f"OO {valutazione['Acuita_Corr_OO'] or '-'}"
+            f"OD {row_get(valutazione, "Acuita_Corr_OD") or '-'}   "
+            f"OS {row_get(valutazione, "Acuita_Corr_OS") or '-'}   "
+            f"OO {row_get(valutazione, "Acuita_Corr_OO") or '-'}"
         )
 
     c.setFont("Helvetica", 11)
@@ -1038,7 +1039,7 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 
     # Anamnesi (breve) se presente
     try:
-        anam = valutazione["Anamnesi"] or ""
+        anam = row_get(valutazione, "Anamnesi") or ""
     except Exception:
         anam = ""
     if str(anam).strip():
@@ -1147,7 +1148,7 @@ def genera_referto_oculistico_pdf_template(paziente, valutazione, mode: str = "L
     y = top
 
     # Data referto
-    data_iso = (valutazione["Data_Valutazione"] if isinstance(valutazione, sqlite3.Row) else valutazione.get("Data_Valutazione"))
+    data_iso = (row_get(valutazione, "Data_Valutazione") if isinstance(valutazione, sqlite3.Row) else valutazione.get("Data_Valutazione"))
     data_it = _format_data_it_from_iso(data_iso) if data_iso else ""
     c.setFont("Helvetica", 10)
     if data_it:
@@ -1161,15 +1162,15 @@ def genera_referto_oculistico_pdf_template(paziente, valutazione, mode: str = "L
 
     # Dati paziente
     c.setFont("Helvetica", 10.5)
-    cogn = paziente["Cognome"] if isinstance(paziente, sqlite3.Row) else paziente.get("Cognome", "")
-    nome = paziente["Nome"] if isinstance(paziente, sqlite3.Row) else paziente.get("Nome", "")
+    cogn = row_get(paziente, "Cognome") if isinstance(paziente, sqlite3.Row) else paziente.get("Cognome", "")
+    nome = row_get(paziente, "Nome") if isinstance(paziente, sqlite3.Row) else paziente.get("Nome", "")
     nome_paz = f"{(cogn or '').strip()} {(nome or '').strip()}".strip()
     if nome_paz:
         c.drawString(left, y, f"Paziente: {nome_paz}")
         y -= 12
 
-    dn = paziente["Data_Nascita"] if isinstance(paziente, sqlite3.Row) else paziente.get("Data_Nascita")
-    cf = (paziente["Codice_Fiscale"] if isinstance(paziente, sqlite3.Row) else paziente.get("Codice_Fiscale")) or ""
+    dn = row_get(paziente, "Data_Nascita") if isinstance(paziente, sqlite3.Row) else paziente.get("Data_Nascita")
+    cf = (row_get(paziente, "Codice_Fiscale") if isinstance(paziente, sqlite3.Row) else paziente.get("Codice_Fiscale")) or ""
     extra_parts = []
     if dn:
         extra_parts.append(f"Nato il: {_format_data_it_from_iso(dn)}")
@@ -1179,8 +1180,8 @@ def genera_referto_oculistico_pdf_template(paziente, valutazione, mode: str = "L
         c.drawString(left, y, " – ".join(extra_parts))
         y -= 12
 
-    tipo = valutazione["Tipo_Visita"] if isinstance(valutazione, sqlite3.Row) else valutazione.get("Tipo_Visita")
-    prof = valutazione["Professionista"] if isinstance(valutazione, sqlite3.Row) else valutazione.get("Professionista")
+    tipo = row_get(valutazione, "Tipo_Visita") if isinstance(valutazione, sqlite3.Row) else valutazione.get("Tipo_Visita")
+    prof = row_get(valutazione, "Professionista") if isinstance(valutazione, sqlite3.Row) else valutazione.get("Professionista")
     if tipo:
         c.drawString(left, y, f"Tipo visita: {tipo}")
         y -= 12
@@ -1394,7 +1395,7 @@ def genera_prescrizione_occhiali_a5_pdf(
     # Nome paziente
     y = top - 15
     c.setFont("Helvetica-Bold", 11)
-    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
+    nome_paz = f"{row_get(paziente, "Cognome")} {row_get(paziente, "Nome")}"
     c.drawString(left, y, f"Paziente: {nome_paz}")
     y -= 20
 
@@ -1553,7 +1554,7 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
         y -= 18
 
     # Data referto = data valutazione
-    data_iso = valutazione["Data_Valutazione"]
+    data_iso = row_get(valutazione, "Data_Valutazione")
     data_it = _format_data_it_from_iso(data_iso) if data_iso else ""
     c.setFont("Helvetica", 10)
     if data_it:
@@ -1567,13 +1568,13 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
 
     # Dati paziente
     c.setFont("Helvetica", 11)
-    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
+    nome_paz = f"{row_get(paziente, "Cognome")} {row_get(paziente, "Nome")}"
     c.drawString(left, y, f"Paziente: {nome_paz}")
     y -= 14
 
     # Data nascita + CF se presenti
-    dn = paziente["Data_Nascita"]
-    cf = (paziente["Codice_Fiscale"] or "").upper() if paziente["Codice_Fiscale"] else ""
+    dn = row_get(paziente, "Data_Nascita")
+    cf = (row_get(paziente, "Codice_Fiscale") or "").upper() if row_get(paziente, "Codice_Fiscale") else ""
     extra_parts = []
     if dn:
         try:
@@ -1589,8 +1590,8 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
         y -= 14
 
     # Tipo visita e professionista
-    tipo = valutazione["Tipo_Visita"] or ""
-    prof = valutazione["Professionista"] or ""
+    tipo = row_get(valutazione, "Tipo_Visita") or ""
+    prof = row_get(valutazione, "Professionista") or ""
     if tipo:
         c.drawString(left, y, f"Tipo visita: {tipo}")
         y -= 14
@@ -1600,7 +1601,7 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
 
     # Blocco ANAMNESI (breve) se presente
     try:
-        anam = valutazione["Anamnesi"] or ""
+        anam = row_get(valutazione, "Anamnesi") or ""
     except Exception:
         anam = ""
     if str(anam).strip():
@@ -1633,12 +1634,12 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
     
 
     # Acuità visiva (stampata solo se è stato scritto qualcosa)
-    ac_nat_od = valutazione["Acuita_Nat_OD"] or ""
-    ac_nat_os = valutazione["Acuita_Nat_OS"] or ""
-    ac_nat_oo = valutazione["Acuita_Nat_OO"] or ""
-    ac_cor_od = valutazione["Acuita_Corr_OD"] or ""
-    ac_cor_os = valutazione["Acuita_Corr_OS"] or ""
-    ac_cor_oo = valutazione["Acuita_Corr_OO"] or ""
+    ac_nat_od = row_get(valutazione, "Acuita_Nat_OD") or ""
+    ac_nat_os = row_get(valutazione, "Acuita_Nat_OS") or ""
+    ac_nat_oo = row_get(valutazione, "Acuita_Nat_OO") or ""
+    ac_cor_od = row_get(valutazione, "Acuita_Corr_OD") or ""
+    ac_cor_os = row_get(valutazione, "Acuita_Corr_OS") or ""
+    ac_cor_oo = row_get(valutazione, "Acuita_Corr_OO") or ""
 
     if any([ac_nat_od, ac_nat_os, ac_nat_oo, ac_cor_od, ac_cor_os, ac_cor_oo]):
         c.setFont("Helvetica-Bold", 11)
@@ -1669,7 +1670,7 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
             y -= 16
 
     # Blocco NOTE / refertazione
-    note = valutazione["Note"] or ""
+    note = row_get(valutazione, "Note") or ""
     if note.strip():
         c.setFont("Helvetica-Bold", 11)
         c.drawString(left, y, "Esame e refertazione")
@@ -1904,7 +1905,7 @@ def ui_pazienti():
 
     rec = next(r for r in rows if row_get(r, "ID") == sel_id)
 
-    st.write(f"Stato attuale: **{rec['Stato_Paziente']}**")
+    st.write(f"Stato attuale: **{row_get(rec, "Stato_Paziente")}**")
 
     col_a, col_b, col_c = st.columns(3)
     with col_a:
@@ -1935,46 +1936,46 @@ def ui_pazienti():
     with st.form("modifica_paziente"):
         col1, col2 = st.columns(2)
         with col1:
-            cognome_m = st.text_input("Cognome", rec["Cognome"] or "", key="m_cognome")
+            cognome_m = st.text_input("Cognome", row_get(rec, "Cognome") or "", key="m_cognome")
             data_nascita_m = st.text_input(
                 "Data di nascita (gg/mm/aaaa)",
-                datetime.strptime(rec["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
-                if rec["Data_Nascita"] else "",
+                datetime.strptime(row_get(rec, "Data_Nascita"), "%Y-%m-%d").strftime("%d/%m/%Y")
+                if row_get(rec, "Data_Nascita") else "",
                 key="m_data_nascita",
             )
         with col2:
-            nome_m = st.text_input("Nome", rec["Nome"] or "", key="m_nome")
+            nome_m = st.text_input("Nome", row_get(rec, "Nome") or "", key="m_nome")
             sesso_m = st.selectbox(
                 "Sesso",
                 ["", "M", "F", "Altro"],
-                index=(["", "M", "F", "Altro"].index(rec["Sesso"]) if rec["Sesso"] in ["", "M", "F", "Altro"] else 0),
+                index=(["", "M", "F", "Altro"].index(row_get(rec, "Sesso")) if row_get(rec, "Sesso") in ["", "M", "F", "Altro"] else 0),
                 key="m_sesso",
             )
 
         col3, col4, col5 = st.columns(3)
         with col3:
-            indirizzo_m = st.text_input("Indirizzo", rec["Indirizzo"] or "", key="m_indirizzo")
+            indirizzo_m = st.text_input("Indirizzo", row_get(rec, "Indirizzo") or "", key="m_indirizzo")
         with col4:
-            cap_m = st.text_input("CAP", rec["CAP"] or "", key="m_cap")
+            cap_m = st.text_input("CAP", row_get(rec, "CAP") or "", key="m_cap")
         with col5:
-            provincia_m = st.text_input("Provincia", rec["Provincia"] or "", key="m_provincia")
+            provincia_m = st.text_input("Provincia", row_get(rec, "Provincia") or "", key="m_provincia")
 
         col6, col7 = st.columns(2)
         with col6:
-            citta_m = st.text_input("Città", rec["Citta"] or "", key="m_citta")
+            citta_m = st.text_input("Città", row_get(rec, "Citta") or "", key="m_citta")
         with col7:
-            cf_m = st.text_input("Codice fiscale", (rec["Codice_Fiscale"] or "").upper(), key="m_cf")
+            cf_m = st.text_input("Codice fiscale", (row_get(rec, "Codice_Fiscale") or "").upper(), key="m_cf")
 
         col8, col9 = st.columns(2)
         with col8:
-            telefono_m = st.text_input("Telefono", rec["Telefono"] or "", key="m_tel")
+            telefono_m = st.text_input("Telefono", row_get(rec, "Telefono") or "", key="m_tel")
         with col9:
-            email_m = st.text_input("Email", rec["Email"] or "", key="m_email")
+            email_m = st.text_input("Email", row_get(rec, "Email") or "", key="m_email")
 
         stato_m = st.selectbox(
             "Stato paziente",
             ["ATTIVO", "ARCHIVIATO"],
-            index=(0 if (rec["Stato_Paziente"] or "ATTIVO") == "ATTIVO" else 1),
+            index=(0 if (row_get(rec, "Stato_Paziente") or "ATTIVO") == "ATTIVO" else 1),
             key="m_stato",
         )
 
@@ -2051,7 +2052,7 @@ def ui_anamnesi():
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -2177,12 +2178,12 @@ Storia libera (narrazione):
     with st.form("modifica_anamnesi"):
         data_m = st.text_input(
             "Data (gg/mm/aaaa)",
-            datetime.strptime(rec["Data_Anamnesi"], "%Y-%m-%d").strftime("%d/%m/%Y")
-            if rec["Data_Anamnesi"] else "",
+            datetime.strptime(row_get(rec, "Data_Anamnesi"), "%Y-%m-%d").strftime("%d/%m/%Y")
+            if row_get(rec, "Data_Anamnesi") else "",
         )
-        motivo_m = st.text_area("Motivo", rec["Motivo"] or "")
-        storia_m = st.text_area("Storia (testo completo)", rec["Storia"] or "")
-        note_m = st.text_area("Note", rec["Note"] or "")
+        motivo_m = st.text_area("Motivo", row_get(rec, "Motivo") or "")
+        storia_m = st.text_area("Storia (testo completo)", row_get(rec, "Storia") or "")
+        note_m = st.text_area("Note", row_get(rec, "Note") or "")
         col1, col2 = st.columns(2)
         with col1:
             salva_m = st.form_submit_button("Salva modifiche")
@@ -2236,7 +2237,7 @@ def ui_valutazioni_visive():
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
@@ -2482,9 +2483,9 @@ ESAMI STRUTTURALI / FUNZIONALI
             else:
                 labels = []
                 for v in vals:
-                    data_lbl = _format_data_it_from_iso(v["Data_Valutazione"]) if v["Data_Valutazione"] else ""
-                    tipo_lbl = (v["Tipo_Visita"] or "").strip()
-                    prof_lbl = (v["Professionista"] or "").strip()
+                    data_lbl = _format_data_it_from_iso(row_get(v, "Data_Valutazione")) if row_get(v, "Data_Valutazione") else ""
+                    tipo_lbl = (row_get(v, "Tipo_Visita") or "").strip()
+                    prof_lbl = (row_get(v, "Professionista") or "").strip()
                     parts = []
                     if data_lbl:
                         parts.append(data_lbl)
@@ -2492,8 +2493,8 @@ ESAMI STRUTTURALI / FUNZIONALI
                         parts.append(tipo_lbl)
                     if prof_lbl:
                         parts.append(prof_lbl)
-                    label = " | ".join(parts) if parts else f"Valutazione ID {v['ID']}"
-                    label = f"{v['ID']} - {label}"
+                    label = " | ".join(parts) if parts else f"Valutazione ID {row_get(v, "ID")}"
+                    label = f"{row_get(v, "ID")} - {label}"
                     labels.append(label)
 
                 sel_val = st.selectbox(
@@ -2502,9 +2503,9 @@ ESAMI STRUTTURALI / FUNZIONALI
                     key=f"referto_a4_sel_{paz_id}",
                 )
                 val_id = int(sel_val.split(" - ", 1)[0])
-                valutazione = next(v for v in vals if v["ID"] == val_id)
+                valutazione = next(v for v in vals if row_get(v, "ID") == val_id)
 
-                st.caption(f"Stato: **{(valutazione['Stato_Valutazione'] or 'BOZZA')}**")
+                st.caption(f"Stato: **{(row_get(valutazione, "Stato_Valutazione") or 'BOZZA')}**")
 
                 col_dup1, col_dup2 = st.columns([1,3])
                 with col_dup1:
@@ -2527,23 +2528,23 @@ ESAMI STRUTTURALI / FUNZIONALI
                         (
                             paz_id,
                             oggi_iso,
-                            valutazione["Tipo_Visita"],
-                            valutazione["Professionista"],
+                            row_get(valutazione, "Tipo_Visita"),
+                            row_get(valutazione, "Professionista"),
                             "BOZZA",
                             now_iso_seconds(),
                             now_iso_seconds(),
-                            valutazione["Acuita_Nat_OD"],
-                            valutazione["Acuita_Nat_OS"],
-                            valutazione["Acuita_Nat_OO"],
-                            valutazione["Acuita_Corr_OD"],
-                            valutazione["Acuita_Corr_OS"],
-                            valutazione["Acuita_Corr_OO"],
-                            float(valutazione["Costo"] or 0.0),
+                            row_get(valutazione, "Acuita_Nat_OD"),
+                            row_get(valutazione, "Acuita_Nat_OS"),
+                            row_get(valutazione, "Acuita_Nat_OO"),
+                            row_get(valutazione, "Acuita_Corr_OD"),
+                            row_get(valutazione, "Acuita_Corr_OS"),
+                            row_get(valutazione, "Acuita_Corr_OO"),
+                            float(row_get(valutazione, "Costo") or 0.0),
                             0,
-                            valutazione["Anamnesi"],
-                            valutazione["Esame"],
-                            valutazione["Conclusioni"],
-                            valutazione["Note"],
+                            row_get(valutazione, "Anamnesi"),
+                            row_get(valutazione, "Esame"),
+                            row_get(valutazione, "Conclusioni"),
+                            row_get(valutazione, "Note"),
                         ),
                     )
                     conn.commit()
@@ -2572,7 +2573,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                         valutazione=valutazione,
                         mode=mode,
                     )
-                    nome_paz_file = f"{(paziente['Cognome'] or '').strip()}_{(paziente['Nome'] or '').strip()}".strip("_") or f"paziente_{paz_id}"
+                    nome_paz_file = f"{(row_get(paziente, "Cognome") or '').strip()}_{(row_get(paziente, "Nome") or '').strip()}".strip("_") or f"paziente_{paz_id}"
                     st.download_button(
                         "Scarica referto A4 (PDF)",
                         data=pdf_bytes,
@@ -2664,7 +2665,7 @@ ESAMI STRUTTURALI / FUNZIONALI
     else:
         pdf_bytes_int = genera_referto_oculistico_pdf(paziente, rec, include_header=True)
         pdf_bytes_no = genera_referto_oculistico_pdf(paziente, rec, include_header=False)
-        base_name = f"{paziente['Cognome']}_{paziente['Nome']}_{val_id}"
+        base_name = f"{row_get(paziente, "Cognome")}_{row_get(paziente, "Nome")}_{val_id}"
 
         colr1, colr2 = st.columns(2)
         with colr1:
@@ -2687,50 +2688,50 @@ ESAMI STRUTTURALI / FUNZIONALI
     with st.form("modifica_val_visiva"):
         data_m = st.text_input(
             "Data (gg/mm/aaaa)",
-            datetime.strptime(rec["Data_Valutazione"], "%Y-%m-%d").strftime("%d/%m/%Y")
-            if rec["Data_Valutazione"] else "",
+            datetime.strptime(row_get(rec, "Data_Valutazione"), "%Y-%m-%d").strftime("%d/%m/%Y")
+            if row_get(rec, "Data_Valutazione") else "",
         )
-        tipo_m = st.text_input("Tipo visita", rec["Tipo_Visita"] or "")
-        professionista_m = st.text_input("Professionista", rec["Professionista"] or "")
+        tipo_m = st.text_input("Tipo visita", row_get(rec, "Tipo_Visita") or "")
+        professionista_m = st.text_input("Professionista", row_get(rec, "Professionista") or "")
 
-        stato_m = st.selectbox("Stato valutazione", ["BOZZA","DEFINITIVO"], index=(0 if (rec["Stato_Valutazione"] or "BOZZA")=="BOZZA" else 1))
+        stato_m = st.selectbox("Stato valutazione", ["BOZZA","DEFINITIVO"], index=(0 if (row_get(rec, "Stato_Valutazione") or "BOZZA")=="BOZZA" else 1))
 
         st.markdown("### Anamnesi")
-        anamnesi_m = st.text_area("Anamnesi (per questa visita)", rec["Anamnesi"] or "", key="vv_anamnesi_edit")
+        anamnesi_m = st.text_area("Anamnesi (per questa visita)", row_get(rec, "Anamnesi") or "", key="vv_anamnesi_edit")
 
         st.markdown("### Esame / Refertazione")
-        esame_m = st.text_area("Esame / Refertazione", rec["Esame"] or "", key="vv_esame_edit")
+        esame_m = st.text_area("Esame / Refertazione", row_get(rec, "Esame") or "", key="vv_esame_edit")
 
         st.markdown("### Conclusioni / Indicazioni")
-        conclusioni_m = st.text_area("Conclusioni / Indicazioni", rec["Conclusioni"] or "", key="vv_concl_edit")
+        conclusioni_m = st.text_area("Conclusioni / Indicazioni", row_get(rec, "Conclusioni") or "", key="vv_concl_edit")
 
 
         st.markdown("**Acuità naturale**")
         col1, col2, col3 = st.columns(3)
         with col1:
-            ac_nat_od_m = av_select("OD (naturale)", rec["Acuita_Nat_OD"], key="ac_nat_od_m")
+            ac_nat_od_m = av_select("OD (naturale)", row_get(rec, "Acuita_Nat_OD"), key="ac_nat_od_m")
         with col2:
-            ac_nat_os_m = av_select("OS (naturale)", rec["Acuita_Nat_OS"], key="ac_nat_os_m")
+            ac_nat_os_m = av_select("OS (naturale)", row_get(rec, "Acuita_Nat_OS"), key="ac_nat_os_m")
         with col3:
-            ac_nat_oo_m = av_select("OO (naturale)", rec["Acuita_Nat_OO"], key="ac_nat_oo_m")
+            ac_nat_oo_m = av_select("OO (naturale)", row_get(rec, "Acuita_Nat_OO"), key="ac_nat_oo_m")
 
         st.markdown("**Acuità corretta**")
         col4, col5, col6 = st.columns(3)
         with col4:
-            ac_cor_od_m = av_select("OD (corretta)", rec["Acuita_Corr_OD"], key="ac_cor_od_m")
+            ac_cor_od_m = av_select("OD (corretta)", row_get(rec, "Acuita_Corr_OD"), key="ac_cor_od_m")
         with col5:
-            ac_cor_os_m = av_select("OS (corretta)", rec["Acuita_Corr_OS"], key="ac_cor_os_m")
+            ac_cor_os_m = av_select("OS (corretta)", row_get(rec, "Acuita_Corr_OS"), key="ac_cor_os_m")
         with col6:
-            ac_cor_oo_m = av_select("OO (corretta)", rec["Acuita_Corr_OO"], key="ac_cor_oo_m")
+            ac_cor_oo_m = av_select("OO (corretta)", row_get(rec, "Acuita_Corr_OO"), key="ac_cor_oo_m")
 
         costo_m = st.number_input(
             "Costo visita",
             min_value=0.0,
             step=5.0,
-            value=float(rec["Costo"] or 0.0),
+            value=float(row_get(rec, "Costo") or 0.0),
             key="costo_m",
         )
-        pagato_m = st.checkbox("Pagato", value=bool(rec["Pagato"]), key="pagato_m")
+        pagato_m = st.checkbox("Pagato", value=bool(row_get(rec, "Pagato")), key="pagato_m")
 
         anamnesi_m = st.text_area("Anamnesi (per questa visita)", row_get(rec, "Anamnesi", "") or "", key="vv_anamnesi_edit2")
 
@@ -2901,7 +2902,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 note=note_prescrizione,
             )
 
-            filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}.pdf"
+            filename = f"prescrizione_occhiali_{row_get(paziente, "Cognome")}_{row_get(paziente, "Nome")}.pdf"
             st.download_button(
                 "Scarica prescrizione occhiali (A5)",
                 data=pdf_bytes,
@@ -2945,7 +2946,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 st.download_button(
                     "Scarica referto A4 (PDF)",
                     data=pdf_bytes,
-                    file_name=f"referto_visivo_{paziente['Cognome']}_{paziente['Nome']}.pdf",
+                    file_name=f"referto_visivo_{row_get(paziente, "Cognome")}_{row_get(paziente, "Nome")}.pdf",
                     mime="application/pdf",
                     key=f"download_referto_{val_id}",
                 )
@@ -2969,7 +2970,7 @@ def ui_sedute():
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -3040,23 +3041,23 @@ def ui_sedute():
     with st.form("modifica_seduta"):
         data_m = st.text_input(
             "Data (gg/mm/aaaa)",
-            datetime.strptime(rec["Data_Seduta"], "%Y-%m-%d").strftime("%d/%m/%Y")
-            if rec["Data_Seduta"] else "",
+            datetime.strptime(row_get(rec, "Data_Seduta"), "%Y-%m-%d").strftime("%d/%m/%Y")
+            if row_get(rec, "Data_Seduta") else "",
         )
-        terapia_m = st.text_input("Terapia", rec["Terapia"] or "")
-        professionista_m = st.text_input("Professionista", rec["Professionista"] or "")
+        terapia_m = st.text_input("Terapia", row_get(rec, "Terapia") or "")
+        professionista_m = st.text_input("Professionista", row_get(rec, "Professionista") or "")
         col1, col2 = st.columns(2)
         with col1:
             costo_m = st.number_input(
                 "Costo seduta",
                 min_value=0.0,
                 step=5.0,
-                value=float(rec["Costo"] or 0.0),
+                value=float(row_get(rec, "Costo") or 0.0),
                 key="costo_sed_m",
             )
         with col2:
-            pagato_m = st.checkbox("Pagato", value=bool(rec["Pagato"]), key="pagato_sed_m")
-        note_m = st.text_area("Note", rec["Note"] or "")
+            pagato_m = st.checkbox("Pagato", value=bool(row_get(rec, "Pagato")), key="pagato_sed_m")
+        note_m = st.text_area("Note", row_get(rec, "Note") or "")
 
         col3, col4 = st.columns(2)
         with col3:
@@ -3115,7 +3116,7 @@ def ui_coupons():
         conn.close()
         return
 
-    opt_paz = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    opt_paz = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -3189,44 +3190,44 @@ def ui_coupons():
 
     for c in coupons:
         data_it = ""
-        if c["Data_Assegnazione"]:
+        if row_get(c, "Data_Assegnazione"):
             try:
-                data_it = datetime.strptime(c["Data_Assegnazione"], "%Y-%m-%d").strftime("%d/%m/%Y")
+                data_it = datetime.strptime(row_get(c, "Data_Assegnazione"), "%Y-%m-%d").strftime("%d/%m/%Y")
             except Exception:
-                data_it = c["Data_Assegnazione"]
+                data_it = row_get(c, "Data_Assegnazione")
 
-        stato = "USATO" if c["Utilizzato"] else "NON USATO"
+        stato = "USATO" if row_get(c, "Utilizzato") else "NON USATO"
 
         col1, col2, col3, col4 = st.columns([4, 2, 2, 2])
         with col1:
             st.write(
-                f"**ID {c['ID']}** – {c['Tipo_Coupon']} – "
-                f"{c['Codice_Coupon'] or '-'} – {data_it or 'data n/d'}"
+                f"**ID {row_get(c, "ID")}** – {row_get(c, "Tipo_Coupon")} – "
+                f"{row_get(c, "Codice_Coupon") or '-'} – {data_it or 'data n/d'}"
             )
-            if c["Note"]:
-                st.caption(f"Note: {c['Note']}")
+            if row_get(c, "Note"):
+                st.caption(f"Note: {row_get(c, "Note")}")
         with col2:
             st.write(f"Stato: **{stato}**")
         with col3:
-            if c["Utilizzato"]:
-                if st.button("Segna NON usato", key=f"c_notused_{c['ID']}"):
+            if row_get(c, "Utilizzato"):
+                if st.button("Segna NON usato", key=f"c_notused_{row_get(c, "ID")}"):
                     cur.execute(
                         "UPDATE Coupons SET Utilizzato = 0 WHERE ID = ?",
-                        (c["ID"],),
+                        (row_get(c, "ID"),),
                     )
                     conn.commit()
                     st.rerun()
             else:
-                if st.button("Segna USATO", key=f"c_used_{c['ID']}"):
+                if st.button("Segna USATO", key=f"c_used_{row_get(c, "ID")}"):
                     cur.execute(
                         "UPDATE Coupons SET Utilizzato = 1 WHERE ID = ?",
-                        (c["ID"],),
+                        (row_get(c, "ID"),),
                     )
                     conn.commit()
                     st.rerun()
         with col4:
-            if st.button("Elimina", key=f"c_del_{c['ID']}"):
-                cur.execute("DELETE FROM Coupons WHERE ID = ?", (c["ID"],))
+            if st.button("Elimina", key=f"c_del_{row_get(c, "ID")}"):
+                cur.execute("DELETE FROM Coupons WHERE ID = ?", (row_get(c, "ID"),))
                 conn.commit()
                 st.rerun()
 
