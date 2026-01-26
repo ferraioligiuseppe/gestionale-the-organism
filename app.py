@@ -1882,7 +1882,7 @@ def ui_pazienti():
             except Exception:
                 nascita_it = row_get(r, "Data_Nascita")
         cf = (row_get(r, "Codice_Fiscale") or "").upper()
-        label = f"{r['ID']} - {r['Cognome']} {r['Nome']}"
+        label = f"{row_get(r, "ID")} - {row_get(r, "Cognome")} {row_get(r, "Nome")}"
         extra = []
         if nascita_it:
             extra.append(f"nato il {nascita_it}")
@@ -2159,7 +2159,7 @@ Storia libera (narrazione):
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
+        f"{row_get(r, "ID")} - {row_get(r, "Data_Anamnesi") or ''} - { (row_get(r, "Motivo")[:40] + '...') if row_get(r, "Motivo") and len(row_get(r, "Motivo"))>40 else (row_get(r, "Motivo") or '') }"
         for r in rows
     ]
     sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
@@ -2643,7 +2643,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
+        f"{row_get(r, "ID")} - {row_get(r, "Data_Valutazione") or ''} - { (row_get(r, "Tipo_Visita")[:40] + '...') if row_get(r, "Tipo_Visita") and len(row_get(r, "Tipo_Visita"))>40 else (row_get(r, "Tipo_Visita") or '') }"
         for r in rows
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
@@ -3022,7 +3022,7 @@ def ui_sedute():
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
+        f"{row_get(r, "ID")} - {row_get(r, "Data_Seduta") or ''} - { (row_get(r, "Terapia")[:40] + '...') if row_get(r, "Terapia") and len(row_get(r, "Terapia"))>40 else (row_get(r, "Terapia") or '') }"
         for r in rows
     ]
     sel_s = st.selectbox("Seleziona una seduta da modificare/cancellare", labels)
