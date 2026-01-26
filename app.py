@@ -200,29 +200,51 @@ def draw_letterhead_background(c, pagesize=A4, variant: str = "CIRILLO"):
 # Auth (Secrets in cloud, fallback locale)
 # -----------------------------
 def _load_users():
+    """Carica credenziali da st.secrets.
+    Supporta:
+      - [users]  (multi-utente)
+      - [auth]   (username/password)
+      - root keys (USERS / AUTH / username/password) come fallback compatibile
+    In Streamlit Cloud: se non trovate credenziali -> stop (nessun fallback).
+    """
     # 1) Multi-utente: [users]
     try:
-        users = dict(st.row_get(secrets, "users"))
+        users = dict(st.secrets["users"])
         if users:
-            return users
+            return {str(k): str(v) for k, v in users.items()}
     except Exception:
         pass
 
     # 2) Singolo utente: [auth]
     try:
-        u = st.row_get(secrets, "auth")["username"]
-        p = st.row_get(secrets, "auth")["password"]
+        u = st.secrets["auth"]["username"]
+        p = st.secrets["auth"]["password"]
         if u and p:
             return {str(u): str(p)}
     except Exception:
         pass
 
-    # In cloud: NO fallback
+    # 3) Root fallback compatibile (se qualcuno salva così)
+    try:
+        if "DATABASE_USERS" in st.secrets:
+            users = dict(st.secrets["DATABASE_USERS"])
+            if users:
+                return {str(k): str(v) for k, v in users.items()}
+    except Exception:
+        pass
+    try:
+        u = st.secrets.get("username")
+        p = st.secrets.get("password")
+        if u and p:
+            return {str(u): str(p)}
+    except Exception:
+        pass
+
     if _running_on_cloud():
         st.error("🔒 Login non configurato: aggiungi [auth] o [users] in Streamlit Cloud → Settings → Secrets.")
         st.stop()
 
-    # Fallback SOLO locale (studio)
+    # Fallback SOLO locale
     return {"admin": "admin123"}
 
 def login() -> bool:
