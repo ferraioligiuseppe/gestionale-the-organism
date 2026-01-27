@@ -350,7 +350,8 @@ class _PgConn:
         self._conn = conn
 
     def cursor(self):
-        return _PgCursor(self._conn_cursor(conn))
+        import psycopg2.extras
+        return _PgCursor(self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor))
 
     def commit(self):
         return self._conn.commit()
