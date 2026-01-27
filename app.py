@@ -919,13 +919,58 @@ def _format_data_it_from_iso(iso_str: Optional[str]) -> str:
         return iso_str
 
 
-def row_get(row, key: str, default=None):
-    """Safe getter for sqlite3.Row or dict."""
-    if row is None:
+def row_get(r, key, default=None):
+    """Accesso sicuro a row SQLite / Postgres (RealDictCursor/DictRow) e fallback su tuple/list.
+
+    Supporta nomi colonna maiuscoli/minuscoli.
+    Se `r` è una tuple/list (fallback), usa l'ordine standard della tabella Pazienti quando possibile.
+    """
+    if r is None:
         return default
 
+    # dict-like (RealDictCursor, sqlite3.Row, DictRow)
+    try:
+        if key in r:
+            return r[key]
+    except Exception:
+        pass
 
+    k2 = str(key).lower()
+    try:
+        if k2 in r:
+            return r[k2]
+    except Exception:
+        pass
 
+    k3 = "_".join(w.capitalize() for w in k2.split("_"))
+    try:
+        if k3 in r:
+            return r[k3]
+    except Exception:
+        pass
+
+    # tuple/list fallback (tipico se un cursor restituisce tuple)
+    if isinstance(r, (list, tuple)):
+        idx_map_pazienti = {
+            "id": 0,
+            "cognome": 1,
+            "nome": 2,
+            "data_nascita": 3,
+            "sesso": 4,
+            "telefono": 5,
+            "email": 6,
+            "indirizzo": 7,
+            "cap": 8,
+            "citta": 9,
+            "provincia": 10,
+            "codice_fiscale": 11,
+            "stato_paziente": 12,
+        }
+        idx = idx_map_pazienti.get(k2)
+        if idx is not None and idx < len(r):
+            return r[idx]
+
+    return default
 
 def conn_cursor(conn):
     """Ritorna un cursore DB compatibile.
