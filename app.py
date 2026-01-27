@@ -350,7 +350,7 @@ class _PgConn:
         self._conn = conn
 
     def cursor(self):
-        return _PgCursor(self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor))
+        return _PgCursor(self._conn_cursor(conn))
 
     def commit(self):
         return self._conn.commit()
@@ -401,7 +401,7 @@ def init_db() -> None:
         return
 
     conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn_cursor(conn)
 
 
     # Pazienti
@@ -531,7 +531,7 @@ def export_pazienti_excel(*, include_archiviati: bool = False) -> bytes:
         raise RuntimeError("openpyxl non disponibile")
 
     conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn_cursor(conn)
     cur.execute("SELECT * FROM Pazienti " + ("" if include_archiviati else "WHERE Stato_Paziente = 'ATTIVO' ") + "ORDER BY Cognome, Nome")
     rows = cur.fetchall()
     conn.close()
@@ -924,6 +924,21 @@ def row_get(row, key: str, default=None):
         return default
 
 
+
+
+def conn_cursor(conn):
+    """Ritorna un cursore DB compatibile.
+    - Postgres/psycopg2: RealDictCursor (righe come dict)
+    - SQLite: cursor standard
+    """
+    try:
+        import psycopg2  # noqa: F401
+        import psycopg2.extras
+        if conn.__class__.__module__.startswith("psycopg2"):
+            return conn_cursor(conn)
+    except Exception:
+        pass
+    return conn.cursor()
 
 def paziente_label(p):
     """Label paziente robusta: ID - Cognome Nome — CF (se presente)"""
@@ -1764,7 +1779,7 @@ def ui_pazienti():
                     st.error(f"Errore export Excel: {e}")
 
     conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn_cursor(conn)
 
     # --- Tool CF separato (facoltativo) ---
     with st.expander("Tool di supporto per generare il Codice Fiscale"):
@@ -2070,7 +2085,7 @@ def ui_anamnesi():
     st.header("Anamnesi")
 
     conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn_cursor(conn)
 
     # Seleziona paziente
     cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
@@ -2257,7 +2272,7 @@ def ui_valutazioni_visive():
     st.header("Valutazioni visive / oculistiche")
 
     conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn_cursor(conn)
 
     # Seleziona paziente
     cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
@@ -2994,7 +3009,7 @@ def ui_sedute():
     st.header("Sedute / Terapie")
 
     conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn_cursor(conn)
 
     cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
@@ -3141,7 +3156,7 @@ def ui_coupons():
     st.header("Gestione coupon OF / SDS")
 
     conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn_cursor(conn)
 
     # Elenco pazienti
     cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
@@ -3280,7 +3295,7 @@ def ui_dashboard():
     st.header("Dashboard incassi")
 
     conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn_cursor(conn)
 
     st.subheader("Filtri")
 
@@ -3409,7 +3424,7 @@ def ui_integrazioni():
 
     if st.button("Genera Excel completo"):
         conn = get_connection()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = conn_cursor(conn)
 
         # parse date filters (non bloccante: se vuote -> nessun filtro)
         data_da_iso = None
