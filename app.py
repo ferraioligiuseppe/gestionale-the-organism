@@ -923,6 +923,23 @@ def row_get(row, key: str, default=None):
         return default
 
 
+
+def paziente_label(p):
+    """Label paziente robusta: ID - Cognome Nome — CF (se presente)"""
+    pid = row_get(p, "id", None)
+    if pid is None:
+        pid = row_get(p, "ID", "")
+    cogn = (row_get(p, "cognome", "") or row_get(p, "Cognome", "") or "").strip()
+    nome = (row_get(p, "nome", "") or row_get(p, "Nome", "") or "").strip()
+    cf = (row_get(p, "codice_fiscale", "") or row_get(p, "Codice_Fiscale", "") or "").strip()
+
+    base = f"{cogn} {nome}".strip()
+    if not base:
+        base = "(senza nome)"
+    if cf:
+        return f"{pid} - {base} — {cf}"
+    return f"{pid} - {base}"
+
 def extract_leading_int(label, default=None):
     """Estrae un ID numerico all'inizio di una stringa tipo '123 - Cognome Nome'.
     Ritorna default se non trova un numero.
@@ -2062,7 +2079,7 @@ def ui_anamnesi():
         conn.close()
         return
 
-    options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
+    options = [paziente_label(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = extract_leading_int(sel)
     if paz_id is None:
@@ -2249,7 +2266,7 @@ def ui_valutazioni_visive():
         conn.close()
         return
 
-    options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
+    options = [paziente_label(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = extract_leading_int(sel)
     if paz_id is None:
@@ -2985,7 +3002,7 @@ def ui_sedute():
         conn.close()
         return
 
-    options = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
+    options = [paziente_label(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = extract_leading_int(sel)
     if paz_id is None:
@@ -3133,7 +3150,7 @@ def ui_coupons():
         conn.close()
         return
 
-    opt_paz = [f"{row_get(p, "ID")} - {row_get(p, "Cognome")} {row_get(p, "Nome")}" for p in pazienti]
+    opt_paz = [paziente_label(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = extract_leading_int(sel)
     if paz_id is None:
