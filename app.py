@@ -976,28 +976,40 @@ def gdrive_upload_bytes(filename: str, data: bytes, mimetype: str = "application
         return None
 
 def export_all_tables_excel(conn) -> bytes:
-    tables = ["pazienti", "anamnesi", "valutazioni_visive", "sedute", "coupons", "consensi_privacy"]
+    tables = ["pazienti", "anamnesi", "valutazioni_visive", "sedute", "coupons", "consensi_privacy", "backup_log"]
     bio = io.BytesIO()
+    wrote_any = False
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         for t in tables:
             try:
-                df = pd.read_sql_query(f"SELECT * FROM {t}", conn)
+                cols, rows = fetch_table_rows(conn, t)
+                df = rows_to_df(cols, rows)
+                df.to_excel(writer, sheet_name=t[:31], index=False)
+                wrote_any = True
             except Exception:
                 continue
-            df.to_excel(writer, sheet_name=t[:31], index=False)
+        if not wrote_any:
+            pd.DataFrame({"info": ["Nessuna tabella esportata (verifica connessione/permessi)"]}).to_excel(
+                writer, sheet_name="info", index=False
+            )
     return bio.getvalue()
 
 def export_all_tables_csv_zip(conn) -> bytes:
     import zipfile
-    tables = ["pazienti", "anamnesi", "valutazioni_visive", "sedute", "coupons", "consensi_privacy"]
+    tables = ["pazienti", "anamnesi", "valutazioni_visive", "sedute", "coupons", "consensi_privacy", "backup_log"]
     bio = io.BytesIO()
+    wrote_any = False
     with zipfile.ZipFile(bio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for t in tables:
             try:
-                df = pd.read_sql_query(f"SELECT * FROM {t}", conn)
+                cols, rows = fetch_table_rows(conn, t)
+                df = rows_to_df(cols, rows)
+                zf.writestr(f"{t}.csv", df.to_csv(index=False).encode("utf-8"))
+                wrote_any = True
             except Exception:
                 continue
-            zf.writestr(f"{t}.csv", df.to_csv(index=False).encode("utf-8"))
+        if not wrote_any:
+            zf.writestr("info.txt", "Nessuna tabella esportata (verifica connessione/permessi)")
     return bio.getvalue()
 
 def export_marketing_contacts_csv(conn) -> bytes:
@@ -1070,6 +1082,39 @@ def conn_cursor(conn):
     except Exception:
         pass
     return conn.cursor()
+
+
+
+def fetch_table_rows(conn, table: str):
+    """Ritorna (cols, rows) per una tabella, compatibile SQLite/Postgres wrapper."""
+    # usa conn_cursor se presente (Postgres dict), altrimenti cursor standard
+    try:
+        cur = conn_cursor(conn)
+    except Exception:
+        cur = conn.cursor()
+    try:
+        cur.execute(f"SELECT * FROM {table}")
+    except Exception:
+        cur.execute(f'SELECT * FROM "{table}"')
+    rows = cur.fetchall() or []
+    cols = []
+    try:
+        cols = [d[0] for d in cur.description] if getattr(cur, "description", None) else []
+    except Exception:
+        cols = []
+    return cols, rows
+
+def rows_to_df(cols, rows):
+    """Converte rows (dict o tuple) in DataFrame."""
+    import pandas as pd
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    first = rows[0]
+    if isinstance(first, dict):
+        return pd.DataFrame(rows)
+    if cols:
+        return pd.DataFrame(list(rows), columns=cols)
+    return pd.DataFrame(list(rows))
 
 def paziente_label(p):
     """Label paziente robusta: ID - Cognome Nome — CF (se presente)"""
