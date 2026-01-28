@@ -12,7 +12,6 @@ from functools import lru_cache
 import math  # <-- aggiungi questa riga se non c'è
 import textwrap  # per andare a capo nel referto
 
-import pandas as pd
 
 
 # -----------------------------
@@ -929,102 +928,6 @@ def row_get(r, key, default=None):
     if r is None:
         return default
 
-
-
-def _get_gdrive_cfg():
-    try:
-        folder_id = st.secrets["gdrive"]["folder_id"]
-        sa_json = st.secrets["gdrive"]["service_account_json"]
-        auto_daily = bool(st.secrets["gdrive"].get("auto_backup_daily", True))
-        return folder_id, sa_json, auto_daily
-    except Exception:
-        return None, None, False
-
-def gdrive_client():
-    folder_id, sa_json, _ = _get_gdrive_cfg()
-    if not folder_id or (not sa_json and not sa_b64):
-        return None
-    try:
-        import json
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        creds_info = json.loads(sa_json) if isinstance(sa_json, str) else sa_json
-        creds = service_account.Credentials.from_service_account_info(
-            creds_info,
-            scopes=["https://www.googleapis.com/auth/drive.file"],
-        )
-        return build("drive", "v3", credentials=creds, cache_discovery=False)
-    except Exception as e:
-        st.sidebar.error(f"Errore Google Drive: {e}")
-        return None
-
-def gdrive_upload_bytes(filename: str, data: bytes, mimetype: str = "application/octet-stream"):
-    folder_id, _, _ = _get_gdrive_cfg()
-    svc = gdrive_client()
-    if not svc:
-        return None
-    try:
-        from googleapiclient.http import MediaInMemoryUpload
-        media = MediaInMemoryUpload(data, mimetype=mimetype, resumable=False)
-        meta = {"name": filename}
-        if folder_id:
-            meta["parents"] = [folder_id]
-        f = svc.files().create(body=meta, media_body=media, fields="id, webViewLink").execute()
-        return f.get("id"), f.get("webViewLink")
-    except Exception as e:
-        st.sidebar.error(f"Upload Drive fallito: {e}")
-        return None
-
-def export_all_tables_excel(conn) -> bytes:
-    tables = ["pazienti", "anamnesi", "valutazioni_visive", "sedute", "coupons", "consensi_privacy", "backup_log"]
-    bio = io.BytesIO()
-    wrote_any = False
-    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-        for t in tables:
-            try:
-                cols, rows = fetch_table_rows(conn, t)
-                df = rows_to_df(cols, rows)
-                df.to_excel(writer, sheet_name=t[:31], index=False)
-                wrote_any = True
-            except Exception:
-                continue
-        if not wrote_any:
-            pd.DataFrame({"info": ["Nessuna tabella esportata (verifica connessione/permessi)"]}).to_excel(
-                writer, sheet_name="info", index=False
-            )
-    return bio.getvalue()
-
-def export_all_tables_csv_zip(conn) -> bytes:
-    import zipfile
-    tables = ["pazienti", "anamnesi", "valutazioni_visive", "sedute", "coupons", "consensi_privacy", "backup_log"]
-    bio = io.BytesIO()
-    wrote_any = False
-    with zipfile.ZipFile(bio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for t in tables:
-            try:
-                cols, rows = fetch_table_rows(conn, t)
-                df = rows_to_df(cols, rows)
-                zf.writestr(f"{t}.csv", df.to_csv(index=False).encode("utf-8"))
-                wrote_any = True
-            except Exception:
-                continue
-        if not wrote_any:
-            zf.writestr("info.txt", "Nessuna tabella esportata (verifica connessione/permessi)")
-    return bio.getvalue()
-
-def export_marketing_contacts_csv(conn) -> bytes:
-    q = """
-    SELECT p.id, p.cognome, p.nome, p.email, p.telefono, p.codice_fiscale
-    FROM pazienti p
-    JOIN consensi_privacy c ON c.paziente_id = p.id
-    WHERE COALESCE(c.consenso_marketing,0) = 1
-    """
-    try:
-        df = pd.read_sql_query(q, conn)
-    except Exception:
-        return b""
-    return df.to_csv(index=False).encode("utf-8")
-
     # dict-like (RealDictCursor, sqlite3.Row, DictRow)
     try:
         if key in r:
@@ -1082,39 +985,6 @@ def conn_cursor(conn):
     except Exception:
         pass
     return conn.cursor()
-
-
-
-def fetch_table_rows(conn, table: str):
-    """Ritorna (cols, rows) per una tabella, compatibile SQLite/Postgres wrapper."""
-    # usa conn_cursor se presente (Postgres dict), altrimenti cursor standard
-    try:
-        cur = conn_cursor(conn)
-    except Exception:
-        cur = conn.cursor()
-    try:
-        cur.execute(f"SELECT * FROM {table}")
-    except Exception:
-        cur.execute(f'SELECT * FROM "{table}"')
-    rows = cur.fetchall() or []
-    cols = []
-    try:
-        cols = [d[0] for d in cur.description] if getattr(cur, "description", None) else []
-    except Exception:
-        cols = []
-    return cols, rows
-
-def rows_to_df(cols, rows):
-    """Converte rows (dict o tuple) in DataFrame."""
-    import pandas as pd
-    if not rows:
-        return pd.DataFrame(columns=cols)
-    first = rows[0]
-    if isinstance(first, dict):
-        return pd.DataFrame(rows)
-    if cols:
-        return pd.DataFrame(list(rows), columns=cols)
-    return pd.DataFrame(list(rows))
 
 def paziente_label(p):
     """Label paziente robusta: ID - Cognome Nome — CF (se presente)"""
@@ -3736,34 +3606,6 @@ def main():
     if not login():
         return
 
-
-    # --- Backup & Export (Google Drive) ---
-    with st.sidebar.expander("Backup & Export (Drive)", expanded=False):
-        folder_id, sa_json, sa_b64, _auto = _get_gdrive_cfg()
-        if not folder_id or (not sa_json and not sa_b64):
-            st.info("Configura [gdrive] nei Secrets per attivare backup/export.")
-        else:
-            conn = get_connection()
-            if st.button("Export Excel (tutte le tabelle)"):
-                xlsx = export_all_tables_excel(conn)
-                st.download_button("Scarica Excel", data=xlsx, file_name="the_organism_export.xlsx",
-                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                up = gdrive_upload_bytes("the_organism_export.xlsx", xlsx,
-                                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                if up:
-                    st.success("Caricato su Drive ✅")
-            if st.button("Export CSV (ZIP)"):
-                z = export_all_tables_csv_zip(conn)
-                st.download_button("Scarica ZIP", data=z, file_name="the_organism_export_csv.zip", mime="application/zip")
-                up = gdrive_upload_bytes("the_organism_export_csv.zip", z, mimetype="application/zip")
-                if up:
-                    st.success("Caricato su Drive ✅")
-            if st.button("Export contatti marketing (CSV)"):
-                csvb = export_marketing_contacts_csv(conn)
-                st.download_button("Scarica CSV marketing", data=csvb, file_name="contatti_marketing.csv", mime="text/csv")
-                up = gdrive_upload_bytes("contatti_marketing.csv", csvb, mimetype="text/csv")
-                if up:
-                    st.success("Caricato su Drive ✅")
     st.sidebar.markdown(f"👤 Utente: **{st.session_state.get('logged_user','')}**")
     _sidebar_db_indicator()
 
