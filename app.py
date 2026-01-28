@@ -942,7 +942,7 @@ def _get_gdrive_cfg():
 
 def gdrive_client():
     folder_id, sa_json, _ = _get_gdrive_cfg()
-    if not folder_id or not sa_json:
+    if not folder_id or (not sa_json and not sa_b64):
         return None
     try:
         import json
@@ -3739,8 +3739,8 @@ def main():
 
     # --- Backup & Export (Google Drive) ---
     with st.sidebar.expander("Backup & Export (Drive)", expanded=False):
-        folder_id, sa_json, _auto = _get_gdrive_cfg()
-        if not folder_id or not sa_json:
+        folder_id, sa_json, sa_b64, _auto = _get_gdrive_cfg()
+        if not folder_id or (not sa_json and not sa_b64):
             st.info("Configura [gdrive] nei Secrets per attivare backup/export.")
         else:
             conn = get_connection()
