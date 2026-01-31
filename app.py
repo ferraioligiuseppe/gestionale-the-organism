@@ -156,12 +156,12 @@ def _require_postgres_on_cloud():
     _sidebar_db_indicator()
     if _is_streamlit_cloud() and _DB_BACKEND != "postgres":
         st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
-        st.info("Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
+        st.info("""Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
 
 [db]
-DATABASE_URL = \"postgresql://...sslmode=require\"
+DATABASE_URL = "postgresql://...sslmode=require"
 
-Poi riavvia l'app.")
+Poi riavvia l'app.""" )
         st.stop()
 
 class _PgCursor:
@@ -2628,4 +2628,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
