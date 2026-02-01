@@ -2,6 +2,12 @@ import streamlit as st
 import sqlite3
 from datetime import date, datetime
 from typing import Optional, Dict
+from letterhead_pdf import build_pdf_with_letterhead
+from pdf_templates import build_pdf
+# A5
+
+# A4 2×A5
+
 import os
 import io
 import csv
@@ -10,13 +16,348 @@ import math  # <-- aggiungi questa riga se non c'è
 import textwrap  # per andare a capo nel referto
 
 # PDF (referti e prescrizioni A4/A5)
+
+# ---- PRINT HELPERS (image background + clean prescription table) ----
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4, A5
+from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
+
+def _safe_str(x) -> str:
+    if x is None:
+        return ""
+    s = str(x).strip()
+    return s
+
+def _fmt_num(x) -> str:
+    if x is None:
+        return ""
+    try:
+        # keep sign and 2 decimals for floats
+        if isinstance(x, (int,)):
+            return f"{x:d}"
+        xf = float(x)
+        return f"{xf:+.2f}"
+    except Exception:
+        return _safe_str(x)
+
+def _find_bg_image(page_kind: str, variant: str) -> str | None:
+    """
+    Finds a background image inside common asset folders.
+    page_kind: 'a4' or 'a5'
+    variant: 'with_cirillo' or 'no_cirillo'
+    """
+    candidates = []
+
+    # preferred canonical names
+    base_names = [
+        f"{page_kind}_{variant}",
+        f"letterhead_{page_kind}_{variant}",
+        f"prescrizione_{page_kind}_{variant}",
+    ]
+    exts = [".png", ".jpg", ".jpeg", ".webp"]
+
+    # common folders
+    folders = [
+        "assets/print_bg",
+        "assets/print",
+        "assets",
+        "assets/templates",   # just in case you put them here
+    ]
+
+    for folder in folders:
+        for bn in base_names:
+            for ext in exts:
+                candidates.append(os.path.join(folder, bn + ext))
+
+    # also accept your specific filenames (legacy)
+    legacy = []
+    if page_kind == "a4":
+        legacy += [
+            "assets/print_bg/CARATA INTESTAT THE ORGANISMA4.jpeg",
+            "assets/CARATA INTESTAT THE ORGANISMA4.jpeg",
+        ]
+    if page_kind == "a5" and variant == "no_cirillo":
+        legacy += [
+            "assets/print_bg/PRESCRIZIONI THE ORGANISMAA5_no cirillo.png",
+            "assets/PRESCRIZIONI THE ORGANISMAA5_no cirillo.png",
+        ]
+    candidates += legacy
+
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+
+    # fallback: if with_cirillo missing, try no_cirillo; and vice versa
+    if variant == "with_cirillo":
+        return _find_bg_image(page_kind, "no_cirillo")
+    return _find_bg_image(page_kind, "with_cirillo") if variant == "no_cirillo" else None
+
+def _draw_bg_image_fullpage(c: canvas.Canvas, page_w: float, page_h: float, img_path: str | None):
+    if not img_path:
+        return
+    try:
+        img = ImageReader(img_path)
+        iw, ih = img.getSize()
+        scale = min(page_w / iw, page_h / ih)
+        dw, dh = iw * scale, ih * scale
+        x = (page_w - dw) / 2
+        y = (page_h - dh) / 2
+        c.drawImage(img, x, y, width=dw, height=dh, mask="auto")
+    except Exception:
+        # fail silently: no background
+        return
+
+
+def _draw_tabo_semicircle(c: canvas.Canvas, cx: float, cy: float, r: float, label: str):
+    """Disegna semicerchio TABO 180→0 con tick principali e label."""
+    c.saveState()
+    c.setLineWidth(1)
+    # arco superiore (0→180)
+    c.arc(cx - r, cy - r, cx + r, cy + r, startAng=0, extent=180)
+
+    # tick ogni 30° (più lunghi ogni 60°)
+    for deg in range(0, 181, 10):
+        rad = math.radians(deg)
+        x1 = cx + r * math.cos(rad)
+        y1 = cy + r * math.sin(rad)
+        tick = 3*mm if deg % 30 == 0 else 1.8*mm
+        if deg % 60 == 0:
+            tick = 4*mm
+        x2 = cx + (r - tick) * math.cos(rad)
+        y2 = cy + (r - tick) * math.sin(rad)
+        c.line(x2, y2, x1, y1)
+
+    # labels principali
+    c.setFont("Helvetica", 8)
+    c.drawString(cx - r - 12*mm, cy + 1*mm, "180")
+    c.drawCentredString(cx, cy + r + 3*mm, "90")
+    c.drawString(cx + r + 4*mm, cy + 1*mm, "0")
+
+    # label occhio sotto
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(cx, cy - r - 6*mm, label)
+    c.restoreState()
+
+
+def _draw_axis_arrow(c: canvas.Canvas, cx: float, cy: float, r: float, axis_deg, enabled: bool):
+    """Disegna freccia direzione asse cilindro su TABO. axis_deg 0..180."""
+    if not enabled:
+        return
+    try:
+        ax = int(axis_deg)
+    except Exception:
+        return
+    if ax < 0 or ax > 180:
+        return
+
+    c.saveState()
+    c.setLineWidth(1.2)
+    rad = math.radians(ax)
+    x2 = cx + (r - 2*mm) * math.cos(rad)
+    y2 = cy + (r - 2*mm) * math.sin(rad)
+    c.line(cx, cy, x2, y2)
+
+    # arrow head
+    head = 4*mm
+    ang1 = rad + math.radians(155)
+    ang2 = rad - math.radians(155)
+    c.line(x2, y2, x2 + head*math.cos(ang1), y2 + head*math.sin(ang1))
+    c.line(x2, y2, x2 + head*math.cos(ang2), y2 + head*math.sin(ang2))
+    c.restoreState()
+
+def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: float, dati: dict, top_offset_mm: float = 60):
+    """
+    Clean layout (no boxes): writes a readable table with SF/CIL/AX for OD/OS:
+    Lontano / Intermedio / Vicino.
+    """
+    left = 18 * mm
+    right = page_w - 18 * mm
+    y = page_h - top_offset_mm * mm  # below header line
+
+    c.setFont("Helvetica", 11)
+    c.drawString(left, y, f"Sig.: {_safe_str(dati.get('paziente',''))}")
+    c.drawRightString(right, y, f"Data: {_safe_str(dati.get('data',''))}")
+    y -= 10 * mm
+
+    # headers
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(left, y, "PRESCRIZIONE OCCHIALI")
+    y -= 7 * mm
+
+    # --- TABO semicircles + axis arrow (asse cilindro) ---
+    # Usare asse del LONTANO; freccia solo se CIL != 0
+    r_tabo = 24 * mm
+    cy_tabo = y - 4 * mm
+    cx_od = left + 55 * mm
+    cx_os = left + 135 * mm
+
+    _draw_tabo_semicircle(c, cx_od, cy_tabo, r_tabo, "Occhio Destro")
+    _draw_tabo_semicircle(c, cx_os, cy_tabo, r_tabo, "Occhio Sinistro")
+
+    od_cil = dati.get("od_lon_cil")
+    os_cil = dati.get("os_lon_cil")
+    od_has_ast = False
+    os_has_ast = False
+    try:
+        od_has_ast = float(od_cil or 0) != 0.0
+    except Exception:
+        od_has_ast = False
+    try:
+        os_has_ast = float(os_cil or 0) != 0.0
+    except Exception:
+        os_has_ast = False
+
+    _draw_axis_arrow(c, cx_od, cy_tabo, r_tabo, dati.get("od_lon_ax"), enabled=od_has_ast)
+    _draw_axis_arrow(c, cx_os, cy_tabo, r_tabo, dati.get("os_lon_ax"), enabled=os_has_ast)
+
+    # spazio dopo TABO
+    y -= 2 * r_tabo + 10 * mm
+
+    # columns
+    col_label = left
+    col_od_sf  = left + 28*mm
+    col_od_cil = left + 46*mm
+    col_od_ax  = left + 64*mm
+
+    col_os_sf  = left + 112*mm
+    col_os_cil = left + 130*mm
+    col_os_ax  = left + 148*mm
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(col_od_sf - 10*mm, y, "OD")
+    c.drawString(col_os_sf - 10*mm, y, "OS")
+    y -= 5 * mm
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(col_label, y, "")
+    c.drawString(col_od_sf,  y, "SF")
+    c.drawString(col_od_cil, y, "CIL")
+    c.drawString(col_od_ax,  y, "AX")
+    c.drawString(col_os_sf,  y, "SF")
+    c.drawString(col_os_cil, y, "CIL")
+    c.drawString(col_os_ax,  y, "AX")
+    y -= 6 * mm
+
+    def row(label, od_sf, od_cil, od_ax, os_sf, os_cil, os_ax):
+        nonlocal y
+        c.setFont("Helvetica", 9)
+        c.drawString(col_label, y, label)
+        c.drawRightString(col_od_sf + 10*mm, y, _fmt_num(od_sf))
+        c.drawRightString(col_od_cil + 10*mm, y, _fmt_num(od_cil))
+        c.drawRightString(col_od_ax + 10*mm, y, _safe_str(od_ax))
+
+        c.drawRightString(col_os_sf + 10*mm, y, _fmt_num(os_sf))
+        c.drawRightString(col_os_cil + 10*mm, y, _fmt_num(os_cil))
+        c.drawRightString(col_os_ax + 10*mm, y, _safe_str(os_ax))
+        y -= 6 * mm
+
+    row("Lontano",
+        dati.get("od_lon_sf"), dati.get("od_lon_cil"), dati.get("od_lon_ax"),
+        dati.get("os_lon_sf"), dati.get("os_lon_cil"), dati.get("os_lon_ax"))
+    row("Intermedio",
+        dati.get("od_int_sf"), dati.get("od_int_cil"), dati.get("od_int_ax"),
+        dati.get("os_int_sf"), dati.get("os_int_cil"), dati.get("os_int_ax"))
+    row("Vicino",
+        dati.get("od_vic_sf"), dati.get("od_vic_cil"), dati.get("od_vic_ax"),
+        dati.get("os_vic_sf"), dati.get("os_vic_cil"), dati.get("os_vic_ax"))
+
+    y -= 8 * mm
+
+    # Lenti / trattamenti
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(left, y, "Lenti consigliate / Trattamenti")
+    y -= 6 * mm
+    c.setFont("Helvetica", 9)
+    lenti = ", ".join(dati.get("lenti", []) or [])
+    if lenti:
+        c.drawString(left, y, f"Lenti: {lenti}")
+        y -= 5 * mm
+    altri = _safe_str(dati.get("altri_trattamenti", ""))
+    if altri:
+        c.drawString(left, y, f"Altri trattamenti: {altri}")
+        y -= 5 * mm
+
+    note = _safe_str(dati.get("note", ""))
+    if note:
+        y -= 2 * mm
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(left, y, "Note:")
+        y -= 5 * mm
+        c.setFont("Helvetica", 9)
+        max_chars = 110 if page_w >= A4[0] else 70
+        for i in range(0, len(note), max_chars):
+            c.drawString(left, y, note[i:i+max_chars])
+            y -= 5 * mm
+
+def _prescrizione_pdf_imagebg(page_size, page_kind: str, con_cirillo: bool, dati: dict) -> bytes:
+    variant = "with_cirillo" if con_cirillo else "no_cirillo"
+    bg = _find_bg_image(page_kind, variant)
+    page_w, page_h = page_size
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=page_size)
+    _draw_bg_image_fullpage(c, page_w, page_h, bg)
+    # top offset: A5 has less vertical space
+    top_offset = 62 if page_kind == "a4" else 58
+    _draw_prescrizione_clean_table(c, page_w, page_h, dati, top_offset_mm=top_offset)
+    c.showPage(); c.save()
+    buf.seek(0)
+    return buf.read()
+
 try:
-    from reportlab.lib.pagesizes import A4, A5
+    from reportlab.lib.pagesizes import A4, A5, landscape
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import mm
     REPORTLAB_AVAILABLE = True
 except ImportError:
     REPORTLAB_AVAILABLE = False
+
+
+# PDF merge (template letterhead)
+try:
+    from pypdf import PdfReader, PdfWriter
+    from pypdf._page import PageObject
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+
+
+def _make_overlay_pdf_pagesize(pagesize, draw_fn):
+    """Crea un PDF overlay (una pagina) con ReportLab per un pagesize arbitrario."""
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=pagesize)
+    w, h = pagesize
+    draw_fn(c, w, h)
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf.read()
+
+@lru_cache(maxsize=4)
+def _build_a4_landscape_2up_template_bytes(variant: str) -> bytes:
+    """Crea un template A4 landscape con 2 template A5 affiancati (sinistra+destra)."""
+    if not PYPDF_AVAILABLE:
+        raise RuntimeError("pypdf non disponibile")
+
+    a4_w, a4_h = landscape(A4)
+    a5_w, a5_h = A5
+
+    a5_path = "assets/letterhead/a5_with_cirillo.pdf" if variant == "with_cirillo" else "assets/letterhead/a5_no_cirillo.pdf"
+    reader = PdfReader(a5_path)
+    a5_page = reader.pages[0]
+
+    out_page = PageObject.create_blank_page(width=a4_w, height=a4_h)
+
+    # due pannelli A5 affiancati
+    out_page.merge_translated_page(a5_page, tx=0, ty=0)
+    out_page.merge_translated_page(a5_page, tx=a5_w, ty=0)
+
+    writer = PdfWriter()
+    writer.add_page(out_page)
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out.read()
 
 
 # -----------------------------
@@ -110,77 +451,113 @@ except Exception:
 
 
 
+def _is_streamlit_cloud() -> bool:
+    """Heuristic check: True when running on Streamlit Cloud."""
+    try:
+        # Streamlit Cloud mounts the repo under /mount/src
+        if os.getcwd().startswith("/mount/src") or os.path.exists("/mount/src"):
+            return True
+    except Exception:
+        pass
+    # Fallback heuristics
+    for k in ("STREAMLIT_CLOUD", "STREAMLIT_SHARING", "STREAMLIT_RUNTIME_ENV"):
+        v = os.getenv(k, "")
+        if str(v).lower() in ("1", "true", "yes", "cloud", "sharing"):
+            return True
+    return False
+
+
 
 class _RowCI(dict):
-    """Case-insensitive dict for DB rows (Postgres returns lowercase keys).
-    Allows code like row['Data_Nascita'] to work even if key is 'data_nascita'.
+    """Case-insensitive dict for row access.
+
+    The app was written against sqlite3.Row with mixed-case column names (e.g., 'ID', 'CAP').
+    PostgreSQL folds unquoted identifiers to lowercase, so DictCursor returns keys like 'id', 'cap'.
+    This wrapper allows row['ID'] to resolve to row['id'] transparently.
     """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._kmap = {str(k).lower(): k for k in self.keys()}
-
-    def _resolve(self, key):
-        # Avoid recursion: use base dict membership
-        if dict.__contains__(self, key):
-            return key
-        lk = str(key).lower()
-        return self._kmap.get(lk, key)
-
     def __getitem__(self, key):
-        return super().__getitem__(self._resolve(key))
+        if isinstance(key, str):
+            if dict.__contains__(self, key):
+                return dict.__getitem__(self, key)
+            lk = key.lower()
+            if dict.__contains__(self, lk):
+                return dict.__getitem__(self, lk)
+            uk = key.upper()
+            if dict.__contains__(self, uk):
+                return dict.__getitem__(self, uk)
+        return dict.__getitem__(self, key)
 
     def get(self, key, default=None):
-        return super().get(self._resolve(key), default)
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
 
-    def __contains__(self, key):
-        return dict.__contains__(self, self._resolve(key))
-
-
-class _PgCursorProxy:
-    """Proxy cursor that converts SQLite-style '?' placeholders to psycopg2 '%s'."""
+class _PgCursor:
+    """Cursor wrapper to:
+    - translate SQLite '?' placeholders -> psycopg2 '%s'
+    - return psycopg2 DictRow (supports both dict and index access)
+    """
     def __init__(self, cur):
         self._cur = cur
 
     @staticmethod
-    def _convert_qmark(sql: str) -> str:
-        # Convert qmark placeholders to psycopg2 format.
-        # Assumes app queries don't contain literal '?' in strings.
+    def _adapt_sql(sql: str) -> str:
+        # naive but effective for this app: replace all '?' placeholders
         return sql.replace("?", "%s")
 
-    def execute(self, query, params=None):
-        q = self._convert_qmark(query) if params is not None else query
-        return self._cur.execute(q, params or ())
+    def execute(self, sql, params=None):
+        sql2 = self._adapt_sql(str(sql))
+        if params is None:
+            return self._cur.execute(sql2)
+        return self._cur.execute(sql2, params)
 
-    def executemany(self, query, param_list):
-        q = self._convert_qmark(query)
-        return self._cur.executemany(q, param_list)
+    def executemany(self, sql, seq_of_params):
+        sql2 = self._adapt_sql(str(sql))
+        return self._cur.executemany(sql2, seq_of_params)
 
     def fetchone(self):
-        r = self._cur.fetchone()
-        return _RowCI(r) if isinstance(r, dict) else r
+        row = self._cur.fetchone()
+        if row is None:
+            return None
+        try:
+            return _RowCI(dict(row))
+        except Exception:
+            return row
 
     def fetchall(self):
         rows = self._cur.fetchall()
-        if rows and isinstance(rows[0], dict):
-            return [_RowCI(r) for r in rows]
-        return rows
+        out = []
+        for r in rows:
+            try:
+                out.append(_RowCI(dict(r)))
+            except Exception:
+                out.append(r)
+        return out
 
-    def __getattr__(self, name):
-        return getattr(self._cur, name)
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+    @property
+    def description(self):
+        return self._cur.description
+
+    def close(self):
+        try:
+            return self._cur.close()
+        except Exception:
+            return None
+
 
 class _PgConn:
-    """Small wrapper to unify cursor behavior across SQLite/PostgreSQL.
-
-    - For PostgreSQL we use RealDictCursor so rows behave like dicts (_rk(row,'ID')).
-    - Exposes commit/close and context-manager methods.
-    """
+    """Connection wrapper to emulate the minimal sqlite3 API used by the app."""
     def __init__(self, conn):
         self._conn = conn
 
     def cursor(self):
-        # RealDictCursor makes rows dict-like; proxy converts '?' placeholders to '%s'.
-        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        return _PgCursorProxy(cur)
+        # DictCursor yields DictRow which supports both mapping and sequence access
+        return _PgCursor(self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor))
 
     def commit(self):
         return self._conn.commit()
@@ -188,27 +565,28 @@ class _PgConn:
     def close(self):
         return self._conn.close()
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        try:
-            if exc_type is None:
-                self._conn.commit()
-        finally:
-            self._conn.close()
-        return False
-
 def _secrets_diagnostics():
-    """Return non-sensitive diagnostics about Streamlit secrets/env."""
+    """Return non-sensitive diagnostics about Streamlit secrets/env.
+
+    Non stampa mai valori sensibili (solo presenza/chiavi/lunghezze).
+    """
     diag = {
         "secrets_available": False,
         "secrets_keys": [],
         "has_db_section": False,
+        "db_keys": [],
+        # True se esiste una delle chiavi attese e il valore non è vuoto dopo strip()
         "has_db_database_url": False,
+        "db_database_url_key": None,
+        "db_database_url_len": 0,
         "has_root_database_url": False,
+        "root_database_url_key": None,
+        "root_database_url_len": 0,
         "env_database_url": False,
+        "env_database_url_len": 0,
     }
+
+    sec = None
     try:
         sec = getattr(st, "secrets", None)
         if sec is not None:
@@ -217,27 +595,67 @@ def _secrets_diagnostics():
                 diag["secrets_keys"] = sorted(list(sec.keys()))
             except Exception:
                 diag["secrets_keys"] = ["<unreadable>"]
-            try:
-                diag["has_db_section"] = "db" in sec
-            except Exception:
-                diag["has_db_section"] = False
-            try:
-                if diag["has_db_section"]:
-                    db = sec.get("db", {})
-                    diag["has_db_database_url"] = isinstance(db, dict) and bool(str(db.get("DATABASE_URL","")).strip())
-            except Exception:
-                diag["has_db_database_url"] = False
-            try:
-                diag["has_root_database_url"] = bool(str(sec.get("DATABASE_URL","")).strip())
-            except Exception:
-                diag["has_root_database_url"] = False
     except Exception:
-        pass
+        sec = None
 
+    # --- [db] section ---
     try:
-        diag["env_database_url"] = bool(os.getenv("DATABASE_URL","").strip())
+        diag["has_db_section"] = bool(sec is not None and ("db" in sec))
+    except Exception:
+        diag["has_db_section"] = False
+
+    if diag["has_db_section"]:
+        try:
+            db = sec.get("db", {})
+            if isinstance(db, dict):
+                diag["db_keys"] = sorted(list(db.keys()))
+                for k in ("DATABASE_URL", "database_url", "url", "URL"):
+                    v = db.get(k)
+                    if v is not None:
+                        s = str(v)
+                        l = len(s.strip())
+                        if l > 0:
+                            diag["has_db_database_url"] = True
+                            diag["db_database_url_key"] = k
+                            diag["db_database_url_len"] = l
+                            break
+                        else:
+                            # chiave presente ma vuota: salva info (se non già trovato nulla)
+                            if diag["db_database_url_key"] is None:
+                                diag["db_database_url_key"] = k
+                                diag["db_database_url_len"] = 0
+        except Exception:
+            pass
+
+    # --- root keys ---
+    if sec is not None:
+        try:
+            for k in ("DATABASE_URL", "database_url"):
+                v = sec.get(k)
+                if v is not None:
+                    s = str(v)
+                    l = len(s.strip())
+                    if l > 0:
+                        diag["has_root_database_url"] = True
+                        diag["root_database_url_key"] = k
+                        diag["root_database_url_len"] = l
+                        break
+                    else:
+                        if diag["root_database_url_key"] is None:
+                            diag["root_database_url_key"] = k
+                            diag["root_database_url_len"] = 0
+        except Exception:
+            pass
+
+    # --- env ---
+    try:
+        envv = (os.getenv("DATABASE_URL", "") or os.getenv("database_url", "") or "")
+        diag["env_database_url_len"] = len(envv.strip())
+        diag["env_database_url"] = diag["env_database_url_len"] > 0
     except Exception:
         diag["env_database_url"] = False
+        diag["env_database_url_len"] = 0
+
     return diag
 def _get_database_url() -> str:
     """Return DATABASE_URL from Streamlit secrets or environment.
@@ -270,7 +688,18 @@ def _get_database_url() -> str:
     # 3) environment
     return (os.getenv("DATABASE_URL", "") or os.getenv("database_url", "") or "").strip()
 
-_DB_URL = _get_database_url()
+
+def _normalize_db_url(u: str) -> str:
+    u = (u or "").strip()
+    # strip accidental surrounding quotes
+    if (u.startswith('"') and u.endswith('"')) or (u.startswith("'") and u.endswith("'")):
+        u = u[1:-1].strip()
+    # normalize scheme
+    if u.startswith("postgres://"):
+        u = "postgresql://" + u[len("postgres://"):]
+    return u
+
+_DB_URL = _normalize_db_url(_get_database_url())
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
 
@@ -292,26 +721,6 @@ def _sidebar_db_indicator():
     except Exception:
         pass
 
-
-def _is_streamlit_cloud() -> bool:
-    """Best-effort detection of Streamlit Community Cloud runtime."""
-    try:
-        # Streamlit Cloud mounts the repo under /mount/src/<repo>
-        if os.path.exists("/mount/src"):
-            return True
-        # Common env hints (may vary)
-        if os.environ.get("STREAMLIT_CLOUD", "").lower() in ("1", "true", "yes"):
-            return True
-        if os.environ.get("STREAMLIT_RUNTIME_ENV", "").lower() in ("cloud", "streamlit_cloud"):
-            return True
-        # Adminuser home is typical on Streamlit Cloud
-        if os.environ.get("HOME", "").startswith("/home/adminuser"):
-            return True
-    except Exception:
-        pass
-    return False
-
-
 def _require_postgres_on_cloud():
     # Mostra sempre l'indicatore, anche in caso di errore
     _sidebar_db_indicator()
@@ -323,10 +732,19 @@ def _require_postgres_on_cloud():
             "secrets_available": diag.get("secrets_available"),
             "secrets_keys": diag.get("secrets_keys"),
             "has_db_section": diag.get("has_db_section"),
+            "db_keys": diag.get("db_keys"),
             "has_db_database_url": diag.get("has_db_database_url"),
+            "db_database_url_key": diag.get("db_database_url_key"),
+            "db_database_url_len": diag.get("db_database_url_len"),
             "has_root_database_url": diag.get("has_root_database_url"),
+            "root_database_url_key": diag.get("root_database_url_key"),
+            "root_database_url_len": diag.get("root_database_url_len"),
             "env_database_url": diag.get("env_database_url"),
+            "env_database_url_len": diag.get("env_database_url_len"),
         })
+        st.write("Chiavi in [db]:", diag.get("db_keys"))
+        st.write("Lunghezza DATABASE_URL (strip):", diag.get("db_database_url_len"))
+        st.write("DATABASE_URL sembra postgresql:// ?", str(_safe_secrets().get("db",{}).get("DATABASE_URL","")).strip().lower().startswith("postgresql://"))
         st.info("""Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
 
 [db]
@@ -339,43 +757,34 @@ def _connect_cached():
     if _DB_BACKEND == "postgres":
         if not PSYCOPG2_AVAILABLE:
             raise RuntimeError("psycopg2 non disponibile. Aggiungi psycopg2-binary a requirements.txt")
-        conn = psycopg2.connect(_DB_URL)
+
+        try:
+            conn = psycopg2.connect(_DB_URL)
+        except Exception:
+            # Non-leak diagnostics (does not print the URL)
+            u = _DB_URL or ""
+            st.error("❌ Errore connessione PostgreSQL (Neon). La DATABASE_URL non sembra in un formato valido per psycopg2.")
+            st.write({
+                "db_url_len": len(u),
+                "db_url_has_whitespace": any(ch.isspace() for ch in u),
+                "db_url_scheme": (u.split("://", 1)[0] if "://" in u else "<missing>"),
+                "hint_1": "Verifica che sia su UNA sola riga nei Secrets (nessun a capo).",
+                "hint_2": "Usa lo schema 'postgresql://'.",
+                "hint_3": "Se la password contiene caratteri speciali (@ : / ? # & %), deve essere URL-encoded (es. @ -> %40).",
+            })
+            st.stop()
+
         return _PgConn(conn)
-    else:
-        conn = sqlite3.connect(SQLITE_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        return conn
+
+    # SQLite (locale / fallback)
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 
 def get_connection():
+
     return _connect_cached()
-
-
-def _rk(row, key: str, default=""):
-    """Row key getter tolerant to postgres lowercasing (id vs ID)."""
-    if row is None:
-        return default
-    if isinstance(row, dict):
-        if key in row:
-            return row[key]
-        lk = key.lower()
-        if lk in row:
-            return row[lk]
-        uk = key.upper()
-        if uk in row:
-            return row[uk]
-        tk = key.title()
-        if tk in row:
-            return row[tk]
-        return default
-    # fallback: sequence/record objects
-    try:
-        return row[key]
-    except Exception:
-        try:
-            return row[key.lower()]
-        except Exception:
-            return default
-
 
 def init_db() -> None:
     conn = get_connection()
@@ -478,7 +887,26 @@ def init_db() -> None:
             """
         )
 
-        # Sedute / terapie
+        
+        # Migrazione campi Esame Obiettivo (SQLite) – aggiunge colonne se mancanti
+        try:
+            cur.execute("PRAGMA table_info(Valutazioni_Visive)")
+            existing_cols = {r[1] for r in cur.fetchall()}
+            eo_cols = [
+                ("Cornea", "TEXT"),
+                ("Camera_Anteriore", "TEXT"),
+                ("Cristallino", "TEXT"),
+                ("Congiuntiva_Sclera", "TEXT"),
+                ("Iride_Pupilla", "TEXT"),
+                ("Vitreo", "TEXT"),
+            ]
+            for col, typ in eo_cols:
+                if col not in existing_cols:
+                    cur.execute(f"ALTER TABLE Valutazioni_Visive ADD COLUMN {col} {typ}")
+        except Exception:
+            # Non bloccare l'avvio se la migrazione fallisce
+            pass
+# Sedute / terapie
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Sedute (
@@ -515,7 +943,10 @@ def init_db() -> None:
     # -------------------------
     # PostgreSQL (Neon) init
     # -------------------------
-    cur.execute('''CREATE TABLE IF NOT EXISTS Pazienti (
+    # Nota: usiamo tipi compatibili e vincoli FK corretti.
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Pazienti (
             ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
             Cognome         TEXT NOT NULL,
             Nome            TEXT NOT NULL,
@@ -529,64 +960,111 @@ def init_db() -> None:
             Provincia       TEXT,
             Codice_Fiscale  TEXT,
             Stato_Paziente  TEXT NOT NULL DEFAULT 'ATTIVO'
-        )''')
+        )
+        """
+    )
 
-
-    cur.execute('''CREATE TABLE IF NOT EXISTS Anamnesi (
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Anamnesi (
             ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID     BIGINT NOT NULL,
+            Paziente_ID     BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
             Data_Anamnesi   TEXT,
             Motivo          TEXT,
             Storia          TEXT,
             Note            TEXT,
-            FOREIGN KEY (Paziente_ID) REFERENCES Pazienti(ID) ON DELETE CASCADE
-        );''')
+            Perinatale      TEXT,
+            Sviluppo        TEXT,
+            Scuola          TEXT,
+            Emotivo         TEXT,
+            Sensoriale      TEXT,
+            Stile_Vita      TEXT
+        )
+        """
+    )
 
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Valutazioni_Visive (
+            ID                  BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+            Paziente_ID         BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            Data_Valutazione    TEXT,
+            Tipo_Visita         TEXT,
+            Professionista      TEXT,
+            Anamnesi            TEXT,
+            Acuita_Nat_OD       TEXT, Acuita_Nat_OS       TEXT, Acuita_Nat_OO       TEXT,
+            Acuita_Corr_OD      TEXT, Acuita_Corr_OS      TEXT, Acuita_Corr_OO      TEXT,
+            SF_Ogg_OD           REAL, CIL_Ogg_OD          REAL, AX_Ogg_OD           INTEGER,
+            SF_Ogg_OS           REAL, CIL_Ogg_OS          REAL, AX_Ogg_OS           INTEGER,
+            SF_Sogg_OD          REAL, CIL_Sogg_OD         REAL, AX_Sogg_OD          INTEGER,
+            SF_Sogg_OS          REAL, CIL_Sogg_OS         REAL, AX_Sogg_OS          INTEGER,
+            ADD_Vicino          REAL,
+            K1_OD_mm            REAL, K1_OD_D            REAL, K2_OD_mm            REAL, K2_OD_D            REAL,
+            K1_OS_mm            REAL, K1_OS_D            REAL, K2_OS_mm            REAL, K2_OS_D            REAL,
+            Tono_OD             REAL, Tono_OS             REAL,
+            Motilita            TEXT,
+            Cover_Test          TEXT,
+            Stereopsi           TEXT,
+            PPC_cm              REAL,
+            Ishihara            TEXT,
+            Pachim_OD_um        REAL, Pachim_OS_um        REAL,
+            Fondo               TEXT,
+            Campo_Visivo        TEXT,
+            OCT                 TEXT,
+            Topografia          TEXT,
+            Costo               REAL,
+            Pagato              INTEGER NOT NULL DEFAULT 0,
+            Note                TEXT
+        )
+        """
+    )
 
-    cur.execute('''CREATE TABLE IF NOT EXISTS Valutazioni_Visive (
-            ID                      BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID             BIGINT NOT NULL,
-            Data_Valutazione        TEXT,
-            Tipo_Visita             TEXT,
-            Professionista          TEXT,
-            Acuita_Nat_OD           TEXT,
-            Acuita_Nat_OS           TEXT,
-            Acuita_Nat_OO           TEXT,
-            Acuita_Corr_OD          TEXT,
-            Acuita_Corr_OS          TEXT,
-            Acuita_Corr_OO          TEXT,
-            Costo                   REAL,
-            Pagato                  INTEGER NOT NULL DEFAULT 0,
-            Note                    TEXT,
-            FOREIGN KEY (Paziente_ID) REFERENCES Pazienti(ID) ON DELETE CASCADE
-        );''')
+    
+    # Migrazione campi Esame Obiettivo (PostgreSQL) – aggiunge colonne se mancanti
+    try:
+        cur.execute("""
+            ALTER TABLE IF EXISTS Valutazioni_Visive
+                ADD COLUMN IF NOT EXISTS Cornea              TEXT,
+                ADD COLUMN IF NOT EXISTS Camera_Anteriore    TEXT,
+                ADD COLUMN IF NOT EXISTS Cristallino         TEXT,
+                ADD COLUMN IF NOT EXISTS Congiuntiva_Sclera  TEXT,
+                ADD COLUMN IF NOT EXISTS Iride_Pupilla       TEXT,
+                ADD COLUMN IF NOT EXISTS Vitreo              TEXT;
+        """)
+    except Exception:
+        pass
 
-
-    cur.execute('''CREATE TABLE IF NOT EXISTS Sedute (
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Sedute (
             ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID     BIGINT NOT NULL,
+            Paziente_ID     BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
             Data_Seduta     TEXT,
             Terapia         TEXT,
             Professionista  TEXT,
             Costo           REAL,
             Pagato          INTEGER NOT NULL DEFAULT 0,
-            Note            TEXT,
-            FOREIGN KEY (Paziente_ID) REFERENCES Pazienti(ID) ON DELETE CASCADE
-        );''')
+            Note            TEXT
+        )
+        """
+    )
 
-
-    cur.execute('''CREATE TABLE IF NOT EXISTS Coupons (
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Coupons (
             ID                BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID       BIGINT NOT NULL,
+            Paziente_ID       BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
             Tipo_Coupon       TEXT NOT NULL,     -- OF o SDS
             Codice_Coupon     TEXT,              -- numero / codice coupon
             Data_Assegnazione TEXT,
             Note              TEXT,
-            Utilizzato        INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY (Paziente_ID) REFERENCES Pazienti(ID) ON DELETE CASCADE
-        );''')
+            Utilizzato        INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
 
     conn.commit()
+
 
 
 def _solo_lettere(s: str) -> str:
@@ -861,114 +1339,169 @@ def _format_data_it_from_iso(iso_str: Optional[str]) -> str:
         return iso_str
 
 
+
 def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -> bytes:
     """
     Genera un referto oculistico/optometrico in PDF A4.
-    Usa solo i dati presenti in anagrafica + valutazione.
+    - Header stile "Studio The Organism" (come app test)
+    - Stampa campi principali + Esame obiettivo (se presente)
+    - Appende sempre il blocco Note completo (dettaglio strutturato)
     """
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    # Sfondo intestazione (immagine A4)
+    try:
+        variant = "with_cirillo" if include_header else "no_cirillo"
+        bg = _find_bg_image('a4', variant)
+        _draw_bg_image_fullpage(c, width, height, bg)
+    except Exception:
+        pass
+
 
     left = 30 * mm
     right = width - 30 * mm
     top = height - 30 * mm
     bottom = 30 * mm
-
     y = top
 
-    # Intestazione opzionale (per carta intestata la puoi togliere)
-    if include_header:
+    def _newline(n=12):
+        nonlocal y
+        y -= n
+
+    def _ensure_space(min_y=bottom + 40):
+        nonlocal y
+        if y < min_y:
+            c.showPage()
+            y = top
+            if include_header:
+                _draw_header()
+
+    def _draw_header():
+        nonlocal y
+        yy = height - 18 * mm
         c.setFont("Helvetica-Bold", 14)
-        c.drawString(left, y, "Studio The Organism")
-        y -= 14
+        c.drawString(left, yy, "Studio The Organism")
+        yy -= 12
         c.setFont("Helvetica", 10)
-        c.drawString(left, y, "Via De Rosa 46 – Pagani (SA)")
-        y -= 12
-        c.drawString(left, y, "Tel: __________   Email: __________   Web: __________")
-        y -= 20
+        c.drawString(left, yy, "Via De Rosa 46 – Pagani (SA)")
+        yy -= 11
+        c.drawString(left, yy, "www.ferraioligiuseppe.it  |  Tel. 393 581 7157")
+        # linea sottile
+        c.line(left, yy - 6, right, yy - 6)
+
+    if include_header:
+        _draw_header()
+        y = height - 40 * mm
 
     c.setFont("Helvetica-Bold", 12)
     c.drawString(left, y, "Referto oculistico / optometrico")
-    y -= 20
+    _newline(18)
 
     # Dati paziente
     c.setFont("Helvetica", 11)
-    nome_paz = f"{_rk(paziente,'Cognome')} {_rk(paziente,'Nome')}"
-    c.drawString(left, y, f"Paziente: {nome_paz}")
-    y -= 14
+    nome_paz = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}"
+    c.drawString(left, y, f"Paziente: {nome_paz.strip()}")
+    _newline(14)
 
-    dn = _format_data_it_from_iso(paziente["Data_Nascita"])
+    dn = _format_data_it_from_iso(paziente.get("Data_Nascita"))
     if dn:
         c.drawString(left, y, f"Data di nascita: {dn}")
-        y -= 14
+        _newline(14)
 
-    # Dati visita
-    data_vis = _format_data_it_from_iso(valutazione["Data_Valutazione"])
+    data_vis = _format_data_it_from_iso(valutazione.get("Data_Valutazione"))
     if data_vis:
         c.drawString(left, y, f"Data visita: {data_vis}")
-        y -= 14
+        _newline(14)
 
-    if valutazione["Tipo_Visita"]:
-        c.drawString(left, y, f"Tipo visita: {valutazione['Tipo_Visita']}")
-        y -= 14
+    if valutazione.get("Tipo_Visita"):
+        c.drawString(left, y, f"Tipo visita: {valutazione.get('Tipo_Visita')}")
+        _newline(14)
 
-    if valutazione["Professionista"]:
-        c.drawString(left, y, f"Professionista: {valutazione['Professionista']}")
-        y -= 18
+    if valutazione.get("Professionista"):
+        c.drawString(left, y, f"Professionista: {valutazione.get('Professionista')}")
+        _newline(16)
 
-    # Acuità visiva solo se presenti
+    # Acuità
     av_lines = []
-    if valutazione["Acuita_Nat_OD"] or valutazione["Acuita_Nat_OS"] or valutazione["Acuita_Nat_OO"]:
+    if valutazione.get("Acuita_Nat_OD") or valutazione.get("Acuita_Nat_OS") or valutazione.get("Acuita_Nat_OO"):
         av_lines.append(
             "Acuità visiva naturale: "
-            f"OD {valutazione['Acuita_Nat_OD'] or '-'}   "
-            f"OS {valutazione['Acuita_Nat_OS'] or '-'}   "
-            f"OO {valutazione['Acuita_Nat_OO'] or '-'}"
+            f"OD {valutazione.get('Acuita_Nat_OD') or '-'}   "
+            f"OS {valutazione.get('Acuita_Nat_OS') or '-'}   "
+            f"OO {valutazione.get('Acuita_Nat_OO') or '-'}"
         )
-    if valutazione["Acuita_Corr_OD"] or valutazione["Acuita_Corr_OS"] or valutazione["Acuita_Corr_OO"]:
+    if valutazione.get("Acuita_Corr_OD") or valutazione.get("Acuita_Corr_OS") or valutazione.get("Acuita_Corr_OO"):
         av_lines.append(
             "Acuità visiva corretta: "
-            f"OD {valutazione['Acuita_Corr_OD'] or '-'}   "
-            f"OS {valutazione['Acuita_Corr_OS'] or '-'}   "
-            f"OO {valutazione['Acuita_Corr_OO'] or '-'}"
+            f"OD {valutazione.get('Acuita_Corr_OD') or '-'}   "
+            f"OS {valutazione.get('Acuita_Corr_OS') or '-'}   "
+            f"OO {valutazione.get('Acuita_Corr_OO') or '-'}"
         )
 
     c.setFont("Helvetica", 11)
     for line in av_lines:
+        _ensure_space()
         c.drawString(left, y, line)
-        y -= 14
+        _newline(14)
     if av_lines:
-        y -= 6
+        _newline(6)
 
-    # Corpo del referto: uso il campo Note della valutazione
-    testo = valutazione["Note"] or ""
+    # Esame obiettivo (campi dedicati)
+    eo = [
+        ("Cornea", valutazione.get("Cornea")),
+        ("Camera anteriore", valutazione.get("Camera_Anteriore")),
+        ("Cristallino", valutazione.get("Cristallino")),
+        ("Congiuntiva / Sclera", valutazione.get("Congiuntiva_Sclera")),
+        ("Iride / Pupilla", valutazione.get("Iride_Pupilla")),
+        ("Vitreo", valutazione.get("Vitreo")),
+    ]
+    if any((str(v).strip() if v is not None else "") for _, v in eo):
+        c.setFont("Helvetica-Bold", 11)
+        _ensure_space()
+        c.drawString(left, y, "Esame obiettivo (strutture oculari)")
+        _newline(14)
+        c.setFont("Helvetica", 11)
+        for lab, v in eo:
+            vv = ("" if v is None else str(v).strip())
+            if vv:
+                _ensure_space()
+                c.drawString(left, y, f"- {lab}: {vv}")
+                _newline(13)
+        _newline(6)
+
+    # Corpo del referto: blocco Note completo (dettaglio strutturato)
+    testo = valutazione.get("Note") or ""
     if testo.strip():
+        c.setFont("Helvetica-Bold", 11)
+        _ensure_space()
+        c.drawString(left, y, "Dettaglio clinico") 
+        _newline(14)
+        c.setFont("Helvetica", 11)
         wrapper = textwrap.TextWrapper(width=90)
         for par in testo.split("\n"):
-            par = par.strip()
-            if not par:
-                y -= 6
+            par = par.rstrip()
+            if not par.strip():
+                _newline(6)
                 continue
-            lines = wrapper.wrap(par)
-            for line in lines:
-                if y < bottom + 40:
-                    c.showPage()
-                    c.setFont("Helvetica", 11)
-                    y = top
+            for line in wrapper.wrap(par):
+                _ensure_space()
                 c.drawString(left, y, line)
-                y -= 13
-            y -= 4
+                _newline(13)
+            _newline(2)
 
-    # Spazio firma
+    # Firma
     if y < bottom + 60:
         c.showPage()
-        c.setFont("Helvetica", 11)
         y = top
+        if include_header:
+            _draw_header()
+            y = height - 40 * mm
 
-    y = bottom + 40
-    c.line(right - 120, y, right, y)
-    c.drawString(right - 110, y + 5, "Firma / Timbro")
+    y_sig = bottom + 40
+    c.line(right - 120, y_sig, right, y_sig)
+    c.setFont("Helvetica", 10)
+    c.drawString(right - 115, y_sig + 5, "Firma / Timbro")
 
     c.showPage()
     c.save()
@@ -1032,7 +1565,143 @@ def draw_axis_arrow(c, center_x, center_y, radius, axis_deg: int):
         c.line(x2, y2, hx, hy)
 
 
-def genera_prescrizione_occhiali_a5_pdf(
+
+def _draw_prescrizione_values_only_on_canvas(
+    c,
+    width: float,
+    height: float,
+    paziente,
+    data_prescrizione_iso: Optional[str],
+    # lontano/intermedio/vicino OD/OS
+    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
+    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
+    sf_int_od: float, cil_int_od: float, ax_int_od: int,
+    sf_int_os: float, cil_int_os: float, ax_int_os: int,
+    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
+    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
+    lenti_scelte: list,
+    altri_trattamenti: str,
+    note: str,
+):
+    """Overlay SOLO VALORI: non disegna linee/archi/riquadri (quelli sono nel template)."""
+
+    # Helper formatting
+    def fmt_sphere_cyl(v):
+        if v is None or v == "": 
+            return ""
+        try:
+            v = float(v)
+        except Exception:
+            return str(v)
+        # +0.00 / -0.50
+        if abs(v) < 1e-9:
+            v = 0.0
+        return f"{v:+.2f}"
+
+    def fmt_axis(v):
+        if v is None or v == "": 
+            return ""
+        try:
+            iv = int(float(v))
+            return str(iv)
+        except Exception:
+            return str(v)
+
+    # Font
+    c.setFont("Helvetica", 10)
+
+    # Data (linea 'Data')
+    data_it = _format_data_it_from_iso(data_prescrizione_iso) if data_prescrizione_iso else ""
+    if data_it:
+        c.drawString(105 * mm, height - 30 * mm, data_it)
+
+    # Paziente (linea 'Sig.')
+    try:
+        nome_paz = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
+    except Exception:
+        nome_paz = str(paziente)
+    if nome_paz:
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20 * mm, height - 45 * mm, nome_paz)
+        c.setFont("Helvetica", 10)
+
+    # Coordinate centri box (mm -> punti) calibrate sul tuo template A5
+    # OD (sinistra)
+    od_x_sf  = 45 * mm
+    od_x_cil = 68 * mm
+    od_x_ax  = 91 * mm
+
+    # OS (destra)
+    os_x_sf  = 96 * mm
+    os_x_cil = 119 * mm
+    os_x_ax  = 142 * mm
+
+    # Y dei tre righi (Lontano / Intermedio / Vicino)
+    y_lon = 104 * mm
+    y_int = 85 * mm
+    y_vic = 66 * mm
+
+    def put_triplet(xsf, xcil, xax, y, sf, cil, ax):
+        s = fmt_sphere_cyl(sf)
+        c1 = fmt_sphere_cyl(cil)
+        a1 = fmt_axis(ax)
+        if s:
+            c.drawCentredString(xsf, y, s)
+        if c1:
+            c.drawCentredString(xcil, y, c1)
+        if a1:
+            c.drawCentredString(xax, y, a1)
+
+    # OD
+    put_triplet(od_x_sf, od_x_cil, od_x_ax, y_lon, sf_lon_od, cil_lon_od, ax_lon_od)
+    put_triplet(od_x_sf, od_x_cil, od_x_ax, y_int, sf_int_od, cil_int_od, ax_int_od)
+    put_triplet(od_x_sf, od_x_cil, od_x_ax, y_vic, sf_vic_od, cil_vic_od, ax_vic_od)
+
+    # OS
+    put_triplet(os_x_sf, os_x_cil, os_x_ax, y_lon, sf_lon_os, cil_lon_os, ax_lon_os)
+    put_triplet(os_x_sf, os_x_cil, os_x_ax, y_int, sf_int_os, cil_int_os, ax_int_os)
+    put_triplet(os_x_sf, os_x_cil, os_x_ax, y_vic, sf_vic_os, cil_vic_os, ax_vic_os)
+
+    # Checkboxes lenti consigliate (metti "X" a sinistra delle voci)
+    checks = set([str(x).strip().lower() for x in (lenti_scelte or [])])
+
+    # Colonna sinistra (progressive, vicino/intermedio, fotocromatiche, polarizzate)
+    base_x = 23 * mm
+    base_y = 48 * mm
+    dy = 6 * mm
+    left_labels = [
+        ("progressive", 0),
+        ("per vicino/intermedio", 1),
+        ("fotocromatiche", 2),
+        ("polarizzate", 3),
+    ]
+    c.setFont("Helvetica-Bold", 10)
+    for lab, i in left_labels:
+        if any(lab in s for s in checks):
+            c.drawString(base_x, base_y - i * dy, "X")
+
+    # Colonna destra (trattamento antiriflesso, altri trattamenti)
+    right_x = 112 * mm
+    right_y = 48 * mm
+    if any("trattamento antiriflesso" in s for s in checks):
+        c.drawString(right_x, right_y, "X")
+    # altri trattamenti: c'è una checkbox e riga testo
+    if (altri_trattamenti or "").strip():
+        c.drawString(right_x, right_y - 6 * mm, "X")
+        c.setFont("Helvetica", 9)
+        c.drawString(112 * mm, 35 * mm, str(altri_trattamenti)[:60])
+
+    # NOTE
+    if (note or "").strip():
+        c.setFont("Helvetica", 9)
+        # area note in basso a sinistra
+        c.drawString(15 * mm, 20 * mm, (str(note).replace("\n", " "))[:120])
+
+
+def _draw_prescrizione_occhiali_a5_on_canvas(
+    c,
+    width: float,
+    height: float,
     paziente,
     data_prescrizione_iso: Optional[str],
     sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
@@ -1044,21 +1713,8 @@ def genera_prescrizione_occhiali_a5_pdf(
     lenti_scelte: list,
     altri_trattamenti: str,
     note: str,
-) -> bytes:
-    """
-    Genera una prescrizione occhiali in formato A5 con:
-    - margini 3 cm alto/basso, 2 cm dx/sn
-    - data in alto a destra
-    - nome paziente
-    - due semicerchi con gradi (schema TABO semplificato) + freccia dell'asse di LONTANO
-    - tre righe LONTANO / INTERMEDIO / VICINO (SF, CIL, AX per OD/OS)
-    - lenti consigliate (check)
-    - campo note
-    """
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A5)
-    width, height = A5
-
+):
+    """Disegna la prescrizione (layout A5) sul canvas corrente, senza fare showPage/save."""
     left = 20 * mm
     right = width - 20 * mm
     top = height - 30 * mm
@@ -1073,7 +1729,7 @@ def genera_prescrizione_occhiali_a5_pdf(
     # Nome paziente
     y = top - 15
     c.setFont("Helvetica-Bold", 11)
-    nome_paz = f"{_rk(paziente,'Cognome')} {_rk(paziente,'Nome')}"
+    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
     c.drawString(left, y, f"Paziente: {nome_paz}")
     y -= 20
 
@@ -1183,25 +1839,149 @@ def genera_prescrizione_occhiali_a5_pdf(
         wrapper = textwrap.TextWrapper(width=70)
         for line in wrapper.wrap(note.strip()):
             if y < bottom + 40:
-                c.showPage()
-                c.setFont("Helvetica", 9)
-                y = top
+                break
             c.drawString(left + 5 * mm, y, line)
             y -= 11
 
     # Firma
     if y < bottom + 50:
-        c.showPage()
-        c.setFont("Helvetica", 9)
-        y = top
+        pass
 
     c.line(right - 100, bottom + 30, right, bottom + 30)
     c.drawString(right - 95, bottom + 35, "Firma / Timbro")
 
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer.getvalue()
+
+
+
+
+def genera_prescrizione_occhiali_a4_pdf(
+    paziente,
+    data_prescrizione_iso: Optional[str],
+    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
+    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
+    sf_int_od: float, cil_int_od: float, ax_int_od: int,
+    sf_int_os: float, cil_int_os: float, ax_int_os: int,
+    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
+    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
+    lenti_scelte: list,
+    altri_trattamenti: str,
+    note: str,
+    con_cirillo: bool = True,
+) -> bytes:
+    """A4: sfondo intestazione (immagine) + prescrizione pulita + TABO con freccia asse cilindro."""
+    dati = {
+        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
+        "data": _safe_str(data_prescrizione_iso),
+        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
+        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
+        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
+        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
+        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
+        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
+        "lenti": lenti_scelte,
+        "altri_trattamenti": altri_trattamenti,
+        "note": note,
+    }
+    return _prescrizione_pdf_imagebg(A4, "a4", con_cirillo, dati)
+
+def genera_prescrizione_occhiali_a4_pdf(
+    paziente,
+    data_prescrizione_iso: Optional[str],
+    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
+    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
+    sf_int_od: float, cil_int_od: float, ax_int_od: int,
+    sf_int_os: float, cil_int_os: float, ax_int_os: int,
+    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
+    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
+    lenti_scelte: list,
+    altri_trattamenti: str,
+    note: str,
+    con_cirillo: bool = True,
+) -> bytes:
+    """
+    A5: SFONDO = immagine letterhead (The Organism) + overlay SOLO valori (tabella pulita).
+    Niente riquadri: zero accavallamenti.
+    """
+    dati = {
+        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
+        "data": _safe_str(data_prescrizione_iso),
+        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
+        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
+        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
+        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
+        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
+        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
+        "lenti": lenti_scelte,
+        "altri_trattamenti": altri_trattamenti,
+        "note": note,
+    }
+    return _prescrizione_pdf_imagebg(A5, "a5", con_cirillo, dati)
+
+def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
+    """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
+    L = mark_len_mm * mm
+    inset = inset_mm * mm
+
+    # Bottom-left
+    c.line(x0 - L, y0 + inset, x0, y0 + inset)
+    c.line(x0 + inset, y0 - L, x0 + inset, y0)
+
+    # Bottom-right
+    c.line(x0 + w, y0 + inset, x0 + w + L, y0 + inset)
+    c.line(x0 + w - inset, y0 - L, x0 + w - inset, y0)
+
+    # Top-left
+    c.line(x0 - L, y0 + h - inset, x0, y0 + h - inset)
+    c.line(x0 + inset, y0 + h, x0 + inset, y0 + h + L)
+
+    # Top-right
+    c.line(x0 + w, y0 + h - inset, x0 + w + L, y0 + h - inset)
+    c.line(x0 + w - inset, y0 + h, x0 + w - inset, y0 + h + L)
+
+
+def _draw_mid_cut_marks(c, page_w, page_h, mark_len_mm: float = 8):
+    """Tacche centrali sui bordi sinistro e destro per taglio a metà pagina."""
+    y = page_h / 2.0
+    L = mark_len_mm * mm
+    c.line(0, y, L, y)
+    c.line(page_w - L, y, page_w, y)
+
+
+
+def genera_prescrizione_occhiali_a4_pdf(
+    paziente,
+    data_prescrizione_iso: Optional[str],
+    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
+    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
+    sf_int_od: float, cil_int_od: float, ax_int_od: int,
+    sf_int_os: float, cil_int_os: float, ax_int_os: int,
+    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
+    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
+    lenti_scelte: list,
+    altri_trattamenti: str,
+    note: str,
+    divider_line: bool = False,
+    con_cirillo: bool = True,
+) -> bytes:
+    """
+    A4: SFONDO = immagine letterhead A4 (The Organism) + overlay SOLO valori (tabella pulita).
+    Nota: il nome della funzione resta per compatibilità con la UI.
+    """
+    dati = {
+        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
+        "data": _safe_str(data_prescrizione_iso),
+        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
+        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
+        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
+        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
+        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
+        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
+        "lenti": lenti_scelte,
+        "altri_trattamenti": altri_trattamenti,
+        "note": note,
+    }
+    return _prescrizione_pdf_imagebg(A4, "a4", con_cirillo, dati)
+
 def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -> bytes:
     """
     Genera un referto oculistico/optometrico in formato A4.
@@ -1212,6 +1992,14 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    # Sfondo intestazione (immagine A4)
+    try:
+        variant = "with_cirillo" if with_header else "no_cirillo"
+        bg = _find_bg_image('a4', variant)
+        _draw_bg_image_fullpage(c, width, height, bg)
+    except Exception:
+        pass
+
 
     left = 25 * mm
     right = width - 25 * mm
@@ -1244,7 +2032,7 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
 
     # Dati paziente
     c.setFont("Helvetica", 11)
-    nome_paz = f"{_rk(paziente,'Cognome')} {_rk(paziente,'Nome')}"
+    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
     c.drawString(left, y, f"Paziente: {nome_paz}")
     y -= 14
 
@@ -1505,7 +2293,7 @@ def ui_pazienti():
             except Exception:
                 nascita_it = r["Data_Nascita"]
         cf = (r["Codice_Fiscale"] or "").upper()
-        label = f"{_rk(r,'ID')} - {_rk(r,'Cognome')} {_rk(r,'Nome')}"
+        label = f"{r['ID']} - {r['Cognome']} {r['Nome']}"
         extra = []
         if nascita_it:
             extra.append(f"nato il {nascita_it}")
@@ -1665,7 +2453,7 @@ def ui_anamnesi():
         conn.close()
         return
 
-    options = [f"{_rk(p,'ID')} - {_rk(p,'Cognome')} {_rk(p,'Nome')}" for p in pazienti]
+    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -1780,7 +2568,7 @@ Storia libera (narrazione):
         return
 
     labels = [
-        f"{_rk(r,'ID')} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
+        f"{r['ID']} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
         for r in rows
     ]
     sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
@@ -1848,7 +2636,7 @@ def ui_valutazioni_visive():
         conn.close()
         return
 
-    options = [f"{_rk(p,'ID')} - {_rk(p,'Cognome')} {_rk(p,'Nome')}" for p in pazienti]
+    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
@@ -1965,6 +2753,16 @@ def ui_valutazioni_visive():
         oct = st.text_area("OCT (descrizione)", "")
         topo = st.text_area("Topografia corneale (descrizione)", "")
 
+
+        st.markdown("### Esame obiettivo (strutture oculari)")
+        cornea = st.text_area("Cornea", "")
+        camera_ant = st.text_area("Camera anteriore", "")
+        cristallino = st.text_area("Cristallino", "")
+        congiuntiva = st.text_area("Congiuntiva / Sclera", "")
+        iride_pupilla = st.text_area("Iride / Pupilla", "")
+        vitreo = st.text_area("Vitreo", "")
+
+
         col7, col8 = st.columns(2)
         with col7:
             costo = st.number_input("Costo visita", min_value=0.0, step=5.0, value=0.0)
@@ -2019,6 +2817,15 @@ COLORI / PACHIMETRIA
 - Pachimetria OD: {pachim_od:.0f} µm
 - Pachimetria OS: {pachim_os:.0f} µm
 
+
+ESAME OBIETTIVO (STRUTTURE OCULARI)
+- Cornea: {cornea}
+- Camera anteriore: {camera_ant}
+- Cristallino: {cristallino}
+- Congiuntiva / Sclera: {congiuntiva}
+- Iride / Pupilla: {iride_pupilla}
+- Vitreo: {vitreo}
+
 ESAMI STRUTTURALI / FUNZIONALI
 - Fondo oculare: {fondo}
 - Campo visivo: {campo_visivo}
@@ -2034,8 +2841,9 @@ ESAMI STRUTTURALI / FUNZIONALI
             (Paziente_ID, Data_Valutazione, Tipo_Visita, Professionista,
              Acuita_Nat_OD, Acuita_Nat_OS, Acuita_Nat_OO,
              Acuita_Corr_OD, Acuita_Corr_OS, Acuita_Corr_OO,
+             Cornea, Camera_Anteriore, Cristallino, Congiuntiva_Sclera, Iride_Pupilla, Vitreo,
              Costo, Pagato, Note)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 paz_id,
@@ -2048,6 +2856,12 @@ ESAMI STRUTTURALI / FUNZIONALI
                 ac_cor_od,
                 ac_cor_os,
                 ac_cor_oo,
+                cornea,
+                camera_ant,
+                cristallino,
+                congiuntiva,
+                iride_pupilla,
+                vitreo,
                 float(costo),
                 1 if pagato else 0,
                 note_finali,
@@ -2124,7 +2938,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         return
 
     labels = [
-        f"{_rk(r,'ID')} - {_rk(r,'Data_Valutazione') or ''} - { (_rk(r,'Tipo_Visita')[:40] + '...') if _rk(r,'Tipo_Visita') and len(_rk(r,'Tipo_Visita'))>40 else (_rk(r,'Tipo_Visita') or '') }"
+        f"{r['ID']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
         for r in rows
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
@@ -2137,7 +2951,7 @@ ESAMI STRUTTURALI / FUNZIONALI
     else:
         pdf_bytes_int = genera_referto_oculistico_pdf(paziente, rec, include_header=True)
         pdf_bytes_no = genera_referto_oculistico_pdf(paziente, rec, include_header=False)
-        base_name = f"{_rk(paziente,'Cognome')}_{_rk(paziente,'Nome')}_{val_id}"
+        base_name = f"{paziente['Cognome']}_{paziente['Nome']}_{val_id}"
 
         colr1, colr2 = st.columns(2)
         with colr1:
@@ -2184,6 +2998,14 @@ ESAMI STRUTTURALI / FUNZIONALI
         with col6:
             ac_cor_oo_m = av_select("OO (corretta)", rec["Acuita_Corr_OO"], key="ac_cor_oo_m")
 
+        st.markdown("### Esame obiettivo (strutture oculari)")
+        cornea_m = st.text_area("Cornea", rec.get("Cornea") or "", key="cornea_m")
+        camera_ant_m = st.text_area("Camera anteriore", rec.get("Camera_Anteriore") or "", key="camera_ant_m")
+        cristallino_m = st.text_area("Cristallino", rec.get("Cristallino") or "", key="cristallino_m")
+        congiuntiva_m = st.text_area("Congiuntiva / Sclera", rec.get("Congiuntiva_Sclera") or "", key="congiuntiva_m")
+        iride_pupilla_m = st.text_area("Iride / Pupilla", rec.get("Iride_Pupilla") or "", key="iride_pupilla_m")
+        vitreo_m = st.text_area("Vitreo", rec.get("Vitreo") or "", key="vitreo_m")
+
         costo_m = st.number_input(
             "Costo visita",
             min_value=0.0,
@@ -2217,6 +3039,7 @@ ESAMI STRUTTURALI / FUNZIONALI
             SET Data_Valutazione = ?, Tipo_Visita = ?, Professionista = ?,
                 Acuita_Nat_OD = ?, Acuita_Nat_OS = ?, Acuita_Nat_OO = ?,
                 Acuita_Corr_OD = ?, Acuita_Corr_OS = ?, Acuita_Corr_OO = ?,
+                Cornea = ?, Camera_Anteriore = ?, Cristallino = ?, Congiuntiva_Sclera = ?, Iride_Pupilla = ?, Vitreo = ?,
                 Costo = ?, Pagato = ?, Note = ?
             WHERE ID = ?
             """,
@@ -2230,6 +3053,12 @@ ESAMI STRUTTURALI / FUNZIONALI
                 ac_cor_od_m,
                 ac_cor_os_m,
                 ac_cor_oo_m,
+                cornea_m,
+                camera_ant_m,
+                cristallino_m,
+                congiuntiva_m,
+                iride_pupilla_m,
+                vitreo_m,
                 float(costo_m),
                 1 if pagato_m else 0,
                 note_m,
@@ -2244,7 +3073,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         conn.commit()
         st.success("Valutazione eliminata.")
     st.markdown("---")
-    st.subheader("Prescrizione occhiali (formato A5)")
+    st.subheader("Prescrizione occhiali (stampa A5 / A4 2×A5)")
 
     if not REPORTLAB_AVAILABLE:
         st.info("Per generare la prescrizione in PDF installa il pacchetto 'reportlab' (es. `pip install reportlab`).")
@@ -2256,6 +3085,16 @@ ESAMI STRUTTURALI / FUNZIONALI
                 "Data prescrizione (gg/mm/aaaa)",
                 datetime.today().strftime("%d/%m/%Y"),
                 key="data_prescr_a5",
+            )
+
+            # SOLO A4: nessuna scelta formato
+            formato_stampa = "A4"
+            divider_line = False
+
+            con_cirillo = st.checkbox(
+                "Intestazione con Dott. Cirillo",
+                value=True,
+                key="prescr_con_cirillo",
             )
 
             st.markdown("**LONTANO**")
@@ -2315,7 +3154,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 key="note_prescr_a5",
             )
 
-            genera_pdf = st.form_submit_button("Genera PDF A5")
+            genera_pdf = st.form_submit_button("Genera PDF")
 
         if genera_pdf:
             data_iso_prescr = None
@@ -2327,7 +3166,8 @@ ESAMI STRUTTURALI / FUNZIONALI
                     st.error("Data prescrizione non valida. Usa il formato gg/mm/aaaa.")
                     data_iso_prescr = None
 
-            pdf_bytes = genera_prescrizione_occhiali_a5_pdf(
+            
+            common_kwargs = dict(
                 paziente=paziente,
                 data_prescrizione_iso=data_iso_prescr,
                 sf_lon_od=sf_lon_od, cil_lon_od=cil_lon_od, ax_lon_od=ax_lon_od,
@@ -2341,13 +3181,17 @@ ESAMI STRUTTURALI / FUNZIONALI
                 note=note_prescrizione,
             )
 
-            filename = f"prescrizione_occhiali_{_rk(paziente,'Cognome')}_{_rk(paziente,'Nome')}.pdf"
+            # SOLO FORMATO A4 (niente A5)
+            pdf_bytes = genera_prescrizione_occhiali_a4_pdf(**common_kwargs, con_cirillo=con_cirillo)
+            filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A4.pdf"
+            label_btn = "Scarica prescrizione occhiali (A4)"
+
             st.download_button(
-                "Scarica prescrizione occhiali (A5)",
+                label_btn,
                 data=pdf_bytes,
                 file_name=filename,
                 mime="application/pdf",
-                key="dl_prescr_a5",
+                key="dl_prescr",
             )
     st.markdown("---")
     st.subheader("Referto oculistico / optometrico (PDF A4)")
@@ -2385,7 +3229,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 st.download_button(
                     "Scarica referto A4 (PDF)",
                     data=pdf_bytes,
-                    file_name=f"referto_visivo_{_rk(paziente,'Cognome')}_{_rk(paziente,'Nome')}.pdf",
+                    file_name=f"referto_visivo_{paziente['Cognome']}_{paziente['Nome']}.pdf",
                     mime="application/pdf",
                     key=f"download_referto_{val_id}",
                 )
@@ -2409,7 +3253,7 @@ def ui_sedute():
         conn.close()
         return
 
-    options = [f"{_rk(p,'ID')} - {_rk(p,'Cognome')} {_rk(p,'Nome')}" for p in pazienti]
+    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -2469,7 +3313,7 @@ def ui_sedute():
         return
 
     labels = [
-        f"{_rk(r,'ID')} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
+        f"{r['ID']} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
         for r in rows
     ]
     sel_s = st.selectbox("Seleziona una seduta da modificare/cancellare", labels)
@@ -2552,7 +3396,7 @@ def ui_coupons():
         conn.close()
         return
 
-    opt_paz = [f"{_rk(p,'ID')} - {_rk(p,'Cognome')} {_rk(p,'Nome')}" for p in pazienti]
+    opt_paz = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = int(sel.split(" - ", 1)[0])
 
