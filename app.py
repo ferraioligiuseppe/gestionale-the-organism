@@ -187,19 +187,26 @@ class _PgConn:
 
 def _secrets_diagnostics():
     """Return non-sensitive diagnostics about Streamlit secrets/env.
-    Nota: non mostra MAI i valori dei secrets, solo la presenza e le chiavi.
+
+    Non stampa mai valori sensibili (solo presenza/chiavi/lunghezze).
     """
     diag = {
         "secrets_available": False,
         "secrets_keys": [],
-        "db_keys": [],
         "has_db_section": False,
+        "db_keys": [],
+        # True se esiste una delle chiavi attese e il valore non è vuoto dopo strip()
         "has_db_database_url": False,
+        "db_database_url_key": None,
+        "db_database_url_len": 0,
         "has_root_database_url": False,
+        "root_database_url_key": None,
+        "root_database_url_len": 0,
         "env_database_url": False,
+        "env_database_url_len": 0,
     }
 
-    # --- secrets ---
+    sec = None
     try:
         sec = getattr(st, "secrets", None)
         if sec is not None:
@@ -208,62 +215,66 @@ def _secrets_diagnostics():
                 diag["secrets_keys"] = sorted(list(sec.keys()))
             except Exception:
                 diag["secrets_keys"] = ["<unreadable>"]
-
-            # Sezione [db]
-            try:
-                diag["has_db_section"] = "db" in sec
-            except Exception:
-                diag["has_db_section"] = False
-
-            dbsec = {}
-            if diag["has_db_section"]:
-                try:
-                    dbsec = sec.get("db", {}) or {}
-                except Exception:
-                    dbsec = {}
-
-            if isinstance(dbsec, dict):
-                # Chiavi presenti in [db]
-                try:
-                    diag["db_keys"] = sorted([str(k) for k in dbsec.keys()])
-                except Exception:
-                    diag["db_keys"] = ["<unreadable>"]
-
-                # Presenza DATABASE_URL (accetta anche varianti comuni e spazi accidentali)
-                try:
-                    candidates = []
-                    for k in dbsec.keys():
-                        ks = str(k)
-                        candidates.append(ks)
-                        candidates.append(ks.strip())
-                    check_keys = set([c for c in candidates if c]) | {"DATABASE_URL", "database_url", "url", "URL"}
-                    found = False
-                    for k in check_keys:
-                        v = dbsec.get(k)
-                        if v and str(v).strip():
-                            found = True
-                            break
-                    diag["has_db_database_url"] = found
-                except Exception:
-                    diag["has_db_database_url"] = False
-
-            # Root DATABASE_URL
-            try:
-                for k in ("DATABASE_URL", "database_url"):
-                    v = sec.get(k)
-                    if v and str(v).strip():
-                        diag["has_root_database_url"] = True
-                        break
-            except Exception:
-                diag["has_root_database_url"] = False
     except Exception:
-        pass
+        sec = None
+
+    # --- [db] section ---
+    try:
+        diag["has_db_section"] = bool(sec is not None and ("db" in sec))
+    except Exception:
+        diag["has_db_section"] = False
+
+    if diag["has_db_section"]:
+        try:
+            db = sec.get("db", {})
+            if isinstance(db, dict):
+                diag["db_keys"] = sorted(list(db.keys()))
+                for k in ("DATABASE_URL", "database_url", "url", "URL"):
+                    v = db.get(k)
+                    if v is not None:
+                        s = str(v)
+                        l = len(s.strip())
+                        if l > 0:
+                            diag["has_db_database_url"] = True
+                            diag["db_database_url_key"] = k
+                            diag["db_database_url_len"] = l
+                            break
+                        else:
+                            # chiave presente ma vuota: salva info (se non già trovato nulla)
+                            if diag["db_database_url_key"] is None:
+                                diag["db_database_url_key"] = k
+                                diag["db_database_url_len"] = 0
+        except Exception:
+            pass
+
+    # --- root keys ---
+    if sec is not None:
+        try:
+            for k in ("DATABASE_URL", "database_url"):
+                v = sec.get(k)
+                if v is not None:
+                    s = str(v)
+                    l = len(s.strip())
+                    if l > 0:
+                        diag["has_root_database_url"] = True
+                        diag["root_database_url_key"] = k
+                        diag["root_database_url_len"] = l
+                        break
+                    else:
+                        if diag["root_database_url_key"] is None:
+                            diag["root_database_url_key"] = k
+                            diag["root_database_url_len"] = 0
+        except Exception:
+            pass
 
     # --- env ---
     try:
-        diag["env_database_url"] = bool((os.getenv("DATABASE_URL", "") or os.getenv("database_url", "") or "").strip())
+        envv = (os.getenv("DATABASE_URL", "") or os.getenv("database_url", "") or "")
+        diag["env_database_url_len"] = len(envv.strip())
+        diag["env_database_url"] = diag["env_database_url_len"] > 0
     except Exception:
         diag["env_database_url"] = False
+        diag["env_database_url_len"] = 0
 
     return diag
 def _get_database_url() -> str:
@@ -330,17 +341,25 @@ def _require_postgres_on_cloud():
             "secrets_available": diag.get("secrets_available"),
             "secrets_keys": diag.get("secrets_keys"),
             "has_db_section": diag.get("has_db_section"),
+            "db_keys": diag.get("db_keys"),
             "has_db_database_url": diag.get("has_db_database_url"),
+            "db_database_url_key": diag.get("db_database_url_key"),
+            "db_database_url_len": diag.get("db_database_url_len"),
             "has_root_database_url": diag.get("has_root_database_url"),
+            "root_database_url_key": diag.get("root_database_url_key"),
+            "root_database_url_len": diag.get("root_database_url_len"),
             "env_database_url": diag.get("env_database_url"),
+            "env_database_url_len": diag.get("env_database_url_len"),
         })
+        st.write("Chiavi in [db]:", diag.get("db_keys"))
+        st.write("Lunghezza DATABASE_URL (strip):", diag.get("db_database_url_len"))
+        st.write("DATABASE_URL sembra postgresql:// ?", str(_safe_secrets().get("db",{}).get("DATABASE_URL","")).strip().lower().startswith("postgresql://"))
         st.info("""Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
 
 [db]
 DATABASE_URL = \"postgresql://...sslmode=require\"
 
 Poi premi Save e riavvia l'app (Reboot).""")
-        st.write("Chiavi in [db]:", list(_safe_secrets().get("db", {}).keys()))
         st.stop()
 def _connect_cached():
     _require_postgres_on_cloud()
