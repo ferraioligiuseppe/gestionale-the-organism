@@ -1,5 +1,12 @@
 import io
 from typing import Callable, Literal
+import streamlit as st
+import os
+
+st.set_page_config(page_title="The Organism", layout="wide")
+st.title("BOOT OK ✅")
+st.write("Se vedi questo, il file giusto sta girando.")
+st.write("Python:", os.getenv("PYTHON_VERSION", "n/a"))
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, A5
