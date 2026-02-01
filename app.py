@@ -108,6 +108,37 @@ except Exception:
     psycopg2 = None
     PSYCOPG2_AVAILABLE = False
 
+
+class _PgConn:
+    """Small wrapper to unify cursor behavior across SQLite/PostgreSQL.
+
+    - For PostgreSQL we use RealDictCursor so rows behave like dicts (row['ID']).
+    - Exposes commit/close and context-manager methods.
+    """
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        # RealDictCursor makes rows dict-like, matching SQLite row access patterns used in the app.
+        return self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def close(self):
+        return self._conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            if exc_type is None:
+                self._conn.commit()
+        finally:
+            self._conn.close()
+        return False
+
 def _secrets_diagnostics():
     """Return non-sensitive diagnostics about Streamlit secrets/env."""
     diag = {
