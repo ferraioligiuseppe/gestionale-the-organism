@@ -11,7 +11,7 @@ import textwrap  # per andare a capo nel referto
 
 # PDF (referti e prescrizioni A4/A5)
 try:
-    from reportlab.lib.pagesizes import A4, A5
+    from reportlab.lib.pagesizes import A4, A5, landscape
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import mm
     REPORTLAB_AVAILABLE = True
@@ -1452,28 +1452,37 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
     lenti_scelte: list,
     altri_trattamenti: str,
     note: str,
-    crop_marks: bool = True,
+    divider_line: bool = False,
 ) -> bytes:
-    """Genera un PDF A4 con due prescrizioni A5 (una sopra, una sotto) + crop marks."""
+    """Genera un PDF A4 *orizzontale* con due prescrizioni A5 (sinistra + destra), pulito.
+    - Nessun crop mark.
+    - divider_line=True aggiunge una linea centrale molto leggera per facilitare il taglio.
+    """
     buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    a4_w, a4_h = A4
+
+    # A4 landscape: 842x595 pt. Due A5 portrait (420x595) stanno perfettamente affiancati.
+    page_size = landscape(A4)
+    c = canvas.Canvas(buffer, pagesize=page_size)
+    a4_w, a4_h = page_size
     a5_w, a5_h = A5
 
-    # centra l'A5 orizzontalmente; in verticale sono due slot metà pagina
-    x0 = (a4_w - a5_w) / 2.0
-    y_bottom = 0
-    y_top = a4_h / 2.0
+    # Allineamento: affianco, centrati orizzontalmente e verticalmente (di solito a5_h==a4_h)
+    total_w = a5_w * 2
+    x_left = (a4_w - total_w) / 2.0
+    x_right = x_left + a5_w
+    y0 = (a4_h - a5_h) / 2.0
 
-    if crop_marks:
-        c.setLineWidth(0.6)
-        _draw_crop_marks_for_rect(c, x0, y_bottom, a5_w, a5_h)
-        _draw_crop_marks_for_rect(c, x0, y_top, a5_w, a5_h)
-        _draw_mid_cut_marks(c, a4_w, a4_h)
+    if divider_line:
+        # linea centrale sottilissima (non invasiva)
+        c.saveState()
+        c.setLineWidth(0.3)
+        c.setDash(1, 2)
+        c.line(a4_w / 2.0, 5 * mm, a4_w / 2.0, a4_h - 5 * mm)
+        c.restoreState()
 
-    # slot basso
+    # Slot sinistro
     c.saveState()
-    c.translate(x0, y_bottom)
+    c.translate(x_left, y0)
     _draw_prescrizione_occhiali_a5_on_canvas(
         c,
         a5_w, a5_h,
@@ -1491,9 +1500,9 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
     )
     c.restoreState()
 
-    # slot alto
+    # Slot destro
     c.saveState()
-    c.translate(x0, y_top)
+    c.translate(x_right, y0)
     _draw_prescrizione_occhiali_a5_on_canvas(
         c,
         a5_w, a5_h,
@@ -2616,14 +2625,14 @@ ESAMI STRUTTURALI / FUNZIONALI
 
             formato_stampa = st.selectbox(
                 "Formato stampa",
-                ["A5", "A4 (2×A5 con taglio)"],
+                ["A5", "A4 (2×A5)"],
                 index=1,
                 key="prescr_formato_stampa",
             )
-            crop_marks = st.checkbox(
-                "Crop marks (segni di taglio)",
-                value=True,
-                key="prescr_crop_marks",
+            divider_line = st.checkbox(
+                "Linea centrale leggera (opzionale, per taglio)",
+                value=False,
+                key="prescr_divider_line",
             )
 
             st.markdown("**LONTANO**")
@@ -2715,9 +2724,9 @@ ESAMI STRUTTURALI / FUNZIONALI
                 filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A5.pdf"
                 label_btn = "Scarica prescrizione occhiali (A5)"
             else:
-                pdf_bytes = genera_prescrizione_occhiali_2a5_su_a4_pdf(**common_kwargs, crop_marks=crop_marks)
+                pdf_bytes = genera_prescrizione_occhiali_2a5_su_a4_pdf(**common_kwargs, divider_line=divider_line)
                 filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A4_2xA5.pdf"
-                label_btn = "Scarica prescrizione occhiali (A4 2×A5)"
+                label_btn = "Scarica prescrizione occhiali (A4 2×A5) - orizzontale"
 
             st.download_button(
                 label_btn,
