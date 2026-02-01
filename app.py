@@ -5,13 +5,6 @@ from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
 from pdf_templates import build_pdf
 
-variant = "with_cirillo" if con_cirillo else "no_cirillo"
-
-# A5
-pdf_bytes = build_pdf("a5", variant, draw_overlay_fn)
-
-# A4 2×A5
-pdf_bytes = build_pdf("a4_2up", variant, draw_overlay_fn_2up)
 
 import os
 import io
@@ -1429,6 +1422,127 @@ def _draw_prescrizione_occhiali_a5_on_canvas(
 
 
 
+
+def _draw_prescrizione_occhiali_FIELDS_ONLY_A5(
+    c,
+    width: float,
+    height: float,
+    paziente,
+    data_prescrizione_iso: Optional[str],
+    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
+    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
+    sf_int_od: float, cil_int_od: float, ax_int_od: int,
+    sf_int_os: float, cil_int_os: float, ax_int_os: int,
+    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
+    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
+    lenti_scelte: list,
+    altri_trattamenti: str,
+    note: str,
+):
+    """Overlay SOLO valori (niente linee/archi/riquadri). Coordinate calibrate per il template A5."""
+    # sicurezza: numeri None -> 0
+    def _n(v, default=0.0):
+        try:
+            return float(v)
+        except Exception:
+            return float(default)
+
+    def _i(v, default=0):
+        try:
+            return int(v)
+        except Exception:
+            return int(default)
+
+    # Testi base
+    c.setFont("Helvetica", 10)
+
+    # Data (campo 'Data________')
+    data_it = _format_data_it_from_iso(data_prescrizione_iso) if data_prescrizione_iso else ""
+    if data_it:
+        c.drawString(140*mm, 240*mm, data_it)
+
+    # Sig. (nome paziente)
+    try:
+        nome_paz = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}"
+    except Exception:
+        nome_paz = ""
+    if nome_paz.strip():
+        c.drawString(22*mm, 228*mm, nome_paz.strip())
+
+    # --- BOX refrazione: 3 righe (Lontano/Intermedio/Vicino), 3 colonne (SF/CIL/ASSE) per OD (sx) e OS (dx)
+    # Queste coordinate sono centri dei riquadri sul tuo template.
+    # OD (sx)
+    od_sf_x, od_cil_x, od_ax_x = 52*mm, 77*mm, 102*mm
+    # OS (dx)
+    os_sf_x, os_cil_x, os_ax_x = 138*mm, 163*mm, 188*mm
+
+    y_lon = 155*mm
+    y_int = 132*mm
+    y_vic = 109*mm
+
+    c.setFont("Helvetica-Bold", 11)
+
+    def put_triplet(xsf, xcil, xax, y, sf, cil, ax):
+        sf = _n(sf); cil = _n(cil); ax = _i(ax)
+        # se tutto vuoto/zero, lascia vuoto
+        if abs(sf) < 0.001 and abs(cil) < 0.001 and ax == 0:
+            return
+        # formato +/-0.00
+        c.drawCentredString(xsf,  y, f"{sf:+.2f}")
+        c.drawCentredString(xcil, y, f"{cil:+.2f}")
+        if ax:
+            c.drawCentredString(xax,  y, f"{ax}")
+
+    put_triplet(od_sf_x, od_cil_x, od_ax_x, y_lon, sf_lon_od, cil_lon_od, ax_lon_od)
+    put_triplet(od_sf_x, od_cil_x, od_ax_x, y_int, sf_int_od, cil_int_od, ax_int_od)
+    put_triplet(od_sf_x, od_cil_x, od_ax_x, y_vic, sf_vic_od, cil_vic_od, ax_vic_od)
+
+    put_triplet(os_sf_x, os_cil_x, os_ax_x, y_lon, sf_lon_os, cil_lon_os, ax_lon_os)
+    put_triplet(os_sf_x, os_cil_x, os_ax_x, y_int, sf_int_os, cil_int_os, ax_int_os)
+    put_triplet(os_sf_x, os_cil_x, os_ax_x, y_vic, sf_vic_os, cil_vic_os, ax_vic_os)
+
+    # Prisma/Base (linee in basso): scriviamo se presenti in note (se li gestirai più avanti)
+    # --- Checkboxes Lenti consigliate (a sinistra)
+    # Mettiamo una 'X' vicino alla riga selezionata
+    c.setFont("Helvetica-Bold", 10)
+    checks = set([str(x).strip().lower() for x in (lenti_scelte or [])])
+
+    # posizioni della "X" per le 4 voci
+    x_check = 18*mm
+    y0 = 84*mm
+    dy = 7*mm
+    voci = [
+        ("progressive", 0),
+        ("per vicino/intermedio", 1),
+        ("fotocromatiche", 2),
+        ("polarizzate", 3),
+    ]
+    c.setFont("Helvetica-Bold", 12)
+    for key, idx in voci:
+        if key in checks:
+            c.drawString(x_check, y0 - idx*dy, "X")
+
+    # Checkboxes a destra (trattamento antiriflesso / altri trattamenti)
+    # Se in lenti_scelte c'è 'trattamento antiriflesso' mettiamo X nella casella.
+    c.setFont("Helvetica-Bold", 12)
+    if "trattamento antiriflesso" in checks:
+        c.drawString(124*mm, 84*mm, "X")
+
+    # Altri trattamenti: testo in riga (se presente)
+    c.setFont("Helvetica", 10)
+    if altri_trattamenti:
+        c.drawString(124*mm, 77*mm, str(altri_trattamenti)[:60])
+
+    # Note (righe basse)
+    if note and str(note).strip():
+        c.setFont("Helvetica", 9)
+        wrapper = textwrap.TextWrapper(width=95)
+        y = 56*mm
+        for line in wrapper.wrap(str(note).strip()):
+            if y < 30*mm:
+                break
+            c.drawString(18*mm, y, line)
+            y -= 4.5*mm
 def genera_prescrizione_occhiali_a5_pdf(
     paziente,
     data_prescrizione_iso: Optional[str],
@@ -1443,16 +1557,15 @@ def genera_prescrizione_occhiali_a5_pdf(
     note: str,
     con_cirillo: bool = True,
 ) -> bytes:
-    """Prescrizione A5 con carta intestata grafica (The Organism) + overlay variabile."""
+    """Prescrizione A5: usa template grafico (da immagine) + overlay SOLO valori (niente linee)."""
     if not REPORTLAB_AVAILABLE:
         raise RuntimeError("ReportLab non disponibile")
+
     variant = "with_cirillo" if con_cirillo else "no_cirillo"
 
-    def draw_overlay(c, width, height):
-        _draw_prescrizione_occhiali_a5_on_canvas(
-            c,
-            width,
-            height,
+    def draw_overlay(c, w, h):
+        _draw_prescrizione_occhiali_FIELDS_ONLY_A5(
+            c, w, h,
             paziente,
             data_prescrizione_iso,
             sf_lon_od, cil_lon_od, ax_lon_od,
@@ -1466,12 +1579,8 @@ def genera_prescrizione_occhiali_a5_pdf(
             note,
         )
 
-    # Template A5 + overlay
-    return build_pdf_with_letterhead(
-        page_kind="a5",
-        variant=variant,
-        draw_fn=draw_overlay,
-    )
+    # usa pdf_templates.py (assets/templates/*)
+    return build_pdf("a5", variant, draw_overlay)
 
 def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
     """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
@@ -1519,81 +1628,59 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
     divider_line: bool = False,
     con_cirillo: bool = True,
 ) -> bytes:
-    """A4 landscape con 2 prescrizioni A5 affiancate, con grafica The Organism (senza crop)."""
+    """A4 2×A5: usa il tuo template A4 grafico + overlay SOLO valori su entrambe le metà."""
     if not REPORTLAB_AVAILABLE:
         raise RuntimeError("ReportLab non disponibile")
-    if not PYPDF_AVAILABLE:
-        raise RuntimeError("pypdf non disponibile (aggiungi 'pypdf' in requirements.txt)")
 
     variant = "with_cirillo" if con_cirillo else "no_cirillo"
-    pagesize = landscape(A4)
-    a4_w, a4_h = pagesize
-    a5_w, a5_h = A5
 
-    # 1) overlay A4 landscape (solo contenuto variabile)
-    def draw_overlay_a4(c, W, H):
+    def draw_overlay(c, w, h):
+        # metà sinistra
+        c.saveState()
+        _draw_prescrizione_occhiali_FIELDS_ONLY_A5(
+            c, w/2.0, h,
+            paziente,
+            data_prescrizione_iso,
+            sf_lon_od, cil_lon_od, ax_lon_od,
+            sf_lon_os, cil_lon_os, ax_lon_os,
+            sf_int_od, cil_int_od, ax_int_od,
+            sf_int_os, cil_int_os, ax_int_os,
+            sf_vic_od, cil_vic_od, ax_vic_od,
+            sf_vic_os, cil_vic_os, ax_vic_os,
+            lenti_scelte,
+            altri_trattamenti,
+            note,
+        )
+        c.restoreState()
+
+        # metà destra
+        c.saveState()
+        c.translate(w/2.0, 0)
+        _draw_prescrizione_occhiali_FIELDS_ONLY_A5(
+            c, w/2.0, h,
+            paziente,
+            data_prescrizione_iso,
+            sf_lon_od, cil_lon_od, ax_lon_od,
+            sf_lon_os, cil_lon_os, ax_lon_os,
+            sf_int_od, cil_int_od, ax_int_od,
+            sf_int_os, cil_int_os, ax_int_os,
+            sf_vic_od, cil_vic_od, ax_vic_od,
+            sf_vic_os, cil_vic_os, ax_vic_os,
+            lenti_scelte,
+            altri_trattamenti,
+            note,
+        )
+        c.restoreState()
+
+        # linea centrale opzionale (molto leggera)
         if divider_line:
             c.saveState()
             c.setLineWidth(0.3)
             c.setDash(1, 2)
-            c.line(a4_w / 2.0, 5 * mm, a4_w / 2.0, a4_h - 5 * mm)
+            c.line(w/2.0, 5*mm, w/2.0, h-5*mm)
             c.restoreState()
 
-        # sinistra
-        c.saveState()
-        c.translate(0, 0)
-        _draw_prescrizione_occhiali_a5_on_canvas(
-            c, a5_w, a5_h,
-            paziente,
-            data_prescrizione_iso,
-            sf_lon_od, cil_lon_od, ax_lon_od,
-            sf_lon_os, cil_lon_os, ax_lon_os,
-            sf_int_od, cil_int_od, ax_int_od,
-            sf_int_os, cil_int_os, ax_int_os,
-            sf_vic_od, cil_vic_od, ax_vic_od,
-            sf_vic_os, cil_vic_os, ax_vic_os,
-            lenti_scelte,
-            altri_trattamenti,
-            note,
-        )
-        c.restoreState()
-
-        # destra
-        c.saveState()
-        c.translate(a5_w, 0)
-        _draw_prescrizione_occhiali_a5_on_canvas(
-            c, a5_w, a5_h,
-            paziente,
-            data_prescrizione_iso,
-            sf_lon_od, cil_lon_od, ax_lon_od,
-            sf_lon_os, cil_lon_os, ax_lon_os,
-            sf_int_od, cil_int_od, ax_int_od,
-            sf_int_os, cil_int_os, ax_int_os,
-            sf_vic_od, cil_vic_od, ax_vic_od,
-            sf_vic_os, cil_vic_os, ax_vic_os,
-            lenti_scelte,
-            altri_trattamenti,
-            note,
-        )
-        c.restoreState()
-
-    overlay_bytes = _make_overlay_pdf_pagesize(pagesize, draw_overlay_a4)
-
-    # 2) template A4 landscape 2-up (da template A5 già presenti)
-    template_bytes = _build_a4_landscape_2up_template_bytes(variant)
-
-    # 3) merge overlay sopra template
-    tpl_reader = PdfReader(io.BytesIO(template_bytes))
-    ov_reader = PdfReader(io.BytesIO(overlay_bytes))
-    tpl_page = tpl_reader.pages[0]
-    tpl_page.merge_page(ov_reader.pages[0])
-
-    writer = PdfWriter()
-    writer.add_page(tpl_page)
-    out = io.BytesIO()
-    writer.write(out)
-    out.seek(0)
-    return out.read()
+    return build_pdf("a4_2up", variant, draw_overlay)
 
 def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -> bytes:
     """
