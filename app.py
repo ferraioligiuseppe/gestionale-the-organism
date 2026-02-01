@@ -108,65 +108,121 @@ except Exception:
     psycopg2 = None
     PSYCOPG2_AVAILABLE = False
 
+def _secrets_diagnostics():
+    """Return non-sensitive diagnostics about Streamlit secrets/env."""
+    diag = {
+        "secrets_available": False,
+        "secrets_keys": [],
+        "has_db_section": False,
+        "has_db_database_url": False,
+        "has_root_database_url": False,
+        "env_database_url": False,
+    }
+    try:
+        sec = getattr(st, "secrets", None)
+        if sec is not None:
+            diag["secrets_available"] = True
+            try:
+                diag["secrets_keys"] = sorted(list(sec.keys()))
+            except Exception:
+                diag["secrets_keys"] = ["<unreadable>"]
+            try:
+                diag["has_db_section"] = "db" in sec
+            except Exception:
+                diag["has_db_section"] = False
+            try:
+                if diag["has_db_section"]:
+                    db = sec.get("db", {})
+                    diag["has_db_database_url"] = isinstance(db, dict) and bool(str(db.get("DATABASE_URL","")).strip())
+            except Exception:
+                diag["has_db_database_url"] = False
+            try:
+                diag["has_root_database_url"] = bool(str(sec.get("DATABASE_URL","")).strip())
+            except Exception:
+                diag["has_root_database_url"] = False
+    except Exception:
+        pass
+
+    try:
+        diag["env_database_url"] = bool(os.getenv("DATABASE_URL","").strip())
+    except Exception:
+        diag["env_database_url"] = False
+    return diag
 def _get_database_url() -> str:
+    """Return DATABASE_URL from Streamlit secrets or environment.
+    Supports either:
+      - [db] DATABASE_URL = "..."
+      - DATABASE_URL = "..."  (root)
+    """
     sec = _safe_secrets()
-    # Prefer [db].DATABASE_URL
+
+    # 1) [db].DATABASE_URL (preferred)
     try:
         dbsec = sec.get("db", {})
-        if isinstance(dbsec, dict) and dbsec.get("DATABASE_URL"):
-            return str(dbsec.get("DATABASE_URL")).strip()
+        if isinstance(dbsec, dict):
+            for k in ("DATABASE_URL", "database_url", "url", "URL"):
+                v = dbsec.get(k)
+                if v:
+                    return str(v).strip()
     except Exception:
         pass
-    # Fallback: top-level key
-    try:
-        if sec.get("DATABASE_URL"):
-            return str(sec.get("DATABASE_URL")).strip()
-    except Exception:
-        pass
-    return (os.getenv("DATABASE_URL", "") or "").strip()
 
-def _is_streamlit_cloud() -> bool:
-    # euristiche: su Streamlit Cloud esiste /mount/src e HOME tipicamente /home/...
-    return os.path.exists("/mount/src") or bool(os.getenv("STREAMLIT_CLOUD")) or bool(os.getenv("STREAMLIT_SHARING"))
+    # 2) root DATABASE_URL
+    try:
+        for k in ("DATABASE_URL", "database_url"):
+            v = sec.get(k)
+            if v:
+                return str(v).strip()
+    except Exception:
+        pass
+
+    # 3) environment
+    return (os.getenv("DATABASE_URL", "") or os.getenv("database_url", "") or "").strip()
 
 _DB_URL = _get_database_url()
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
+
+def _sidebar_db_indicator():
+    """Mostra in sidebar quale database sta usando l'app."""
+    try:
+        if _is_streamlit_cloud():
+            if _DB_BACKEND == "postgres" and _DB_URL:
+                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
+            else:
+                st.sidebar.error("🔴 DB: PostgreSQL (Neon) NON configurato")
+        else:
+            if _DB_BACKEND == "postgres" and _DB_URL:
+                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
+            else:
+                # locale / test
+                db_path = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_TEST.db")
+                st.sidebar.warning(f"🟡 DB: SQLite ({db_path})")
+    except Exception:
+        pass
+
 def _require_postgres_on_cloud():
+    # Mostra sempre l'indicatore, anche in caso di errore
+    _sidebar_db_indicator()
     if _is_streamlit_cloud() and _DB_BACKEND != "postgres":
         st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
+        diag = _secrets_diagnostics()
+        st.write("Diagnostica Secrets (senza valori):")
+        st.write({
+            "secrets_available": diag.get("secrets_available"),
+            "secrets_keys": diag.get("secrets_keys"),
+            "has_db_section": diag.get("has_db_section"),
+            "has_db_database_url": diag.get("has_db_database_url"),
+            "has_root_database_url": diag.get("has_root_database_url"),
+            "env_database_url": diag.get("env_database_url"),
+        })
+        st.info("""Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
+
+[db]
+DATABASE_URL = \"postgresql://...sslmode=require\"
+
+Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
-
-class _PgCursor:
-    def __init__(self, cur):
-        self._cur = cur
-    def execute(self, q, params=None):
-        # Convert SQLite placeholders (?) to psycopg2 (%s)
-        q2 = q.replace("?", "%s")
-        return self._cur.execute(q2, params or ())
-    def executemany(self, q, seq):
-        q2 = q.replace("?", "%s")
-        return self._cur.executemany(q2, seq)
-    def fetchone(self):
-        return self._cur.fetchone()
-    def fetchall(self):
-        return self._cur.fetchall()
-    def __getattr__(self, name):
-        return getattr(self._cur, name)
-
-class _PgConn:
-    def __init__(self, conn):
-        self._conn = conn
-    def cursor(self):
-        # RealDictCursor restituisce dict (compatibile con r["ID"])
-        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        return _PgCursor(cur)
-    def commit(self):
-        return self._conn.commit()
-    def close(self):
-        return self._conn.close()
-
-@st.cache_resource(show_spinner=False)
 def _connect_cached():
     _require_postgres_on_cloud()
     if _DB_BACKEND == "postgres":
@@ -339,17 +395,18 @@ def init_db() -> None:
 
     cur.execute('''CREATE TABLE IF NOT EXISTS Anamnesi (
             ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID     INTEGER NOT NULL,
+            Paziente_ID     BIGINT NOT NULL,
             Data_Anamnesi   TEXT,
             Motivo          TEXT,
             Storia          TEXT,
             Note            TEXT,
-            FOREIGN KEY (Paziente_ID) ''')
+            FOREIGN KEY (Paziente_ID) REFERENCES Pazienti(ID) ON DELETE CASCADE
+        );''')
 
 
     cur.execute('''CREATE TABLE IF NOT EXISTS Valutazioni_Visive (
             ID                      BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID             INTEGER NOT NULL,
+            Paziente_ID             BIGINT NOT NULL,
             Data_Valutazione        TEXT,
             Tipo_Visita             TEXT,
             Professionista          TEXT,
@@ -362,30 +419,33 @@ def init_db() -> None:
             Costo                   REAL,
             Pagato                  INTEGER NOT NULL DEFAULT 0,
             Note                    TEXT,
-            FOREIGN KEY (Paziente_ID) ''')
+            FOREIGN KEY (Paziente_ID) REFERENCES Pazienti(ID) ON DELETE CASCADE
+        );''')
 
 
     cur.execute('''CREATE TABLE IF NOT EXISTS Sedute (
             ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID     INTEGER NOT NULL,
+            Paziente_ID     BIGINT NOT NULL,
             Data_Seduta     TEXT,
             Terapia         TEXT,
             Professionista  TEXT,
             Costo           REAL,
             Pagato          INTEGER NOT NULL DEFAULT 0,
             Note            TEXT,
-            FOREIGN KEY (Paziente_ID) ''')
+            FOREIGN KEY (Paziente_ID) REFERENCES Pazienti(ID) ON DELETE CASCADE
+        );''')
 
 
     cur.execute('''CREATE TABLE IF NOT EXISTS Coupons (
             ID                BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID       INTEGER NOT NULL,
+            Paziente_ID       BIGINT NOT NULL,
             Tipo_Coupon       TEXT NOT NULL,     -- OF o SDS
             Codice_Coupon     TEXT,              -- numero / codice coupon
             Data_Assegnazione TEXT,
             Note              TEXT,
             Utilizzato        INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY (Paziente_ID) ''')
+            FOREIGN KEY (Paziente_ID) REFERENCES Pazienti(ID) ON DELETE CASCADE
+        );''')
 
     conn.commit()
 
@@ -2561,6 +2621,8 @@ def main():
         layout="wide"
     )
 
+    _sidebar_db_indicator()
+
     # inizializza il database (se le tabelle non ci sono le crea)
     init_db()
 
@@ -2599,4 +2661,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
