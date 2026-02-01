@@ -203,6 +203,92 @@ def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: floa
             c.drawString(left, y, note[i:i+max_chars])
             y -= 5 * mm
 
+
+# ---- TABO semicircle + axis arrow (A5) ----
+def _draw_tabo_semicircle(c: canvas.Canvas, cx: float, cy: float, r: float, show_tabo: bool=False):
+    """Disegna semicerchio 180°→0° (parte alta) con label 90° e 180°/0° come nel modulo."""
+    c.saveState()
+    c.setLineWidth(1)
+
+    # Semicerchio superiore: arco da 0 a 180 gradi
+    c.arc(cx - r, cy - r, cx + r, cy + r, startAng=0, extent=180)
+
+    # Tacche principali (0, 90, 180) e label
+    c.setFont("Helvetica", 8)
+    c.drawString(cx - r - 4*mm, cy - 2*mm, "180")
+    c.drawString(cx + r + 1*mm, cy - 2*mm, "0")
+    c.drawCentredString(cx, cy + r + 3*mm, "90")
+
+    if show_tabo:
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(cx, cy + r*0.55, "TABO")
+
+    c.restoreState()
+
+def _draw_axis_arrow_on_tabo(c: canvas.Canvas, cx: float, cy: float, r: float, axis_deg):
+    """Freccia che indica l'asse del cilindro sul semicerchio (0° destra, 90° alto, 180° sinistra)."""
+    try:
+        if axis_deg is None or str(axis_deg).strip() == "":
+            return
+        axis = int(float(axis_deg))
+    except Exception:
+        return
+
+    # Clamp 0..180
+    axis = max(0, min(180, axis))
+    ang = math.radians(axis)
+
+    # stelo: dal 70% al 95% del raggio
+    r1 = r * 0.70
+    r2 = r * 0.95
+    x1 = cx + r1 * math.cos(ang)
+    y1 = cy + r1 * math.sin(ang)
+    x2 = cx + r2 * math.cos(ang)
+    y2 = cy + r2 * math.sin(ang)
+
+    c.saveState()
+    c.setLineWidth(1.2)
+    c.line(x1, y1, x2, y2)
+
+    # testa freccia
+    head = r * 0.16
+    for delta in (-22, 22):
+        a2 = ang + math.radians(delta)
+        hx = x2 - head * math.cos(a2)
+        hy = y2 - head * math.sin(a2)
+        c.line(x2, y2, hx, hy)
+
+    c.restoreState()
+
+def _draw_tabo_block_a5(c: canvas.Canvas, page_w: float, page_h: float, dati: dict):
+    """Disegna i due semicerchi (OD/OS) e la freccia dell'asse (solo se CIL != 0)."""
+    r = 22 * mm
+    # posizionamento calibrato "generico" per A5 su letterhead: sotto le righe Sig./Data
+    cy = page_h - 88 * mm
+    cx_left  = 45 * mm   # semicerchio sinistro
+    cx_right = page_w - 45 * mm  # semicerchio destro
+
+    # Nel tuo modulo: a sinistra Occhio Destro, a destra Occhio Sinistro
+    # (se vuoi invertire, basta scambiare i due blocchi)
+    _draw_tabo_semicircle(c, cx_left,  cy, r, show_tabo=False)
+    _draw_tabo_semicircle(c, cx_right, cy, r, show_tabo=True)
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(cx_left,  cy - r - 4*mm, "Occhio Destro")
+    c.drawCentredString(cx_right, cy - r - 4*mm, "Occhio Sinistro")
+
+    # Disegna freccia asse (usa asse LONTANO; se CIL è 0/None non disegna)
+    def _nonzero_cyl(v):
+        try:
+            return abs(float(v)) > 1e-6
+        except Exception:
+            return False
+
+    if _nonzero_cyl(dati.get("od_lon_cil")):
+        _draw_axis_arrow_on_tabo(c, cx_left, cy, r, dati.get("od_lon_ax"))
+    if _nonzero_cyl(dati.get("os_lon_cil")):
+        _draw_axis_arrow_on_tabo(c, cx_right, cy, r, dati.get("os_lon_ax"))
+
 def _prescrizione_pdf_imagebg(page_size, page_kind: str, con_cirillo: bool, dati: dict) -> bytes:
     variant = "with_cirillo" if con_cirillo else "no_cirillo"
     bg = _find_bg_image(page_kind, variant)
@@ -210,8 +296,10 @@ def _prescrizione_pdf_imagebg(page_size, page_kind: str, con_cirillo: bool, dati
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=page_size)
     _draw_bg_image_fullpage(c, page_w, page_h, bg)
+    if page_kind == "a5":
+        _draw_tabo_block_a5(c, page_w, page_h, dati)
     # top offset: A5 has less vertical space
-    top_offset = 62 if page_kind == "a4" else 58
+    top_offset = 62 if page_kind == "a4" else 72
     _draw_prescrizione_clean_table(c, page_w, page_h, dati, top_offset_mm=top_offset)
     c.showPage(); c.save()
     buf.seek(0)
@@ -1440,35 +1528,6 @@ def draw_axis_arrow(c, center_x, center_y, radius, axis_deg: int):
         hx = x2 - head_len * math.cos(ang)
         hy = y2 - head_len * math.sin(ang)
         c.line(x2, y2, hx, hy)
-
-def draw_axis_arrow(c, center_x, center_y, radius, axis_deg: int):
-    """
-    Disegna una freccia sulla semicirconferenza per indicare l'asse (0–180°).
-    0° = lato destro, 90° = alto, 180° = sinistra.
-    """
-    axis_deg = max(0, min(180, int(axis_deg)))  # clamp di sicurezza
-    angle_rad = math.radians(axis_deg)
-
-    # Punto interno e punto sulla circonferenza
-    r1 = radius * 0.7
-    r2 = radius * 0.95
-    x1 = center_x + r1 * math.cos(angle_rad)
-    y1 = center_y + r1 * math.sin(angle_rad)
-    x2 = center_x + r2 * math.cos(angle_rad)
-    y2 = center_y + r2 * math.sin(angle_rad)
-
-    c.setLineWidth(1)
-    # stelo della freccia
-    c.line(x1, y1, x2, y2)
-
-    # testa della freccia (due segmentini inclinati)
-    head_len = radius * 0.15
-    for delta in (-20, 20):
-        ang = angle_rad + math.radians(delta)
-        hx = x2 - head_len * math.cos(ang)
-        hy = y2 - head_len * math.sin(ang)
-        c.line(x2, y2, hx, hy)
-
 
 
 def _draw_prescrizione_values_only_on_canvas(
