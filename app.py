@@ -108,26 +108,76 @@ except Exception:
     psycopg2 = None
     PSYCOPG2_AVAILABLE = False
 
+def _secrets_diagnostics():
+    """Return non-sensitive diagnostics about Streamlit secrets/env."""
+    diag = {
+        "secrets_available": False,
+        "secrets_keys": [],
+        "has_db_section": False,
+        "has_db_database_url": False,
+        "has_root_database_url": False,
+        "env_database_url": False,
+    }
+    try:
+        sec = getattr(st, "secrets", None)
+        if sec is not None:
+            diag["secrets_available"] = True
+            try:
+                diag["secrets_keys"] = sorted(list(sec.keys()))
+            except Exception:
+                diag["secrets_keys"] = ["<unreadable>"]
+            try:
+                diag["has_db_section"] = "db" in sec
+            except Exception:
+                diag["has_db_section"] = False
+            try:
+                if diag["has_db_section"]:
+                    db = sec.get("db", {})
+                    diag["has_db_database_url"] = isinstance(db, dict) and bool(str(db.get("DATABASE_URL","")).strip())
+            except Exception:
+                diag["has_db_database_url"] = False
+            try:
+                diag["has_root_database_url"] = bool(str(sec.get("DATABASE_URL","")).strip())
+            except Exception:
+                diag["has_root_database_url"] = False
+    except Exception:
+        pass
+
+    try:
+        diag["env_database_url"] = bool(os.getenv("DATABASE_URL","").strip())
+    except Exception:
+        diag["env_database_url"] = False
+    return diag
 def _get_database_url() -> str:
+    """Return DATABASE_URL from Streamlit secrets or environment.
+    Supports either:
+      - [db] DATABASE_URL = "..."
+      - DATABASE_URL = "..."  (root)
+    """
     sec = _safe_secrets()
-    # Prefer [db].DATABASE_URL
+
+    # 1) [db].DATABASE_URL (preferred)
     try:
         dbsec = sec.get("db", {})
-        if isinstance(dbsec, dict) and dbsec.get("DATABASE_URL"):
-            return str(dbsec.get("DATABASE_URL")).strip()
+        if isinstance(dbsec, dict):
+            for k in ("DATABASE_URL", "database_url", "url", "URL"):
+                v = dbsec.get(k)
+                if v:
+                    return str(v).strip()
     except Exception:
         pass
-    # Fallback: top-level key
-    try:
-        if sec.get("DATABASE_URL"):
-            return str(sec.get("DATABASE_URL")).strip()
-    except Exception:
-        pass
-    return (os.getenv("DATABASE_URL", "") or "").strip()
 
-def _is_streamlit_cloud() -> bool:
-    # euristiche: su Streamlit Cloud esiste /mount/src e HOME tipicamente /home/...
-    return os.path.exists("/mount/src") or bool(os.getenv("STREAMLIT_CLOUD")) or bool(os.getenv("STREAMLIT_SHARING"))
+    # 2) root DATABASE_URL
+    try:
+        for k in ("DATABASE_URL", "database_url"):
+            v = sec.get(k)
+            if v:
+                return str(v).strip()
+    except Exception:
+        pass
+
+    # 3) environment
+    return (os.getenv("DATABASE_URL", "") or os.getenv("database_url", "") or "").strip()
 
 _DB_URL = _get_database_url()
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
@@ -156,6 +206,16 @@ def _require_postgres_on_cloud():
     _sidebar_db_indicator()
     if _is_streamlit_cloud() and _DB_BACKEND != "postgres":
         st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
+    diag = _secrets_diagnostics()
+    st.write("Diagnostica Secrets (senza valori):")
+    st.write({
+        "secrets_available": diag.get("secrets_available"),
+        "secrets_keys": diag.get("secrets_keys"),
+        "has_db_section": diag.get("has_db_section"),
+        "has_db_database_url": diag.get("has_db_database_url"),
+        "has_root_database_url": diag.get("has_root_database_url"),
+        "env_database_url": diag.get("env_database_url"),
+    })
         st.info("""Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
 
 [db]
