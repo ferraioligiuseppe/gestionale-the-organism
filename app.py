@@ -206,54 +206,23 @@ def _require_postgres_on_cloud():
     _sidebar_db_indicator()
     if _is_streamlit_cloud() and _DB_BACKEND != "postgres":
         st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
-    diag = _secrets_diagnostics()
-    st.write("Diagnostica Secrets (senza valori):")
-    st.write({
-        "secrets_available": diag.get("secrets_available"),
-        "secrets_keys": diag.get("secrets_keys"),
-        "has_db_section": diag.get("has_db_section"),
-        "has_db_database_url": diag.get("has_db_database_url"),
-        "has_root_database_url": diag.get("has_root_database_url"),
-        "env_database_url": diag.get("env_database_url"),
-    })
+        diag = _secrets_diagnostics()
+        st.write("Diagnostica Secrets (senza valori):")
+        st.write({
+            "secrets_available": diag.get("secrets_available"),
+            "secrets_keys": diag.get("secrets_keys"),
+            "has_db_section": diag.get("has_db_section"),
+            "has_db_database_url": diag.get("has_db_database_url"),
+            "has_root_database_url": diag.get("has_root_database_url"),
+            "env_database_url": diag.get("env_database_url"),
+        })
         st.info("""Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
 
 [db]
-DATABASE_URL = "postgresql://...sslmode=require"
+DATABASE_URL = \"postgresql://...sslmode=require\"
 
-Poi riavvia l'app.""" )
+Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
-
-class _PgCursor:
-    def __init__(self, cur):
-        self._cur = cur
-    def execute(self, q, params=None):
-        # Convert SQLite placeholders (?) to psycopg2 (%s)
-        q2 = q.replace("?", "%s")
-        return self._cur.execute(q2, params or ())
-    def executemany(self, q, seq):
-        q2 = q.replace("?", "%s")
-        return self._cur.executemany(q2, seq)
-    def fetchone(self):
-        return self._cur.fetchone()
-    def fetchall(self):
-        return self._cur.fetchall()
-    def __getattr__(self, name):
-        return getattr(self._cur, name)
-
-class _PgConn:
-    def __init__(self, conn):
-        self._conn = conn
-    def cursor(self):
-        # RealDictCursor restituisce dict (compatibile con r["ID"])
-        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        return _PgCursor(cur)
-    def commit(self):
-        return self._conn.commit()
-    def close(self):
-        return self._conn.close()
-
-@st.cache_resource(show_spinner=False)
 def _connect_cached():
     _require_postgres_on_cloud()
     if _DB_BACKEND == "postgres":
