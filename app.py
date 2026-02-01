@@ -109,6 +109,35 @@ except Exception:
     PSYCOPG2_AVAILABLE = False
 
 
+
+class _PgCursorProxy:
+    """Proxy cursor that converts SQLite-style '?' placeholders to psycopg2 '%s'."""
+    def __init__(self, cur):
+        self._cur = cur
+
+    @staticmethod
+    def _convert_qmark(sql: str) -> str:
+        # Convert qmark placeholders to psycopg2 format.
+        # Assumes app queries don't contain literal '?' in strings.
+        return sql.replace("?", "%s")
+
+    def execute(self, query, params=None):
+        q = self._convert_qmark(query) if params is not None else query
+        return self._cur.execute(q, params or ())
+
+    def executemany(self, query, param_list):
+        q = self._convert_qmark(query)
+        return self._cur.executemany(q, param_list)
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    def __getattr__(self, name):
+        return getattr(self._cur, name)
+
 class _PgConn:
     """Small wrapper to unify cursor behavior across SQLite/PostgreSQL.
 
@@ -119,8 +148,9 @@ class _PgConn:
         self._conn = conn
 
     def cursor(self):
-        # RealDictCursor makes rows dict-like, matching SQLite row access patterns used in the app.
-        return self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # RealDictCursor makes rows dict-like; proxy converts '?' placeholders to '%s'.
+        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        return _PgCursorProxy(cur)
 
     def commit(self):
         return self._conn.commit()
