@@ -1604,6 +1604,7 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
 ) -> bytes:
 
     """A4 landscape 2xA5: TEMPLATE + overlay SOLO valori su entrambe le metà (niente linee)."""
+    variant = "with_cirillo" if con_cirillo else "no_cirillo"
     def draw_fn(c, w, h):
         # metà sinistra
         c.saveState()
