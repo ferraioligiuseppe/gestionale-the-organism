@@ -112,7 +112,7 @@ except Exception:
 class _PgConn:
     """Small wrapper to unify cursor behavior across SQLite/PostgreSQL.
 
-    - For PostgreSQL we use RealDictCursor so rows behave like dicts (row['ID']).
+    - For PostgreSQL we use RealDictCursor so rows behave like dicts (_rk(row,'ID')).
     - Exposes commit/close and context-manager methods.
     """
     def __init__(self, conn):
@@ -288,6 +288,34 @@ def _connect_cached():
 
 def get_connection():
     return _connect_cached()
+
+
+def _rk(row, key: str, default=""):
+    """Row key getter tolerant to postgres lowercasing (id vs ID)."""
+    if row is None:
+        return default
+    if isinstance(row, dict):
+        if key in row:
+            return row[key]
+        lk = key.lower()
+        if lk in row:
+            return row[lk]
+        uk = key.upper()
+        if uk in row:
+            return row[uk]
+        tk = key.title()
+        if tk in row:
+            return row[tk]
+        return default
+    # fallback: sequence/record objects
+    try:
+        return row[key]
+    except Exception:
+        try:
+            return row[key.lower()]
+        except Exception:
+            return default
+
 
 def init_db() -> None:
     conn = get_connection()
@@ -806,7 +834,7 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 
     # Dati paziente
     c.setFont("Helvetica", 11)
-    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
+    nome_paz = f"{_rk(paziente,'Cognome')} {_rk(paziente,'Nome')}"
     c.drawString(left, y, f"Paziente: {nome_paz}")
     y -= 14
 
@@ -985,7 +1013,7 @@ def genera_prescrizione_occhiali_a5_pdf(
     # Nome paziente
     y = top - 15
     c.setFont("Helvetica-Bold", 11)
-    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
+    nome_paz = f"{_rk(paziente,'Cognome')} {_rk(paziente,'Nome')}"
     c.drawString(left, y, f"Paziente: {nome_paz}")
     y -= 20
 
@@ -1156,7 +1184,7 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
 
     # Dati paziente
     c.setFont("Helvetica", 11)
-    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
+    nome_paz = f"{_rk(paziente,'Cognome')} {_rk(paziente,'Nome')}"
     c.drawString(left, y, f"Paziente: {nome_paz}")
     y -= 14
 
@@ -1417,7 +1445,7 @@ def ui_pazienti():
             except Exception:
                 nascita_it = r["Data_Nascita"]
         cf = (r["Codice_Fiscale"] or "").upper()
-        label = f"{r['ID']} - {r['Cognome']} {r['Nome']}"
+        label = f"{_rk(r,'ID')} - {_rk(r,'Cognome')} {_rk(r,'Nome')}"
         extra = []
         if nascita_it:
             extra.append(f"nato il {nascita_it}")
@@ -1577,7 +1605,7 @@ def ui_anamnesi():
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{_rk(p,'ID')} - {_rk(p,'Cognome')} {_rk(p,'Nome')}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -1692,7 +1720,7 @@ Storia libera (narrazione):
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
+        f"{_rk(r,'ID')} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
         for r in rows
     ]
     sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
@@ -1760,7 +1788,7 @@ def ui_valutazioni_visive():
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{_rk(p,'ID')} - {_rk(p,'Cognome')} {_rk(p,'Nome')}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
@@ -2036,7 +2064,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
+        f"{_rk(r,'ID')} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
         for r in rows
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
@@ -2049,7 +2077,7 @@ ESAMI STRUTTURALI / FUNZIONALI
     else:
         pdf_bytes_int = genera_referto_oculistico_pdf(paziente, rec, include_header=True)
         pdf_bytes_no = genera_referto_oculistico_pdf(paziente, rec, include_header=False)
-        base_name = f"{paziente['Cognome']}_{paziente['Nome']}_{val_id}"
+        base_name = f"{_rk(paziente,'Cognome')}_{_rk(paziente,'Nome')}_{val_id}"
 
         colr1, colr2 = st.columns(2)
         with colr1:
@@ -2253,7 +2281,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 note=note_prescrizione,
             )
 
-            filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}.pdf"
+            filename = f"prescrizione_occhiali_{_rk(paziente,'Cognome')}_{_rk(paziente,'Nome')}.pdf"
             st.download_button(
                 "Scarica prescrizione occhiali (A5)",
                 data=pdf_bytes,
@@ -2297,7 +2325,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 st.download_button(
                     "Scarica referto A4 (PDF)",
                     data=pdf_bytes,
-                    file_name=f"referto_visivo_{paziente['Cognome']}_{paziente['Nome']}.pdf",
+                    file_name=f"referto_visivo_{_rk(paziente,'Cognome')}_{_rk(paziente,'Nome')}.pdf",
                     mime="application/pdf",
                     key=f"download_referto_{val_id}",
                 )
@@ -2321,7 +2349,7 @@ def ui_sedute():
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{_rk(p,'ID')} - {_rk(p,'Cognome')} {_rk(p,'Nome')}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -2381,7 +2409,7 @@ def ui_sedute():
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
+        f"{_rk(r,'ID')} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
         for r in rows
     ]
     sel_s = st.selectbox("Seleziona una seduta da modificare/cancellare", labels)
@@ -2464,7 +2492,7 @@ def ui_coupons():
         conn.close()
         return
 
-    opt_paz = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    opt_paz = [f"{_rk(p,'ID')} - {_rk(p,'Cognome')} {_rk(p,'Nome')}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = int(sel.split(" - ", 1)[0])
 
