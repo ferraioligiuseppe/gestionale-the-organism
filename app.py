@@ -3,6 +3,15 @@ import sqlite3
 from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
+from pdf_templates import build_pdf
+
+variant = "with_cirillo" if con_cirillo else "no_cirillo"
+
+# A5
+pdf_bytes = build_pdf("a5", variant, draw_overlay_fn)
+
+# A4 2×A5
+pdf_bytes = build_pdf("a4_2up", variant, draw_overlay_fn_2up)
 
 import os
 import io
