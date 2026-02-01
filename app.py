@@ -186,15 +186,20 @@ class _PgConn:
         return self._conn.close()
 
 def _secrets_diagnostics():
-    """Return non-sensitive diagnostics about Streamlit secrets/env."""
+    """Return non-sensitive diagnostics about Streamlit secrets/env.
+    Nota: non mostra MAI i valori dei secrets, solo la presenza e le chiavi.
+    """
     diag = {
         "secrets_available": False,
         "secrets_keys": [],
+        "db_keys": [],
         "has_db_section": False,
         "has_db_database_url": False,
         "has_root_database_url": False,
         "env_database_url": False,
     }
+
+    # --- secrets ---
     try:
         sec = getattr(st, "secrets", None)
         if sec is not None:
@@ -203,27 +208,63 @@ def _secrets_diagnostics():
                 diag["secrets_keys"] = sorted(list(sec.keys()))
             except Exception:
                 diag["secrets_keys"] = ["<unreadable>"]
+
+            # Sezione [db]
             try:
                 diag["has_db_section"] = "db" in sec
             except Exception:
                 diag["has_db_section"] = False
+
+            dbsec = {}
+            if diag["has_db_section"]:
+                try:
+                    dbsec = sec.get("db", {}) or {}
+                except Exception:
+                    dbsec = {}
+
+            if isinstance(dbsec, dict):
+                # Chiavi presenti in [db]
+                try:
+                    diag["db_keys"] = sorted([str(k) for k in dbsec.keys()])
+                except Exception:
+                    diag["db_keys"] = ["<unreadable>"]
+
+                # Presenza DATABASE_URL (accetta anche varianti comuni e spazi accidentali)
+                try:
+                    candidates = []
+                    for k in dbsec.keys():
+                        ks = str(k)
+                        candidates.append(ks)
+                        candidates.append(ks.strip())
+                    check_keys = set([c for c in candidates if c]) | {"DATABASE_URL", "database_url", "url", "URL"}
+                    found = False
+                    for k in check_keys:
+                        v = dbsec.get(k)
+                        if v and str(v).strip():
+                            found = True
+                            break
+                    diag["has_db_database_url"] = found
+                except Exception:
+                    diag["has_db_database_url"] = False
+
+            # Root DATABASE_URL
             try:
-                if diag["has_db_section"]:
-                    db = sec.get("db", {})
-                    diag["has_db_database_url"] = isinstance(db, dict) and bool(str(db.get("DATABASE_URL","")).strip())
-            except Exception:
-                diag["has_db_database_url"] = False
-            try:
-                diag["has_root_database_url"] = bool(str(sec.get("DATABASE_URL","")).strip())
+                for k in ("DATABASE_URL", "database_url"):
+                    v = sec.get(k)
+                    if v and str(v).strip():
+                        diag["has_root_database_url"] = True
+                        break
             except Exception:
                 diag["has_root_database_url"] = False
     except Exception:
         pass
 
+    # --- env ---
     try:
-        diag["env_database_url"] = bool(os.getenv("DATABASE_URL","").strip())
+        diag["env_database_url"] = bool((os.getenv("DATABASE_URL", "") or os.getenv("database_url", "") or "").strip())
     except Exception:
         diag["env_database_url"] = False
+
     return diag
 def _get_database_url() -> str:
     """Return DATABASE_URL from Streamlit secrets or environment.
@@ -299,6 +340,7 @@ def _require_postgres_on_cloud():
 DATABASE_URL = \"postgresql://...sslmode=require\"
 
 Poi premi Save e riavvia l'app (Reboot).""")
+        st.write("Chiavi in [db]:", list(_safe_secrets().get("db", {}).keys()))
         st.stop()
 def _connect_cached():
     _require_postgres_on_cloud()
