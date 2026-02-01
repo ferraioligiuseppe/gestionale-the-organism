@@ -4,6 +4,15 @@ from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
 from pdf_templates import build_pdf
+
+variant = "with_cirillo" if con_cirillo else "no_cirillo"
+
+# A5
+pdf_bytes = build_pdf("a5", variant, draw_overlay_fn)
+
+# A4 2×A5
+pdf_bytes = build_pdf("a4_2up", variant, draw_overlay_fn_2up)
+
 import os
 import io
 import csv
@@ -1265,104 +1274,6 @@ def draw_axis_arrow(c, center_x, center_y, radius, axis_deg: int):
         c.line(x2, y2, hx, hy)
 
 
-
-def _draw_prescrizione_values_only_on_canvas(
-    c,
-    width: float,
-    height: float,
-    paziente,
-    data_prescrizione_iso: Optional[str],
-    # lontano/intermedio/vicino OD/OS
-    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
-    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
-    sf_int_od: float, cil_int_od: float, ax_int_od: int,
-    sf_int_os: float, cil_int_os: float, ax_int_os: int,
-    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
-    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
-    lenti_scelte: list,
-    altri_trattamenti: str,
-    note: str,
-):
-    """Overlay SOLO VALORI: non disegna linee/archi/riquadri (quelli sono nel template)."""
-    c.setFont("Helvetica", 10)
-
-    # Data (vicino a "Data:" in alto)
-    data_it = _format_data_it_from_iso(data_prescrizione_iso) if data_prescrizione_iso else ""
-    if data_it:
-        c.drawString(280, height - 85, data_it)
-
-    # Paziente (sulla riga "Sig.")
-    try:
-        nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
-    except Exception:
-        nome_paz = str(paziente)
-    if nome_paz:
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(55, height - 128, nome_paz)
-        c.setFont("Helvetica", 10)
-
-    # BOX SF/CIL/ASSE (blocco a destra: 3 righe)
-    x_sf, x_cil, x_ax = 270, 325, 380
-    y_lon, y_int, y_vic = 300, 246, 193
-
-    def fmt(v):
-        if v is None: return ""
-        if isinstance(v, float):
-            if abs(v) < 1e-6: v = 0.0
-            return f"{v:+.2f}"
-        return str(v)
-
-    def put_row(y, sf, cil, ax):
-        if sf not in (None, ""):  c.drawCentredString(x_sf, y, fmt(sf))
-        if cil not in (None, ""): c.drawCentredString(x_cil, y, fmt(cil))
-        if ax not in (None, ""):  c.drawCentredString(x_ax, y, str(int(ax)) if str(ax).isdigit() else str(ax))
-
-    # Questo template ha UN set di box: usiamo OS.
-    put_row(y_lon, sf_lon_os, cil_lon_os, ax_lon_os)
-    put_row(y_int, sf_int_os, cil_int_os, ax_int_os)
-    put_row(y_vic, sf_vic_os, cil_vic_os, ax_vic_os)
-
-    # Check "Lenti consigliate" (X nelle caselle)
-    checks = set([str(x).strip().lower() for x in (lenti_scelte or [])])
-    check_x = 92
-    check_ys = [285, 266, 247, 228, 209, 190]
-    labels = [
-        "progressive",
-        "per vicino/intermedio",
-        "fotocromatiche",
-        "polarizzate",
-        "controllo miopia",
-        "trattamento antiriflesso",
-    ]
-    c.setFont("Helvetica-Bold", 10)
-    for y, lab in zip(check_ys, labels):
-        if any(lab in s for s in checks):
-            c.drawString(check_x, y, "X")
-    c.setFont("Helvetica", 10)
-
-    if altri_trattamenti:
-        c.setFont("Helvetica", 9)
-        c.drawString(245, 130, altri_trattamenti[:80])
-        c.setFont("Helvetica", 10)
-
-    if note:
-        c.setFont("Helvetica", 9)
-        max_chars = 95
-        lines = []
-        s = note.strip()
-        while len(s) > max_chars:
-            cut = s.rfind(" ", 0, max_chars)
-            if cut <= 0: cut = max_chars
-            lines.append(s[:cut])
-            s = s[cut:].lstrip()
-        if s: lines.append(s)
-        y = 88
-        for line in lines[:3]:
-            c.drawString(55, y, line)
-            y -= 12
-        c.setFont("Helvetica", 10)
-
-
 def _draw_prescrizione_occhiali_a5_on_canvas(
     c,
     width: float,
@@ -1379,143 +1290,97 @@ def _draw_prescrizione_occhiali_a5_on_canvas(
     altri_trattamenti: str,
     note: str,
 ):
-    """Disegna la prescrizione (layout A5) sul canvas corrente, senza fare showPage/save."""
-    left = 20 * mm
-    right = width - 20 * mm
-    top = height - 30 * mm
-    bottom = 30 * mm
+    """Overlay SOLO valori per template prescrizione (niente archi/riquadri/linee)."""
+    # pagina A5: 148x210mm. Origine in basso a sinistra.
+    from reportlab.lib.units import mm
 
-    # Data prescrizione
-    c.setFont("Helvetica", 10)
+    def fmt_num(x):
+        if x is None:
+            return ""
+        try:
+            # evita -0.00
+            val = float(x)
+            if abs(val) < 0.005:
+                val = 0.0
+            s = f"{val:+.2f}"
+            return s.replace("+0.00", "+0.00").replace("-0.00", "+0.00")
+        except Exception:
+            return str(x)
+
+    def fmt_ax(x):
+        if x in (None, "", 0):
+            return ""
+        try:
+            return str(int(x))
+        except Exception:
+            return str(x)
+
+    # DATA e PAZIENTE (senza etichette: nel template ci sono già le linee "Data" e "Sig.")
     data_it = _format_data_it_from_iso(data_prescrizione_iso) if data_prescrizione_iso else ""
+    nome_paz = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
+
+    c.setFont("Helvetica", 10)
     if data_it:
-        c.drawRightString(right, top, f"Data: {data_it}")
+        c.drawString(118*mm, 182*mm, data_it)   # sulla linea Data (a destra)
+    if nome_paz:
+        c.drawString(24*mm, 175*mm, nome_paz)   # sulla linea Sig.
 
-    # Nome paziente
-    y = top - 15
+    # BOX REFRAZIONE: tre righe (Lontano/Intermedio/Vicino) e due colonne (OD sinistra, OS destra)
+    # Coordinate centrate nei box (tarate sul tuo template A5).
+    # OD (sinistra)
+    od_sf, od_cil, od_ax = 40*mm, 62*mm, 84*mm
+    # OS (destra)
+    os_sf, os_cil, os_ax = 122*mm, 144*mm, 166*mm
+
+    y_lon = 116*mm
+    y_int = 95*mm
+    y_vic = 74*mm
+
+    def put_triplet(xsf, xcil, xax, y, sf, cil, ax):
+        c.setFont("Helvetica", 10)
+        s_sf = fmt_num(sf)
+        s_cil = fmt_num(cil)
+        s_ax = fmt_ax(ax)
+        if s_sf:  c.drawCentredString(xsf,  y, s_sf)
+        if s_cil: c.drawCentredString(xcil, y, s_cil)
+        if s_ax:  c.drawCentredString(xax,  y, s_ax)
+
+    # LONTANO
+    put_triplet(od_sf, od_cil, od_ax, y_lon, sf_lon_od, cil_lon_od, ax_lon_od)
+    put_triplet(os_sf, os_cil, os_ax, y_lon, sf_lon_os, cil_lon_os, ax_lon_os)
+    # INTERMEDIO
+    put_triplet(od_sf, od_cil, od_ax, y_int, sf_int_od, cil_int_od, ax_int_od)
+    put_triplet(os_sf, os_cil, os_ax, y_int, sf_int_os, cil_int_os, ax_int_os)
+    # VICINO
+    put_triplet(od_sf, od_cil, od_ax, y_vic, sf_vic_od, cil_vic_od, ax_vic_od)
+    put_triplet(os_sf, os_cil, os_ax, y_vic, sf_vic_os, cil_vic_os, ax_vic_os)
+
+    # CHECK "Lenti consigliate" (sul template non ridisegniamo nulla; mettiamo una X allineata alle voci)
+    # Voci attese: ["Progressive","Per vicino/intermedio","Fotocromatiche","Polarizzate","Controllo miopia","Trattamento antiriflesso"]
+    checks = set([str(x).strip() for x in (lenti_scelte or [])])
     c.setFont("Helvetica-Bold", 11)
-    nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
-    c.drawString(left, y, f"Paziente: {nome_paz}")
-    y -= 20
-
-    # Semicerchi TABO semplificati per OD e OS
-    c.setFont("Helvetica", 8)
-    radius = 22 * mm
-    center_y = y - radius - 5 * mm
-    center_x_os = left + radius
-    center_x_od = right - radius
-
-    # OS – semicirconferenza + etichette
-    c.arc(
-        center_x_os - radius,
-        center_y - radius,
-        center_x_os + radius,
-        center_y + radius,
-        0,
-        180,
-    )
-    c.drawString(center_x_os - radius - 4 * mm, center_y, "180° / 0°")
-    c.drawString(center_x_os - 5, center_y + radius + 3 * mm, "90°")
-
-    # OD – semicirconferenza + etichette
-    c.arc(
-        center_x_od - radius,
-        center_y - radius,
-        center_x_od + radius,
-        center_y + radius,
-        0,
-        180,
-    )
-    c.drawString(center_x_od - radius - 4 * mm, center_y, "180° / 0°")
-    c.drawString(center_x_od - 5, center_y + radius + 3 * mm, "90°")
-
-    # Frecce sull'asse (uso gli assi di LONTANO: ax_lon_os / ax_lon_od)
-    try:
-        draw_axis_arrow(c, center_x_os, center_y, radius, ax_lon_os)
-        draw_axis_arrow(c, center_x_od, center_y, radius, ax_lon_od)
-    except Exception:
-        # se per qualunque motivo qualcosa va storto, non blocchiamo la prescrizione
-        pass
-
-    y = center_y - radius - 10
-
-    # Funzione di utilità per disegnare una riga LONTANO/INTERMEDIO/VICINO
-    def draw_riga_prescr(y_start, label, sf_od, cil_od, ax_od, sf_os, cil_os, ax_os):
-        # se tutti zero, saltiamo la riga
-        if (
-            abs(sf_od) < 0.001 and abs(cil_od) < 0.001 and int(ax_od) == 0 and
-            abs(sf_os) < 0.001 and abs(cil_os) < 0.001 and int(ax_os) == 0
-        ):
-            return y_start
-
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(left, y_start, label)
-        y = y_start - 11
-        c.setFont("Helvetica", 9)
-        c.drawString(
-            left + 5 * mm,
-            y,
-            f"OD: SF {sf_od:+.2f}  CIL {cil_od:+.2f}  AX {int(ax_od)}°",
-        )
-        y -= 10
-        c.drawString(
-            left + 5 * mm,
-            y,
-            f"OS: SF {sf_os:+.2f}  CIL {cil_os:+.2f}  AX {int(ax_os)}°",
-        )
-        return y - 8
-
-    y = draw_riga_prescr(y, "LONTANO", sf_lon_od, cil_lon_od, ax_lon_od, sf_lon_os, cil_lon_os, ax_lon_os)
-    y = draw_riga_prescr(y, "INTERMEDIO", sf_int_od, cil_int_od, ax_int_od, sf_int_os, cil_int_os, ax_int_os)
-    y = draw_riga_prescr(y, "VICINO", sf_vic_od, cil_vic_od, ax_vic_od, sf_vic_os, cil_vic_os, ax_vic_os)
-
-    y -= 5
-
-    # Lenti consigliate
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(left, y, "Lenti consigliate:")
-    y -= 12
-    c.setFont("Helvetica", 9)
-
-    tutte_lenti = [
-        "Progressive",
-        "Per vicino/intermedio",
-        "Fotocromatiche",
-        "Polarizzate",
-        "Controllo miopia",
-        "Trattamento antiriflesso",
+    x_check = 27*mm
+    y0 = 54*mm
+    dy = 7*mm
+    mapping = [
+        ("Progressive", 0),
+        ("Per vicino/intermedio", 1),
+        ("Fotocromatiche", 2),
+        ("Polarizzate", 3),
+        ("Controllo miopia", 4),
+        ("Trattamento antiriflesso", 5),
     ]
+    for label, idx in mapping:
+        if label in checks:
+            c.drawString(x_check, y0 - idx*dy, "X")
 
-    for voce in tutte_lenti:
-        mark = "[x]" if voce in lenti_scelte else "[ ]"
-        c.drawString(left + 5 * mm, y, f"{mark} {voce}")
-        y -= 10
-
+    # ALTRI TRATTAMENTI (riga a destra) + NOTE (righe in basso)
+    c.setFont("Helvetica", 9)
     if altri_trattamenti:
-        c.drawString(left + 5 * mm, y, f"Altri trattamenti: {altri_trattamenti}")
-        y -= 12
-
-    # Note
-    if note.strip():
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(left, y, "Note:")
-        y -= 10
-        c.setFont("Helvetica", 9)
-        wrapper = textwrap.TextWrapper(width=70)
-        for line in wrapper.wrap(note.strip()):
-            if y < bottom + 40:
-                break
-            c.drawString(left + 5 * mm, y, line)
-            y -= 11
-
-    # Firma
-    if y < bottom + 50:
-        pass
-
-    c.line(right - 100, bottom + 30, right, bottom + 30)
-    c.drawString(right - 95, bottom + 35, "Firma / Timbro")
-
-
+        c.drawString(120*mm, 58*mm, str(altri_trattamenti)[:40])
+    if note:
+        # prima riga note
+        c.drawString(20*mm, 28*mm, str(note)[:110])
 
 
 def genera_prescrizione_occhiali_a5_pdf(
@@ -1532,12 +1397,18 @@ def genera_prescrizione_occhiali_a5_pdf(
     note: str,
     con_cirillo: bool = True,
 ) -> bytes:
+    """Prescrizione A5 con carta intestata grafica (The Organism) + overlay variabile."""
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError("ReportLab non disponibile")
+    variant = "with_cirillo" if con_cirillo else "no_cirillo"
 
-    """Prescrizione A5: TEMPLATE + overlay SOLO valori (niente linee)."""
-    def draw_fn(c, w, h):
-        _draw_prescrizione_values_only_on_canvas(
-            c, w, h,
-            paziente, data_prescrizione_iso,
+    def draw_overlay(c, width, height):
+        _draw_prescrizione_occhiali_a5_on_canvas(
+            c,
+            width,
+            height,
+            paziente,
+            data_prescrizione_iso,
             sf_lon_od, cil_lon_od, ax_lon_od,
             sf_lon_os, cil_lon_os, ax_lon_os,
             sf_int_od, cil_int_od, ax_int_od,
@@ -1549,10 +1420,8 @@ def genera_prescrizione_occhiali_a5_pdf(
             note,
         )
 
-    variant = "with_cirillo" if con_cirillo else "no_cirillo"
-    return build_pdf("a5", variant, draw_fn)
-
-
+    # Template A5 + overlay
+    return build_pdf("a5", variant, draw_overlay)
 def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
     """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
     L = mark_len_mm * mm
@@ -1599,43 +1468,81 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
     divider_line: bool = False,
     con_cirillo: bool = True,
 ) -> bytes:
-
-    """A4 landscape 2xA5: TEMPLATE + overlay SOLO valori su entrambe le metà (niente linee)."""
-    def draw_fn(c, w, h):
-        # metà sinistra
-        c.saveState()
-        _draw_prescrizione_values_only_on_canvas(
-            c, w/2.0, h,
-            paziente, data_prescrizione_iso,
-            sf_lon_od, cil_lon_od, ax_lon_od,
-            sf_lon_os, cil_lon_os, ax_lon_os,
-            sf_int_od, cil_int_od, ax_int_od,
-            sf_int_os, cil_int_os, ax_int_os,
-            sf_vic_od, cil_vic_od, ax_vic_od,
-            sf_vic_os, cil_vic_os, ax_vic_os,
-            lenti_scelte, altri_trattamenti, note,
-        )
-        c.restoreState()
-
-        # metà destra
-        c.saveState()
-        c.translate(w/2.0, 0)
-        _draw_prescrizione_values_only_on_canvas(
-            c, w/2.0, h,
-            paziente, data_prescrizione_iso,
-            sf_lon_od, cil_lon_od, ax_lon_od,
-            sf_lon_os, cil_lon_os, ax_lon_os,
-            sf_int_od, cil_int_od, ax_int_od,
-            sf_int_os, cil_int_os, ax_int_os,
-            sf_vic_od, cil_vic_od, ax_vic_od,
-            sf_vic_os, cil_vic_os, ax_vic_os,
-            lenti_scelte, altri_trattamenti, note,
-        )
-        c.restoreState()
+    """A4 landscape con 2 prescrizioni A5 affiancate, con grafica The Organism (senza crop)."""
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError("ReportLab non disponibile")
+    if not PYPDF_AVAILABLE:
+        raise RuntimeError("pypdf non disponibile (aggiungi 'pypdf' in requirements.txt)")
 
     variant = "with_cirillo" if con_cirillo else "no_cirillo"
-    return build_pdf("a4_2up", variant, draw_fn)
+    pagesize = landscape(A4)
+    a4_w, a4_h = pagesize
+    a5_w, a5_h = A5
 
+    # 1) overlay A4 landscape (solo contenuto variabile)
+    def draw_overlay_a4(c, W, H):
+        if divider_line:
+            c.saveState()
+            c.setLineWidth(0.3)
+            c.setDash(1, 2)
+            c.line(a4_w / 2.0, 5 * mm, a4_w / 2.0, a4_h - 5 * mm)
+            c.restoreState()
+
+        # sinistra
+        c.saveState()
+        c.translate(0, 0)
+        _draw_prescrizione_occhiali_a5_on_canvas(
+            c, a5_w, a5_h,
+            paziente,
+            data_prescrizione_iso,
+            sf_lon_od, cil_lon_od, ax_lon_od,
+            sf_lon_os, cil_lon_os, ax_lon_os,
+            sf_int_od, cil_int_od, ax_int_od,
+            sf_int_os, cil_int_os, ax_int_os,
+            sf_vic_od, cil_vic_od, ax_vic_od,
+            sf_vic_os, cil_vic_os, ax_vic_os,
+            lenti_scelte,
+            altri_trattamenti,
+            note,
+        )
+        c.restoreState()
+
+        # destra
+        c.saveState()
+        c.translate(a5_w, 0)
+        _draw_prescrizione_occhiali_a5_on_canvas(
+            c, a5_w, a5_h,
+            paziente,
+            data_prescrizione_iso,
+            sf_lon_od, cil_lon_od, ax_lon_od,
+            sf_lon_os, cil_lon_os, ax_lon_os,
+            sf_int_od, cil_int_od, ax_int_od,
+            sf_int_os, cil_int_os, ax_int_os,
+            sf_vic_od, cil_vic_od, ax_vic_od,
+            sf_vic_os, cil_vic_os, ax_vic_os,
+            lenti_scelte,
+            altri_trattamenti,
+            note,
+        )
+        c.restoreState()
+
+    overlay_bytes = _make_overlay_pdf_pagesize(pagesize, draw_overlay_a4)
+
+    # 2) template A4 landscape 2-up (da template A5 già presenti)
+    template_bytes = _build_a4_landscape_2up_template_bytes(variant)
+
+    # 3) merge overlay sopra template
+    tpl_reader = PdfReader(io.BytesIO(template_bytes))
+    ov_reader = PdfReader(io.BytesIO(overlay_bytes))
+    tpl_page = tpl_reader.pages[0]
+    tpl_page.merge_page(ov_reader.pages[0])
+
+    writer = PdfWriter()
+    writer.add_page(tpl_page)
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out.read()
 
 def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -> bytes:
     """
