@@ -110,6 +110,31 @@ except Exception:
 
 
 
+
+class _RowCI(dict):
+    """Case-insensitive dict for DB rows (Postgres returns lowercase keys).
+    Allows code like row['Data_Nascita'] to work even if key is 'data_nascita'.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._kmap = {str(k).lower(): k for k in self.keys()}
+
+    def _resolve(self, key):
+        if key in self:
+            return key
+        lk = str(key).lower()
+        return self._kmap.get(lk, key)
+
+    def __getitem__(self, key):
+        return super().__getitem__(self._resolve(key))
+
+    def get(self, key, default=None):
+        return super().get(self._resolve(key), default)
+
+    def __contains__(self, key):
+        return super().__contains__(self._resolve(key))
+
+
 class _PgCursorProxy:
     """Proxy cursor that converts SQLite-style '?' placeholders to psycopg2 '%s'."""
     def __init__(self, cur):
@@ -130,10 +155,14 @@ class _PgCursorProxy:
         return self._cur.executemany(q, param_list)
 
     def fetchone(self):
-        return self._cur.fetchone()
+        r = self._cur.fetchone()
+        return _RowCI(r) if isinstance(r, dict) else r
 
     def fetchall(self):
-        return self._cur.fetchall()
+        rows = self._cur.fetchall()
+        if rows and isinstance(rows[0], dict):
+            return [_RowCI(r) for r in rows]
+        return rows
 
     def __getattr__(self, name):
         return getattr(self._cur, name)
