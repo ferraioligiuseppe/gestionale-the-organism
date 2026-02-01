@@ -1,8 +1,8 @@
+import streamlit as st
+import sqlite3
 APP_MODE = st.secrets.get("APP_MODE", "prod")
 if APP_MODE == "test":
     st.warning("⚠️ MODALITÀ TEST — database separato (Neon TEST).")
-import streamlit as st
-import sqlite3
 from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
