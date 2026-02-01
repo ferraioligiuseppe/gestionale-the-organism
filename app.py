@@ -120,7 +120,8 @@ class _RowCI(dict):
         self._kmap = {str(k).lower(): k for k in self.keys()}
 
     def _resolve(self, key):
-        if key in self:
+        # Avoid recursion: use base dict membership
+        if dict.__contains__(self, key):
             return key
         lk = str(key).lower()
         return self._kmap.get(lk, key)
@@ -132,7 +133,7 @@ class _RowCI(dict):
         return super().get(self._resolve(key), default)
 
     def __contains__(self, key):
-        return super().__contains__(self._resolve(key))
+        return dict.__contains__(self, self._resolve(key))
 
 
 class _PgCursorProxy:
