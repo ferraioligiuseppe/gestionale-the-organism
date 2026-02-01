@@ -377,28 +377,33 @@ def _connect_cached():
     if _DB_BACKEND == "postgres":
         if not PSYCOPG2_AVAILABLE:
             raise RuntimeError("psycopg2 non disponibile. Aggiungi psycopg2-binary a requirements.txt")
+
         try:
-    conn = psycopg2.connect(_DB_URL)
-except Exception as e:
-    # Non-leak diagnostics (does not print the URL)
-    u = _DB_URL or ""
-    st.error("❌ Errore connessione PostgreSQL (Neon). La DATABASE_URL non sembra in un formato valido per psycopg2.")
-    st.write({
-        "db_url_len": len(u),
-        "db_url_has_whitespace": any(ch.isspace() for ch in u),
-        "db_url_scheme": (u.split("://", 1)[0] if "://" in u else "<missing>"),
-        "hint_1": "Verifica che sia su UNA sola riga nei Secrets (nessun a capo).",
-        "hint_2": "Usa lo schema 'postgresql://'.",
-        "hint_3": "Se la password contiene caratteri speciali (@ : / ? # & %), deve essere URL-encoded (es. @ -> %40).",
-    })
-    st.stop()
+            conn = psycopg2.connect(_DB_URL)
+        except Exception:
+            # Non-leak diagnostics (does not print the URL)
+            u = _DB_URL or ""
+            st.error("❌ Errore connessione PostgreSQL (Neon). La DATABASE_URL non sembra in un formato valido per psycopg2.")
+            st.write({
+                "db_url_len": len(u),
+                "db_url_has_whitespace": any(ch.isspace() for ch in u),
+                "db_url_scheme": (u.split("://", 1)[0] if "://" in u else "<missing>"),
+                "hint_1": "Verifica che sia su UNA sola riga nei Secrets (nessun a capo).",
+                "hint_2": "Usa lo schema 'postgresql://'.",
+                "hint_3": "Se la password contiene caratteri speciali (@ : / ? # & %), deve essere URL-encoded (es. @ -> %40).",
+            })
+            st.stop()
+
         return _PgConn(conn)
-    else:
-        conn = sqlite3.connect(SQLITE_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        return conn
+
+    # SQLite (locale / fallback)
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 
 def get_connection():
+
     return _connect_cached()
 
 def init_db() -> None:
