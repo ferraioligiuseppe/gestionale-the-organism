@@ -1,15 +1,13 @@
-PACK STAMPA PRESCRIZIONE - The Organism (PRO)
+INSTALLAZIONE (stampa prescrizione con SFONDO IMMAGINE + tabella pulita)
 
-Copia nel repo Streamlit (root):
-- pdf_templates.py
-- cartella assets/templates/ (con 4 PDF)
+1) Carica nel repo Streamlit Cloud:
+   - app.py (questo file)
+   - cartella assets/ (tutta)
 
-IMPORTANTE:
-- L'A4 2×A5 usa SEMPRE il template A4 in assets/templates. Se vedi "A4 senza grafica" significa che questi file non sono nel repo oppure i nomi non combaciano.
-- requirements.txt: reportlab, pypdf
+2) requirements.txt deve includere:
+   reportlab
 
-File template inclusi:
-- prescrizione_A5_with_cirillo.pdf
-- prescrizione_A5_no_cirillo.pdf (pulito: rimossa area nome+titoli)
-- prescrizione_A4_2xA5_with_cirillo.pdf
-- prescrizione_A4_2xA5_no_cirillo.pdf
+3) Se hai le intestazioni reali "con Cirillo", sostituisci:
+   assets/print_bg/a4_with_cirillo.jpeg
+   assets/print_bg/a5_with_cirillo.jpeg
+con i tuoi file definitivi.

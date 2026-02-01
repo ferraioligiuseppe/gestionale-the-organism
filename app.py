@@ -16,6 +16,207 @@ import math  # <-- aggiungi questa riga se non c'è
 import textwrap  # per andare a capo nel referto
 
 # PDF (referti e prescrizioni A4/A5)
+
+# ---- PRINT HELPERS (image background + clean prescription table) ----
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4, A5
+from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
+
+def _safe_str(x) -> str:
+    if x is None:
+        return ""
+    s = str(x).strip()
+    return s
+
+def _fmt_num(x) -> str:
+    if x is None:
+        return ""
+    try:
+        # keep sign and 2 decimals for floats
+        if isinstance(x, (int,)):
+            return f"{x:d}"
+        xf = float(x)
+        return f"{xf:+.2f}"
+    except Exception:
+        return _safe_str(x)
+
+def _find_bg_image(page_kind: str, variant: str) -> str | None:
+    """
+    Finds a background image inside common asset folders.
+    page_kind: 'a4' or 'a5'
+    variant: 'with_cirillo' or 'no_cirillo'
+    """
+    candidates = []
+
+    # preferred canonical names
+    base_names = [
+        f"{page_kind}_{variant}",
+        f"letterhead_{page_kind}_{variant}",
+        f"prescrizione_{page_kind}_{variant}",
+    ]
+    exts = [".png", ".jpg", ".jpeg", ".webp"]
+
+    # common folders
+    folders = [
+        "assets/print_bg",
+        "assets/print",
+        "assets",
+        "assets/templates",   # just in case you put them here
+    ]
+
+    for folder in folders:
+        for bn in base_names:
+            for ext in exts:
+                candidates.append(os.path.join(folder, bn + ext))
+
+    # also accept your specific filenames (legacy)
+    legacy = []
+    if page_kind == "a4":
+        legacy += [
+            "assets/print_bg/CARATA INTESTAT THE ORGANISMA4.jpeg",
+            "assets/CARATA INTESTAT THE ORGANISMA4.jpeg",
+        ]
+    if page_kind == "a5" and variant == "no_cirillo":
+        legacy += [
+            "assets/print_bg/PRESCRIZIONI THE ORGANISMAA5_no cirillo.png",
+            "assets/PRESCRIZIONI THE ORGANISMAA5_no cirillo.png",
+        ]
+    candidates += legacy
+
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+
+    # fallback: if with_cirillo missing, try no_cirillo; and vice versa
+    if variant == "with_cirillo":
+        return _find_bg_image(page_kind, "no_cirillo")
+    return _find_bg_image(page_kind, "with_cirillo") if variant == "no_cirillo" else None
+
+def _draw_bg_image_fullpage(c: canvas.Canvas, page_w: float, page_h: float, img_path: str | None):
+    if not img_path:
+        return
+    try:
+        img = ImageReader(img_path)
+        iw, ih = img.getSize()
+        scale = min(page_w / iw, page_h / ih)
+        dw, dh = iw * scale, ih * scale
+        x = (page_w - dw) / 2
+        y = (page_h - dh) / 2
+        c.drawImage(img, x, y, width=dw, height=dh, mask="auto")
+    except Exception:
+        # fail silently: no background
+        return
+
+def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: float, dati: dict, top_offset_mm: float = 60):
+    """
+    Clean layout (no boxes): writes a readable table with SF/CIL/AX for OD/OS:
+    Lontano / Intermedio / Vicino.
+    """
+    left = 18 * mm
+    right = page_w - 18 * mm
+    y = page_h - top_offset_mm * mm  # below header line
+
+    c.setFont("Helvetica", 11)
+    c.drawString(left, y, f"Sig.: {_safe_str(dati.get('paziente',''))}")
+    c.drawRightString(right, y, f"Data: {_safe_str(dati.get('data',''))}")
+    y -= 10 * mm
+
+    # headers
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(left, y, "PRESCRIZIONE OCCHIALI")
+    y -= 7 * mm
+
+    # columns
+    col_label = left
+    col_od_sf  = left + 28*mm
+    col_od_cil = left + 46*mm
+    col_od_ax  = left + 64*mm
+
+    col_os_sf  = left + 112*mm
+    col_os_cil = left + 130*mm
+    col_os_ax  = left + 148*mm
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(col_od_sf - 10*mm, y, "OD")
+    c.drawString(col_os_sf - 10*mm, y, "OS")
+    y -= 5 * mm
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(col_label, y, "")
+    c.drawString(col_od_sf,  y, "SF")
+    c.drawString(col_od_cil, y, "CIL")
+    c.drawString(col_od_ax,  y, "AX")
+    c.drawString(col_os_sf,  y, "SF")
+    c.drawString(col_os_cil, y, "CIL")
+    c.drawString(col_os_ax,  y, "AX")
+    y -= 6 * mm
+
+    def row(label, od_sf, od_cil, od_ax, os_sf, os_cil, os_ax):
+        nonlocal y
+        c.setFont("Helvetica", 9)
+        c.drawString(col_label, y, label)
+        c.drawRightString(col_od_sf + 10*mm, y, _fmt_num(od_sf))
+        c.drawRightString(col_od_cil + 10*mm, y, _fmt_num(od_cil))
+        c.drawRightString(col_od_ax + 10*mm, y, _safe_str(od_ax))
+
+        c.drawRightString(col_os_sf + 10*mm, y, _fmt_num(os_sf))
+        c.drawRightString(col_os_cil + 10*mm, y, _fmt_num(os_cil))
+        c.drawRightString(col_os_ax + 10*mm, y, _safe_str(os_ax))
+        y -= 6 * mm
+
+    row("Lontano",
+        dati.get("od_lon_sf"), dati.get("od_lon_cil"), dati.get("od_lon_ax"),
+        dati.get("os_lon_sf"), dati.get("os_lon_cil"), dati.get("os_lon_ax"))
+    row("Intermedio",
+        dati.get("od_int_sf"), dati.get("od_int_cil"), dati.get("od_int_ax"),
+        dati.get("os_int_sf"), dati.get("os_int_cil"), dati.get("os_int_ax"))
+    row("Vicino",
+        dati.get("od_vic_sf"), dati.get("od_vic_cil"), dati.get("od_vic_ax"),
+        dati.get("os_vic_sf"), dati.get("os_vic_cil"), dati.get("os_vic_ax"))
+
+    y -= 8 * mm
+
+    # Lenti / trattamenti
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(left, y, "Lenti consigliate / Trattamenti")
+    y -= 6 * mm
+    c.setFont("Helvetica", 9)
+    lenti = ", ".join(dati.get("lenti", []) or [])
+    if lenti:
+        c.drawString(left, y, f"Lenti: {lenti}")
+        y -= 5 * mm
+    altri = _safe_str(dati.get("altri_trattamenti", ""))
+    if altri:
+        c.drawString(left, y, f"Altri trattamenti: {altri}")
+        y -= 5 * mm
+
+    note = _safe_str(dati.get("note", ""))
+    if note:
+        y -= 2 * mm
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(left, y, "Note:")
+        y -= 5 * mm
+        c.setFont("Helvetica", 9)
+        max_chars = 110 if page_w >= A4[0] else 70
+        for i in range(0, len(note), max_chars):
+            c.drawString(left, y, note[i:i+max_chars])
+            y -= 5 * mm
+
+def _prescrizione_pdf_imagebg(page_size, page_kind: str, con_cirillo: bool, dati: dict) -> bytes:
+    variant = "with_cirillo" if con_cirillo else "no_cirillo"
+    bg = _find_bg_image(page_kind, variant)
+    page_w, page_h = page_size
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=page_size)
+    _draw_bg_image_fullpage(c, page_w, page_h, bg)
+    # top offset: A5 has less vertical space
+    top_offset = 62 if page_kind == "a4" else 58
+    _draw_prescrizione_clean_table(c, page_w, page_h, dati, top_offset_mm=top_offset)
+    c.showPage(); c.save()
+    buf.seek(0)
+    return buf.read()
+
 try:
     from reportlab.lib.pagesizes import A4, A5, landscape
     from reportlab.pdfgen import canvas
@@ -33,62 +234,6 @@ try:
 except ImportError:
     PYPDF_AVAILABLE = False
 
-
-
-# -----------------------------
-# Stampa: carta intestata come IMMAGINE (PRO)
-# - Evita overlay su template che in Cloud spesso non trova assets/pdf.
-# - Disegna la carta intestata come sfondo (contain, senza crop).
-# -----------------------------
-try:
-    from reportlab.lib.utils import ImageReader
-    IMAGE_BG_AVAILABLE = True
-except Exception:
-    IMAGE_BG_AVAILABLE = False
-
-# Percorsi immagini (dentro repo)
-# Nota: se non hai l'immagine "with_cirillo" puoi temporaneamente usare quella "no_cirillo"
-PRINT_BG_IMAGES = {
-    ("a4", "with_cirillo"): "assets/print/a4_with_cirillo.png",
-    ("a4", "no_cirillo"):   "assets/print/a4_no_cirillo.png",
-    # A5: useremo l'A4 scalata in contain; puoi comunque mettere immagini dedicate qui se vuoi.
-    ("a5", "with_cirillo"): "assets/print/a5_with_cirillo.png",
-    ("a5", "no_cirillo"):   "assets/print/a5_no_cirillo.png",
-}
-
-def _draw_image_contain(c, img_reader, pagesize):
-    """Disegna un'immagine a piena pagina in modalità 'contain' (senza distorsioni, senza ritagliare)."""
-    w, h = pagesize
-    iw, ih = img_reader.getSize()
-    if not iw or not ih:
-        return
-    scale = min(w / iw, h / ih)
-    dw, dh = iw * scale, ih * scale
-    x = (w - dw) / 2.0
-    y = (h - dh) / 2.0
-    c.drawImage(img_reader, x, y, width=dw, height=dh, preserveAspectRatio=True, mask='auto')
-
-def _try_draw_letterhead_bg_image(c, pagesize, variant: str):
-    """Sfondo carta intestata da immagine. Non blocca mai la stampa se manca l'asset."""
-    if not REPORTLAB_AVAILABLE or not IMAGE_BG_AVAILABLE:
-        return
-    key = ("a4" if pagesize == A4 else "a5", variant)
-    path = PRINT_BG_IMAGES.get(key)
-
-    # fallback: se manca, prova a usare l'A4 equivalente (poi verrà scalata)
-    if not path or not os.path.exists(path):
-        alt = PRINT_BG_IMAGES.get(("a4", variant))
-        if alt and os.path.exists(alt):
-            path = alt
-
-    if not path or not os.path.exists(path):
-        return
-
-    try:
-        img = ImageReader(path)
-        _draw_image_contain(c, img, pagesize)
-    except Exception:
-        return
 
 def _make_overlay_pdf_pagesize(pagesize, draw_fn):
     """Crea un PDF overlay (una pagina) con ReportLab per un pagesize arbitrario."""
@@ -1627,38 +1772,24 @@ def genera_prescrizione_occhiali_a5_pdf(
     note: str,
     con_cirillo: bool = True,
 ) -> bytes:
-    """Prescrizione A5 (PRO): sfondo carta intestata come immagine + overlay SOLO valori."""
-    if not REPORTLAB_AVAILABLE:
-        raise RuntimeError("ReportLab non disponibile")
-
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A5)
-    width, height = A5
-
-    variant = "with_cirillo" if con_cirillo else "no_cirillo"
-
-    # Sfondo grafico (contain) — se manca l'immagine, non blocca.
-    _try_draw_letterhead_bg_image(c, pagesize=A5, variant=variant)
-
-    # Overlay SOLO valori, senza linee/riquadri (così non si accavalla)
-    _draw_prescrizione_values_only_on_canvas(
-        c, width, height,
-        paziente, data_prescrizione_iso,
-        sf_lon_od, cil_lon_od, ax_lon_od,
-        sf_lon_os, cil_lon_os, ax_lon_os,
-        sf_int_od, cil_int_od, ax_int_od,
-        sf_int_os, cil_int_os, ax_int_os,
-        sf_vic_od, cil_vic_od, ax_vic_od,
-        sf_vic_os, cil_vic_os, ax_vic_os,
-        lenti_scelte,
-        altri_trattamenti,
-        note,
-    )
-
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer.getvalue()
+    """
+    A5: SFONDO = immagine letterhead (The Organism) + overlay SOLO valori (tabella pulita).
+    Niente riquadri: zero accavallamenti.
+    """
+    dati = {
+        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
+        "data": _safe_str(data_prescrizione_iso),
+        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
+        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
+        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
+        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
+        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
+        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
+        "lenti": lenti_scelte,
+        "altri_trattamenti": altri_trattamenti,
+        "note": note,
+    }
+    return _prescrizione_pdf_imagebg(A5, "a5", con_cirillo, dati)
 
 def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
     """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
@@ -1706,69 +1837,24 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
     divider_line: bool = False,
     con_cirillo: bool = True,
 ) -> bytes:
-    """A4 (2×A5 in verticale): sfondo A4 (immagine) + due overlay valori (scalati).
-
-    - NIENTE crop marks.
-    - NIENTE riquadri/linee (solo testi nei punti giusti).
     """
-    if not REPORTLAB_AVAILABLE:
-        raise RuntimeError("ReportLab non disponibile")
-
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    page_w, page_h = A4
-
-    variant = "with_cirillo" if con_cirillo else "no_cirillo"
-
-    # Sfondo grafico A4
-    _try_draw_letterhead_bg_image(c, pagesize=A4, variant=variant)
-
-    # Dimensioni A5 "logiche" per il layout dei valori
-    a5_w, a5_h = A5
-
-    half_h = page_h / 2.0
-    # Scala per far entrare un A5 dentro metà A4 (verticale)
-    s = min(page_w / a5_w, half_h / a5_h)
-
-    def draw_one_half(y0):
-        c.saveState()
-        # centra orizzontalmente
-        x = (page_w - a5_w * s) / 2.0
-        y = y0 + (half_h - a5_h * s) / 2.0
-        c.translate(x, y)
-        c.scale(s, s)
-
-        _draw_prescrizione_values_only_on_canvas(
-            c, a5_w, a5_h,
-            paziente, data_prescrizione_iso,
-            sf_lon_od, cil_lon_od, ax_lon_od,
-            sf_lon_os, cil_lon_os, ax_lon_os,
-            sf_int_od, cil_int_od, ax_int_od,
-            sf_int_os, cil_int_os, ax_int_os,
-            sf_vic_od, cil_vic_od, ax_vic_od,
-            sf_vic_os, cil_vic_os, ax_vic_os,
-            lenti_scelte,
-            altri_trattamenti,
-            note,
-        )
-        c.restoreState()
-
-    # Basso + alto (due copie)
-    draw_one_half(0)
-    draw_one_half(half_h)
-
-    # opzionale: linea centrale leggera
-    if divider_line:
-        c.saveState()
-        c.setLineWidth(0.5)
-        c.setStrokeColorRGB(0.75, 0.75, 0.75)
-        c.line(10 * mm, half_h, page_w - 10 * mm, half_h)
-        c.restoreState()
-
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer.getvalue()
+    A4: SFONDO = immagine letterhead A4 (The Organism) + overlay SOLO valori (tabella pulita).
+    Nota: il nome della funzione resta per compatibilità con la UI.
+    """
+    dati = {
+        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
+        "data": _safe_str(data_prescrizione_iso),
+        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
+        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
+        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
+        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
+        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
+        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
+        "lenti": lenti_scelte,
+        "altri_trattamenti": altri_trattamenti,
+        "note": note,
+    }
+    return _prescrizione_pdf_imagebg(A4, "a4", con_cirillo, dati)
 
 def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -> bytes:
     """
