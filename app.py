@@ -21,6 +21,53 @@ except ImportError:
     REPORTLAB_AVAILABLE = False
 
 
+# PDF merge (template letterhead)
+try:
+    from pypdf import PdfReader, PdfWriter
+    from pypdf._page import PageObject
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+
+
+def _make_overlay_pdf_pagesize(pagesize, draw_fn):
+    """Crea un PDF overlay (una pagina) con ReportLab per un pagesize arbitrario."""
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=pagesize)
+    w, h = pagesize
+    draw_fn(c, w, h)
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf.read()
+
+@lru_cache(maxsize=4)
+def _build_a4_landscape_2up_template_bytes(variant: str) -> bytes:
+    """Crea un template A4 landscape con 2 template A5 affiancati (sinistra+destra)."""
+    if not PYPDF_AVAILABLE:
+        raise RuntimeError("pypdf non disponibile")
+
+    a4_w, a4_h = landscape(A4)
+    a5_w, a5_h = A5
+
+    a5_path = "assets/letterhead/a5_with_cirillo.pdf" if variant == "with_cirillo" else "assets/letterhead/a5_no_cirillo.pdf"
+    reader = PdfReader(a5_path)
+    a5_page = reader.pages[0]
+
+    out_page = PageObject.create_blank_page(width=a4_w, height=a4_h)
+
+    # due pannelli A5 affiancati
+    out_page.merge_translated_page(a5_page, tx=0, ty=0)
+    out_page.merge_translated_page(a5_page, tx=a5_w, ty=0)
+
+    writer = PdfWriter()
+    writer.add_page(out_page)
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out.read()
+
+
 # -----------------------------
 # -----------------------------
 # Configurazione accesso (login semplice)
@@ -1372,6 +1419,7 @@ def _draw_prescrizione_occhiali_a5_on_canvas(
 
 
 
+
 def genera_prescrizione_occhiali_a5_pdf(
     paziente,
     data_prescrizione_iso: Optional[str],
@@ -1384,33 +1432,37 @@ def genera_prescrizione_occhiali_a5_pdf(
     lenti_scelte: list,
     altri_trattamenti: str,
     note: str,
+    con_cirillo: bool = True,
 ) -> bytes:
-    """Genera una prescrizione occhiali in formato A5 (PDF) pronta per la stampa."""
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A5)
-    width, height = A5
+    """Prescrizione A5 con carta intestata grafica (The Organism) + overlay variabile."""
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError("ReportLab non disponibile")
+    variant = "with_cirillo" if con_cirillo else "no_cirillo"
 
-    _draw_prescrizione_occhiali_a5_on_canvas(
-        c,
-        width, height,
-        paziente,
-        data_prescrizione_iso,
-        sf_lon_od, cil_lon_od, ax_lon_od,
-        sf_lon_os, cil_lon_os, ax_lon_os,
-        sf_int_od, cil_int_od, ax_int_od,
-        sf_int_os, cil_int_os, ax_int_os,
-        sf_vic_od, cil_vic_od, ax_vic_od,
-        sf_vic_os, cil_vic_os, ax_vic_os,
-        lenti_scelte,
-        altri_trattamenti,
-        note,
+    def draw_overlay(c, width, height):
+        _draw_prescrizione_occhiali_a5_on_canvas(
+            c,
+            width,
+            height,
+            paziente,
+            data_prescrizione_iso,
+            sf_lon_od, cil_lon_od, ax_lon_od,
+            sf_lon_os, cil_lon_os, ax_lon_os,
+            sf_int_od, cil_int_od, ax_int_od,
+            sf_int_os, cil_int_os, ax_int_os,
+            sf_vic_od, cil_vic_od, ax_vic_od,
+            sf_vic_os, cil_vic_os, ax_vic_os,
+            lenti_scelte,
+            altri_trattamenti,
+            note,
+        )
+
+    # Template A5 + overlay
+    return build_pdf_with_letterhead(
+        page_kind="a5",
+        variant=variant,
+        draw_fn=draw_overlay,
     )
-
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer.getvalue()
-
 
 def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
     """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
@@ -1442,6 +1494,7 @@ def _draw_mid_cut_marks(c, page_w, page_h, mark_len_mm: float = 8):
     c.line(page_w - L, y, page_w, y)
 
 
+
 def genera_prescrizione_occhiali_2a5_su_a4_pdf(
     paziente,
     data_prescrizione_iso: Optional[str],
@@ -1455,78 +1508,83 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
     altri_trattamenti: str,
     note: str,
     divider_line: bool = False,
+    con_cirillo: bool = True,
 ) -> bytes:
-    """Genera un PDF A4 *orizzontale* con due prescrizioni A5 (sinistra + destra), pulito.
-    - Nessun crop mark.
-    - divider_line=True aggiunge una linea centrale molto leggera per facilitare il taglio.
-    """
-    buffer = io.BytesIO()
+    """A4 landscape con 2 prescrizioni A5 affiancate, con grafica The Organism (senza crop)."""
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError("ReportLab non disponibile")
+    if not PYPDF_AVAILABLE:
+        raise RuntimeError("pypdf non disponibile (aggiungi 'pypdf' in requirements.txt)")
 
-    # A4 landscape: 842x595 pt. Due A5 portrait (420x595) stanno perfettamente affiancati.
-    page_size = landscape(A4)
-    c = canvas.Canvas(buffer, pagesize=page_size)
-    a4_w, a4_h = page_size
+    variant = "with_cirillo" if con_cirillo else "no_cirillo"
+    pagesize = landscape(A4)
+    a4_w, a4_h = pagesize
     a5_w, a5_h = A5
 
-    # Allineamento: affianco, centrati orizzontalmente e verticalmente (di solito a5_h==a4_h)
-    total_w = a5_w * 2
-    x_left = (a4_w - total_w) / 2.0
-    x_right = x_left + a5_w
-    y0 = (a4_h - a5_h) / 2.0
+    # 1) overlay A4 landscape (solo contenuto variabile)
+    def draw_overlay_a4(c, W, H):
+        if divider_line:
+            c.saveState()
+            c.setLineWidth(0.3)
+            c.setDash(1, 2)
+            c.line(a4_w / 2.0, 5 * mm, a4_w / 2.0, a4_h - 5 * mm)
+            c.restoreState()
 
-    if divider_line:
-        # linea centrale sottilissima (non invasiva)
+        # sinistra
         c.saveState()
-        c.setLineWidth(0.3)
-        c.setDash(1, 2)
-        c.line(a4_w / 2.0, 5 * mm, a4_w / 2.0, a4_h - 5 * mm)
+        c.translate(0, 0)
+        _draw_prescrizione_occhiali_a5_on_canvas(
+            c, a5_w, a5_h,
+            paziente,
+            data_prescrizione_iso,
+            sf_lon_od, cil_lon_od, ax_lon_od,
+            sf_lon_os, cil_lon_os, ax_lon_os,
+            sf_int_od, cil_int_od, ax_int_od,
+            sf_int_os, cil_int_os, ax_int_os,
+            sf_vic_od, cil_vic_od, ax_vic_od,
+            sf_vic_os, cil_vic_os, ax_vic_os,
+            lenti_scelte,
+            altri_trattamenti,
+            note,
+        )
         c.restoreState()
 
-    # Slot sinistro
-    c.saveState()
-    c.translate(x_left, y0)
-    _draw_prescrizione_occhiali_a5_on_canvas(
-        c,
-        a5_w, a5_h,
-        paziente,
-        data_prescrizione_iso,
-        sf_lon_od, cil_lon_od, ax_lon_od,
-        sf_lon_os, cil_lon_os, ax_lon_os,
-        sf_int_od, cil_int_od, ax_int_od,
-        sf_int_os, cil_int_os, ax_int_os,
-        sf_vic_od, cil_vic_od, ax_vic_od,
-        sf_vic_os, cil_vic_os, ax_vic_os,
-        lenti_scelte,
-        altri_trattamenti,
-        note,
-    )
-    c.restoreState()
+        # destra
+        c.saveState()
+        c.translate(a5_w, 0)
+        _draw_prescrizione_occhiali_a5_on_canvas(
+            c, a5_w, a5_h,
+            paziente,
+            data_prescrizione_iso,
+            sf_lon_od, cil_lon_od, ax_lon_od,
+            sf_lon_os, cil_lon_os, ax_lon_os,
+            sf_int_od, cil_int_od, ax_int_od,
+            sf_int_os, cil_int_os, ax_int_os,
+            sf_vic_od, cil_vic_od, ax_vic_od,
+            sf_vic_os, cil_vic_os, ax_vic_os,
+            lenti_scelte,
+            altri_trattamenti,
+            note,
+        )
+        c.restoreState()
 
-    # Slot destro
-    c.saveState()
-    c.translate(x_right, y0)
-    _draw_prescrizione_occhiali_a5_on_canvas(
-        c,
-        a5_w, a5_h,
-        paziente,
-        data_prescrizione_iso,
-        sf_lon_od, cil_lon_od, ax_lon_od,
-        sf_lon_os, cil_lon_os, ax_lon_os,
-        sf_int_od, cil_int_od, ax_int_od,
-        sf_int_os, cil_int_os, ax_int_os,
-        sf_vic_od, cil_vic_od, ax_vic_od,
-        sf_vic_os, cil_vic_os, ax_vic_os,
-        lenti_scelte,
-        altri_trattamenti,
-        note,
-    )
-    c.restoreState()
+    overlay_bytes = _make_overlay_pdf_pagesize(pagesize, draw_overlay_a4)
 
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer.getvalue()
+    # 2) template A4 landscape 2-up (da template A5 già presenti)
+    template_bytes = _build_a4_landscape_2up_template_bytes(variant)
 
+    # 3) merge overlay sopra template
+    tpl_reader = PdfReader(io.BytesIO(template_bytes))
+    ov_reader = PdfReader(io.BytesIO(overlay_bytes))
+    tpl_page = tpl_reader.pages[0]
+    tpl_page.merge_page(ov_reader.pages[0])
+
+    writer = PdfWriter()
+    writer.add_page(tpl_page)
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out.read()
 
 def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -> bytes:
     """
@@ -2637,6 +2695,12 @@ ESAMI STRUTTURALI / FUNZIONALI
                 key="prescr_divider_line",
             )
 
+            con_cirillo = st.checkbox(
+                "Intestazione con Dott. Cirillo",
+                value=True,
+                key="prescr_con_cirillo",
+            )
+
             st.markdown("**LONTANO**")
             colL1, colL2 = st.columns(2)
             with colL1:
@@ -2722,11 +2786,11 @@ ESAMI STRUTTURALI / FUNZIONALI
             )
 
             if formato_stampa == "A5":
-                pdf_bytes = genera_prescrizione_occhiali_a5_pdf(**common_kwargs)
+                pdf_bytes = genera_prescrizione_occhiali_a5_pdf(**common_kwargs, con_cirillo=con_cirillo)
                 filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A5.pdf"
                 label_btn = "Scarica prescrizione occhiali (A5)"
             else:
-                pdf_bytes = genera_prescrizione_occhiali_2a5_su_a4_pdf(**common_kwargs, divider_line=divider_line)
+                pdf_bytes = genera_prescrizione_occhiali_2a5_su_a4_pdf(**common_kwargs, divider_line=divider_line, con_cirillo=con_cirillo)
                 filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A4_2xA5.pdf"
                 label_btn = "Scarica prescrizione occhiali (A4 2×A5) - orizzontale"
 
