@@ -2094,7 +2094,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         return
 
     labels = [
-        f"{_rk(r,'ID')} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
+        f"{_rk(r,'ID')} - {_rk(r,'Data_Valutazione') or ''} - { (_rk(r,'Tipo_Visita')[:40] + '...') if _rk(r,'Tipo_Visita') and len(_rk(r,'Tipo_Visita'))>40 else (_rk(r,'Tipo_Visita') or '') }"
         for r in rows
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
