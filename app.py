@@ -1288,83 +1288,118 @@ def _draw_prescrizione_values_only_on_canvas(
     note: str,
 ):
     """Overlay SOLO VALORI: non disegna linee/archi/riquadri (quelli sono nel template)."""
+
+    # Helper formatting
+    def fmt_sphere_cyl(v):
+        if v is None or v == "": 
+            return ""
+        try:
+            v = float(v)
+        except Exception:
+            return str(v)
+        # +0.00 / -0.50
+        if abs(v) < 1e-9:
+            v = 0.0
+        return f"{v:+.2f}"
+
+    def fmt_axis(v):
+        if v is None or v == "": 
+            return ""
+        try:
+            iv = int(float(v))
+            return str(iv)
+        except Exception:
+            return str(v)
+
+    # Font
     c.setFont("Helvetica", 10)
 
-    # Data (vicino a "Data:" in alto)
+    # Data (linea 'Data')
     data_it = _format_data_it_from_iso(data_prescrizione_iso) if data_prescrizione_iso else ""
     if data_it:
-        c.drawString(280, height - 85, data_it)
+        c.drawString(105 * mm, height - 30 * mm, data_it)
 
-    # Paziente (sulla riga "Sig.")
+    # Paziente (linea 'Sig.')
     try:
-        nome_paz = f"{paziente['Cognome']} {paziente['Nome']}"
+        nome_paz = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
     except Exception:
         nome_paz = str(paziente)
     if nome_paz:
         c.setFont("Helvetica-Bold", 11)
-        c.drawString(55, height - 128, nome_paz)
+        c.drawString(20 * mm, height - 45 * mm, nome_paz)
         c.setFont("Helvetica", 10)
 
-    # BOX SF/CIL/ASSE (blocco a destra: 3 righe)
-    x_sf, x_cil, x_ax = 270, 325, 380
-    y_lon, y_int, y_vic = 300, 246, 193
+    # Coordinate centri box (mm -> punti) calibrate sul tuo template A5
+    # OD (sinistra)
+    od_x_sf  = 45 * mm
+    od_x_cil = 68 * mm
+    od_x_ax  = 91 * mm
 
-    def fmt(v):
-        if v is None: return ""
-        if isinstance(v, float):
-            if abs(v) < 1e-6: v = 0.0
-            return f"{v:+.2f}"
-        return str(v)
+    # OS (destra)
+    os_x_sf  = 96 * mm
+    os_x_cil = 119 * mm
+    os_x_ax  = 142 * mm
 
-    def put_row(y, sf, cil, ax):
-        if sf not in (None, ""):  c.drawCentredString(x_sf, y, fmt(sf))
-        if cil not in (None, ""): c.drawCentredString(x_cil, y, fmt(cil))
-        if ax not in (None, ""):  c.drawCentredString(x_ax, y, str(int(ax)) if str(ax).isdigit() else str(ax))
+    # Y dei tre righi (Lontano / Intermedio / Vicino)
+    y_lon = 104 * mm
+    y_int = 85 * mm
+    y_vic = 66 * mm
 
-    # Questo template ha UN set di box: usiamo OS.
-    put_row(y_lon, sf_lon_os, cil_lon_os, ax_lon_os)
-    put_row(y_int, sf_int_os, cil_int_os, ax_int_os)
-    put_row(y_vic, sf_vic_os, cil_vic_os, ax_vic_os)
+    def put_triplet(xsf, xcil, xax, y, sf, cil, ax):
+        s = fmt_sphere_cyl(sf)
+        c1 = fmt_sphere_cyl(cil)
+        a1 = fmt_axis(ax)
+        if s:
+            c.drawCentredString(xsf, y, s)
+        if c1:
+            c.drawCentredString(xcil, y, c1)
+        if a1:
+            c.drawCentredString(xax, y, a1)
 
-    # Check "Lenti consigliate" (X nelle caselle)
+    # OD
+    put_triplet(od_x_sf, od_x_cil, od_x_ax, y_lon, sf_lon_od, cil_lon_od, ax_lon_od)
+    put_triplet(od_x_sf, od_x_cil, od_x_ax, y_int, sf_int_od, cil_int_od, ax_int_od)
+    put_triplet(od_x_sf, od_x_cil, od_x_ax, y_vic, sf_vic_od, cil_vic_od, ax_vic_od)
+
+    # OS
+    put_triplet(os_x_sf, os_x_cil, os_x_ax, y_lon, sf_lon_os, cil_lon_os, ax_lon_os)
+    put_triplet(os_x_sf, os_x_cil, os_x_ax, y_int, sf_int_os, cil_int_os, ax_int_os)
+    put_triplet(os_x_sf, os_x_cil, os_x_ax, y_vic, sf_vic_os, cil_vic_os, ax_vic_os)
+
+    # Checkboxes lenti consigliate (metti "X" a sinistra delle voci)
     checks = set([str(x).strip().lower() for x in (lenti_scelte or [])])
-    check_x = 92
-    check_ys = [285, 266, 247, 228, 209, 190]
-    labels = [
-        "progressive",
-        "per vicino/intermedio",
-        "fotocromatiche",
-        "polarizzate",
-        "controllo miopia",
-        "trattamento antiriflesso",
+
+    # Colonna sinistra (progressive, vicino/intermedio, fotocromatiche, polarizzate)
+    base_x = 23 * mm
+    base_y = 48 * mm
+    dy = 6 * mm
+    left_labels = [
+        ("progressive", 0),
+        ("per vicino/intermedio", 1),
+        ("fotocromatiche", 2),
+        ("polarizzate", 3),
     ]
     c.setFont("Helvetica-Bold", 10)
-    for y, lab in zip(check_ys, labels):
+    for lab, i in left_labels:
         if any(lab in s for s in checks):
-            c.drawString(check_x, y, "X")
-    c.setFont("Helvetica", 10)
+            c.drawString(base_x, base_y - i * dy, "X")
 
-    if altri_trattamenti:
+    # Colonna destra (trattamento antiriflesso, altri trattamenti)
+    right_x = 112 * mm
+    right_y = 48 * mm
+    if any("trattamento antiriflesso" in s for s in checks):
+        c.drawString(right_x, right_y, "X")
+    # altri trattamenti: c'è una checkbox e riga testo
+    if (altri_trattamenti or "").strip():
+        c.drawString(right_x, right_y - 6 * mm, "X")
         c.setFont("Helvetica", 9)
-        c.drawString(245, 130, altri_trattamenti[:80])
-        c.setFont("Helvetica", 10)
+        c.drawString(112 * mm, 35 * mm, str(altri_trattamenti)[:60])
 
-    if note:
+    # NOTE
+    if (note or "").strip():
         c.setFont("Helvetica", 9)
-        max_chars = 95
-        lines = []
-        s = note.strip()
-        while len(s) > max_chars:
-            cut = s.rfind(" ", 0, max_chars)
-            if cut <= 0: cut = max_chars
-            lines.append(s[:cut])
-            s = s[cut:].lstrip()
-        if s: lines.append(s)
-        y = 88
-        for line in lines[:3]:
-            c.drawString(55, y, line)
-            y -= 12
-        c.setFont("Helvetica", 10)
+        # area note in basso a sinistra
+        c.drawString(15 * mm, 20 * mm, (str(note).replace("\n", " "))[:120])
 
 
 def _draw_prescrizione_occhiali_a5_on_canvas(
@@ -1538,6 +1573,7 @@ def genera_prescrizione_occhiali_a5_pdf(
 ) -> bytes:
 
     """Prescrizione A5: TEMPLATE + overlay SOLO valori (niente linee)."""
+    variant = "with_cirillo" if con_cirillo else "no_cirillo"
     def draw_fn(c, w, h):
         _draw_prescrizione_values_only_on_canvas(
             c, w, h,
