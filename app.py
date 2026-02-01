@@ -4,9 +4,6 @@ from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
 from pdf_templates import build_pdf
-
-variant = "with_cirillo" if con_cirillo else "no_cirillo"
-
 # A5
 pdf_bytes = build_pdf("a5", variant, draw_overlay_fn)
 
@@ -1543,8 +1540,6 @@ def genera_prescrizione_occhiali_a5_pdf(
 ) -> bytes:
 
     """Prescrizione A5: TEMPLATE + overlay SOLO valori (niente linee)."""
-    variant = "with_cirillo" if con_cirillo else "no_cirillo"
-
     def draw_fn(c, w, h):
         _draw_prescrizione_values_only_on_canvas(
             c, w, h,
@@ -1611,8 +1606,6 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
 ) -> bytes:
 
     """A4 landscape 2xA5: TEMPLATE + overlay SOLO valori su entrambe le metà (niente linee)."""
-    variant = "with_cirillo" if con_cirillo else "no_cirillo"
-
     def draw_fn(c, w, h):
         # metà sinistra
         c.saveState()
