@@ -298,7 +298,7 @@ def _prescrizione_pdf_imagebg(page_size, page_kind: str, con_cirillo: bool, dati
     c = canvas.Canvas(buf, pagesize=page_size)
     _draw_bg_image_fullpage(c, page_w, page_h, bg)
     # top offset: A5 has less vertical space
-    top_offset = 62 if page_kind == "a4" else 58
+    top_offset = 72 if page_kind == "a4" else 62
     _draw_prescrizione_clean_table(c, page_w, page_h, dati, top_offset_mm=top_offset)
     c.showPage(); c.save()
     buf.seek(0)
@@ -1361,7 +1361,7 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 
     left = 30 * mm
     right = width - 30 * mm
-    top = height - 30 * mm
+    top = height - 80 * mm
     bottom = 30 * mm
     y = top
 
@@ -1392,7 +1392,7 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 
     if include_header:
         _draw_header()
-        y = height - 40 * mm
+        y = height - 80 * mm
 
     c.setFont("Helvetica-Bold", 12)
     c.drawString(left, y, "Referto oculistico / optometrico")
