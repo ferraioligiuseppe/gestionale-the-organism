@@ -201,6 +201,26 @@ def _sidebar_db_indicator():
     except Exception:
         pass
 
+
+def _is_streamlit_cloud() -> bool:
+    """Best-effort detection of Streamlit Community Cloud runtime."""
+    try:
+        # Streamlit Cloud mounts the repo under /mount/src/<repo>
+        if os.path.exists("/mount/src"):
+            return True
+        # Common env hints (may vary)
+        if os.environ.get("STREAMLIT_CLOUD", "").lower() in ("1", "true", "yes"):
+            return True
+        if os.environ.get("STREAMLIT_RUNTIME_ENV", "").lower() in ("cloud", "streamlit_cloud"):
+            return True
+        # Adminuser home is typical on Streamlit Cloud
+        if os.environ.get("HOME", "").startswith("/home/adminuser"):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _require_postgres_on_cloud():
     # Mostra sempre l'indicatore, anche in caso di errore
     _sidebar_db_indicator()
