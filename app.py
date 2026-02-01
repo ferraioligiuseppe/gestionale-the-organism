@@ -34,6 +34,62 @@ except ImportError:
     PYPDF_AVAILABLE = False
 
 
+
+# -----------------------------
+# Stampa: carta intestata come IMMAGINE (PRO)
+# - Evita overlay su template che in Cloud spesso non trova assets/pdf.
+# - Disegna la carta intestata come sfondo (contain, senza crop).
+# -----------------------------
+try:
+    from reportlab.lib.utils import ImageReader
+    IMAGE_BG_AVAILABLE = True
+except Exception:
+    IMAGE_BG_AVAILABLE = False
+
+# Percorsi immagini (dentro repo)
+# Nota: se non hai l'immagine "with_cirillo" puoi temporaneamente usare quella "no_cirillo"
+PRINT_BG_IMAGES = {
+    ("a4", "with_cirillo"): "assets/print/a4_with_cirillo.png",
+    ("a4", "no_cirillo"):   "assets/print/a4_no_cirillo.png",
+    # A5: useremo l'A4 scalata in contain; puoi comunque mettere immagini dedicate qui se vuoi.
+    ("a5", "with_cirillo"): "assets/print/a5_with_cirillo.png",
+    ("a5", "no_cirillo"):   "assets/print/a5_no_cirillo.png",
+}
+
+def _draw_image_contain(c, img_reader, pagesize):
+    """Disegna un'immagine a piena pagina in modalità 'contain' (senza distorsioni, senza ritagliare)."""
+    w, h = pagesize
+    iw, ih = img_reader.getSize()
+    if not iw or not ih:
+        return
+    scale = min(w / iw, h / ih)
+    dw, dh = iw * scale, ih * scale
+    x = (w - dw) / 2.0
+    y = (h - dh) / 2.0
+    c.drawImage(img_reader, x, y, width=dw, height=dh, preserveAspectRatio=True, mask='auto')
+
+def _try_draw_letterhead_bg_image(c, pagesize, variant: str):
+    """Sfondo carta intestata da immagine. Non blocca mai la stampa se manca l'asset."""
+    if not REPORTLAB_AVAILABLE or not IMAGE_BG_AVAILABLE:
+        return
+    key = ("a4" if pagesize == A4 else "a5", variant)
+    path = PRINT_BG_IMAGES.get(key)
+
+    # fallback: se manca, prova a usare l'A4 equivalente (poi verrà scalata)
+    if not path or not os.path.exists(path):
+        alt = PRINT_BG_IMAGES.get(("a4", variant))
+        if alt and os.path.exists(alt):
+            path = alt
+
+    if not path or not os.path.exists(path):
+        return
+
+    try:
+        img = ImageReader(path)
+        _draw_image_contain(c, img, pagesize)
+    except Exception:
+        return
+
 def _make_overlay_pdf_pagesize(pagesize, draw_fn):
     """Crea un PDF overlay (una pagina) con ReportLab per un pagesize arbitrario."""
     buf = io.BytesIO()
@@ -1571,26 +1627,38 @@ def genera_prescrizione_occhiali_a5_pdf(
     note: str,
     con_cirillo: bool = True,
 ) -> bytes:
+    """Prescrizione A5 (PRO): sfondo carta intestata come immagine + overlay SOLO valori."""
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError("ReportLab non disponibile")
 
-    """Prescrizione A5: TEMPLATE + overlay SOLO valori (niente linee)."""
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A5)
+    width, height = A5
+
     variant = "with_cirillo" if con_cirillo else "no_cirillo"
-    def draw_fn(c, w, h):
-        _draw_prescrizione_values_only_on_canvas(
-            c, w, h,
-            paziente, data_prescrizione_iso,
-            sf_lon_od, cil_lon_od, ax_lon_od,
-            sf_lon_os, cil_lon_os, ax_lon_os,
-            sf_int_od, cil_int_od, ax_int_od,
-            sf_int_os, cil_int_os, ax_int_os,
-            sf_vic_od, cil_vic_od, ax_vic_od,
-            sf_vic_os, cil_vic_os, ax_vic_os,
-            lenti_scelte,
-            altri_trattamenti,
-            note,
-        )
 
-    return build_pdf("a5", variant, draw_fn)
+    # Sfondo grafico (contain) — se manca l'immagine, non blocca.
+    _try_draw_letterhead_bg_image(c, pagesize=A5, variant=variant)
 
+    # Overlay SOLO valori, senza linee/riquadri (così non si accavalla)
+    _draw_prescrizione_values_only_on_canvas(
+        c, width, height,
+        paziente, data_prescrizione_iso,
+        sf_lon_od, cil_lon_od, ax_lon_od,
+        sf_lon_os, cil_lon_os, ax_lon_os,
+        sf_int_od, cil_int_od, ax_int_od,
+        sf_int_os, cil_int_os, ax_int_os,
+        sf_vic_od, cil_vic_od, ax_vic_od,
+        sf_vic_os, cil_vic_os, ax_vic_os,
+        lenti_scelte,
+        altri_trattamenti,
+        note,
+    )
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
 
 def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
     """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
@@ -1638,14 +1706,40 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
     divider_line: bool = False,
     con_cirillo: bool = True,
 ) -> bytes:
+    """A4 (2×A5 in verticale): sfondo A4 (immagine) + due overlay valori (scalati).
 
-    """A4 landscape 2xA5: TEMPLATE + overlay SOLO valori su entrambe le metà (niente linee)."""
+    - NIENTE crop marks.
+    - NIENTE riquadri/linee (solo testi nei punti giusti).
+    """
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError("ReportLab non disponibile")
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    page_w, page_h = A4
+
     variant = "with_cirillo" if con_cirillo else "no_cirillo"
-    def draw_fn(c, w, h):
-        # metà sinistra
+
+    # Sfondo grafico A4
+    _try_draw_letterhead_bg_image(c, pagesize=A4, variant=variant)
+
+    # Dimensioni A5 "logiche" per il layout dei valori
+    a5_w, a5_h = A5
+
+    half_h = page_h / 2.0
+    # Scala per far entrare un A5 dentro metà A4 (verticale)
+    s = min(page_w / a5_w, half_h / a5_h)
+
+    def draw_one_half(y0):
         c.saveState()
+        # centra orizzontalmente
+        x = (page_w - a5_w * s) / 2.0
+        y = y0 + (half_h - a5_h * s) / 2.0
+        c.translate(x, y)
+        c.scale(s, s)
+
         _draw_prescrizione_values_only_on_canvas(
-            c, w/2.0, h,
+            c, a5_w, a5_h,
             paziente, data_prescrizione_iso,
             sf_lon_od, cil_lon_od, ax_lon_od,
             sf_lon_os, cil_lon_os, ax_lon_os,
@@ -1653,28 +1747,28 @@ def genera_prescrizione_occhiali_2a5_su_a4_pdf(
             sf_int_os, cil_int_os, ax_int_os,
             sf_vic_od, cil_vic_od, ax_vic_od,
             sf_vic_os, cil_vic_os, ax_vic_os,
-            lenti_scelte, altri_trattamenti, note,
+            lenti_scelte,
+            altri_trattamenti,
+            note,
         )
         c.restoreState()
 
-        # metà destra
+    # Basso + alto (due copie)
+    draw_one_half(0)
+    draw_one_half(half_h)
+
+    # opzionale: linea centrale leggera
+    if divider_line:
         c.saveState()
-        c.translate(w/2.0, 0)
-        _draw_prescrizione_values_only_on_canvas(
-            c, w/2.0, h,
-            paziente, data_prescrizione_iso,
-            sf_lon_od, cil_lon_od, ax_lon_od,
-            sf_lon_os, cil_lon_os, ax_lon_os,
-            sf_int_od, cil_int_od, ax_int_od,
-            sf_int_os, cil_int_os, ax_int_os,
-            sf_vic_od, cil_vic_od, ax_vic_od,
-            sf_vic_os, cil_vic_os, ax_vic_os,
-            lenti_scelte, altri_trattamenti, note,
-        )
+        c.setLineWidth(0.5)
+        c.setStrokeColorRGB(0.75, 0.75, 0.75)
+        c.line(10 * mm, half_h, page_w - 10 * mm, half_h)
         c.restoreState()
 
-    return build_pdf("a4_2up", variant, draw_fn)
-
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
 
 def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -> bytes:
     """
