@@ -7,6 +7,16 @@ st.set_page_config(page_title="The Organism", layout="wide")
 st.title("BOOT OK ✅")
 st.write("Se vedi questo, il file giusto sta girando.")
 st.write("Python:", os.getenv("PYTHON_VERSION", "n/a"))
+st.write("CHK 1: imports base ok")
+
+# ---- dopo import pypdf / reportlab / ecc
+st.write("CHK 2: imports pdf ok")
+
+# ---- prima di qualunque init_db / migrate / connessione
+st.write("CHK 3: prima init_db ok")
+
+# ---- subito prima della funzione login / render login
+st.write("CHK 4: prima login ok")
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, A5
