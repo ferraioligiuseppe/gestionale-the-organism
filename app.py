@@ -2,13 +2,14 @@ import streamlit as st
 import sqlite3
 from datetime import date, datetime
 from typing import Optional, Dict
+from letterhead_pdf import build_pdf_with_letterhead
+
 import os
 import io
 import csv
 from functools import lru_cache
 import math  # <-- aggiungi questa riga se non c'è
 import textwrap  # per andare a capo nel referto
-from letterhead_pdf import build_pdf_with_letterhead
 
 # PDF (referti e prescrizioni A4/A5)
 try:
