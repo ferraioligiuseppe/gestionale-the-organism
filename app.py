@@ -308,7 +308,18 @@ def _get_database_url() -> str:
     # 3) environment
     return (os.getenv("DATABASE_URL", "") or os.getenv("database_url", "") or "").strip()
 
-_DB_URL = _get_database_url()
+
+def _normalize_db_url(u: str) -> str:
+    u = (u or "").strip()
+    # strip accidental surrounding quotes
+    if (u.startswith('"') and u.endswith('"')) or (u.startswith("'") and u.endswith("'")):
+        u = u[1:-1].strip()
+    # normalize scheme
+    if u.startswith("postgres://"):
+        u = "postgresql://" + u[len("postgres://"):]
+    return u
+
+_DB_URL = _normalize_db_url(_get_database_url())
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
 
@@ -366,7 +377,21 @@ def _connect_cached():
     if _DB_BACKEND == "postgres":
         if not PSYCOPG2_AVAILABLE:
             raise RuntimeError("psycopg2 non disponibile. Aggiungi psycopg2-binary a requirements.txt")
-        conn = psycopg2.connect(_DB_URL)
+        try:
+    conn = psycopg2.connect(_DB_URL)
+except Exception as e:
+    # Non-leak diagnostics (does not print the URL)
+    u = _DB_URL or ""
+    st.error("❌ Errore connessione PostgreSQL (Neon). La DATABASE_URL non sembra in un formato valido per psycopg2.")
+    st.write({
+        "db_url_len": len(u),
+        "db_url_has_whitespace": any(ch.isspace() for ch in u),
+        "db_url_scheme": (u.split("://", 1)[0] if "://" in u else "<missing>"),
+        "hint_1": "Verifica che sia su UNA sola riga nei Secrets (nessun a capo).",
+        "hint_2": "Usa lo schema 'postgresql://'.",
+        "hint_3": "Se la password contiene caratteri speciali (@ : / ? # & %), deve essere URL-encoded (es. @ -> %40).",
+    })
+    st.stop()
         return _PgConn(conn)
     else:
         conn = sqlite3.connect(SQLITE_DB_PATH)
