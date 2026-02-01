@@ -178,7 +178,7 @@ def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: floa
     c.setFont("Helvetica", 11)
     c.drawString(left, y, f"Sig.: {_safe_str(dati.get('paziente',''))}")
     c.drawRightString(right, y, f"Data: {_safe_str(dati.get('data',''))}")
-    y -= 10 * mm
+    y -= 18*mm
 
     # headers
     c.setFont("Helvetica-Bold", 10)
@@ -1374,7 +1374,7 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
         if y < min_y:
             c.showPage()
             y = top
-            if include_header:
+    if False and include_header:
                 _draw_header()
 
     def _draw_header():
@@ -1392,7 +1392,7 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 
     if include_header:
         _draw_header()
-        y = height - 80 * mm
+        y = height - 55*mm
 
     c.setFont("Helvetica-Bold", 12)
     c.drawString(left, y, "Referto oculistico / optometrico")
@@ -2003,13 +2003,13 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
 
     left = 25 * mm
     right = width - 25 * mm
-    top = height - 25 * mm
+    top = height - 55 * mm
     bottom = 25 * mm
 
     y = top
 
     # Intestazione opzionale
-    if with_header:
+    if False and with_header:
         c.setFont("Helvetica-Bold", 12)
         c.drawCentredString(width / 2.0, y, "The Organism – Centro di Neuropsicologia e Sviluppo")
         y -= 14
