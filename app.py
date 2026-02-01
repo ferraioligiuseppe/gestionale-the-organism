@@ -175,6 +175,9 @@ def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: floa
     right = page_w - 18 * mm
     y = page_h - top_offset_mm * mm  # below header line
 
+    # marker di debug: posizione inizio stampa
+    c.saveState(); c.setFont('Helvetica', 7); c.drawString(left-8*mm, y+2, '1'); c.restoreState()
+
     c.setFont("Helvetica", 11)
     c.drawString(left, y, f"Sig.: {_safe_str(dati.get('paziente',''))}")
     c.drawRightString(right, y, f"Data: {_safe_str(dati.get('data',''))}")
@@ -2003,10 +2006,12 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
 
     left = 25 * mm
     right = width - 25 * mm
-    top = height - 55 * mm
+    top = height - 40 * mm
     bottom = 25 * mm
 
     y = top
+    # marker di debug: posizione inizio stampa
+    c.saveState(); c.setFont('Helvetica', 7); c.drawString(left-8*mm, y+2, '1'); c.restoreState()
 
     # Intestazione opzionale
     if False and with_header:
