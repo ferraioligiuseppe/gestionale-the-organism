@@ -1135,7 +1135,10 @@ def draw_axis_arrow(c, center_x, center_y, radius, axis_deg: int):
         c.line(x2, y2, hx, hy)
 
 
-def genera_prescrizione_occhiali_a5_pdf(
+def _draw_prescrizione_occhiali_a5_on_canvas(
+    c,
+    width: float,
+    height: float,
     paziente,
     data_prescrizione_iso: Optional[str],
     sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
@@ -1147,21 +1150,8 @@ def genera_prescrizione_occhiali_a5_pdf(
     lenti_scelte: list,
     altri_trattamenti: str,
     note: str,
-) -> bytes:
-    """
-    Genera una prescrizione occhiali in formato A5 con:
-    - margini 3 cm alto/basso, 2 cm dx/sn
-    - data in alto a destra
-    - nome paziente
-    - due semicerchi con gradi (schema TABO semplificato) + freccia dell'asse di LONTANO
-    - tre righe LONTANO / INTERMEDIO / VICINO (SF, CIL, AX per OD/OS)
-    - lenti consigliate (check)
-    - campo note
-    """
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A5)
-    width, height = A5
-
+):
+    """Disegna la prescrizione (layout A5) sul canvas corrente, senza fare showPage/save."""
     left = 20 * mm
     right = width - 20 * mm
     top = height - 30 * mm
@@ -1286,25 +1276,166 @@ def genera_prescrizione_occhiali_a5_pdf(
         wrapper = textwrap.TextWrapper(width=70)
         for line in wrapper.wrap(note.strip()):
             if y < bottom + 40:
-                c.showPage()
-                c.setFont("Helvetica", 9)
-                y = top
+                break
             c.drawString(left + 5 * mm, y, line)
             y -= 11
 
     # Firma
     if y < bottom + 50:
-        c.showPage()
-        c.setFont("Helvetica", 9)
-        y = top
+        pass
 
     c.line(right - 100, bottom + 30, right, bottom + 30)
     c.drawString(right - 95, bottom + 35, "Firma / Timbro")
+
+
+
+def genera_prescrizione_occhiali_a5_pdf(
+    paziente,
+    data_prescrizione_iso: Optional[str],
+    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
+    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
+    sf_int_od: float, cil_int_od: float, ax_int_od: int,
+    sf_int_os: float, cil_int_os: float, ax_int_os: int,
+    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
+    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
+    lenti_scelte: list,
+    altri_trattamenti: str,
+    note: str,
+) -> bytes:
+    """Genera una prescrizione occhiali in formato A5 (PDF) pronta per la stampa."""
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A5)
+    width, height = A5
+
+    _draw_prescrizione_occhiali_a5_on_canvas(
+        c,
+        width, height,
+        paziente,
+        data_prescrizione_iso,
+        sf_lon_od, cil_lon_od, ax_lon_od,
+        sf_lon_os, cil_lon_os, ax_lon_os,
+        sf_int_od, cil_int_od, ax_int_od,
+        sf_int_os, cil_int_os, ax_int_os,
+        sf_vic_od, cil_vic_od, ax_vic_od,
+        sf_vic_os, cil_vic_os, ax_vic_os,
+        lenti_scelte,
+        altri_trattamenti,
+        note,
+    )
 
     c.showPage()
     c.save()
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
+    """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
+    L = mark_len_mm * mm
+    inset = inset_mm * mm
+
+    # Bottom-left
+    c.line(x0 - L, y0 + inset, x0, y0 + inset)
+    c.line(x0 + inset, y0 - L, x0 + inset, y0)
+
+    # Bottom-right
+    c.line(x0 + w, y0 + inset, x0 + w + L, y0 + inset)
+    c.line(x0 + w - inset, y0 - L, x0 + w - inset, y0)
+
+    # Top-left
+    c.line(x0 - L, y0 + h - inset, x0, y0 + h - inset)
+    c.line(x0 + inset, y0 + h, x0 + inset, y0 + h + L)
+
+    # Top-right
+    c.line(x0 + w, y0 + h - inset, x0 + w + L, y0 + h - inset)
+    c.line(x0 + w - inset, y0 + h, x0 + w - inset, y0 + h + L)
+
+
+def _draw_mid_cut_marks(c, page_w, page_h, mark_len_mm: float = 8):
+    """Tacche centrali sui bordi sinistro e destro per taglio a metà pagina."""
+    y = page_h / 2.0
+    L = mark_len_mm * mm
+    c.line(0, y, L, y)
+    c.line(page_w - L, y, page_w, y)
+
+
+def genera_prescrizione_occhiali_2a5_su_a4_pdf(
+    paziente,
+    data_prescrizione_iso: Optional[str],
+    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
+    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
+    sf_int_od: float, cil_int_od: float, ax_int_od: int,
+    sf_int_os: float, cil_int_os: float, ax_int_os: int,
+    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
+    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
+    lenti_scelte: list,
+    altri_trattamenti: str,
+    note: str,
+    crop_marks: bool = True,
+) -> bytes:
+    """Genera un PDF A4 con due prescrizioni A5 (una sopra, una sotto) + crop marks."""
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    a4_w, a4_h = A4
+    a5_w, a5_h = A5
+
+    # centra l'A5 orizzontalmente; in verticale sono due slot metà pagina
+    x0 = (a4_w - a5_w) / 2.0
+    y_bottom = 0
+    y_top = a4_h / 2.0
+
+    if crop_marks:
+        c.setLineWidth(0.6)
+        _draw_crop_marks_for_rect(c, x0, y_bottom, a5_w, a5_h)
+        _draw_crop_marks_for_rect(c, x0, y_top, a5_w, a5_h)
+        _draw_mid_cut_marks(c, a4_w, a4_h)
+
+    # slot basso
+    c.saveState()
+    c.translate(x0, y_bottom)
+    _draw_prescrizione_occhiali_a5_on_canvas(
+        c,
+        a5_w, a5_h,
+        paziente,
+        data_prescrizione_iso,
+        sf_lon_od, cil_lon_od, ax_lon_od,
+        sf_lon_os, cil_lon_os, ax_lon_os,
+        sf_int_od, cil_int_od, ax_int_od,
+        sf_int_os, cil_int_os, ax_int_os,
+        sf_vic_od, cil_vic_od, ax_vic_od,
+        sf_vic_os, cil_vic_os, ax_vic_os,
+        lenti_scelte,
+        altri_trattamenti,
+        note,
+    )
+    c.restoreState()
+
+    # slot alto
+    c.saveState()
+    c.translate(x0, y_top)
+    _draw_prescrizione_occhiali_a5_on_canvas(
+        c,
+        a5_w, a5_h,
+        paziente,
+        data_prescrizione_iso,
+        sf_lon_od, cil_lon_od, ax_lon_od,
+        sf_lon_os, cil_lon_os, ax_lon_os,
+        sf_int_od, cil_int_od, ax_int_od,
+        sf_int_os, cil_int_os, ax_int_os,
+        sf_vic_od, cil_vic_od, ax_vic_od,
+        sf_vic_os, cil_vic_os, ax_vic_os,
+        lenti_scelte,
+        altri_trattamenti,
+        note,
+    )
+    c.restoreState()
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
 def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -> bytes:
     """
     Genera un referto oculistico/optometrico in formato A4.
@@ -2347,7 +2478,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         conn.commit()
         st.success("Valutazione eliminata.")
     st.markdown("---")
-    st.subheader("Prescrizione occhiali (formato A5)")
+    st.subheader("Prescrizione occhiali (stampa A5 / A4 2×A5)")
 
     if not REPORTLAB_AVAILABLE:
         st.info("Per generare la prescrizione in PDF installa il pacchetto 'reportlab' (es. `pip install reportlab`).")
@@ -2359,6 +2490,18 @@ ESAMI STRUTTURALI / FUNZIONALI
                 "Data prescrizione (gg/mm/aaaa)",
                 datetime.today().strftime("%d/%m/%Y"),
                 key="data_prescr_a5",
+            )
+
+            formato_stampa = st.selectbox(
+                "Formato stampa",
+                ["A5", "A4 (2×A5 con taglio)"],
+                index=1,
+                key="prescr_formato_stampa",
+            )
+            crop_marks = st.checkbox(
+                "Crop marks (segni di taglio)",
+                value=True,
+                key="prescr_crop_marks",
             )
 
             st.markdown("**LONTANO**")
@@ -2418,7 +2561,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 key="note_prescr_a5",
             )
 
-            genera_pdf = st.form_submit_button("Genera PDF A5")
+            genera_pdf = st.form_submit_button("Genera PDF")
 
         if genera_pdf:
             data_iso_prescr = None
@@ -2430,7 +2573,8 @@ ESAMI STRUTTURALI / FUNZIONALI
                     st.error("Data prescrizione non valida. Usa il formato gg/mm/aaaa.")
                     data_iso_prescr = None
 
-            pdf_bytes = genera_prescrizione_occhiali_a5_pdf(
+            
+            common_kwargs = dict(
                 paziente=paziente,
                 data_prescrizione_iso=data_iso_prescr,
                 sf_lon_od=sf_lon_od, cil_lon_od=cil_lon_od, ax_lon_od=ax_lon_od,
@@ -2444,13 +2588,21 @@ ESAMI STRUTTURALI / FUNZIONALI
                 note=note_prescrizione,
             )
 
-            filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}.pdf"
+            if formato_stampa == "A5":
+                pdf_bytes = genera_prescrizione_occhiali_a5_pdf(**common_kwargs)
+                filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A5.pdf"
+                label_btn = "Scarica prescrizione occhiali (A5)"
+            else:
+                pdf_bytes = genera_prescrizione_occhiali_2a5_su_a4_pdf(**common_kwargs, crop_marks=crop_marks)
+                filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A4_2xA5.pdf"
+                label_btn = "Scarica prescrizione occhiali (A4 2×A5)"
+
             st.download_button(
-                "Scarica prescrizione occhiali (A5)",
+                label_btn,
                 data=pdf_bytes,
                 file_name=filename,
                 mime="application/pdf",
-                key="dl_prescr_a5",
+                key="dl_prescr",
             )
     st.markdown("---")
     st.subheader("Referto oculistico / optometrico (PDF A4)")
