@@ -126,6 +126,32 @@ def _is_streamlit_cloud() -> bool:
     return False
 
 
+
+class _RowCI(dict):
+    """Case-insensitive dict for row access.
+
+    The app was written against sqlite3.Row with mixed-case column names (e.g., 'ID', 'CAP').
+    PostgreSQL folds unquoted identifiers to lowercase, so DictCursor returns keys like 'id', 'cap'.
+    This wrapper allows row['ID'] to resolve to row['id'] transparently.
+    """
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            if dict.__contains__(self, key):
+                return dict.__getitem__(self, key)
+            lk = key.lower()
+            if dict.__contains__(self, lk):
+                return dict.__getitem__(self, lk)
+            uk = key.upper()
+            if dict.__contains__(self, uk):
+                return dict.__getitem__(self, uk)
+        return dict.__getitem__(self, key)
+
+    def get(self, key, default=None):
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
+
 class _PgCursor:
     """Cursor wrapper to:
     - translate SQLite '?' placeholders -> psycopg2 '%s'
@@ -150,10 +176,23 @@ class _PgCursor:
         return self._cur.executemany(sql2, seq_of_params)
 
     def fetchone(self):
-        return self._cur.fetchone()
+        row = self._cur.fetchone()
+        if row is None:
+            return None
+        try:
+            return _RowCI(dict(row))
+        except Exception:
+            return row
 
     def fetchall(self):
-        return self._cur.fetchall()
+        rows = self._cur.fetchall()
+        out = []
+        for r in rows:
+            try:
+                out.append(_RowCI(dict(r)))
+            except Exception:
+                out.append(r)
+        return out
 
     @property
     def rowcount(self):
