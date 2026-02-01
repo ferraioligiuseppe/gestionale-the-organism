@@ -108,6 +108,64 @@ def _draw_bg_image_fullpage(c: canvas.Canvas, page_w: float, page_h: float, img_
         # fail silently: no background
         return
 
+
+def _draw_tabo_semicircle(c: canvas.Canvas, cx: float, cy: float, r: float, label: str):
+    """Disegna semicerchio TABO 180→0 con tick principali e label."""
+    c.saveState()
+    c.setLineWidth(1)
+    # arco superiore (0→180)
+    c.arc(cx - r, cy - r, cx + r, cy + r, startAng=0, extent=180)
+
+    # tick ogni 30° (più lunghi ogni 60°)
+    for deg in range(0, 181, 10):
+        rad = math.radians(deg)
+        x1 = cx + r * math.cos(rad)
+        y1 = cy + r * math.sin(rad)
+        tick = 3*mm if deg % 30 == 0 else 1.8*mm
+        if deg % 60 == 0:
+            tick = 4*mm
+        x2 = cx + (r - tick) * math.cos(rad)
+        y2 = cy + (r - tick) * math.sin(rad)
+        c.line(x2, y2, x1, y1)
+
+    # labels principali
+    c.setFont("Helvetica", 8)
+    c.drawString(cx - r - 12*mm, cy + 1*mm, "180")
+    c.drawCentredString(cx, cy + r + 3*mm, "90")
+    c.drawString(cx + r + 4*mm, cy + 1*mm, "0")
+
+    # label occhio sotto
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(cx, cy - r - 6*mm, label)
+    c.restoreState()
+
+
+def _draw_axis_arrow(c: canvas.Canvas, cx: float, cy: float, r: float, axis_deg, enabled: bool):
+    """Disegna freccia direzione asse cilindro su TABO. axis_deg 0..180."""
+    if not enabled:
+        return
+    try:
+        ax = int(axis_deg)
+    except Exception:
+        return
+    if ax < 0 or ax > 180:
+        return
+
+    c.saveState()
+    c.setLineWidth(1.2)
+    rad = math.radians(ax)
+    x2 = cx + (r - 2*mm) * math.cos(rad)
+    y2 = cy + (r - 2*mm) * math.sin(rad)
+    c.line(cx, cy, x2, y2)
+
+    # arrow head
+    head = 4*mm
+    ang1 = rad + math.radians(155)
+    ang2 = rad - math.radians(155)
+    c.line(x2, y2, x2 + head*math.cos(ang1), y2 + head*math.sin(ang1))
+    c.line(x2, y2, x2 + head*math.cos(ang2), y2 + head*math.sin(ang2))
+    c.restoreState()
+
 def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: float, dati: dict, top_offset_mm: float = 60):
     """
     Clean layout (no boxes): writes a readable table with SF/CIL/AX for OD/OS:
@@ -126,6 +184,35 @@ def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: floa
     c.setFont("Helvetica-Bold", 10)
     c.drawString(left, y, "PRESCRIZIONE OCCHIALI")
     y -= 7 * mm
+
+    # --- TABO semicircles + axis arrow (asse cilindro) ---
+    # Usare asse del LONTANO; freccia solo se CIL != 0
+    r_tabo = 24 * mm
+    cy_tabo = y - 4 * mm
+    cx_od = left + 55 * mm
+    cx_os = left + 135 * mm
+
+    _draw_tabo_semicircle(c, cx_od, cy_tabo, r_tabo, "Occhio Destro")
+    _draw_tabo_semicircle(c, cx_os, cy_tabo, r_tabo, "Occhio Sinistro")
+
+    od_cil = dati.get("od_lon_cil")
+    os_cil = dati.get("os_lon_cil")
+    od_has_ast = False
+    os_has_ast = False
+    try:
+        od_has_ast = float(od_cil or 0) != 0.0
+    except Exception:
+        od_has_ast = False
+    try:
+        os_has_ast = float(os_cil or 0) != 0.0
+    except Exception:
+        os_has_ast = False
+
+    _draw_axis_arrow(c, cx_od, cy_tabo, r_tabo, dati.get("od_lon_ax"), enabled=od_has_ast)
+    _draw_axis_arrow(c, cx_os, cy_tabo, r_tabo, dati.get("os_lon_ax"), enabled=os_has_ast)
+
+    # spazio dopo TABO
+    y -= 2 * r_tabo + 10 * mm
 
     # columns
     col_label = left
@@ -203,92 +290,6 @@ def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: floa
             c.drawString(left, y, note[i:i+max_chars])
             y -= 5 * mm
 
-
-# ---- TABO semicircle + axis arrow (A5) ----
-def _draw_tabo_semicircle(c: canvas.Canvas, cx: float, cy: float, r: float, show_tabo: bool=False):
-    """Disegna semicerchio 180°→0° (parte alta) con label 90° e 180°/0° come nel modulo."""
-    c.saveState()
-    c.setLineWidth(1)
-
-    # Semicerchio superiore: arco da 0 a 180 gradi
-    c.arc(cx - r, cy - r, cx + r, cy + r, startAng=0, extent=180)
-
-    # Tacche principali (0, 90, 180) e label
-    c.setFont("Helvetica", 8)
-    c.drawString(cx - r - 4*mm, cy - 2*mm, "180")
-    c.drawString(cx + r + 1*mm, cy - 2*mm, "0")
-    c.drawCentredString(cx, cy + r + 3*mm, "90")
-
-    if show_tabo:
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(cx, cy + r*0.55, "TABO")
-
-    c.restoreState()
-
-def _draw_axis_arrow_on_tabo(c: canvas.Canvas, cx: float, cy: float, r: float, axis_deg):
-    """Freccia che indica l'asse del cilindro sul semicerchio (0° destra, 90° alto, 180° sinistra)."""
-    try:
-        if axis_deg is None or str(axis_deg).strip() == "":
-            return
-        axis = int(float(axis_deg))
-    except Exception:
-        return
-
-    # Clamp 0..180
-    axis = max(0, min(180, axis))
-    ang = math.radians(axis)
-
-    # stelo: dal 70% al 95% del raggio
-    r1 = r * 0.70
-    r2 = r * 0.95
-    x1 = cx + r1 * math.cos(ang)
-    y1 = cy + r1 * math.sin(ang)
-    x2 = cx + r2 * math.cos(ang)
-    y2 = cy + r2 * math.sin(ang)
-
-    c.saveState()
-    c.setLineWidth(1.2)
-    c.line(x1, y1, x2, y2)
-
-    # testa freccia
-    head = r * 0.16
-    for delta in (-22, 22):
-        a2 = ang + math.radians(delta)
-        hx = x2 - head * math.cos(a2)
-        hy = y2 - head * math.sin(a2)
-        c.line(x2, y2, hx, hy)
-
-    c.restoreState()
-
-def _draw_tabo_block_a5(c: canvas.Canvas, page_w: float, page_h: float, dati: dict):
-    """Disegna i due semicerchi (OD/OS) e la freccia dell'asse (solo se CIL != 0)."""
-    r = 22 * mm
-    # posizionamento calibrato "generico" per A5 su letterhead: sotto le righe Sig./Data
-    cy = page_h - 88 * mm
-    cx_left  = 45 * mm   # semicerchio sinistro
-    cx_right = page_w - 45 * mm  # semicerchio destro
-
-    # Nel tuo modulo: a sinistra Occhio Destro, a destra Occhio Sinistro
-    # (se vuoi invertire, basta scambiare i due blocchi)
-    _draw_tabo_semicircle(c, cx_left,  cy, r, show_tabo=False)
-    _draw_tabo_semicircle(c, cx_right, cy, r, show_tabo=True)
-
-    c.setFont("Helvetica-Bold", 9)
-    c.drawCentredString(cx_left,  cy - r - 4*mm, "Occhio Destro")
-    c.drawCentredString(cx_right, cy - r - 4*mm, "Occhio Sinistro")
-
-    # Disegna freccia asse (usa asse LONTANO; se CIL è 0/None non disegna)
-    def _nonzero_cyl(v):
-        try:
-            return abs(float(v)) > 1e-6
-        except Exception:
-            return False
-
-    if _nonzero_cyl(dati.get("od_lon_cil")):
-        _draw_axis_arrow_on_tabo(c, cx_left, cy, r, dati.get("od_lon_ax"))
-    if _nonzero_cyl(dati.get("os_lon_cil")):
-        _draw_axis_arrow_on_tabo(c, cx_right, cy, r, dati.get("os_lon_ax"))
-
 def _prescrizione_pdf_imagebg(page_size, page_kind: str, con_cirillo: bool, dati: dict) -> bytes:
     variant = "with_cirillo" if con_cirillo else "no_cirillo"
     bg = _find_bg_image(page_kind, variant)
@@ -296,10 +297,8 @@ def _prescrizione_pdf_imagebg(page_size, page_kind: str, con_cirillo: bool, dati
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=page_size)
     _draw_bg_image_fullpage(c, page_w, page_h, bg)
-    if page_kind == "a5":
-        _draw_tabo_block_a5(c, page_w, page_h, dati)
     # top offset: A5 has less vertical space
-    top_offset = 62 if page_kind == "a4" else 72
+    top_offset = 62 if page_kind == "a4" else 58
     _draw_prescrizione_clean_table(c, page_w, page_h, dati, top_offset_mm=top_offset)
     c.showPage(); c.save()
     buf.seek(0)
@@ -1351,6 +1350,14 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    # Sfondo intestazione (immagine A4)
+    try:
+        variant = "with_cirillo" if include_header else "no_cirillo"
+        bg = _find_bg_image('a4', variant)
+        _draw_bg_image_fullpage(c, width, height, bg)
+    except Exception:
+        pass
+
 
     left = 30 * mm
     right = width - 30 * mm
@@ -1528,6 +1535,35 @@ def draw_axis_arrow(c, center_x, center_y, radius, axis_deg: int):
         hx = x2 - head_len * math.cos(ang)
         hy = y2 - head_len * math.sin(ang)
         c.line(x2, y2, hx, hy)
+
+def draw_axis_arrow(c, center_x, center_y, radius, axis_deg: int):
+    """
+    Disegna una freccia sulla semicirconferenza per indicare l'asse (0–180°).
+    0° = lato destro, 90° = alto, 180° = sinistra.
+    """
+    axis_deg = max(0, min(180, int(axis_deg)))  # clamp di sicurezza
+    angle_rad = math.radians(axis_deg)
+
+    # Punto interno e punto sulla circonferenza
+    r1 = radius * 0.7
+    r2 = radius * 0.95
+    x1 = center_x + r1 * math.cos(angle_rad)
+    y1 = center_y + r1 * math.sin(angle_rad)
+    x2 = center_x + r2 * math.cos(angle_rad)
+    y2 = center_y + r2 * math.sin(angle_rad)
+
+    c.setLineWidth(1)
+    # stelo della freccia
+    c.line(x1, y1, x2, y2)
+
+    # testa della freccia (due segmentini inclinati)
+    head_len = radius * 0.15
+    for delta in (-20, 20):
+        ang = angle_rad + math.radians(delta)
+        hx = x2 - head_len * math.cos(ang)
+        hy = y2 - head_len * math.sin(ang)
+        c.line(x2, y2, hx, hy)
+
 
 
 def _draw_prescrizione_values_only_on_canvas(
@@ -1817,7 +1853,38 @@ def _draw_prescrizione_occhiali_a5_on_canvas(
 
 
 
-def genera_prescrizione_occhiali_a5_pdf(
+
+def genera_prescrizione_occhiali_a4_pdf(
+    paziente,
+    data_prescrizione_iso: Optional[str],
+    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
+    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
+    sf_int_od: float, cil_int_od: float, ax_int_od: int,
+    sf_int_os: float, cil_int_os: float, ax_int_os: int,
+    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
+    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
+    lenti_scelte: list,
+    altri_trattamenti: str,
+    note: str,
+    con_cirillo: bool = True,
+) -> bytes:
+    """A4: sfondo intestazione (immagine) + prescrizione pulita + TABO con freccia asse cilindro."""
+    dati = {
+        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
+        "data": _safe_str(data_prescrizione_iso),
+        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
+        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
+        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
+        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
+        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
+        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
+        "lenti": lenti_scelte,
+        "altri_trattamenti": altri_trattamenti,
+        "note": note,
+    }
+    return _prescrizione_pdf_imagebg(A4, "a4", con_cirillo, dati)
+
+def genera_prescrizione_occhiali_a4_pdf(
     paziente,
     data_prescrizione_iso: Optional[str],
     sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
@@ -1881,7 +1948,7 @@ def _draw_mid_cut_marks(c, page_w, page_h, mark_len_mm: float = 8):
 
 
 
-def genera_prescrizione_occhiali_2a5_su_a4_pdf(
+def genera_prescrizione_occhiali_a4_pdf(
     paziente,
     data_prescrizione_iso: Optional[str],
     sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
@@ -1925,6 +1992,14 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    # Sfondo intestazione (immagine A4)
+    try:
+        variant = "with_cirillo" if with_header else "no_cirillo"
+        bg = _find_bg_image('a4', variant)
+        _draw_bg_image_fullpage(c, width, height, bg)
+    except Exception:
+        pass
+
 
     left = 25 * mm
     right = width - 25 * mm
@@ -3012,17 +3087,9 @@ ESAMI STRUTTURALI / FUNZIONALI
                 key="data_prescr_a5",
             )
 
-            formato_stampa = st.selectbox(
-                "Formato stampa",
-                ["A5", "A4 (2×A5)"],
-                index=1,
-                key="prescr_formato_stampa",
-            )
-            divider_line = st.checkbox(
-                "Linea centrale leggera (opzionale, per taglio)",
-                value=False,
-                key="prescr_divider_line",
-            )
+            # SOLO A4: nessuna scelta formato
+            formato_stampa = "A4"
+            divider_line = False
 
             con_cirillo = st.checkbox(
                 "Intestazione con Dott. Cirillo",
@@ -3114,14 +3181,10 @@ ESAMI STRUTTURALI / FUNZIONALI
                 note=note_prescrizione,
             )
 
-            if formato_stampa == "A5":
-                pdf_bytes = genera_prescrizione_occhiali_a5_pdf(**common_kwargs, con_cirillo=con_cirillo)
-                filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A5.pdf"
-                label_btn = "Scarica prescrizione occhiali (A5)"
-            else:
-                pdf_bytes = genera_prescrizione_occhiali_2a5_su_a4_pdf(**common_kwargs, divider_line=divider_line, con_cirillo=con_cirillo)
-                filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A4_2xA5.pdf"
-                label_btn = "Scarica prescrizione occhiali (A4 2×A5) - orizzontale"
+            # SOLO FORMATO A4 (niente A5)
+            pdf_bytes = genera_prescrizione_occhiali_a4_pdf(**common_kwargs, con_cirillo=con_cirillo)
+            filename = f"prescrizione_occhiali_{paziente['Cognome']}_{paziente['Nome']}_A4.pdf"
+            label_btn = "Scarica prescrizione occhiali (A4)"
 
             st.download_button(
                 label_btn,
