@@ -1,5 +1,8 @@
 import streamlit as st
 import sqlite3
+APP_MODE = st.secrets.get("APP_MODE", "prod")
+if APP_MODE == "test":
+    st.warning("⚠️ MODALITÀ TEST — database separato (Neon TEST).")
 from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
@@ -1092,6 +1095,36 @@ def _codice_nome(nome: str) -> str:
     else:
         codice = "".join(consonanti + vocali)[:3]
     return (codice + "XXX")[:3]
+
+# ------------------------------
+# Codice Fiscale - tabelle
+# ------------------------------
+# Mese (01-12) -> lettera
+MESE_CF = {
+    1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "H",
+    7: "L", 8: "M", 9: "P", 10: "R", 11: "S", 12: "T",
+}
+
+# Tabelle ufficiali per il carattere di controllo (16° carattere)
+CONTROL_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+EVEN_MAP = {
+    **{str(i): i for i in range(10)},
+    **{chr(ord("A") + i): i for i in range(26)},
+}
+
+ODD_MAP = {
+    # cifre
+    "0": 1, "1": 0, "2": 5, "3": 7, "4": 9,
+    "5": 13, "6": 15, "7": 17, "8": 19, "9": 21,
+    # lettere
+    "A": 1, "B": 0, "C": 5, "D": 7, "E": 9,
+    "F": 13, "G": 15, "H": 17, "I": 19, "J": 21,
+    "K": 2, "L": 4, "M": 18, "N": 20, "O": 11,
+    "P": 3, "Q": 6, "R": 8, "S": 12, "T": 14,
+    "U": 16, "V": 10, "W": 22, "X": 25, "Y": 24, "Z": 23,
+}
+
 
 def _codice_data_sesso(d: date, sesso: str) -> str:
     yy = f"{d.year % 100:02d}"
