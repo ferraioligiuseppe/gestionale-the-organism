@@ -1096,6 +1096,12 @@ def _codice_nome(nome: str) -> str:
         codice = "".join(consonanti + vocali)[:3]
     return (codice + "XXX")[:3]
 
+# Mappatura mese -> lettera (Codice Fiscale)
+MESE_CF = {
+    1: 'A', 2: 'B', 3: 'C', 4: 'D', 5: 'E', 6: 'H',
+    7: 'L', 8: 'M', 9: 'P', 10: 'R', 11: 'S', 12: 'T'
+}
+
 def _codice_data_sesso(d: date, sesso: str) -> str:
     yy = f"{d.year % 100:02d}"
     mm = MESE_CF[d.month]
