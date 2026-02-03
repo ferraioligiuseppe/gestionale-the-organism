@@ -203,21 +203,36 @@ def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: floa
     _draw_tabo_semicircle(c, cx_od, cy_tabo, r_tabo, "Occhio Destro")
     _draw_tabo_semicircle(c, cx_os, cy_tabo, r_tabo, "Occhio Sinistro")
 
-    od_cil = dati.get("od_lon_cil")
-    os_cil = dati.get("os_lon_cil")
-    od_has_ast = False
-    os_has_ast = False
-    try:
-        od_has_ast = float(od_cil or 0) != 0.0
-    except Exception:
-        od_has_ast = False
-    try:
-        os_has_ast = float(os_cil or 0) != 0.0
-    except Exception:
-        os_has_ast = False
+    # Scegli l'asse da disegnare sui TABO.
+    # Regola: usa prima il rigo che ha CIL diverso da 0; se nessuno, usa il primo asse diverso da 0 (se presente).
+    def _pick_axis_and_cyl(prefix: str):
+        cand = [
+            ("lon", dati.get(f"{prefix}_lon_cil"), dati.get(f"{prefix}_lon_ax")),
+            ("int", dati.get(f"{prefix}_int_cil"), dati.get(f"{prefix}_int_ax")),
+            ("vic", dati.get(f"{prefix}_vic_cil"), dati.get(f"{prefix}_vic_ax")),
+        ]
+        # 1) priorità: CIL != 0
+        for _, cil, ax in cand:
+            try:
+                if float(cil or 0) != 0.0 and ax is not None and str(ax).strip() != "":
+                    return ax, cil
+            except Exception:
+                pass
+        # 2) fallback: asse != 0 (anche se CIL=0) — utile se vuoi indicare comunque la direzione di montaggio
+        for _, cil, ax in cand:
+            try:
+                if ax is not None and str(ax).strip() != "":
+                    return ax, cil
+            except Exception:
+                if ax is not None and str(ax).strip() != "":
+                    return ax, cil
+        return None, None
 
-    _draw_axis_arrow(c, cx_od, cy_tabo, r_tabo, dati.get("od_lon_ax"), enabled=od_has_ast)
-    _draw_axis_arrow(c, cx_os, cy_tabo, r_tabo, dati.get("os_lon_ax"), enabled=os_has_ast)
+    od_ax_pick, od_cil_pick = _pick_axis_and_cyl("od")
+    os_ax_pick, os_cil_pick = _pick_axis_and_cyl("os")
+
+    _draw_axis_arrow(c, cx_od, cy_tabo, r_tabo, od_ax_pick, enabled=(od_ax_pick is not None))
+    _draw_axis_arrow(c, cx_os, cy_tabo, r_tabo, os_ax_pick, enabled=(os_ax_pick is not None))
 
     # spazio dopo TABO
     y -= 2 * r_tabo + 10 * mm
@@ -1381,25 +1396,30 @@ def _format_data_it_from_iso(iso_str: Optional[str]) -> str:
 def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -> bytes:
     """
     Genera un referto oculistico/optometrico in PDF A4.
-    - Header stile "Studio The Organism" (come app test)
-    - Stampa campi principali + Esame obiettivo (se presente)
-    - Appende sempre il blocco Note completo (dettaglio strutturato)
+    - Usa background letterhead (con/ senza Cirillo) se disponibile
+    - Contenuto spostato più in alto di ~2.5 cm rispetto alla versione precedente
+    - Stampa SOLO i campi compilati (nessuna riga vuota o con soli separatori)
     """
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+
     # Sfondo intestazione (immagine A4)
     try:
         variant = "with_cirillo" if include_header else "no_cirillo"
-        bg = _find_bg_image('a4', variant)
+        bg = _find_bg_image("a4", variant)
         _draw_bg_image_fullpage(c, width, height, bg)
     except Exception:
         pass
 
-
     left = 30 * mm
     right = width - 30 * mm
-    top = height - 80 * mm
+
+    # ✅ Alza la stampa di 2.5 cm (25mm)
+    top_with_header = height - 30 * mm   # prima: 55mm
+    top_no_header   = height - 55 * mm   # prima: 80mm
+    top = top_with_header if include_header else top_no_header
+
     bottom = 30 * mm
     y = top
 
@@ -1407,16 +1427,25 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
         nonlocal y
         y -= n
 
+    def _reset_y_for_new_page():
+        nonlocal y
+        y = top_with_header if include_header else top_no_header
+
     def _ensure_space(min_y=bottom + 40):
         nonlocal y
         if y < min_y:
             c.showPage()
-            y = top
-    if False and include_header:
-                _draw_header()
+            # riapplica background anche sulle pagine successive
+            try:
+                variant = "with_cirillo" if include_header else "no_cirillo"
+                bg = _find_bg_image("a4", variant)
+                _draw_bg_image_fullpage(c, width, height, bg)
+            except Exception:
+                pass
+            _reset_y_for_new_page()
 
     def _draw_header():
-        nonlocal y
+        # Header testuale (fallback); normalmente l'intestazione è già nel background.
         yy = height - 18 * mm
         c.setFont("Helvetica-Bold", 14)
         c.drawString(left, yy, "Studio The Organism")
@@ -1425,22 +1454,23 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
         c.drawString(left, yy, "Via De Rosa 46 – Pagani (SA)")
         yy -= 11
         c.drawString(left, yy, "www.ferraioligiuseppe.it  |  Tel. 393 581 7157")
-        # linea sottile
         c.line(left, yy - 6, right, yy - 6)
 
-    if include_header:
-        _draw_header()
-        y = height - 55*mm
+    # Se vuoi un header testuale extra (di solito no), abilitalo qui:
+    # if include_header:
+    #     _draw_header()
+    #     y = top_with_header
 
     c.setFont("Helvetica-Bold", 12)
     c.drawString(left, y, "Referto oculistico / optometrico")
     _newline(18)
 
-    # Dati paziente
+    # Dati paziente (solo se presenti)
     c.setFont("Helvetica", 11)
-    nome_paz = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}"
-    c.drawString(left, y, f"Paziente: {nome_paz.strip()}")
-    _newline(14)
+    nome_paz = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
+    if nome_paz:
+        c.drawString(left, y, f"Paziente: {nome_paz}")
+        _newline(14)
 
     dn = _format_data_it_from_iso(paziente.get("Data_Nascita"))
     if dn:
@@ -1452,40 +1482,55 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
         c.drawString(left, y, f"Data visita: {data_vis}")
         _newline(14)
 
-    if valutazione.get("Tipo_Visita"):
-        c.drawString(left, y, f"Tipo visita: {valutazione.get('Tipo_Visita')}")
+    tipo_visita = (valutazione.get("Tipo_Visita") or "").strip()
+    if tipo_visita:
+        c.drawString(left, y, f"Tipo visita: {tipo_visita}")
         _newline(14)
 
-    if valutazione.get("Professionista"):
-        c.drawString(left, y, f"Professionista: {valutazione.get('Professionista')}")
+    prof = (valutazione.get("Professionista") or "").strip()
+    if prof:
+        c.drawString(left, y, f"Professionista: {prof}")
         _newline(16)
 
-    # Acuità
-    av_lines = []
-    if valutazione.get("Acuita_Nat_OD") or valutazione.get("Acuita_Nat_OS") or valutazione.get("Acuita_Nat_OO"):
-        av_lines.append(
-            "Acuità visiva naturale: "
-            f"OD {valutazione.get('Acuita_Nat_OD') or '-'}   "
-            f"OS {valutazione.get('Acuita_Nat_OS') or '-'}   "
-            f"OO {valutazione.get('Acuita_Nat_OO') or '-'}"
-        )
-    if valutazione.get("Acuita_Corr_OD") or valutazione.get("Acuita_Corr_OS") or valutazione.get("Acuita_Corr_OO"):
-        av_lines.append(
-            "Acuità visiva corretta: "
-            f"OD {valutazione.get('Acuita_Corr_OD') or '-'}   "
-            f"OS {valutazione.get('Acuita_Corr_OS') or '-'}   "
-            f"OO {valutazione.get('Acuita_Corr_OO') or '-'}"
-        )
+    # -------------------
+    # Acuità visiva (solo campi compilati)
+    # -------------------
+    def _fmt_av_triplet(prefix: str, od, os_, oo):
+        parts = []
+        if (od or "").strip():
+            parts.append(f"OD {str(od).strip()}")
+        if (os_ or "").strip():
+            parts.append(f"OS {str(os_).strip()}")
+        if (oo or "").strip():
+            parts.append(f"OO {str(oo).strip()}")
+        if not parts:
+            return ""
+        return f"{prefix}: " + "   ".join(parts)
 
-    c.setFont("Helvetica", 11)
-    for line in av_lines:
-        _ensure_space()
-        c.drawString(left, y, line)
-        _newline(14)
-    if av_lines:
+    av_nat = _fmt_av_triplet(
+        "Acuità visiva naturale",
+        valutazione.get("Acuita_Nat_OD"),
+        valutazione.get("Acuita_Nat_OS"),
+        valutazione.get("Acuita_Nat_OO"),
+    )
+    av_corr = _fmt_av_triplet(
+        "Acuità visiva corretta",
+        valutazione.get("Acuita_Corr_OD"),
+        valutazione.get("Acuita_Corr_OS"),
+        valutazione.get("Acuita_Corr_OO"),
+    )
+
+    for line in (av_nat, av_corr):
+        if line:
+            _ensure_space()
+            c.drawString(left, y, line)
+            _newline(14)
+    if av_nat or av_corr:
         _newline(6)
 
-    # Esame obiettivo (campi dedicati)
+    # -------------------
+    # Esame obiettivo (solo campi compilati)
+    # -------------------
     eo = [
         ("Cornea", valutazione.get("Cornea")),
         ("Camera anteriore", valutazione.get("Camera_Anteriore")),
@@ -1494,47 +1539,126 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
         ("Iride / Pupilla", valutazione.get("Iride_Pupilla")),
         ("Vitreo", valutazione.get("Vitreo")),
     ]
-    if any((str(v).strip() if v is not None else "") for _, v in eo):
+    eo_items = [(lab, ("" if v is None else str(v).strip())) for lab, v in eo]
+    eo_items = [(lab, v) for lab, v in eo_items if v]
+
+    if eo_items:
         c.setFont("Helvetica-Bold", 11)
         _ensure_space()
         c.drawString(left, y, "Esame obiettivo (strutture oculari)")
         _newline(14)
         c.setFont("Helvetica", 11)
-        for lab, v in eo:
-            vv = ("" if v is None else str(v).strip())
-            if vv:
-                _ensure_space()
-                c.drawString(left, y, f"- {lab}: {vv}")
-                _newline(13)
+        for lab, vv in eo_items:
+            _ensure_space()
+            c.drawString(left, y, f"- {lab}: {vv}")
+            _newline(13)
         _newline(6)
 
-    # Corpo del referto: blocco Note completo (dettaglio strutturato)
-    testo = valutazione.get("Note") or ""
-    if testo.strip():
+    # -------------------
+    # Dettaglio clinico (valutazione['Note']) filtrato: SOLO righe compilate
+    # -------------------
+    testo_raw = (valutazione.get("Note") or "").strip()
+
+    def _is_filled_line(line: str) -> bool:
+        s = (line or "").strip()
+        if not s:
+            return False
+        # Non stampare righe di firma già gestite a parte
+        if s.lower().startswith("firma"):
+            return False
+        # Righe tipo "- Campo:" senza contenuto
+        if s.startswith("-"):
+            body = s.lstrip("-").strip()
+            # "- X:" oppure "- X :" oppure "- X:" + solo spazi
+            if ":" in body:
+                left_part, right_part = body.split(":", 1)
+                if right_part.strip() == "":
+                    return False
+            else:
+                # "- " senza niente
+                if body == "":
+                    return False
+        else:
+            # Righe tipo "NOTE LIBERE:" senza contenuto
+            if ":" in s:
+                left_part, right_part = s.split(":", 1)
+                if right_part.strip() == "" and len(left_part.strip()) <= 40:
+                    return False
+        return True
+
+    def _is_section_header(line: str) -> bool:
+        s = (line or "").strip()
+        if not s:
+            return False
+        # Header tipici in maiuscolo (es: "ACUITÀ VISIVA", "TONOMETRIA", ecc.)
+        if s == s.upper() and any(ch.isalpha() for ch in s) and ":" not in s and not s.startswith("-"):
+            return True
+        return False
+
+    def _filter_note_block(raw: str) -> list[str]:
+        lines = [ln.rstrip() for ln in raw.splitlines()]
+        sections = []
+        current_header = None
+        current_items = []
+
+        def flush():
+            nonlocal current_header, current_items
+            if current_items:
+                if current_header:
+                    sections.append(current_header)
+                sections.extend(current_items)
+            current_header = None
+            current_items = []
+
+        for ln in lines:
+            if _is_section_header(ln):
+                flush()
+                current_header = ln.strip()
+                continue
+            if _is_filled_line(ln):
+                current_items.append(ln.strip())
+        flush()
+        return sections
+
+    filtered_lines = _filter_note_block(testo_raw)
+
+    if filtered_lines:
         c.setFont("Helvetica-Bold", 11)
         _ensure_space()
-        c.drawString(left, y, "Dettaglio clinico") 
+        c.drawString(left, y, "Dettaglio clinico")
         _newline(14)
+
         c.setFont("Helvetica", 11)
         wrapper = textwrap.TextWrapper(width=90)
-        for par in testo.split("\n"):
-            par = par.rstrip()
-            if not par.strip():
-                _newline(6)
-                continue
-            for line in wrapper.wrap(par):
+        for ln in filtered_lines:
+            # lascia una piccola distanza prima dei titoli sezione
+            if _is_section_header(ln):
+                _newline(4)
+                c.setFont("Helvetica-Bold", 11)
                 _ensure_space()
-                c.drawString(left, y, line)
+                c.drawString(left, y, ln)
+                _newline(14)
+                c.setFont("Helvetica", 11)
+                continue
+
+            # wrap normale
+            for wline in wrapper.wrap(ln):
+                _ensure_space()
+                c.drawString(left, y, wline)
                 _newline(13)
+
             _newline(2)
 
-    # Firma
+    # Firma (sempre)
     if y < bottom + 60:
         c.showPage()
-        y = top
-        if include_header:
-            _draw_header()
-            y = height - 40 * mm
+        try:
+            variant = "with_cirillo" if include_header else "no_cirillo"
+            bg = _find_bg_image("a4", variant)
+            _draw_bg_image_fullpage(c, width, height, bg)
+        except Exception:
+            pass
+        _reset_y_for_new_page()
 
     y_sig = bottom + 40
     c.line(right - 120, y_sig, right, y_sig)
@@ -3233,47 +3357,6 @@ ESAMI STRUTTURALI / FUNZIONALI
                 mime="application/pdf",
                 key="dl_prescr",
             )
-    st.markdown("---")
-    st.subheader("Referto oculistico / optometrico (PDF A4)")
-
-    if not REPORTLAB_AVAILABLE:
-        st.info(
-            "Per generare il referto in PDF è necessario avere installato il pacchetto "
-            "`reportlab`.\n"
-            "Da terminale: `pip install reportlab`."
-        )
-    else:
-        col_r1, col_r2 = st.columns([2, 1])
-        with col_r1:
-            with_header = st.checkbox(
-                "Stampa con intestazione dello studio (usa carta bianca)",
-                value=False,
-                key=f"hdr_referto_{val_id}",
-            )
-
-        if st.button("Genera referto A4 per questa valutazione", key=f"btn_referto_{val_id}"):
-            # Ricarico i dati aggiornati dal DB
-            cur.execute("SELECT * FROM Pazienti WHERE ID = ?", (paz_id,))
-            paziente = cur.fetchone()
-            cur.execute("SELECT * FROM Valutazioni_Visive WHERE ID = ?", (val_id,))
-            valutazione = cur.fetchone()
-
-            if not paziente or not valutazione:
-                st.error("Errore nel recupero dei dati dal database.")
-            else:
-                pdf_bytes = genera_referto_oculistico_a4_pdf(
-                    paziente=paziente,
-                    valutazione=valutazione,
-                    with_header=with_header,
-                )
-                st.download_button(
-                    "Scarica referto A4 (PDF)",
-                    data=pdf_bytes,
-                    file_name=f"referto_visivo_{paziente['Cognome']}_{paziente['Nome']}.pdf",
-                    mime="application/pdf",
-                    key=f"download_referto_{val_id}",
-                )
-
     conn.close()
 
 # -----------------------------
