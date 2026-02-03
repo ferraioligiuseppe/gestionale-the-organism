@@ -1215,7 +1215,8 @@ def init_db() -> None:
     except Exception:
         pass
 
-conn.commit()
+    conn.commit()
+
 
 def _solo_lettere(s: str) -> str:
     return "".join(ch for ch in s.upper() if ch.isalpha())
