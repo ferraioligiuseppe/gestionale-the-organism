@@ -221,7 +221,7 @@ def _draw_prescrizione_clean_table(c: canvas.Canvas, page_w: float, page_h: floa
         # 2) fallback: asse != 0 (anche se CIL=0) — utile se vuoi indicare comunque la direzione di montaggio
         for _, cil, ax in cand:
             try:
-                if ax is not None and str(ax).strip() != "" and int(float(ax)) != 0:
+                if ax is not None and str(ax).strip() != "":
                     return ax, cil
             except Exception:
                 if ax is not None and str(ax).strip() != "":
