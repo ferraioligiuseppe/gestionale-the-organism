@@ -3,40 +3,6 @@ import sqlite3
 APP_MODE = st.secrets.get("APP_MODE", "prod")
 if APP_MODE == "test":
     st.warning("⚠️ MODALITÀ TEST — database separato (Neon TEST).")
-
-# -----------------------------
-# DEBUG LOG (solo in APP_MODE=test)
-# -----------------------------
-def _dbg(msg: str):
-    """Mini log in sidebar per capire ID usati e operazioni DB (solo in test)."""
-    try:
-        if str(APP_MODE).lower() != "test":
-            return
-        from datetime import datetime as _dt
-        st.session_state.setdefault("_debug_log", [])
-        st.session_state["_debug_log"].append(f"{_dt.now().strftime('%H:%M:%S')} | {msg}")
-        if len(st.session_state["_debug_log"]) > 200:
-            st.session_state["_debug_log"] = st.session_state["_debug_log"][-200:]
-    except Exception:
-        return
-
-def _dbg_sidebar():
-    try:
-        if str(APP_MODE).lower() != "test":
-            return
-        with st.sidebar.expander("🧪 Debug (TEST)", expanded=False):
-            logs = st.session_state.get("_debug_log", [])
-            if not logs:
-                st.caption("Nessun evento ancora.")
-            else:
-                st.code("\n".join(logs[-60:]))
-            if st.button("Svuota debug log"):
-                st.session_state["_debug_log"] = []
-                st.rerun()
-    except Exception:
-        return
-
-_dbg_sidebar()
 from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
@@ -885,19 +851,6 @@ def init_db() -> None:
             )
             """
         )
-        # Evita duplicati per Codice Fiscale (se presente)
-        try:
-            cur.execute(
-                """
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_pazienti_cf_unique
-                ON Pazienti(Codice_Fiscale)
-                WHERE Codice_Fiscale IS NOT NULL AND TRIM(Codice_Fiscale) <> '';
-                """
-            )
-        except Exception:
-            pass
-
-
 
         # Anamnesi
         cur.execute(
@@ -1052,6 +1005,8 @@ def init_db() -> None:
     """
 )
 
+
+        
         # Migrazione Consensi_Privacy (SQLite) – aggiunge colonne firma se mancanti
         try:
             cur.execute("PRAGMA table_info(Consensi_Privacy)")
@@ -1094,19 +1049,6 @@ def init_db() -> None:
         )
         """
     )
-    # Evita duplicati per Codice Fiscale (se presente)
-    try:
-        cur.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_pazienti_cf_unique
-            ON Pazienti (Codice_Fiscale)
-            WHERE Codice_Fiscale IS NOT NULL AND TRIM(Codice_Fiscale) <> '';
-            """
-        )
-    except Exception:
-        pass
-
-
 
     cur.execute(
         """
@@ -2968,6 +2910,268 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
     return buffer.getvalue()
 
 
+
+# -----------------------------
+# 🧹 Tool: Pulizia duplicati (solo TEST)
+# -----------------------------
+
+def _patient_child_tables():
+    # tabelle che referenziano Pazienti(ID) via Paziente_ID
+    return [
+        ("Anamnesi", "Paziente_ID"),
+        ("Valutazioni_Visive", "Paziente_ID"),
+        ("Sedute", "Paziente_ID"),
+        ("Coupons", "Paziente_ID"),
+        ("Consensi_Privacy", "Paziente_ID"),
+    ]
+
+
+def _fetchall_dicts(cur, sql: str, params=()):
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    out = []
+    for r in rows:
+        try:
+            out.append(dict(r))
+        except Exception:
+            out.append({str(i): v for i, v in enumerate(r)})
+    return out
+
+
+def db_find_duplicate_cf(cur):
+    # duplicati solo per CF non vuoto
+    rows = _fetchall_dicts(
+        cur,
+        '''
+        SELECT UPPER(TRIM(Codice_Fiscale)) AS CF, COUNT(*) AS N
+        FROM Pazienti
+        WHERE Codice_Fiscale IS NOT NULL AND TRIM(Codice_Fiscale) <> ''
+        GROUP BY UPPER(TRIM(Codice_Fiscale))
+        HAVING COUNT(*) > 1
+        ORDER BY N DESC, CF
+        ''',
+        (),
+    )
+    groups = []
+    for r in rows:
+        cf = r.get("CF") or r.get("cf")
+        det = _fetchall_dicts(
+            cur,
+            '''
+            SELECT ID, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
+            FROM Pazienti
+            WHERE UPPER(TRIM(Codice_Fiscale)) = ?
+            ORDER BY ID
+            ''',
+            (cf,),
+        )
+        groups.append({"key": cf, "kind": "CF", "rows": det})
+    return groups
+
+
+def db_find_duplicate_identity(cur):
+    # duplicati per (Cognome, Nome, Data_Nascita) quando presenti
+    rows = _fetchall_dicts(
+        cur,
+        '''
+        SELECT
+          UPPER(TRIM(Cognome)) AS COG,
+          UPPER(TRIM(Nome)) AS NOM,
+          COALESCE(TRIM(Data_Nascita),'') AS DN,
+          COUNT(*) AS N
+        FROM Pazienti
+        WHERE TRIM(Cognome) <> '' AND TRIM(Nome) <> ''
+        GROUP BY UPPER(TRIM(Cognome)), UPPER(TRIM(Nome)), COALESCE(TRIM(Data_Nascita),'')
+        HAVING COUNT(*) > 1
+        ORDER BY N DESC, COG, NOM, DN
+        ''',
+        (),
+    )
+    groups = []
+    for r in rows:
+        cog = r.get("COG") or r.get("cog")
+        nom = r.get("NOM") or r.get("nom")
+        dn = r.get("DN") or r.get("dn") or ""
+        det = _fetchall_dicts(
+            cur,
+            '''
+            SELECT ID, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
+            FROM Pazienti
+            WHERE UPPER(TRIM(Cognome)) = ?
+              AND UPPER(TRIM(Nome)) = ?
+              AND COALESCE(TRIM(Data_Nascita),'') = ?
+            ORDER BY ID
+            ''',
+            (cog, nom, dn),
+        )
+        groups.append({"key": f"{cog} | {nom} | {dn or 'SENZA_DATA'}", "kind": "IDENTITA", "rows": det})
+    return groups
+
+
+def _count_refs(cur, paziente_id: int) -> dict:
+    counts = {}
+    for tbl, col in _patient_child_tables():
+        try:
+            cur.execute(f"SELECT COUNT(*) AS N FROM {tbl} WHERE {col} = ?", (paziente_id,))
+            r = cur.fetchone()
+            try:
+                n = int(r["N"]) if isinstance(r, dict) else int(r[0])
+            except Exception:
+                n = int(r[0]) if r else 0
+            counts[tbl] = n
+        except Exception:
+            counts[tbl] = 0
+    return counts
+
+
+def db_merge_patients(cur, master_id: int, dup_ids: list):
+    """Sposta tutti i riferimenti (Paziente_ID) dai duplicati verso master_id e cancella i duplicati."""
+    report = {"master": int(master_id), "moved": {}, "deleted": [], "errors": []}
+    for dup_id in dup_ids:
+        dup_id = int(dup_id)
+        if dup_id == int(master_id):
+            continue
+        for tbl, col in _patient_child_tables():
+            try:
+                cur.execute(f"UPDATE {tbl} SET {col} = ? WHERE {col} = ?", (master_id, dup_id))
+                moved = getattr(cur, "rowcount", None)
+                report["moved"].setdefault(tbl, 0)
+                if moved is not None and moved >= 0:
+                    report["moved"][tbl] += int(moved)
+            except Exception as e:
+                report["errors"].append(f"{tbl}: {e}")
+        try:
+            cur.execute("DELETE FROM Pazienti WHERE ID = ?", (dup_id,))
+            report["deleted"].append(dup_id)
+        except Exception as e:
+            report["errors"].append(f"DELETE Pazienti({dup_id}): {e}")
+    return report
+
+
+def db_keep_latest_privacy_consent(cur, paziente_id: int):
+    """Mantiene SOLO l'ultimo consenso privacy del paziente (per Data_Ora/ID) ed elimina i precedenti."""
+    cur.execute(
+        "SELECT ID, Data_Ora FROM Consensi_Privacy WHERE Paziente_ID=? ORDER BY COALESCE(Data_Ora,'') DESC, ID DESC",
+        (paziente_id,),
+    )
+    rows = cur.fetchall() or []
+    if not rows:
+        return {"kept": None, "deleted": 0}
+
+    keep_id = rows[0]["ID"]
+    deleted = 0
+    if len(rows) > 1:
+        cur.execute(
+            "DELETE FROM Consensi_Privacy WHERE Paziente_ID=? AND ID<>?",
+            (paziente_id, keep_id),
+        )
+        deleted = len(rows) - 1
+    return {"kept": keep_id, "deleted": deleted}
+
+
+def db_compact_all_privacy_consents(cur):
+    """Per ogni paziente, mantiene SOLO l'ultimo consenso privacy."""
+    cur.execute("SELECT DISTINCT Paziente_ID FROM Consensi_Privacy")
+    pids = [r["Paziente_ID"] for r in (cur.fetchall() or [])]
+    total_deleted = 0
+    total_patients = 0
+    for pid in pids:
+        rep = db_keep_latest_privacy_consent(cur, int(pid))
+        total_deleted += int(rep.get("deleted", 0))
+        total_patients += 1
+    return {"patients": total_patients, "deleted": total_deleted}
+
+
+
+def ui_db_cleanup():
+    st.header("🧹 Pulizia DB (solo TEST)")
+    st.warning("Usa questa sezione SOLO in APP_MODE=test (DB TEST).")
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    tab1, tab2 = st.tabs(["Duplicati per Codice Fiscale", "Duplicati per Identità (nome/cognome/data)"])
+
+    with st.expander("🧾 Compatta consensi privacy (tieni solo l'ultimo)", expanded=False):
+        st.write("Elimina i consensi privacy precedenti e lascia SOLO l'ultimo per ogni paziente (DB TEST).")
+        conf = st.text_input("Per confermare scrivi: COMPACT", key="compact_confirm")
+        if st.button("Esegui compattazione consensi (tutti i pazienti)", disabled=(conf.strip().upper() != "COMPACT")):
+            try:
+                repc = db_compact_all_privacy_consents(cur)
+                conn.commit()
+                st.success(f"Compattazione completata: pazienti analizzati={repc['patients']}, consensi eliminati={repc['deleted']}.")
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                st.error(f"Errore compattazione: {e}")
+
+
+    def _render(groups, key_prefix: str):
+        if not groups:
+            st.success("Nessun duplicato trovato 🎉")
+            return
+
+        keys = [f"{g['kind']}: {g['key']} ({len(g['rows'])} record)" for g in groups]
+        sel = st.selectbox("Seleziona un gruppo da analizzare", keys, key=f"{key_prefix}_grp")
+        g = groups[keys.index(sel)]
+        rows = g["rows"]
+
+        st.markdown("### Record nel gruppo")
+        for r in rows:
+            pid = int(r.get("ID") or r.get("id") or 0)
+            st.write(
+                f"**ID {pid}** — {r.get('Cognome','')} {r.get('Nome','')} | DN: {r.get('Data_Nascita','') or ''} | CF: {r.get('Codice_Fiscale','') or ''} | Email: {r.get('Email','') or ''}"
+            )
+            counts = _count_refs(cur, pid)
+            st.caption("Riferimenti: " + ", ".join([f"{k}={v}" for k, v in counts.items()]))
+
+        ids = [int(r.get("ID") or r.get("id")) for r in rows]
+        master_id = st.selectbox("Scegli il record MASTER (quello da tenere)", ids, key=f"{key_prefix}_master")
+        dup_ids = [i for i in ids if i != master_id]
+
+        st.info(f"Sposterò i riferimenti da {dup_ids} verso MASTER {master_id}, poi eliminerò i duplicati.")
+
+        confirm = st.text_input("Per confermare scrivi: MERGE", key=f"{key_prefix}_confirm")
+        if st.button("Esegui MERGE", type="primary", key=f"{key_prefix}_go", disabled=(confirm.strip().upper() != "MERGE")):
+            try:
+                rep = db_merge_patients(cur, master_id=master_id, dup_ids=dup_ids)
+                conn.commit()
+                st.success(f"Merge completato. Master: {master_id}. Eliminati: {rep['deleted']}")
+                # Dopo merge: mantieni SOLO l'ultimo consenso privacy (come richiesto)
+                try:
+                    rep2 = db_keep_latest_privacy_consent(cur, paziente_id=master_id)
+                    conn.commit()
+                    st.info(f"Consensi_Privacy: tenuto ID {rep2.get('kept')} — eliminati {rep2.get('deleted')} consensi precedenti.")
+                except Exception as e:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    st.warning(f"Merge ok, ma non sono riuscito a compattare i consensi privacy: {e}")
+                if rep["moved"]:
+                    st.write("Spostamenti:", rep["moved"])
+                if rep["errors"]:
+                    st.error("Alcuni errori:")
+                    for e in rep["errors"]:
+                        st.write(e)
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                st.error(f"Merge fallito: {e}")
+
+    with tab1:
+        _render(db_find_duplicate_cf(cur), "cf")
+
+    with tab2:
+        _render(db_find_duplicate_identity(cur), "id")
+
+    conn.close()
+
+
 def ui_pazienti():
     st.header("Pazienti")
 
@@ -3109,79 +3313,61 @@ def ui_pazienti():
         # Inserimento paziente + recupero ID
         paz_id = None
         try:
-            # Se ho un Codice Fiscale, provo prima a ri-usare un paziente già presente (evita doppi salvataggi)
-            if cf_clean:
+            if _DB_BACKEND == "postgres":
                 cur.execute(
-                    "SELECT ID FROM Pazienti WHERE Codice_Fiscale = ? LIMIT 1",
-                    (cf_clean,),
+                    """
+                    INSERT INTO Pazienti
+                    (Cognome, Nome, Data_Nascita, Sesso, Telefono, Email,
+                     Indirizzo, CAP, Citta, Provincia, Codice_Fiscale, Stato_Paziente)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    RETURNING ID
+                    """,
+                    (
+                        cognome.strip(),
+                        nome.strip(),
+                        data_iso,
+                        sesso,
+                        telefono.strip(),
+                        email.strip(),
+                        indirizzo.strip(),
+                        cap.strip(),
+                        citta.strip(),
+                        provincia.strip().upper(),
+                        cf_clean or None,
+                        "ATTIVO",
+                    ),
                 )
-                r0 = cur.fetchone()
-                if r0:
-                    try:
-                        paz_id = int(r0["ID"]) if isinstance(r0, dict) else int(r0[0])
-                    except Exception:
-                        paz_id = None
+                row = cur.fetchone()
+                # RowCI wrapper supports ["ID"] and ["id"]
+                paz_id = int(row["ID"]) if isinstance(row, dict) else int(row[0])
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO Pazienti
+                    (Cognome, Nome, Data_Nascita, Sesso, Telefono, Email,
+                     Indirizzo, CAP, Citta, Provincia, Codice_Fiscale, Stato_Paziente)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        cognome.strip(),
+                        nome.strip(),
+                        data_iso,
+                        sesso,
+                        telefono.strip(),
+                        email.strip(),
+                        indirizzo.strip(),
+                        cap.strip(),
+                        citta.strip(),
+                        provincia.strip().upper(),
+                        cf_clean or None,
+                        "ATTIVO",
+                    ),
+                )
+                try:
+                    paz_id = int(getattr(cur, "lastrowid", None) or 0) or None
+                except Exception:
+                    paz_id = None
 
-            # Se non esiste, lo inserisco
-            if not paz_id:
-                _dbg("Nuovo paziente: CF non trovato, inserisco nuovo record")
-                if _DB_BACKEND == "postgres":
-                    cur.execute(
-                        """
-                        INSERT INTO Pazienti
-                        (Cognome, Nome, Data_Nascita, Sesso, Telefono, Email,
-                         Indirizzo, CAP, Citta, Provincia, Codice_Fiscale, Stato_Paziente)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                        RETURNING ID
-                        """,
-                        (
-                            cognome.strip(),
-                            nome.strip(),
-                            data_iso,
-                            sesso,
-                            telefono.strip(),
-                            email.strip(),
-                            indirizzo.strip(),
-                            cap.strip(),
-                            citta.strip(),
-                            provincia.strip().upper(),
-                            cf_clean or None,
-                            "ATTIVO",
-                        ),
-                    )
-                    row = cur.fetchone()
-                    paz_id = int(row["ID"]) if isinstance(row, dict) else int(row[0])
-                else:
-                    cur.execute(
-                        """
-                        INSERT INTO Pazienti
-                        (Cognome, Nome, Data_Nascita, Sesso, Telefono, Email,
-                         Indirizzo, CAP, Citta, Provincia, Codice_Fiscale, Stato_Paziente)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                        """,
-                        (
-                            cognome.strip(),
-                            nome.strip(),
-                            data_iso,
-                            sesso,
-                            telefono.strip(),
-                            email.strip(),
-                            indirizzo.strip(),
-                            cap.strip(),
-                            citta.strip(),
-                            provincia.strip().upper(),
-                            cf_clean or None,
-                            "ATTIVO",
-                        ),
-                    )
-                    try:
-                        paz_id = int(getattr(cur, "lastrowid", None) or 0) or None
-                    except Exception:
-                        paz_id = None
-
-            if not paz_id:
-                raise RuntimeError("Impossibile determinare l'ID del paziente (salvataggio non completato).")
-            _dbg(f"Salvataggio paziente OK: paziente_id={paz_id} (tipo_privacy={tipo_privacy})")
             now_iso = datetime.now().isoformat(timespec="seconds")
             tipo_db = "MINORE" if (tipo_privacy == "Minore") else "ADULTO"
             cur.execute(
@@ -3213,7 +3399,6 @@ def ui_pazienti():
 
             conn.commit()
             st.success("Paziente salvato correttamente (privacy registrata).")
-            st.rerun()
 
         except Exception as e:
             try:
@@ -3265,9 +3450,8 @@ def ui_pazienti():
             label += " (" + " | ".join(extra) + ")"
         options.append(label)
 
-    selected = st.selectbox("Seleziona un paziente per modificare / archiviare", options, key="pazienti_sel_mod_arch")
+    selected = st.selectbox("Seleziona un paziente per modificare / archiviare", options, key="pz_sel_mod")
     sel_id = int(selected.split(" - ", 1)[0])
-    _dbg(f"UI Pazienti: selezionato paziente_id={sel_id}")
     rec = next(r for r in rows if r["ID"] == sel_id)
 
     st.write(f"Stato attuale: **{rec['Stato_Paziente']}**")
@@ -3329,11 +3513,11 @@ def ui_pazienti():
         with col6:
             citta_m = st.text_input("Città", rec["Citta"] or "", key=f"m_citta_{sel_id}")
         with col7:
-            cf_m = st.text_input("Codice fiscale", (rec["Codice_Fiscale"] or "").upper(), key="m_cf")
+            cf_m = st.text_input("Codice fiscale", (rec["Codice_Fiscale"] or "").upper(), key=f"m_cf_{sel_id}")
 
         col8, col9 = st.columns(2)
         with col8:
-            telefono_m = st.text_input("Telefono", rec["Telefono"] or "", key="m_tel")
+            telefono_m = st.text_input("Telefono", rec["Telefono"] or "", key=f"m_tel_{sel_id}")
         with col9:
             email_m = st.text_input("Email", rec["Email"] or "", key=f"m_email_{sel_id}")
 
@@ -3419,7 +3603,6 @@ def ui_anamnesi():
     options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
-    _dbg(f"UI Valutazioni visive: selezionato paziente_id={paz_id}")
 
     with st.form("nuova_anamnesi"):
         st.subheader("Nuova anamnesi")
@@ -3603,7 +3786,6 @@ def ui_valutazioni_visive():
     options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
-    _dbg(f"UI Valutazioni visive: selezionato paziente_id={paz_id}")
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
     cur.execute("SELECT * FROM Pazienti WHERE ID = ?", (paz_id,))
     paziente = cur.fetchone()
@@ -4360,7 +4542,6 @@ def ui_sedute():
     options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
-    _dbg(f"UI Valutazioni visive: selezionato paziente_id={paz_id}")
 
     with st.form("nuova_seduta"):
         st.subheader("Nuova seduta")
@@ -4504,7 +4685,6 @@ def ui_coupons():
     opt_paz = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = int(sel.split(" - ", 1)[0])
-    _dbg(f"UI Valutazioni visive: selezionato paziente_id={paz_id}")
 
     st.markdown("### Aggiungi nuovo coupon")
 
@@ -4721,17 +4901,17 @@ def main():
 
     # menu laterale
     st.sidebar.title("Navigazione")
-    sezione = st.sidebar.radio(
-        "Vai a",
-        [
-            "Pazienti",
-            "Anamnesi",
-            "Valutazioni visive / oculistiche",
-            "Sedute / Terapie",
-            "Coupon OF / SDS",
-            "Dashboard incassi",
-        ],
-    )
+    sections = [
+        "Pazienti",
+        "Anamnesi",
+        "Valutazioni visive / oculistiche",
+        "Sedute / Terapie",
+        "Coupon OF / SDS",
+        "Dashboard incassi",
+    ]
+    if APP_MODE == "test":
+        sections.append("🧹 Pulizia DB (TEST)")
+    sezione = st.sidebar.radio("Vai a", sections)
 
     # routing alle varie sezioni
     if sezione == "Pazienti":
@@ -4746,7 +4926,7 @@ def main():
         ui_coupons()
     elif sezione == "Dashboard incassi":
         ui_dashboard()
-
-
+    elif sezione == "🧹 Pulizia DB (TEST)":
+        ui_db_cleanup()
 if __name__ == "__main__":
     main()
