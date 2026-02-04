@@ -1,4 +1,22 @@
 import streamlit as st
+
+def debug_secrets_auth():
+    has_auth = "auth" in st.secrets
+    st.write("SECRETS: has [auth] =", has_auth)
+
+    if has_auth:
+        u_ok = "username" in st.secrets["auth"]
+        p_ok = "password" in st.secrets["auth"]
+        st.write("SECRETS auth.username presente =", u_ok)
+        st.write("SECRETS auth.password presente =", p_ok)
+
+        if p_ok:
+            pw = st.secrets["auth"]["password"]
+            st.write("Lunghezza password letta =", len(pw))
+            st.write("Password vuota? =", (len(pw) == 0))
+
+# chiama la funzione solo in test o solo per admin
+debug_secrets_auth()
 import sqlite3
 APP_MODE = st.secrets.get("APP_MODE", "prod")
 if APP_MODE == "test":
