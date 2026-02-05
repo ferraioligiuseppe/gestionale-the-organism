@@ -7,3 +7,6 @@ openpyxl
 google-api-python-client
 google-auth
 pypdf
+streamlit>=1.30
+docxtpl>=0.16.7
+python-docx>=1.1.0
