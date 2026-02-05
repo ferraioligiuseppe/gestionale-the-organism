@@ -1041,6 +1041,29 @@ def init_db() -> None:
         except Exception:
             pass
 
+        
+        # Relazioni Cliniche (SQLite)
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS relazioni_cliniche (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        paziente_id  INTEGER NOT NULL,
+        tipo         TEXT NOT NULL,
+        titolo       TEXT NOT NULL,
+        data_relazione TEXT NOT NULL,
+        docx_path    TEXT NOT NULL,
+        pdf_path     TEXT,
+        note         TEXT,
+        created_at   TEXT NOT NULL
+            )
+            """
+        )
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
+        except Exception:
+            pass
+        
         conn.commit()
         return
 
@@ -1210,7 +1233,30 @@ def init_db() -> None:
     except Exception:
         pass
 
-    conn.commit()
+# Relazioni Cliniche (PostgreSQL)
+cur.execute(
+    """
+    CREATE TABLE IF NOT EXISTS relazioni_cliniche (
+        id              SERIAL PRIMARY KEY,
+        paziente_id     INTEGER NOT NULL,
+        tipo            TEXT NOT NULL,
+        titolo          TEXT NOT NULL,
+        data_relazione  TEXT NOT NULL,
+        docx_path       TEXT NOT NULL,
+        pdf_path        TEXT,
+        note            TEXT,
+        created_at      TEXT NOT NULL
+    );
+    """
+)
+try:
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
+except Exception:
+    pass
+
+conn.commit()
+
 
 
 def _solo_lettere(s: str) -> str:
@@ -4902,6 +4948,97 @@ def ui_dashboard():
 # Main
 # -----------------------------
 
+
+# ==========================
+# Dashboard Evolutiva Paziente
+# ==========================
+def ui_dashboard_evolutiva():
+    """Dashboard evolutiva basata su relazioni_cliniche."""
+    import streamlit as st
+    import os
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    st.header("📊 Dashboard evolutiva")
+
+    # Selezione paziente (indipendente dalla sezione Pazienti)
+    try:
+        cur.execute("SELECT ID, Cognome, Nome, Data_Nascita FROM Pazienti ORDER BY Cognome, Nome")
+        paz_list = cur.fetchall()
+    except Exception:
+        st.error("Tabella Pazienti non disponibile.")
+        return
+
+    if not paz_list:
+        st.info("Nessun paziente presente.")
+        return
+
+    def _label(p):
+        pid, cogn, nome, dn = p
+        dn_s = dn or ""
+        return f"{cogn} {nome} (ID {pid}) {dn_s}".strip()
+
+    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
+    paziente_id = sel[0]
+
+    # Carica relazioni
+    cur.execute(
+        """
+        SELECT id, titolo, tipo, data_relazione, docx_path, pdf_path
+        FROM relazioni_cliniche
+        WHERE paziente_id = %s
+        ORDER BY data_relazione ASC
+        """ % ("?" if _DB_BACKEND == "sqlite" else "%s"),
+        (paziente_id,)
+    )
+    rows = cur.fetchall()
+
+    if not rows:
+        st.info("Nessuna relazione presente per questo paziente.")
+        return
+
+    def area_from_title(titolo: str) -> str:
+        t = (titolo or "").lower()
+        if "follow" in t: return "🔁 Follow-up"
+        if "linguaggio" in t: return "🗣️ Linguaggio"
+        if "neuropsico" in t: return "🧠 Neuropsicologica"
+        if "neuroevol" in t: return "🌱 Neuroevolutiva"
+        if "sensori" in t or "psico-motor" in t: return "🧍 Sensori-motoria"
+        if "smof" in t or "oro" in t: return "👅 SMOF / Oro-linguale"
+        if "scuola" in t: return "🏫 Scuola / ASL"
+        return "📄 Altro"
+
+    grouped = {}
+    for r in rows:
+        area = area_from_title(r[1])
+        grouped.setdefault(area, []).append(r)
+
+    for area, items in grouped.items():
+        with st.expander(area, expanded=True):
+            for r in items:
+                rid, titolo, tipo, data_rel, docx_path, pdf_path = r
+                st.markdown(f"**{data_rel} – {titolo}**")
+                cols = st.columns(2)
+
+                if docx_path and os.path.exists(docx_path):
+                    with cols[0]:
+                        with open(docx_path, "rb") as f:
+                            st.download_button("⬇️ Word", f, file_name=os.path.basename(docx_path), key=f"dw_{rid}")
+                else:
+                    with cols[0]:
+                        st.caption("Word non disponibile")
+
+                if pdf_path and os.path.exists(pdf_path):
+                    with cols[1]:
+                        with open(pdf_path, "rb") as f:
+                            st.download_button("⬇️ PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rid}")
+                else:
+                    with cols[1]:
+                        st.caption("PDF non disponibile (cloud)")
+
+
+
 def main():
     st.set_page_config(
         page_title="The Organism – Gestionale Studio",
@@ -4926,6 +5063,7 @@ def main():
         "Sedute / Terapie",
         "Coupon OF / SDS",
         "Dashboard incassi",
+        "📊 Dashboard evolutiva",
     ]
     if APP_MODE == "test":
         sections.append("🧹 Pulizia DB (TEST)")
@@ -4944,7 +5082,219 @@ def main():
         ui_coupons()
     elif sezione == "Dashboard incassi":
         ui_dashboard()
+    elif sezione == "📊 Dashboard evolutiva":
+        ui_dashboard_evolutiva()
     elif sezione == "🧹 Pulizia DB (TEST)":
         ui_db_cleanup()
 if __name__ == "__main__":
     main()
+
+
+# ================================
+# RELAZIONI CLINICHE - THE ORGANISM
+# ================================
+import shutil as _shutil
+
+try:
+    from docxtpl import DocxTemplate
+except Exception:
+    DocxTemplate = None
+
+def _ensure_relazioni_cliniche_table(conn):
+    # compatible with sqlite; for postgres the surrounding app should adapt placeholders if needed
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS relazioni_cliniche (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          paziente_id INTEGER NOT NULL,
+          tipo TEXT NOT NULL,
+          titolo TEXT NOT NULL,
+          data_relazione TEXT NOT NULL,
+          docx_path TEXT NOT NULL,
+          pdf_path TEXT NOT NULL,
+          note TEXT,
+          created_at TEXT NOT NULL
+        )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
+    except Exception:
+        # fallback: if DB doesn't support AUTOINCREMENT/IF NOT EXISTS on index
+        pass
+    conn.commit()
+
+def _render_docx_docxtpl(template_path, out_docx_path, context):
+    if DocxTemplate is None:
+        raise RuntimeError("Dipendenza mancante: docxtpl. Aggiungi a requirements.txt: docxtpl")
+    doc = DocxTemplate(template_path)
+    doc.render(context)
+    os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
+    doc.save(out_docx_path)
+
+def _convert_pdf_if_possible(docx_path, out_pdf_path):
+    # Streamlit Cloud: spesso NON disponibile. In locale funziona se LibreOffice è installato.
+    soffice_ok = _shutil.which("soffice") is not None
+    if not soffice_ok:
+        return False, ""
+    import subprocess, shutil
+    out_dir = os.path.dirname(out_pdf_path)
+    os.makedirs(out_dir, exist_ok=True)
+    cmd = [
+        "soffice","--headless","--nologo","--nolockcheck","--nodefault","--norestore",
+        "--convert-to","pdf","--outdir", out_dir, docx_path
+    ]
+    subprocess.run(cmd, check=True)
+    gen = os.path.join(out_dir, os.path.splitext(os.path.basename(docx_path))[0] + ".pdf")
+    if not os.path.exists(gen):
+        return False, ""
+    shutil.move(gen, out_pdf_path)
+    return True, out_pdf_path
+
+TEMPLATES = {
+  # Linguaggio (ospedaliero) - unico template
+  "linguaggio_invio_ospedaliero": {
+    "titolo": "Relazione Linguaggio – Invio Ospedaliero",
+    "files": {"std": "relazione_linguaggio_invio_ospedaliero.docx"}
+  },
+  # Neuropsicologica
+  "neuropsicologica_3_6": {
+    "titolo": "Relazione Neuropsicologica – Invio Ospedaliero (3–6)",
+    "files": {"std": "relazione_neuropsicologica_invio_ospedaliero_3_6.docx"}
+  },
+  "neuropsicologica_6_10": {
+    "titolo": "Relazione Neuropsicologica – Invio Ospedaliero (6–10)",
+    "files": {"std": "relazione_neuropsicologica_invio_ospedaliero_6_10.docx"}
+  },
+  # Neuroevolutiva integrata
+  "neuroevolutiva_3_6": {
+    "titolo": "Relazione Neuroevolutiva Integrata (3–6)",
+    "files": {"std": "relazione_neuroevolutiva_integrata_3_6.docx"}
+  },
+  "neuroevolutiva_6_10": {
+    "titolo": "Relazione Neuroevolutiva Integrata (6–10)",
+    "files": {"std": "relazione_neuroevolutiva_integrata_6_10.docx"}
+  },
+  # Scuola / ASL
+  "scuola_asl_3_6": {
+    "titolo": "Relazione Scuola / ASL (3–6)",
+    "files": {"std": "relazione_scuola_asl_3_6.docx"}
+  },
+  "scuola_asl_6_10": {
+    "titolo": "Relazione Scuola / ASL (6–10)",
+    "files": {"std": "relazione_scuola_asl_6_10.docx"}
+  },
+  # Sensori-motoria / Neuro-psico-motoria
+  "sensori_motorio_3_6": {
+    "titolo": "Relazione Sensori-motoria / Neuro-psico-motoria (3–6)",
+    "files": {"std": "relazione_sensori_motorio_neuropsicomotorio_3_6.docx"}
+  },
+  "sensori_motorio_6_10": {
+    "titolo": "Relazione Sensori-motoria / Neuro-psico-motoria (6–10)",
+    "files": {"std": "relazione_sensori_motorio_neuropsicomotorio_6_10.docx"}
+  },
+  # SMOF
+  "smof_3_6": {
+    "titolo": "Relazione SMOF / Oro-linguale (3–6)",
+    "files": {"std": "relazione_smof_oro_linguale_3_6.docx"}
+  },
+  "smof_6_10": {
+    "titolo": "Relazione SMOF / Oro-linguale (6–10)",
+    "files": {"std": "relazione_smof_oro_linguale_6_10.docx"}
+  },
+  # Follow-up
+  "followup_3_6": {
+    "titolo": "Relazione Follow-up (3–6)",
+    "files": {"std": "relazione_followup_3_6.docx"}
+  },
+  "followup_6_10": {
+    "titolo": "Relazione Follow-up (6–10)",
+    "files": {"std": "relazione_followup_6_10.docx"}
+  },
+}
+
+def ui_relazioni_cliniche(paziente, conn, templates_dir="templates", output_base="output"):
+    import streamlit as st
+    from datetime import date
+
+    _ensure_relazioni_cliniche_table(conn)
+
+    st.header("🗂️ Relazioni cliniche")
+    st.caption("Generazione: Word sempre (cloud) • PDF solo in locale se LibreOffice è disponibile")
+
+    # Selezione tipo relazione
+    keys = list(TEMPLATES.keys())
+    labels = [TEMPLATES[k]["titolo"] for k in keys]
+    idx = 0
+    scelta = st.selectbox("Tipo relazione", options=list(range(len(keys))), format_func=lambda i: labels[i])
+    rel_key = keys[scelta]
+    rel = TEMPLATES[rel_key]
+
+    c1, c2 = st.columns(2)
+    with c1:
+        data_valutazione = st.date_input("Data valutazione", value=date.today())
+    with c2:
+        data_relazione = st.date_input("Data relazione", value=date.today())
+
+    periodo_followup = ""
+    if "followup" in rel_key:
+        periodo_followup = st.text_input("Periodo follow-up (es. Gen–Mar 2026)", value="")
+
+    note = st.text_area("Note cliniche (facoltative)", height=140)
+
+    # Context placeholder comune
+    nome_cognome = f"{paziente.get('cognome','')} {paziente.get('nome','')}".strip()
+    context = {
+        "NOME_COGNOME": nome_cognome,
+        "DATA_NASCITA": paziente.get("data_nascita",""),
+        "ETA": paziente.get("eta",""),
+        "SCUOLA": paziente.get("scuola",""),
+        "DATA_VALUTAZIONE": data_valutazione.strftime("%d/%m/%Y"),
+        "DATA_RELAZIONE": data_relazione.strftime("%d/%m/%Y"),
+        "NOTE_CLINICHE": note.strip(),
+        "PERIODO_FOLLOWUP": periodo_followup.strip(),
+    }
+
+    template_file = rel["files"]["std"]
+    template_path = os.path.join(templates_dir, template_file)
+
+    if st.button("📄 Genera Word ( + PDF se disponibile )", type="primary"):
+        if not os.path.exists(template_path):
+            st.error(f"Template mancante: {template_path}")
+            st.stop()
+
+        pid = paziente.get("id")
+        safe_name = (nome_cognome.replace(" ", "_") or f"PAZ_{pid}")
+        out_dir = os.path.join(output_base, f"{pid}_{safe_name}", "relazioni_cliniche")
+        os.makedirs(out_dir, exist_ok=True)
+
+        base = f"{data_relazione.strftime('%Y-%m-%d')}_{rel_key}_{safe_name}"
+        out_docx = os.path.join(out_dir, base + ".docx")
+        out_pdf  = os.path.join(out_dir, base + ".pdf")
+
+        try:
+            _render_docx_docxtpl(template_path, out_docx, context)
+        except Exception as e:
+            st.error(f"Errore Word: {e}")
+            st.stop()
+
+        pdf_ok, pdf_path = _convert_pdf_if_possible(out_docx, out_pdf)
+        if not pdf_ok:
+            pdf_path = ""  # cloud-safe
+
+        # salva DB
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO relazioni_cliniche (paziente_id, tipo, titolo, data_relazione, docx_path, pdf_path, note, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (pid, rel_key, rel["titolo"], data_relazione.strftime("%Y-%m-%d"), out_docx, pdf_path, note.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        conn.commit()
+
+        st.success("Relazione generata ✅")
+        with open(out_docx, "rb") as f:
+            st.download_button("⬇️ Scarica Word", f, file_name=os.path.basename(out_docx), key=f"dw_{rel_key}_{pid}")
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                st.download_button("⬇️ Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rel_key}_{pid}")
+        else:
+            st.info("PDF non disponibile in cloud: apri il Word e salva in PDF dal PC in studio.")
