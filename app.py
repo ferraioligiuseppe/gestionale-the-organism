@@ -1234,29 +1234,7 @@ def init_db() -> None:
         pass
 
 # Relazioni Cliniche (PostgreSQL)
-cur.execute(
-    """
-    CREATE TABLE IF NOT EXISTS relazioni_cliniche (
-        id              SERIAL PRIMARY KEY,
-        paziente_id     INTEGER NOT NULL,
-        tipo            TEXT NOT NULL,
-        titolo          TEXT NOT NULL,
-        data_relazione  TEXT NOT NULL,
-        docx_path       TEXT NOT NULL,
-        pdf_path        TEXT,
-        note            TEXT,
-        created_at      TEXT NOT NULL
-    );
-    """
-)
-try:
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
-except Exception:
-    pass
-
-conn.commit()
-
+# (Inizializzazione spostata dentro init_db / funzioni helper per evitare NameError in import)
 
 
 def _solo_lettere(s: str) -> str:
