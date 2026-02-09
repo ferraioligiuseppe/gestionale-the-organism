@@ -5819,163 +5819,74 @@ def _clinic_email() -> str:
     return st.secrets.get("privacy", {}).get("CLINIC_EMAIL") or st.secrets.get("smtp", {}).get("FROM") or st.secrets.get("smtp", {}).get("USERNAME") or ""
 
 def ui_privacy_pdf():
-    st.header("📄 Privacy & Consensi (PDF) – Cloud privato")
-    st.caption("Genera PDF precompilato, invia link temporaneo (24h) e archivia il PDF firmato su cloud privato. Nel DB resta solo la chiave (link sicuro).")
+    st.subheader("📄 Privacy & Consensi (PDF)")
 
-    # verifica dipendenze/secret
-    if "storage" not in st.secrets:
-        st.error("Mancano i Secrets [storage]. Aggiungi S3_* e PRESIGN_EXPIRE_SECONDS nei Secrets di Streamlit Cloud.")
-        return
-    if boto3 is None or PdfReader is None:
-        st.warning("Dipendenze mancanti: aggiungi 'boto3' e 'pypdf' in requirements.txt e ridistribuisci l'app.")
-        return
+    # Sezione dedicata alla generazione/stampa dei PDF (cartaceo) e al salvataggio su cloud privato (se S3 configurato)
+    conn = db_conn()
 
-    conn = get_connection()
-    _ensure_documenti_table(conn)
+    # (facoltativo) assicurati che esista la tabella documenti se la usi
+    try:
+        _ensure_documenti_table(conn)
+    except Exception:
+        pass
 
-    paz_list, table, colmap = fetch_pazienti_for_select(conn)
-    if not paz_list:
-        st.warning("Nessun paziente trovato nel database.")
+    # Selezione paziente
+    paz = db_list_pazienti(conn)
+    if not paz:
+        st.info("Nessun paziente presente.")
         return
 
-    labels = []
-    by_label = {}
-    for row in paz_list:
-        pid, cogn, nome, dn, scuola, eta = row
-        label = f"{cogn} {nome} (ID {pid})"
-        if dn:
-            label += f" – {dn}"
-        labels.append(label)
-        by_label[label] = row
+    options = {f"{p.get('cognome','')} {p.get('nome','')} (ID {p.get('id')})": p.get("id") for p in paz}
+    sel = st.selectbox("Seleziona paziente", list(options.keys()))
+    pid = options[sel]
 
-    sel = st.selectbox("Seleziona paziente", labels)
-    pid, cogn, nome, dn, scuola, eta = by_label[sel]
+    doc_type = st.radio("Tipo consenso", ["adulto", "minore"], horizontal=True)
+    template = _privacy_template_path(doc_type)
 
-    colA, colB = st.columns(2)
-    with colA:
-        doc_choice = st.radio("Tipo documento", ["Adulto", "Minore"], horizontal=True)
-    with colB:
-        st.info("Link di condivisione: **presigned 24h**", icon="🔒")
+    col1, col2 = st.columns(2)
 
-    doc_type = "adulto" if doc_choice == "Adulto" else "minore"
-    template_path = PDF_PRIVACY_ADULTO_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_TEMPLATE
-    if not os.path.exists(template_path):
-        st.error(f"Template PDF non trovato: {template_path}. Metti i PDF in repo (assets/privacy/...).")
-        return
-
-    st.subheader("1) Seleziona modalità (stampa / online)")
-    fields = {}
-    if doc_type == "adulto":
-        fields = {"a_nome_cognome": f"{nome} {cogn}".strip()}
-    else:
-        fields = {"m_nome_cognome": f"{nome} {cogn}".strip()}
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        # STAMPA (download)
-        if st.button("🖨️ Stampa (scarica PDF)"):
-            pdf_bytes = _prefill_pdf(template_path, fields)
-            fn = f"consenso_{doc_type}_{cogn}_{nome}_{pid}.pdf".replace(" ", "_")
-            st.download_button("⬇️ Scarica PDF", data=pdf_bytes, file_name=fn, mime="application/pdf")
-
-    with c2:
-        # LINK PDF 24h (per compilazione offline)
-        if st.button("🔗 Link PDF 24h (compila e rimanda)"):
-            pdf_bytes = _prefill_pdf(template_path, fields)
-            digest = _sha256_bytes(pdf_bytes)
-            ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-            key = f"consensi/{pid}/draft/privacy_{doc_type}/{ts}_{digest[:10]}.pdf"
-            ok_s3, msg_s3 = _s3_put_private(key, pdf_bytes, content_type="application/pdf")
-        if not ok_s3:
-            st.error(f"S3 upload fallito: {msg_s3}")
-            url = _s3_presign_get(key)
-            st.success("Link temporaneo creato (24h).")
-            msg = f"Ciao! Ti invio il modulo privacy/consenso da compilare e firmare. Link (valido 24h): {url}\n\nDopo la firma, puoi rimandarmi il PDF oppure caricarlo dal link che ti invierò."
-            st.write("🔗 Link 24h:", url)
-            st.markdown(f"[Apri WhatsApp]({_whatsapp_link(msg)})")
-            st.markdown(f"[Apri Email]({_mailto_link('Modulo privacy/consenso', msg)})")
-            st.code(msg)
-
-    with c3:
-        # ONLINE (pagina firma) – doc_type già nel link
-        if st.button("🌐 Online (firma su pagina web)"):
-            tok = _make_sign_token(int(pid), doc_type, _presign_expires())
-            url = _public_sign_url(tok)
-            st.success("Link firma online creato (24h).")
-            msg = f"Ciao! Per firmare il consenso online apri questo link (valido 24h): {url}"
-            st.write("🔗 Link firma:", url)
-            st.markdown(f"[Apri WhatsApp]({_whatsapp_link(msg)})")
-            st.markdown(f"[Apri Email]({_mailto_link('Firma consenso online', msg)})")
-            st.code(msg)
-
-    st.divider()
-    st.subheader("2) Carica consenso cartaceo firmato (fronte/retro) – PDF unico")
-    uploads = st.file_uploader(
-        "Carica fronte e retro (ordine: fronte poi retro). Accetta PDF/JPG/PNG",
-        type=["pdf", "jpg", "jpeg", "png"],
-        accept_multiple_files=True,
-        key=f"cartaceo_{pid}_{doc_type}"
-    )
-    if uploads:
-        st.info("Controlla l'ordine: il primo file è la FRONTE, il secondo la RETRO.")
-        if st.button("Unisci e archivia (PDF unico)", key=f"merge_{pid}_{doc_type}"):
-            merged_pdf, out_name = _merge_files_to_single_pdf(uploads)
-            digest = _sha256_bytes(merged_pdf)
-            ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-            key = f"consensi/{pid}/firmati/cartaceo_{doc_type}/{ts}_{digest[:10]}_{out_name}"
-            # salva e registra
-            cli = _s3_client()
-            cli.put_object(Bucket=_s3_bucket(), Key=key, Body=merged_pdf, ContentType="application/pdf")
-            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_cartaceo", key, digest, out_name)
-            st.success("✅ Fronte/retro uniti e archiviati su cloud privato.")
-            st.download_button("Scarica PDF unificato (controllo)", merged_pdf, file_name=out_name, mime="application/pdf")
-
-    st.divider()
-    st.subheader("3) Carica PDF firmato (se ti è stato rimandato) e archivia (cloud privato + link in DB)")
-
-    up = st.file_uploader("Carica qui il PDF firmato", type=["pdf"], key=f"up_{pid}_{doc_type}")
-    if up is not None:
-        signed_bytes = up.read()
-        digest = _sha256_bytes(signed_bytes)
-        values = _extract_pdf_field_values(signed_bytes)
-        missing = _validate_required_fields(doc_type, values)
-
-        if missing:
-            st.warning("Checklist: mancano alcune selezioni Sì/No nei consensi (radio).")
-            st.write("Campi mancanti:", ", ".join(missing))
-            proceed = st.checkbox("Salva comunque (lo verificherò manualmente)", value=False)
-            if not proceed:
-                st.stop()
-        else:
-            st.success("Checklist OK: consensi principali presenti (Sì/No).")
-
-        ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_name = os.path.basename(up.name).replace(" ", "_")
-        key = f"consensi/{pid}/firmati/privacy_{doc_type}/{ts}_{digest[:10]}_{safe_name}"
-        _s3_put_private(key, signed_bytes)
-        _db_insert_documento(conn, int(pid), f"privacy_{doc_type}", key, digest, safe_name)
-        st.success("✅ Salvato su cloud privato e registrato nel database.")
-
-    st.divider()
-    st.subheader("4) Documenti già archiviati (apertura con link 24h)")
-    docs = _db_list_documenti(conn, int(pid))
-    if not docs:
-        st.info("Nessun documento archiviato per questo paziente.")
-        return
-
-    # render semplice
-    for d in docs[:20]:
+    with col1:
+        st.markdown("### 🖨️ Stampa / Scarica (cartaceo)")
         try:
-            did, tipo, s3_key, filename, sha, created_at = d
-        except Exception:
-            # RealDictRow style
-            did = d.get("id"); tipo = d.get("tipo"); s3_key = d.get("s3_key"); filename = d.get("filename"); sha = d.get("sha256"); created_at = d.get("created_at")
-        st.write(f"• **{tipo}** – {filename or ''} – {created_at}")
-        if st.button(f"Apri (24h) – {did}", key=f"open_{did}"):
-            url = _s3_presign_get(s3_key)
-            st.markdown(f"[Apri documento]({url})")
+            with open(template, "rb") as f:
+                pdf_bytes = f.read()
+            st.download_button(
+                "⬇️ Scarica PDF da stampare",
+                data=pdf_bytes,
+                file_name=f"privacy_{doc_type}_stampabile.pdf",
+                mime="application/pdf",
+            )
+        except Exception as e:
+            st.error(f"Impossibile leggere il template PDF: {e}")
+            return
 
+    with col2:
+        st.markdown("### ☁️ Archivia su Cloud (opzionale)")
+        st.caption("Usa questa funzione solo se hai configurato S3 nei Secrets.")
+        if st.button("📤 Carica su cloud il PDF (template) per questo paziente"):
+            # Key univoca (template associato al paziente)
+            digest = _sha256_bytes(pdf_bytes)
+            key = f"consensi/{pid}/template/privacy_{doc_type}_{digest[:10]}.pdf"
 
+            ok_s3, msg_s3 = _s3_put_private(key, pdf_bytes, content_type="application/pdf")
+            if not ok_s3:
+                st.error(f"S3 upload fallito: {msg_s3}")
+                return
+
+            # salva su DB SOLO se upload ok
+            try:
+                _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_template", key, digest, f"privacy_{doc_type}_template.pdf")
+                st.success("Caricato e registrato nel DB ✅")
+            except Exception as e:
+                st.warning(f"Caricato su S3, ma DB non aggiornato: {e}")
+
+            # link presigned (se disponibile)
+            try:
+                url = _s3_presign_get(key)
+                st.write("Link (24h):")
+                st.code(url)
+            except Exception:
+                pass
 
 def ui_public_sign_page():
     """Pagina pubblica: compilazione + firma online (canvas) + invio PDF a clinica e paziente."""
@@ -6170,10 +6081,10 @@ def ui_public_sign_page():
         digest = _sha256_bytes(final_pdf)
         ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
-        ok_upload = ok_s3, msg_s3 = _s3_put_private(key, final_pdf, content_type="application/pdf")
-        if not ok_s3:
-            st.error(f"S3 upload fallito: {msg_s3}")
+        ok_s3, msg_s3 = _s3_put_private(key, final_pdf, content_type="application/pdf")
+        ok_upload = ok_s3
         if not ok_upload:
+            st.error(f"S3 upload fallito: {msg_s3}")
             st.warning("Documento NON archiviato su cloud (upload fallito). Il PDF verrà comunque inviato via email se configurata.")
         else:
             _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
