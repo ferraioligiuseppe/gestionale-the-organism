@@ -1,5 +1,16 @@
 import streamlit as st
 
+
+def _valid_endpoint_url(url):
+    if not url:
+        return None
+    u = str(url).strip()
+    if not u:
+        return None
+    if not (u.startswith("http://") or u.startswith("https://")):
+        return None
+    return u
+
 # ---------- AUTO-DETECT TABella PAZIENTI (SQLite/PostgreSQL) ----------
 def _qident(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
@@ -5526,7 +5537,7 @@ def _s3_client():
     cfg = st.secrets.get("storage", {})
     return boto3.client(
         "s3",
-        endpoint_url=cfg.get("S3_ENDPOINT_URL") or None,
+        endpoint_url=_valid_endpoint_url(cfg.get("S3_ENDPOINT_URL")),
         region_name=cfg.get("S3_REGION") or None,
         aws_access_key_id=cfg.get("S3_ACCESS_KEY"),
         aws_secret_access_key=cfg.get("S3_SECRET_KEY"),
