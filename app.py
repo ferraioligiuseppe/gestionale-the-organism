@@ -1054,7 +1054,7 @@ def _require_postgres_on_cloud():
         st.info("""Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
 
 [db]
-DATABASE_URL = \"postgresql://...sslmode=require\"
+DATABASE_URL = "postgresql://...sslmode=require"
 
 Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
@@ -5885,9 +5885,9 @@ def ui_privacy_pdf():
             digest = _sha256_bytes(pdf_bytes)
             ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
             key = f"consensi/{pid}/draft/privacy_{doc_type}/{ts}_{digest[:10]}.pdf"
-            ok_s3, msg_s3 = _s3_put_private(key, pdf_bytes, content_type=\"application/pdf\")
+            ok_s3, msg_s3 = _s3_put_private(key, pdf_bytes, content_type="application/pdf")
         if not ok_s3:
-            st.error(f\"S3 upload fallito: {msg_s3}\")
+            st.error(f"S3 upload fallito: {msg_s3}")
             url = _s3_presign_get(key)
             st.success("Link temporaneo creato (24h).")
             msg = f"Ciao! Ti invio il modulo privacy/consenso da compilare e firmare. Link (valido 24h): {url}\n\nDopo la firma, puoi rimandarmi il PDF oppure caricarlo dal link che ti invierò."
