@@ -5822,7 +5822,7 @@ def ui_privacy_pdf():
     st.subheader("📄 Privacy & Consensi (PDF)")
 
     # Sezione dedicata alla generazione/stampa dei PDF (cartaceo) e al salvataggio su cloud privato (se S3 configurato)
-    conn = db_conn()
+    conn = get_connection()
 
     # (facoltativo) assicurati che esista la tabella documenti se la usi
     try:
