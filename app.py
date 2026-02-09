@@ -5531,6 +5531,30 @@ def _ensure_documenti_table(conn):
 def _sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
+
+def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> tuple[bool, str]:
+    """Upload bytes to private S3. Never raises. Returns (ok, message)."""
+    try:
+        cli = _s3_client()
+        cli.put_object(
+            Bucket=_s3_bucket(),
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+        )
+        return True, "OK"
+    except Exception as e:
+        try:
+            import botocore
+            if isinstance(e, botocore.exceptions.ClientError):
+                err = getattr(e, "response", {}).get("Error", {})
+                code = err.get("Code", "ClientError")
+                msg = err.get("Message", "")
+                return False, f"{code}: {msg}"
+        except Exception:
+            pass
+        return False, f"{type(e).__name__}: {e}"
+
 def _s3_client():
     if boto3 is None:
         raise RuntimeError("Manca boto3. Aggiungi 'boto3' in requirements.txt")
@@ -5555,14 +5579,30 @@ def _presign_expires():
     # default 24h
     return int(cfg.get("PRESIGN_EXPIRE_SECONDS", 86400))
 
-def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"):
-    cli = _s3_client()
-    cli.put_object(
-        Bucket=_s3_bucket(),
-        Key=key,
-        Body=data,
-        ContentType=content_type,
-    )
+def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> bool:
+    """Upload bytes to private S3. Returns True on success; False on failure (does not crash the app)."""
+    try:
+        cli = _s3_client()
+        cli.put_object(
+            Bucket=_s3_bucket(),
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+        )
+        return True
+    except Exception as e:
+        # Try to surface useful info on Streamlit without leaking secrets
+        try:
+            import botocore
+            if isinstance(e, botocore.exceptions.ClientError):
+                err = getattr(e, "response", {}).get("Error", {})
+                st.error(f"Upload S3 fallito: {err.get('Code','ClientError')} – {err.get('Message','')}")
+            else:
+                st.error(f"Upload S3 fallito: {type(e).__name__}: {e}")
+        except Exception:
+            pass
+        return False
+
 
 def _s3_presign_get(key: str) -> str:
     cli = _s3_client()
@@ -5845,7 +5885,9 @@ def ui_privacy_pdf():
             digest = _sha256_bytes(pdf_bytes)
             ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
             key = f"consensi/{pid}/draft/privacy_{doc_type}/{ts}_{digest[:10]}.pdf"
-            _s3_put_private(key, pdf_bytes)
+            ok_s3, msg_s3 = _s3_put_private(key, pdf_bytes, content_type=\"application/pdf\")
+        if not ok_s3:
+            st.error(f\"S3 upload fallito: {msg_s3}\")
             url = _s3_presign_get(key)
             st.success("Link temporaneo creato (24h).")
             msg = f"Ciao! Ti invio il modulo privacy/consenso da compilare e firmare. Link (valido 24h): {url}\n\nDopo la firma, puoi rimandarmi il PDF oppure caricarlo dal link che ti invierò."
@@ -6122,11 +6164,19 @@ def ui_public_sign_page():
             extra_pdf = sig_page_bytes
             extra_name = f"Firma_Allegato_{doc_type}.pdf"
         # --- ARCHIVIAZIONE SU CLOUD PRIVATO (NO AcroForm) ---
+        if not final_pdf or len(final_pdf) < 1000:
+            # fallback: at least send/archivia the base template
+            final_pdf = base_pdf
         digest = _sha256_bytes(final_pdf)
         ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
-        _s3_put_private(key, final_pdf, content_type="application/pdf")
-        _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
+        ok_upload = ok_s3, msg_s3 = _s3_put_private(key, final_pdf, content_type="application/pdf")
+        if not ok_s3:
+            st.error(f"S3 upload fallito: {msg_s3}")
+        if not ok_upload:
+            st.warning("Documento NON archiviato su cloud (upload fallito). Il PDF verrà comunque inviato via email se configurata.")
+        else:
+            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
 
         # Se il merge fallisce, archiviamo anche la pagina firma separata
         extra_key = None
