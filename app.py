@@ -6055,6 +6055,8 @@ def ui_public_sign_page():
             }
 
         base_pdf = _prefill_pdf(template_path, fields)
+        extra_pdf = None
+        extra_name = None
 
         # crea una pagina "firma" con immagine + timestamp, e la unisce al PDF
         from reportlab.pdfgen import canvas as _rl_canvas
@@ -6104,7 +6106,6 @@ def ui_public_sign_page():
             final_pdf = base_pdf
             extra_pdf = sig_page_bytes
             extra_name = f"Firma_Allegato_{doc_type}.pdf"
-f)
         _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
 
         # invio email a entrambi
