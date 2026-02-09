@@ -5740,7 +5740,7 @@ def _smtp_cfg():
         raise RuntimeError("Secrets mancanti: [smtp] HOST, PORT, USERNAME, PASSWORD. (Facoltativi: FROM, USE_TLS)")
     return cfg
 
-def _send_email_with_pdf(to_list: list[str], subject: str, body: str, pdf_bytes: bytes, filename: str):
+def _send_email_with_pdf(to_list: list[str], subject: str, body: str, pdf_bytes: bytes, filename: str, pdf2_bytes: bytes | None = None, filename2: str | None = None):
     cfg = _smtp_cfg()
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -5748,6 +5748,8 @@ def _send_email_with_pdf(to_list: list[str], subject: str, body: str, pdf_bytes:
     msg["To"] = ", ".join([x for x in to_list if x])
     msg.set_content(body)
     msg.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename=filename)
+    if pdf2_bytes and filename2:
+        msg.add_attachment(pdf2_bytes, maintype="application", subtype="pdf", filename=filename2)
 
     host = cfg["HOST"]
     port = int(cfg["PORT"])
@@ -6082,23 +6084,27 @@ def ui_public_sign_page():
             pass
         sig_page_bytes = sig_page.getvalue()
 
-        # merge base_pdf + sig_page
-        r1 = PdfReader(io.BytesIO(base_pdf))
-        r2 = PdfReader(io.BytesIO(sig_page_bytes))
-        w = PdfWriter()
-        for p in r1.pages:
-            w.add_page(p)
-        for p in r2.pages:
-            w.add_page(p)
-        out = io.BytesIO()
-        w.write(out)
-        final_pdf = out.getvalue()
-
-        # salva su cloud privato
-        digest = _sha256_bytes(final_pdf)
-        ts = _dt.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        key = f"consensi/{pid}/firmati/online_privacy_{doc_type}/{ts}_{digest[:10]}.pdf"
-        _s3_put_private(key, final_pdf)
+        # merge base_pdf + sig_page (robusto: se il PDF base è illeggibile/monco, inviamo 2 allegati separati)
+        final_pdf = None
+        extra_pdf = None
+        extra_name = None
+        try:
+            r1 = PdfReader(io.BytesIO(base_pdf))
+            r2 = PdfReader(io.BytesIO(sig_page_bytes))
+            w = PdfWriter()
+            for p in r1.pages:
+                w.add_page(p)
+            for p in r2.pages:
+                w.add_page(p)
+            out = io.BytesIO()
+            w.write(out)
+            final_pdf = out.getvalue()
+        except Exception:
+            # fallback: non bloccare il consenso online
+            final_pdf = base_pdf
+            extra_pdf = sig_page_bytes
+            extra_name = f"Firma_Allegato_{doc_type}.pdf"
+f)
         _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
 
         # invio email a entrambi
@@ -6106,7 +6112,7 @@ def ui_public_sign_page():
             to_list = [email.strip(), _clinic_email()]
             subject = "Consenso informato e privacy – Studio The Organism"
             body = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
-            _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf")
+            _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
         except Exception as e:
             st.warning(f"Consenso salvato, ma invio email non riuscito: {e}")
 
