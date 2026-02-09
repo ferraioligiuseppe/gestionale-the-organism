@@ -5544,13 +5544,13 @@ def _presign_expires():
     # default 24h
     return int(cfg.get("PRESIGN_EXPIRE_SECONDS", 86400))
 
-def _s3_put_private(key: str, data: bytes):
+def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"):
     cli = _s3_client()
     cli.put_object(
         Bucket=_s3_bucket(),
         Key=key,
         Body=data,
-        ContentType="application/pdf",
+        ContentType=content_type,
     )
 
 def _s3_presign_get(key: str) -> str:
@@ -6086,6 +6086,10 @@ def ui_public_sign_page():
             pass
         sig_page_bytes = sig_page.getvalue()
 
+        # init
+        extra_pdf = None
+        extra_name = None
+
         # merge base_pdf + sig_page (robusto: se il PDF base è illeggibile/monco, inviamo 2 allegati separati)
         final_pdf = None
         extra_pdf = None
@@ -6106,7 +6110,21 @@ def ui_public_sign_page():
             final_pdf = base_pdf
             extra_pdf = sig_page_bytes
             extra_name = f"Firma_Allegato_{doc_type}.pdf"
+        # --- ARCHIVIAZIONE SU CLOUD PRIVATO (NO AcroForm) ---
+        digest = _sha256_bytes(final_pdf)
+        ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
+        _s3_put_private(key, final_pdf, content_type="application/pdf")
         _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
+
+        # Se il merge fallisce, archiviamo anche la pagina firma separata
+        extra_key = None
+        if extra_pdf is not None and extra_name:
+            extra_digest = _sha256_bytes(extra_pdf)
+            extra_key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{extra_digest[:10]}_{extra_name}"
+            _s3_put_private(extra_key, extra_pdf, content_type="application/pdf")
+            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online_firma", extra_key, extra_digest, extra_name)
+
 
         # invio email a entrambi
         try:
