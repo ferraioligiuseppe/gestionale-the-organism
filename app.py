@@ -5831,12 +5831,12 @@ def ui_privacy_pdf():
         pass
 
     # Selezione paziente
-    paz = db_list_pazienti(conn)
+    paz, _ptab, _pcolmap = fetch_pazienti_for_select(conn)
     if not paz:
         st.info("Nessun paziente presente.")
         return
 
-    options = {f"{p.get('cognome','')} {p.get('nome','')} (ID {p.get('id')})": p.get("id") for p in paz}
+    options = {f"{cognome} {nome} (ID {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
     sel = st.selectbox("Seleziona paziente", list(options.keys()))
     pid = options[sel]
 
