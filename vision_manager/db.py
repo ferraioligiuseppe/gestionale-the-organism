@@ -1,4 +1,3 @@
-
 import os
 import sqlite3
 
@@ -28,14 +27,12 @@ def init_db(conn):
         );
         """)
         cur.execute("""
-        CREATE TABLE IF NOT EXISTS valutazioni_visive (
+        CREATE TABLE IF NOT EXISTS visite_visive (
             id SERIAL PRIMARY KEY,
             paziente_id INTEGER REFERENCES pazienti_visivi(id),
-            data_valutazione TEXT,
-            acuita_visiva TEXT,
-            motilita_oculare TEXT,
-            stereopsi TEXT,
-            conclusioni TEXT
+            data_visita TEXT,
+            dati_json JSONB,
+            pdf_bytes BYTEA
         );
         """)
         cur.execute("""
@@ -44,9 +41,8 @@ def init_db(conn):
             paziente_id INTEGER REFERENCES pazienti_visivi(id),
             data_prescrizione TEXT,
             formato TEXT,
-            with_cirillo BOOLEAN,
-            od_sfera TEXT, od_cil TEXT, od_asse TEXT,
-            os_sfera TEXT, os_cil TEXT, os_asse TEXT,
+            tipo_occhiale TEXT,
+            dati_json JSONB,
             pdf_bytes BYTEA
         );
         """)
@@ -61,14 +57,12 @@ def init_db(conn):
         )
         """)
         cur.execute("""
-        CREATE TABLE IF NOT EXISTS valutazioni_visive (
+        CREATE TABLE IF NOT EXISTS visite_visive (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             paziente_id INTEGER,
-            data_valutazione TEXT,
-            acuita_visiva TEXT,
-            motilita_oculare TEXT,
-            stereopsi TEXT,
-            conclusioni TEXT
+            data_visita TEXT,
+            dati_json TEXT,
+            pdf_bytes BLOB
         )
         """)
         cur.execute("""
@@ -77,11 +71,9 @@ def init_db(conn):
             paziente_id INTEGER,
             data_prescrizione TEXT,
             formato TEXT,
-            with_cirillo INTEGER,
-            od_sfera TEXT, od_cil TEXT, od_asse TEXT,
-            os_sfera TEXT, os_cil TEXT, os_asse TEXT,
+            tipo_occhiale TEXT,
+            dati_json TEXT,
             pdf_bytes BLOB
         )
         """)
-
     conn.commit()
