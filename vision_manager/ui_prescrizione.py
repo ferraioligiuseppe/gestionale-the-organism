@@ -1,19 +1,22 @@
 import json
 import streamlit as st
-from datetime import datetime
+from datetime import date
 from vision_core.pdf_prescrizione import genera_prescrizione_occhiali_bytes
 from utils import is_pg_conn, ph
 from psycopg2.extras import Json as PgJson  # used only in Postgres path
 
+def _date_to_iso(d):
+    return d.isoformat() if d else ""
+
+def _date_to_eu(d):
+    return d.strftime("%d/%m/%Y") if d else ""
+
 def _diopters(min_d: float, max_d: float, step: float = 0.25):
-    # returns list of strings: +0.25, 0.00, -0.25 ... within range (inclusive)
     vals = []
     v = max_d
-    # go downward so 0.00 stays near top if max_d>0; we will later reorder
     while v >= min_d - 1e-9:
         vals.append(round(v, 2))
         v -= step
-    # sort descending (e.g., +30 -> -30)
     vals = sorted(vals, reverse=True)
     return [""] + [f"{x:+.2f}".replace("+0.00","0.00") for x in vals]
 
@@ -37,48 +40,52 @@ def ui_prescrizione(conn):
         st.warning("Prima crea almeno un paziente.")
         return
 
-    paz = st.selectbox("Paziente", pazienti, format_func=lambda x: f"{x[1]} {x[2]}")
-    data = st.text_input("Data prescrizione (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d"))
-    formato = st.selectbox("Formato PDF", ["A4", "A5"])
+    paz = st.selectbox("Paziente", pazienti, format_func=lambda x: f"{x[1]} {x[2]}", key="pr_paz")
+    d = st.date_input("Data prescrizione", value=date.today(), key="pr_date")
+    data_iso = _date_to_iso(d)
+    data_eu = _date_to_eu(d)
+
+    formato = st.selectbox("Formato PDF", ["A4", "A5"], key="pr_fmt")
 
     st.subheader("Tipo occhiale")
     c1, c2 = st.columns([2,3])
     with c1:
         tipi = {
-            "Monofocale": st.checkbox("Monofocale", key="t_mono"),
-            "Progressivo": st.checkbox("Progressivo", key="t_prog"),
-            "Bifocale": st.checkbox("Bifocale", key="t_bi"),
-            "Office/Intermedio": st.checkbox("Office/Intermedio", key="t_off"),
-            "Da sole": st.checkbox("Da sole", key="t_sole"),
-            "Altro": st.checkbox("Altro", key="t_altro"),
+            "Monofocale": st.checkbox("Monofocale", key="pr_mono"),
+            "Progressivo": st.checkbox("Progressivo", key="pr_prog"),
+            "Bifocale": st.checkbox("Bifocale", key="pr_bi"),
+            "Office/Intermedio": st.checkbox("Office/Intermedio", key="pr_off"),
+            "Da sole": st.checkbox("Da sole", key="pr_sole"),
+            "Altro": st.checkbox("Altro", key="pr_altro"),
         }
     with c2:
-        tipo_note = st.text_area("Note lente (campo libero)", key="tipo_note")
+        tipo_note = st.text_area("Note lente (campo libero)", key="pr_note_lente")
 
     st.subheader("Lontano")
     c1,c2 = st.columns(2)
-    with c1: odx_l = _ref_eye("presc_lont_odx")
-    with c2: osn_l = _ref_eye("presc_lont_osn")
+    with c1: odx_l = _ref_eye("Lontano ODX")
+    with c2: osn_l = _ref_eye("Lontano OSN")
 
     st.subheader("Intermedio (solo se compilato)")
     c1,c2 = st.columns(2)
-    with c1: odx_i = _ref_eye("presc_int_odx")
-    with c2: osn_i = _ref_eye("presc_int_osn")
+    with c1: odx_i = _ref_eye("Intermedio ODX")
+    with c2: osn_i = _ref_eye("Intermedio OSN")
 
     st.subheader("Vicino (solo se compilato)")
     c1,c2 = st.columns(2)
-    with c1: odx_v = _ref_eye("presc_vic_odx")
-    with c2: osn_v = _ref_eye("presc_vic_osn")
-    add = st.text_input("ADD (vicino)", key="add_vic")
+    with c1: odx_v = _ref_eye("Vicino ODX")
+    with c2: osn_v = _ref_eye("Vicino OSN")
+    add = st.selectbox("ADD (vicino)", [""] + [f"{x:+.2f}".replace("+0.00","0.00") for x in [round(i*0.25,2) for i in range(0, 41)]], key="pr_add")
 
-    with_cirillo = st.toggle("Intestazione con Cirillo", value=True)
+    with_cirillo = st.toggle("Intestazione con Cirillo", value=True, key="pr_cirillo")
 
-    if st.button("Genera PDF + salva nel DB"):
+    if st.button("Genera PDF + salva nel DB", key="pr_save"):
         tipi_sel = [k for k,v in tipi.items() if v]
         dati = {
             "paziente_id": paz[0],
             "paziente_label": f"{paz[1]} {paz[2]}",
-            "data": data,
+            "data": data_eu,
+            "data_iso": data_iso,
             "tipi_selezionati": tipi_sel,
             "tipo_note": tipo_note,
             "prescrizione": {
@@ -102,9 +109,9 @@ def ui_prescrizione(conn):
 
         sql = f"INSERT INTO prescrizioni_occhiali (paziente_id, data_prescrizione, formato, dati_json, pdf_bytes) VALUES ({p},{p},{p},{p},{p})"
         cur = conn.cursor()
-        cur.execute(sql, (paz[0], data, formato, json_val, blob))
+        cur.execute(sql, (paz[0], data_iso, formato, json_val, blob))
         conn.commit()
 
         safe = f"{paz[1]}_{paz[2]}".replace(" ", "_")
         st.success("Prescrizione salvata nel DB ✅")
-        st.download_button("Scarica PDF", data=pdf_bytes, file_name=f"prescrizione_{safe}_{data}_{formato}.pdf")
+        st.download_button("Scarica PDF", data=pdf_bytes, file_name=f"prescrizione_{safe}_{data_iso}_{formato}.pdf")

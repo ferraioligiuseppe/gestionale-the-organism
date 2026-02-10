@@ -1,19 +1,24 @@
 import streamlit as st
 from utils import ph
 
+def _date_to_iso(d):
+    return d.isoformat() if d else ""
+
 def ui_pazienti(conn):
     st.header("Pazienti (Modulo Visivo)")
 
     c1, c2, c3 = st.columns([1,1,2])
     with c1:
-        nome = st.text_input("Nome")
+        nome = st.text_input("Nome", key="pz_nome")
     with c2:
-        cognome = st.text_input("Cognome")
+        cognome = st.text_input("Cognome", key="pz_cognome")
     with c3:
-        data_nascita = st.text_input("Data di nascita (YYYY-MM-DD)")
-    note = st.text_area("Note")
+        dn = st.date_input("Data di nascita", value=None, key="pz_dn")
+        data_nascita = _date_to_iso(dn)
 
-    if st.button("Salva paziente"):
+    note = st.text_area("Note", key="pz_note")
+
+    if st.button("Salva paziente", key="pz_save"):
         cur = conn.cursor()
         p = ph(conn)
         sql = f"INSERT INTO pazienti_visivi (nome, cognome, data_nascita, note) VALUES ({p},{p},{p},{p})"
