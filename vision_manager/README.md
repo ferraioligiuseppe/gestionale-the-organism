@@ -1,21 +1,11 @@
 
-# Vision Manager – estrazione chirurgica (indipendente)
+# Vision Manager (DB only – senza S3)
 
 ## Online (Streamlit Cloud)
-Secrets (stessi del gestionale):
-- DATABASE_URL
-- S3_BUCKET
-- S3_ACCESS_KEY
-- S3_SECRET_KEY
-- S3_REGION
-- PRESIGN_EXPIRE_SECONDS
+Imposta nei Secrets:
+- DATABASE_URL (stesso del gestionale)
 
-## Asset carta intestata
-Inserisci gli sfondi in:
-- vision_core/assets/print_bg/
+Al primo avvio l'app crea le tabelle in Neon (public).
 
-Se non presenti, la prescrizione viene generata senza sfondo (fallback).
-
-## Run
-pip install -r requirements.txt
-streamlit run app.py
+## Locale
+Se DATABASE_URL non è presente, usa SQLite `vision_manager.db`.

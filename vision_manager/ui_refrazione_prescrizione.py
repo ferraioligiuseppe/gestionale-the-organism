@@ -1,11 +1,15 @@
 
+import os, sys
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 import streamlit as st
 from datetime import datetime
 from vision_core.pdf_prescrizione import genera_prescrizione_occhiali_bytes
-from s3_utils import upload_bytes, presign_get
 
 def ui_refrazione_prescrizione(conn):
-    st.header("Refrazione completa / Prescrizione occhiali")
+    st.header("Refrazione completa / Prescrizione occhiali (salvataggio in DB)")
 
     cur = conn.cursor()
     cur.execute("SELECT id, cognome, nome FROM pazienti_visivi ORDER BY cognome, nome")
@@ -32,7 +36,7 @@ def ui_refrazione_prescrizione(conn):
         os_cil = st.text_input("OS Cilindro")
         os_asse = st.text_input("OS Asse")
 
-    if st.button("Genera PDF + carica su S3"):
+    if st.button("Genera PDF + salva nel DB"):
         dati = {
             "od_sfera": od_sfera, "od_cil": od_cil, "od_asse": od_asse,
             "os_sfera": os_sfera, "os_cil": os_cil, "os_asse": os_asse,
@@ -42,32 +46,58 @@ def ui_refrazione_prescrizione(conn):
         }
         pdf_bytes = genera_prescrizione_occhiali_bytes(formato, dati, with_cirillo=with_cirillo)
 
-        safe = f"{paziente[1]}_{paziente[2]}".replace(" ", "_")
-        key = f"vision/prescrizioni/{safe}/{data}_prescrizione_{formato}{'_cirillo' if with_cirillo else ''}.pdf"
-        upload_bytes(pdf_bytes, key)
-        url = presign_get(key)
+        is_pg = conn.__class__.__module__.startswith("psycopg2")
+        ph = "%s" if is_pg else "?"
 
-        ph = "%s" if conn.__class__.__module__.startswith("psycopg2") else "?"
         sql = (
             "INSERT INTO prescrizioni_occhiali "
-            "(paziente_id, data_prescrizione, formato, with_cirillo, od_sfera, od_cil, od_asse, os_sfera, os_cil, os_asse, s3_key) "
+            "(paziente_id, data_prescrizione, formato, with_cirillo, od_sfera, od_cil, od_asse, os_sfera, os_cil, os_asse, pdf_bytes) "
             f"VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})"
         )
+
+        if is_pg:
+            import psycopg2
+            blob = psycopg2.Binary(pdf_bytes)
+        else:
+            blob = pdf_bytes
+
         cur = conn.cursor()
-        cur.execute(sql, (paziente[0], data, formato, int(with_cirillo), od_sfera, od_cil, od_asse, os_sfera, os_cil, os_asse, key))
+        cur.execute(sql, (paziente[0], data, formato, int(with_cirillo), od_sfera, od_cil, od_asse, os_sfera, os_cil, os_asse, blob))
         conn.commit()
 
-        st.success("Prescrizione salvata su S3.")
+        safe = f"{paziente[1]}_{paziente[2]}".replace(" ", "_")
+        st.success("Prescrizione salvata nel DB ✅")
         st.download_button("Scarica PDF", data=pdf_bytes, file_name=f"prescrizione_{safe}_{data}_{formato}.pdf")
-        st.markdown(f"Link temporaneo: {url}")
 
-    st.subheader("Storico (ultimo 20)")
+    st.subheader("Storico (ultimo 20) – download")
+    is_pg = conn.__class__.__module__.startswith("psycopg2")
     cur = conn.cursor()
-    if conn.__class__.__module__.startswith("psycopg2"):
-        cur.execute("SELECT data_prescrizione, formato, s3_key FROM prescrizioni_occhiali WHERE paziente_id = %s ORDER BY id DESC LIMIT 20", (paziente[0],))
+    if is_pg:
+        cur.execute(
+            "SELECT id, data_prescrizione, formato, with_cirillo FROM prescrizioni_occhiali WHERE paziente_id = %s ORDER BY id DESC LIMIT 20",
+            (paziente[0],)
+        )
     else:
-        cur.execute("SELECT data_prescrizione, formato, s3_key FROM prescrizioni_occhiali WHERE paziente_id = ? ORDER BY id DESC LIMIT 20", (paziente[0],))
+        cur.execute(
+            "SELECT id, data_prescrizione, formato, with_cirillo FROM prescrizioni_occhiali WHERE paziente_id = ? ORDER BY id DESC LIMIT 20",
+            (paziente[0],)
+        )
     rows = cur.fetchall()
-    if rows:
-        for r in rows:
-            st.write(f"• {r[0]} – {r[1]} – {r[2]}")
+    if not rows:
+        st.info("Nessuna prescrizione salvata per questo paziente.")
+        return
+
+    scelta = st.selectbox("Seleziona prescrizione", rows, format_func=lambda r: f"#{r[0]} – {r[1]} – {r[2]} – {'Cirillo' if r[3] else 'Solo Ferraioli'}")
+    if st.button("Carica PDF selezionato"):
+        pid = scelta[0]
+        if is_pg:
+            cur.execute("SELECT pdf_bytes FROM prescrizioni_occhiali WHERE id = %s", (pid,))
+        else:
+            cur.execute("SELECT pdf_bytes FROM prescrizioni_occhiali WHERE id = ?", (pid,))
+        blob = cur.fetchone()[0]
+        if blob is None:
+            st.error("PDF non presente in DB (pdf_bytes NULL).")
+            return
+        pdf_b = bytes(blob) if isinstance(blob, (memoryview, bytearray)) else blob
+        safe = f"{paziente[1]}_{paziente[2]}".replace(" ", "_")
+        st.download_button("Scarica PDF dallo storico", data=pdf_b, file_name=f"prescrizione_{safe}_{scelta[1]}_{scelta[2]}.pdf")

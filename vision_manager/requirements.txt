@@ -1,5 +1,4 @@
 
 streamlit
 reportlab
-boto3
 psycopg2-binary

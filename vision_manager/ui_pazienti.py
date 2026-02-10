@@ -19,7 +19,7 @@ def ui_pazienti(conn):
         sql = f"INSERT INTO pazienti_visivi (nome, cognome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph})"
         cur.execute(sql, (nome, cognome, data_nascita, note))
         conn.commit()
-        st.success("Paziente salvato")
+        st.success("Paziente salvato ✅")
 
     st.subheader("Elenco pazienti")
     cur = conn.cursor()

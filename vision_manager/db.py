@@ -28,6 +28,17 @@ def init_db(conn):
         );
         """)
         cur.execute("""
+        CREATE TABLE IF NOT EXISTS valutazioni_visive (
+            id SERIAL PRIMARY KEY,
+            paziente_id INTEGER REFERENCES pazienti_visivi(id),
+            data_valutazione TEXT,
+            acuita_visiva TEXT,
+            motilita_oculare TEXT,
+            stereopsi TEXT,
+            conclusioni TEXT
+        );
+        """)
+        cur.execute("""
         CREATE TABLE IF NOT EXISTS prescrizioni_occhiali (
             id SERIAL PRIMARY KEY,
             paziente_id INTEGER REFERENCES pazienti_visivi(id),
@@ -36,7 +47,7 @@ def init_db(conn):
             with_cirillo BOOLEAN,
             od_sfera TEXT, od_cil TEXT, od_asse TEXT,
             os_sfera TEXT, os_cil TEXT, os_asse TEXT,
-            s3_key TEXT
+            pdf_bytes BYTEA
         );
         """)
     else:
@@ -50,6 +61,17 @@ def init_db(conn):
         )
         """)
         cur.execute("""
+        CREATE TABLE IF NOT EXISTS valutazioni_visive (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paziente_id INTEGER,
+            data_valutazione TEXT,
+            acuita_visiva TEXT,
+            motilita_oculare TEXT,
+            stereopsi TEXT,
+            conclusioni TEXT
+        )
+        """)
+        cur.execute("""
         CREATE TABLE IF NOT EXISTS prescrizioni_occhiali (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             paziente_id INTEGER,
@@ -58,7 +80,8 @@ def init_db(conn):
             with_cirillo INTEGER,
             od_sfera TEXT, od_cil TEXT, od_asse TEXT,
             os_sfera TEXT, os_cil TEXT, os_asse TEXT,
-            s3_key TEXT
+            pdf_bytes BLOB
         )
         """)
+
     conn.commit()
