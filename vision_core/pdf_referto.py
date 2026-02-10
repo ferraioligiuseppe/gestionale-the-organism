@@ -42,12 +42,12 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
 
     av = dati.get("av", {})
     if isinstance(av, dict):
-        _add_line(lines, "AV Lontano OD", av.get("lontano_od"))
-        _add_line(lines, "AV Lontano OS", av.get("lontano_os"))
-        _add_line(lines, "AV Vicino OD", av.get("vicino_od"))
-        _add_line(lines, "AV Vicino OS", av.get("vicino_os"))
-        _add_line(lines, "AV Intermedio OD", av.get("intermedio_od"))
-        _add_line(lines, "AV Intermedio OS", av.get("intermedio_os"))
+        _add_line(lines, "AV Lontano ODX", av.get("lontano_odx"))
+        _add_line(lines, "AV Lontano OSN", av.get("lontano_osn"))
+        _add_line(lines, "AV Vicino ODX", av.get("vicino_odx"))
+        _add_line(lines, "AV Vicino OSN", av.get("vicino_osn"))
+        _add_line(lines, "AV Intermedio ODX", av.get("intermedio_odx"))
+        _add_line(lines, "AV Intermedio OSN", av.get("intermedio_osn"))
 
     eo = dati.get("esame_obiettivo", {})
     if isinstance(eo, dict):
@@ -67,12 +67,16 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
             for dist_key, dist_label in [("lontano","Lontano"), ("intermedio","Intermedio"), ("vicino","Vicino")]:
                 d = ref.get(dist_key, {})
                 if isinstance(d, dict):
-                    od = d.get("od", {})
-                    os_ = d.get("os", {})
-                    if any(_clean(x) for x in [od.get("sf"), od.get("cil"), od.get("ax"), os_.get("sf"), os_.get("cil"), os_.get("ax"), d.get("add")]):
-                        _add_line(lines, f"{title} {dist_label} OD", f"SF {od.get('sf','')}  CIL {od.get('cil','')}  AX {od.get('ax','')}")
-                        _add_line(lines, f"{title} {dist_label} OS", f"SF {os_.get('sf','')}  CIL {os_.get('cil','')}  AX {os_.get('ax','')}")
+                    od = d.get("odx", {})
+                    osn = d.get("osn", {})
+                    if any(_clean(x) for x in [od.get("sf"), od.get("cil"), od.get("ax"), osn.get("sf"), osn.get("cil"), osn.get("ax"), d.get("add")]):
+                        _add_line(lines, f"{title} {dist_label} ODX", f"SF {od.get('sf','')}  CIL {od.get('cil','')}  AX {od.get('ax','')}")
+                        _add_line(lines, f"{title} {dist_label} OSN", f"SF {osn.get('sf','')}  CIL {osn.get('cil','')}  AX {osn.get('ax','')}")
                         _add_line(lines, f"{title} {dist_label} ADD", d.get("add"))
+
+    if dati.get("tipi_selezionati"):
+        _add_line(lines, "Tipo occhiale", ", ".join([str(x) for x in dati.get("tipi_selezionati", [])]))
+    _add_line(lines, "Note lente", dati.get("tipo_note"))
 
     _add_line(lines, "Note", dati.get("note"))
     _add_line(lines, "Conclusioni/Indicazioni", dati.get("conclusioni"))

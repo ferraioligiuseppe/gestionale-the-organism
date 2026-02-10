@@ -1,4 +1,5 @@
 import streamlit as st
+from utils import ph
 
 def ui_pazienti(conn):
     st.header("Pazienti (Modulo Visivo)")
@@ -14,8 +15,8 @@ def ui_pazienti(conn):
 
     if st.button("Salva paziente"):
         cur = conn.cursor()
-        ph = "%s" if conn.__class__.__module__.startswith("psycopg2") else "?"
-        sql = f"INSERT INTO pazienti_visivi (nome, cognome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph})"
+        p = ph(conn)
+        sql = f"INSERT INTO pazienti_visivi (nome, cognome, data_nascita, note) VALUES ({p},{p},{p},{p})"
         cur.execute(sql, (nome, cognome, data_nascita, note))
         conn.commit()
         st.success("Paziente salvato ✅")

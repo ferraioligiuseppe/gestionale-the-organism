@@ -67,46 +67,54 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
         c.drawString(2*cm, y, f"Data: {data}")
         y -= 18
 
-    tipo = _clean(dati.get("tipo_occhiale"))
-    if tipo:
+    tipi = dati.get("tipi_selezionati", []) or []
+    note_tipo = _clean(dati.get("tipo_note"))
+    if tipi:
         c.setFont("Helvetica-Bold", 10 if formato.upper()=="A4" else 9)
-        c.drawString(2*cm, y, f"Tipo occhiale: {tipo}")
-        y -= 16
+        c.drawString(2*cm, y, "Tipo occhiale:")
         c.setFont("Helvetica", 10 if formato.upper()=="A4" else 9)
+        c.drawString(6.2*cm, y, ", ".join([str(x) for x in tipi]))
+        y -= 14
+    if note_tipo:
+        c.setFont("Helvetica-Bold", 10 if formato.upper()=="A4" else 9)
+        c.drawString(2*cm, y, "Note lente:")
+        c.setFont("Helvetica", 10 if formato.upper()=="A4" else 9)
+        c.drawString(6.2*cm, y, note_tipo)
+        y -= 18
 
-    def row(label, od, os_):
+    def row(label, odx, osn):
         nonlocal y
+        odx = odx or {}
+        osn = osn or {}
+        if not any(_clean(x) for x in [odx.get("sf"), odx.get("cil"), odx.get("ax"), osn.get("sf"), osn.get("cil"), osn.get("ax")]):
+            return
         c.setFont("Helvetica-Bold", 10 if formato.upper()=="A4" else 9)
         c.drawString(2*cm, y, label)
         c.setFont("Helvetica", 10 if formato.upper()=="A4" else 9)
-        c.drawString(6.2*cm, y, f"OD  SF {od.get('sf','')}  CIL {od.get('cil','')}  AX {od.get('ax','')}")
-        c.drawString(6.2*cm, y-13, f"OS  SF {os_.get('sf','')}  CIL {os_.get('cil','')}  AX {os_.get('ax','')}")
+        c.drawString(6.2*cm, y, f"ODX  SF {odx.get('sf','')}  CIL {odx.get('cil','')}  AX {odx.get('ax','')}")
+        c.drawString(6.2*cm, y-13, f"OSN  SF {osn.get('sf','')}  CIL {osn.get('cil','')}  AX {osn.get('ax','')}")
         y -= 30
 
-    presc = dati.get("prescrizione", {})
-    lont = presc.get("lontano", {})
-    inter = presc.get("intermedio", {})
-    vicino = presc.get("vicino", {})
+    presc = dati.get("prescrizione", {}) or {}
+    lont = presc.get("lontano", {}) or {}
+    inter = presc.get("intermedio", {}) or {}
+    vicino = presc.get("vicino", {}) or {}
 
-    if lont:
-        row("Lontano", lont.get("od", {}), lont.get("os", {}))
-    if inter:
-        row("Intermedio", inter.get("od", {}), inter.get("os", {}))
-    if vicino:
-        row("Vicino", vicino.get("od", {}), vicino.get("os", {}))
-        add = _clean(vicino.get("add"))
-        if add:
-            c.drawString(6.2*cm, y+10, f"ADD: {add}")
+    row("Lontano", lont.get("odx", {}), lont.get("osn", {}))
+    row("Intermedio", inter.get("odx", {}), inter.get("osn", {}))
+    row("Vicino", vicino.get("odx", {}), vicino.get("osn", {}))
 
-    if lont and (lont.get("od", {}).get("ax") or lont.get("os", {}).get("ax")):
-        ax_od = lont.get("od", {}).get("ax")
-        ax_os = lont.get("os", {}).get("ax")
+    add = _clean(vicino.get("add"))
+    if add:
+        c.setFont("Helvetica-Bold", 10 if formato.upper()=="A4" else 9)
+        c.drawString(6.2*cm, y+10, f"ADD: {add}")
+
+    ax_osn = (lont.get("osn", {}) or {}).get("ax")
+    if _clean(ax_osn):
         r = 2.8*cm if formato.upper()=="A4" else 2.3*cm
-        cx1 = 4.2*cm
-        cx2 = 10.5*cm if formato.upper()=="A4" else 9.2*cm
+        cx = 5.6*cm if formato.upper()=="A4" else 5.0*cm
         cy = 4.2*cm if formato.upper()=="A4" else 3.8*cm
-        _draw_semiluna_tabo(c, cx1, cy, r, int(ax_od) if _clean(ax_od) else None, "TABO OD")
-        _draw_semiluna_tabo(c, cx2, cy, r, int(ax_os) if _clean(ax_os) else None, "TABO OS")
+        _draw_semiluna_tabo(c, cx, cy, r, int(ax_osn), "TABO – OSN")
 
     c.setFont("Helvetica", 10 if formato.upper()=="A4" else 9)
     c.drawString(2*cm, 2*cm, "Firma e Timbro")

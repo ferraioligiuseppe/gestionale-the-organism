@@ -41,7 +41,6 @@ def init_db(conn):
             paziente_id INTEGER REFERENCES pazienti_visivi(id),
             data_prescrizione TEXT,
             formato TEXT,
-            tipo_occhiale TEXT,
             dati_json JSONB,
             pdf_bytes BYTEA
         );
@@ -71,7 +70,6 @@ def init_db(conn):
             paziente_id INTEGER,
             data_prescrizione TEXT,
             formato TEXT,
-            tipo_occhiale TEXT,
             dati_json TEXT,
             pdf_bytes BLOB
         )

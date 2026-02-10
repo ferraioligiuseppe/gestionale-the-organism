@@ -1,3 +1,4 @@
 streamlit
 reportlab
 psycopg2-binary
+pandas

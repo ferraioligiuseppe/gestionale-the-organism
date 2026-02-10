@@ -2,6 +2,8 @@ import json
 import streamlit as st
 from datetime import datetime
 from vision_core.pdf_prescrizione import genera_prescrizione_occhiali_bytes
+from utils import is_pg_conn, ph
+from psycopg2.extras import Json as PgJson  # used only in Postgres path
 
 def _axis_options():
     return list(range(0, 181))
@@ -13,7 +15,7 @@ def _ref_eye(prefix: str):
     return {"sf": sf, "cil": cil, "ax": ax}
 
 def ui_prescrizione(conn):
-    st.header("Prescrizione occhiali (A4/A5) – TABO semiluna + tipo occhiale")
+    st.header("Prescrizione occhiali (A4/A5) – TABO solo OSN + stampa solo compilati")
 
     cur = conn.cursor()
     cur.execute("SELECT id, cognome, nome FROM pazienti_visivi ORDER BY cognome, nome")
@@ -26,57 +28,68 @@ def ui_prescrizione(conn):
     data = st.text_input("Data prescrizione (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d"))
     formato = st.selectbox("Formato PDF", ["A4", "A5"])
 
-    tipo = st.selectbox("Tipo di occhiale", [
-        "", "Monofocale", "Progressivo", "Bifocale", "Da sole", "Office (intermedio)", "Altro"
-    ])
+    st.subheader("Tipo occhiale")
+    c1, c2 = st.columns([2,3])
+    with c1:
+        tipi = {
+            "Monofocale": st.checkbox("Monofocale", key="t_mono"),
+            "Progressivo": st.checkbox("Progressivo", key="t_prog"),
+            "Bifocale": st.checkbox("Bifocale", key="t_bi"),
+            "Office/Intermedio": st.checkbox("Office/Intermedio", key="t_off"),
+            "Da sole": st.checkbox("Da sole", key="t_sole"),
+            "Altro": st.checkbox("Altro", key="t_altro"),
+        }
+    with c2:
+        tipo_note = st.text_area("Note lente (campo libero)", key="tipo_note")
 
     st.subheader("Lontano")
     c1,c2 = st.columns(2)
-    with c1: od_l = _ref_eye("presc_lont_od")
-    with c2: os_l = _ref_eye("presc_lont_os")
+    with c1: odx_l = _ref_eye("presc_lont_odx")
+    with c2: osn_l = _ref_eye("presc_lont_osn")
 
-    st.subheader("Intermedio")
+    st.subheader("Intermedio (solo se compilato)")
     c1,c2 = st.columns(2)
-    with c1: od_i = _ref_eye("presc_int_od")
-    with c2: os_i = _ref_eye("presc_int_os")
+    with c1: odx_i = _ref_eye("presc_int_odx")
+    with c2: osn_i = _ref_eye("presc_int_osn")
 
-    st.subheader("Vicino")
+    st.subheader("Vicino (solo se compilato)")
     c1,c2 = st.columns(2)
-    with c1: od_v = _ref_eye("presc_vic_od")
-    with c2: os_v = _ref_eye("presc_vic_os")
-    add = st.text_input("ADD (vicino)")
+    with c1: odx_v = _ref_eye("presc_vic_odx")
+    with c2: osn_v = _ref_eye("presc_vic_osn")
+    add = st.text_input("ADD (vicino)", key="add_vic")
 
     with_cirillo = st.toggle("Intestazione con Cirillo", value=True)
 
     if st.button("Genera PDF + salva nel DB"):
+        tipi_sel = [k for k,v in tipi.items() if v]
         dati = {
             "paziente_id": paz[0],
             "paziente_label": f"{paz[1]} {paz[2]}",
             "data": data,
-            "tipo_occhiale": tipo,
+            "tipi_selezionati": tipi_sel,
+            "tipo_note": tipo_note,
             "prescrizione": {
-                "lontano": {"od": od_l, "os": os_l},
-                "intermedio": {"od": od_i, "os": os_i},
-                "vicino": {"od": od_v, "os": os_v, "add": add},
+                "lontano": {"odx": odx_l, "osn": osn_l},
+                "intermedio": {"odx": odx_i, "osn": osn_i},
+                "vicino": {"odx": odx_v, "osn": osn_v, "add": add},
             }
         }
         pdf_bytes = genera_prescrizione_occhiali_bytes(formato, dati, with_cirillo=with_cirillo)
 
-        is_pg = conn.__class__.__module__.startswith("psycopg2")
-        ph = "%s" if is_pg else "?"
+        is_pg = is_pg_conn(conn)
+        p = ph(conn)
 
         if is_pg:
             import psycopg2
-            from psycopg2.extras import Json
-            json_val = Json(dati)
+            json_val = PgJson(dati)
             blob = psycopg2.Binary(pdf_bytes)
         else:
             json_val = json.dumps(dati, ensure_ascii=False)
             blob = pdf_bytes
 
-        sql = f"INSERT INTO prescrizioni_occhiali (paziente_id, data_prescrizione, formato, tipo_occhiale, dati_json, pdf_bytes) VALUES ({ph},{ph},{ph},{ph},{ph},{ph})"
+        sql = f"INSERT INTO prescrizioni_occhiali (paziente_id, data_prescrizione, formato, dati_json, pdf_bytes) VALUES ({p},{p},{p},{p},{p})"
         cur = conn.cursor()
-        cur.execute(sql, (paz[0], data, formato, tipo, json_val, blob))
+        cur.execute(sql, (paz[0], data, formato, json_val, blob))
         conn.commit()
 
         safe = f"{paz[1]}_{paz[2]}".replace(" ", "_")
