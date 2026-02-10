@@ -5,13 +5,26 @@ from vision_core.pdf_prescrizione import genera_prescrizione_occhiali_bytes
 from utils import is_pg_conn, ph
 from psycopg2.extras import Json as PgJson  # used only in Postgres path
 
-def _axis_options():
-    return list(range(0, 181))
+def _diopters(min_d: float, max_d: float, step: float = 0.25):
+    # returns list of strings: +0.25, 0.00, -0.25 ... within range (inclusive)
+    vals = []
+    v = max_d
+    # go downward so 0.00 stays near top if max_d>0; we will later reorder
+    while v >= min_d - 1e-9:
+        vals.append(round(v, 2))
+        v -= step
+    # sort descending (e.g., +30 -> -30)
+    vals = sorted(vals, reverse=True)
+    return [""] + [f"{x:+.2f}".replace("+0.00","0.00") for x in vals]
+
+SF_OPTS = _diopters(-30.0, 30.0, 0.25)
+CIL_OPTS = _diopters(-15.0, 15.0, 0.25)
+AX_OPTS = [""] + list(range(0, 181))
 
 def _ref_eye(prefix: str):
-    sf = st.text_input(f"{prefix} SF", key=f"{prefix}_sf")
-    cil = st.text_input(f"{prefix} CIL", key=f"{prefix}_cil")
-    ax = st.selectbox(f"{prefix} AX", _axis_options(), key=f"{prefix}_ax")
+    sf = st.selectbox(f"{prefix} SF", SF_OPTS, key=f"{prefix}_sf")
+    cil = st.selectbox(f"{prefix} CIL", CIL_OPTS, key=f"{prefix}_cil")
+    ax = st.selectbox(f"{prefix} AX", AX_OPTS, key=f"{prefix}_ax")
     return {"sf": sf, "cil": cil, "ax": ax}
 
 def ui_prescrizione(conn):

@@ -1,15 +1,11 @@
-# Vision Manager – Storico + Confronto nel tempo + Export ottico (DB only)
+# Vision Manager v3 – Fix DB + Referto stile 'buono'
 
-## Streamlit Cloud
-Secrets:
-- DATABASE_URL (stesso Neon del gestionale)
+- Fix migrazione Postgres: ALTER TABLE ADD COLUMN IF NOT EXISTS (evita UndefinedColumn)
+- Referto A4 stile 'Dettaglio clinico'
+- Prescrizione invariata (TABO solo OSN)
+- Storico + confronto + grafici + export CSV ottico
 
-Main file:
-- vision_manager/app.py
-
-## Funzioni
-- Visita visiva: salva JSONB + PDF in DB
-- Prescrizione: salva JSONB + PDF in DB (TABO solo OSN, AX da lontano)
-- Storico: elenco visite, download PDF
-- Confronto: tabella A vs B + grafici trend (SF/CIL lontano)
-- Export ottico: CSV (da Visita B selezionata)
+## Diottrie (selettori)
+- SF: da -30.00 a +30.00 (step 0.25)
+- CIL: da -15.00 a +15.00 (step 0.25)
+- AX: 0–180
