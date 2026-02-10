@@ -117,23 +117,25 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
         y -= 6
 
 
-# AV decimi (L/I/V)
-if isinstance(avd, dict):
-    dvals = [
-        ("lontano_odx","AV Lontano ODX"), ("lontano_osn","AV Lontano OSN"),
-        ("intermedio_odx","AV Intermedio ODX"), ("intermedio_osn","AV Intermedio OSN"),
-        ("vicino_odx","AV Vicino ODX"), ("vicino_osn","AV Vicino OSN"),
-    ]
-    if any(_s(avd.get(k)) for k,_ in dvals):
-        y = _section_title(c, y, "Acuità visiva (decimi)")
-        # group into 3 lines
-        lon = f"Lontano: ODX {_s(avd.get('lontano_odx'))} | OSN {_s(avd.get('lontano_osn'))}"
-        inte = f"Intermedio: ODX {_s(avd.get('intermedio_odx'))} | OSN {_s(avd.get('intermedio_osn'))}"
-        vic = f"Vicino: ODX {_s(avd.get('vicino_odx'))} | OSN {_s(avd.get('vicino_osn'))}"
-        if any(_s(avd.get(k)) for k in ["lontano_odx","lontano_osn"]): y = _bullet(c, y, lon)
-        if any(_s(avd.get(k)) for k in ["intermedio_odx","intermedio_osn"]): y = _bullet(c, y, inte)
-        if any(_s(avd.get(k)) for k in ["vicino_odx","vicino_osn"]): y = _bullet(c, y, vic)
-        y -= 6
+    # AV decimi (L/I/V)
+    if isinstance(avd, dict):
+        dvals = [
+            ('lontano_odx','AV Lontano ODX'), ('lontano_osn','AV Lontano OSN'),
+            ('intermedio_odx','AV Intermedio ODX'), ('intermedio_osn','AV Intermedio OSN'),
+            ('vicino_odx','AV Vicino ODX'), ('vicino_osn','AV Vicino OSN'),
+        ]
+        if any(_s(avd.get(k)) for k,_ in dvals):
+            y = _section_title(c, y, 'Acuità visiva (decimi)')
+            lon = f"Lontano: ODX {_s(avd.get('lontano_odx'))} | OSN {_s(avd.get('lontano_osn'))}"
+            inte = f"Intermedio: ODX {_s(avd.get('intermedio_odx'))} | OSN {_s(avd.get('intermedio_osn'))}"
+            vic = f"Vicino: ODX {_s(avd.get('vicino_odx'))} | OSN {_s(avd.get('vicino_osn'))}"
+            if any(_s(avd.get(k)) for k in ['lontano_odx','lontano_osn']):
+                y = _bullet(c, y, lon)
+            if any(_s(avd.get(k)) for k in ['intermedio_odx','intermedio_osn']):
+                y = _bullet(c, y, inte)
+            if any(_s(avd.get(k)) for k in ['vicino_odx','vicino_osn']):
+                y = _bullet(c, y, vic)
+            y -= 6
 
     # REFR. OGGETTIVA / SOGGETTIVA
     ro = (dati.get("ref_oggettiva") or {})
