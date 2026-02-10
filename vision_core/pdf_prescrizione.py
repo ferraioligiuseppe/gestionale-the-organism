@@ -6,6 +6,28 @@ from reportlab.lib.pagesizes import A4, A5
 from reportlab.lib.units import cm, mm
 import math
 
+
+from pypdf import PdfReader, PdfWriter
+from io import BytesIO
+import os
+
+def _overlay_on_template(content_pdf_bytes: bytes, template_path: str) -> bytes:
+    try:
+        if not os.path.exists(template_path):
+            return content_pdf_bytes
+        r_t = PdfReader(template_path)
+        r_c = PdfReader(BytesIO(content_pdf_bytes))
+        w = PdfWriter()
+        base = r_t.pages[0]
+        overlay = r_c.pages[0]
+        base.merge_page(overlay)
+        w.add_page(base)
+        out = BytesIO()
+        w.write(out)
+        return out.getvalue()
+    except Exception:
+        return content_pdf_bytes
+
 def _clean(v: Any) -> str:
     return "" if v is None else str(v).strip()
 
@@ -119,4 +141,10 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
     c.setFont("Helvetica", 10 if formato.upper()=="A4" else 9)
     c.drawString(2*cm, 2*cm, "Firma e Timbro")
     c.save()
-    return buf.getvalue()
+    pdf_bytes = buf.getvalue()
+    assets = os.path.join(os.path.dirname(__file__), 'assets')
+    if formato.upper() == 'A4':
+        template = os.path.join(assets, 'letterhead_prescrizione_A4.pdf')
+    else:
+        template = os.path.join(assets, 'letterhead_prescrizione_A5.pdf')
+    return _overlay_on_template(pdf_bytes, template)

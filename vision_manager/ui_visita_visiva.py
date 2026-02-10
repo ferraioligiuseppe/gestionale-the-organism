@@ -42,6 +42,20 @@ def ui_visita_visiva(conn):
     data_visita = st.text_input("Data visita (YYYY-MM-DD)", value=datetime.now().strftime("%Y-%m-%d"))
 
     st.subheader("Acuità visiva (come nel tuo modello)")
+
+st.subheader("Acuità visiva (decimi) – selezione rapida")
+av_opts = ["", "ONV", "NV","1/10","2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10","11/10","12/10"]
+c1,c2,c3 = st.columns(3)
+with c1:
+    av_lont_odx = st.selectbox("Lontano ODX", av_opts, index=0)
+    av_lont_osn = st.selectbox("Lontano OSN", av_opts, index=0)
+with c2:
+    av_vic_odx = st.selectbox("Vicino ODX", av_opts, index=0)
+    av_vic_osn = st.selectbox("Vicino OSN", av_opts, index=0)
+with c3:
+    av_int_odx = st.selectbox("Intermedio ODX", av_opts, index=0)
+    av_int_osn = st.selectbox("Intermedio OSN", av_opts, index=0)
+
     c1,c2,c3 = st.columns(3)
     with c1:
         nat_odx = st.text_input("NAT ODX")
@@ -109,6 +123,11 @@ def ui_visita_visiva(conn):
             "av": {
                 "nat_odx": nat_odx, "nat_osn": nat_osn, "nat_oo": nat_oo,
                 "corr_odx": corr_odx, "corr_osn": corr_osn, "corr_oo": corr_oo,
+            },
+            "av_decimi": {
+                "lontano_odx": av_lont_odx, "lontano_osn": av_lont_osn,
+                "vicino_odx": av_vic_odx, "vicino_osn": av_vic_osn,
+                "intermedio_odx": av_int_odx, "intermedio_osn": av_int_osn,
             },
             "ref_oggettiva": {"odx": ro_odx, "osn": ro_osn},
             "ref_soggettiva": {"odx": rs_odx, "osn": rs_osn},

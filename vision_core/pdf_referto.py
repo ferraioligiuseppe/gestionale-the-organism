@@ -6,6 +6,34 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib.utils import simpleSplit
 
+
+from pypdf import PdfReader, PdfWriter
+import os
+
+def _overlay_on_template(content_pdf_bytes: bytes, template_path: str) -> bytes:
+    try:
+        if not os.path.exists(template_path):
+            return content_pdf_bytes
+        r_t = PdfReader(template_path)
+        r_c = PdfReader(BytesIO(content_pdf_bytes))
+        w = PdfWriter()
+
+        base = r_t.pages[0]
+        overlay = r_c.pages[0]
+
+        base.merge_page(overlay)
+        w.add_page(base)
+
+        # if content has more pages, append them as-is (rare)
+        for i in range(1, len(r_c.pages)):
+            w.add_page(r_c.pages[i])
+
+        out = BytesIO()
+        w.write(out)
+        return out.getvalue()
+    except Exception:
+        return content_pdf_bytes
+
 def _s(v: Any) -> str:
     if v is None:
         return ""
@@ -74,8 +102,9 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     c.drawString(2*cm, y, "Dettaglio clinico")
     y -= 18
 
-    # ACUITA' VISIVA
+    # ACUITA' VISIVA (modello libero) + ACUITA' VISIVA (decimi)
     av = dati.get("av", {}) or {}
+    avd = dati.get("av_decimi", {}) or {}
     av_rows = []
     nat_odx = _s(av.get("nat_odx")); nat_osn = _s(av.get("nat_osn")); nat_oo = _s(av.get("nat_oo"))
     cor_odx = _s(av.get("corr_odx")); cor_osn = _s(av.get("corr_osn")); cor_oo = _s(av.get("corr_oo"))
@@ -85,6 +114,25 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
             y = _bullet(c, y, f"NAT: ODX {nat_odx or ''} | OSN {nat_osn or ''} | OO {nat_oo or ''}")
         if any([cor_odx, cor_osn, cor_oo]):
             y = _bullet(c, y, f"CORR: ODX {cor_odx or ''} | OSN {cor_osn or ''} | OO {cor_oo or ''}")
+        y -= 6
+
+
+# AV decimi (L/I/V)
+if isinstance(avd, dict):
+    dvals = [
+        ("lontano_odx","AV Lontano ODX"), ("lontano_osn","AV Lontano OSN"),
+        ("intermedio_odx","AV Intermedio ODX"), ("intermedio_osn","AV Intermedio OSN"),
+        ("vicino_odx","AV Vicino ODX"), ("vicino_osn","AV Vicino OSN"),
+    ]
+    if any(_s(avd.get(k)) for k,_ in dvals):
+        y = _section_title(c, y, "Acuità visiva (decimi)")
+        # group into 3 lines
+        lon = f"Lontano: ODX {_s(avd.get('lontano_odx'))} | OSN {_s(avd.get('lontano_osn'))}"
+        inte = f"Intermedio: ODX {_s(avd.get('intermedio_odx'))} | OSN {_s(avd.get('intermedio_osn'))}"
+        vic = f"Vicino: ODX {_s(avd.get('vicino_odx'))} | OSN {_s(avd.get('vicino_osn'))}"
+        if any(_s(avd.get(k)) for k in ["lontano_odx","lontano_osn"]): y = _bullet(c, y, lon)
+        if any(_s(avd.get(k)) for k in ["intermedio_odx","intermedio_osn"]): y = _bullet(c, y, inte)
+        if any(_s(avd.get(k)) for k in ["vicino_odx","vicino_osn"]): y = _bullet(c, y, vic)
         y -= 6
 
     # REFR. OGGETTIVA / SOGGETTIVA
@@ -153,4 +201,6 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     c.line(W-8.5*cm, 2.0*cm, W-2*cm, 2.0*cm)
 
     c.save()
-    return buf.getvalue()
+    pdf_bytes = buf.getvalue()
+    template = os.path.join(os.path.dirname(__file__), 'assets', 'letterhead_referto_A4.pdf')
+    return _overlay_on_template(pdf_bytes, template)
