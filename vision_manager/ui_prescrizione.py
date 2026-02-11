@@ -3,7 +3,7 @@ import streamlit as st
 from datetime import date
 from vision_core.pdf_prescrizione import genera_prescrizione_occhiali_bytes
 from utils import is_pg_conn, ph
-from psycopg2.extras import Json as PgJson  # used only in Postgres path
+from psycopg2.extras import Json as PgJson
 
 def _date_to_iso(d):
     return d.isoformat() if d else ""
@@ -23,6 +23,7 @@ def _diopters(min_d: float, max_d: float, step: float = 0.25):
 SF_OPTS = _diopters(-30.0, 30.0, 0.25)
 CIL_OPTS = _diopters(-15.0, 15.0, 0.25)
 AX_OPTS = [""] + list(range(0, 181))
+ADD_OPTS = [""] + [f"{x:+.2f}".replace("+0.00","0.00") for x in [round(i*0.25,2) for i in range(0, 41)]]
 
 def _ref_eye(prefix: str):
     sf = st.selectbox(f"{prefix} SF", SF_OPTS, key=f"{prefix}_sf")
@@ -31,7 +32,7 @@ def _ref_eye(prefix: str):
     return {"sf": sf, "cil": cil, "ax": ax}
 
 def ui_prescrizione(conn):
-    st.header("Prescrizione occhiali (A4/A5) – TABO solo OSN + stampa solo compilati")
+    st.header("Prescrizione occhiali (A4/A5)")
 
     cur = conn.cursor()
     cur.execute("SELECT id, cognome, nome FROM pazienti_visivi ORDER BY cognome, nome")
@@ -47,19 +48,22 @@ def ui_prescrizione(conn):
 
     formato = st.selectbox("Formato PDF", ["A4", "A5"], key="pr_fmt")
 
+    st.subheader("Distanza interpupillare (PD)")
+    pd_mm = st.text_input("PD (mm) – es. 62", key="pr_pd")
+
     st.subheader("Tipo occhiale")
     c1, c2 = st.columns([2,3])
     with c1:
         tipi = {
-            "Monofocale": st.checkbox("Monofocale", key="pr_mono"),
-            "Progressivo": st.checkbox("Progressivo", key="pr_prog"),
-            "Bifocale": st.checkbox("Bifocale", key="pr_bi"),
-            "Office/Intermedio": st.checkbox("Office/Intermedio", key="pr_off"),
-            "Da sole": st.checkbox("Da sole", key="pr_sole"),
-            "Altro": st.checkbox("Altro", key="pr_altro"),
+            "Monofocale": st.checkbox("Monofocale", key="t_mono"),
+            "Progressivo": st.checkbox("Progressivo", key="t_prog"),
+            "Bifocale": st.checkbox("Bifocale", key="t_bi"),
+            "Office/Intermedio": st.checkbox("Office/Intermedio", key="t_off"),
+            "Da sole": st.checkbox("Da sole", key="t_sole"),
+            "Altro": st.checkbox("Altro", key="t_altro"),
         }
     with c2:
-        tipo_note = st.text_area("Note lente (campo libero)", key="pr_note_lente")
+        tipo_note = st.text_area("Note lente (campo libero)", key="tipo_note")
 
     st.subheader("Lontano")
     c1,c2 = st.columns(2)
@@ -75,17 +79,18 @@ def ui_prescrizione(conn):
     c1,c2 = st.columns(2)
     with c1: odx_v = _ref_eye("Vicino ODX")
     with c2: osn_v = _ref_eye("Vicino OSN")
-    add = st.selectbox("ADD (vicino)", [""] + [f"{x:+.2f}".replace("+0.00","0.00") for x in [round(i*0.25,2) for i in range(0, 41)]], key="pr_add")
+    add = st.selectbox("ADD (vicino)", ADD_OPTS, key="add")
 
-    with_cirillo = st.toggle("Intestazione con Cirillo", value=True, key="pr_cirillo")
+    with_cirillo = st.toggle("Intestazione con Cirillo", value=True, key="cirillo")
 
-    if st.button("Genera PDF + salva nel DB", key="pr_save"):
+    if st.button("Genera PDF + salva nel DB", key="save_presc"):
         tipi_sel = [k for k,v in tipi.items() if v]
         dati = {
             "paziente_id": paz[0],
             "paziente_label": f"{paz[1]} {paz[2]}",
             "data": data_eu,
             "data_iso": data_iso,
+            "pd_mm": pd_mm,
             "tipi_selezionati": tipi_sel,
             "tipo_note": tipo_note,
             "prescrizione": {
@@ -98,7 +103,6 @@ def ui_prescrizione(conn):
 
         is_pg = is_pg_conn(conn)
         p = ph(conn)
-
         if is_pg:
             import psycopg2
             json_val = PgJson(dati)
