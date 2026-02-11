@@ -35,6 +35,12 @@ def _draw_semiluna_tabo(c: canvas.Canvas, cx: float, cy: float, r: float, axis: 
     """Semicerchio TABO 0–180° con tacche + freccia asse.
     mirror=True per OSN (specchio) come da convenzione ottica.
     """
+    # forza nero (alcuni template/driver stampanti possono attenuare linee sottili)
+    try:
+        c.setStrokeColorRGB(0, 0, 0)
+        c.setFillColorRGB(0, 0, 0)
+    except Exception:
+        pass
     # arco + base
     c.setLineWidth(1.4)
     c.arc(cx-r, cy-r, cx+r, cy+r, startAng=0, extent=180)
@@ -84,6 +90,9 @@ def _draw_semiluna_tabo(c: canvas.Canvas, cx: float, cy: float, r: float, axis: 
     right = ang - math.radians(155)
     c.line(x_end, y_end, x_end + ah*math.cos(left), y_end + ah*math.sin(left))
     c.line(x_end, y_end, x_end + ah*math.cos(right), y_end + ah*math.sin(right))
+    # valore asse
+    c.setFont("Helvetica-Bold", 8)
+    c.drawCentredString(cx, cy + 6, f"AX {axis_i}°")
 
 
 
@@ -209,7 +218,7 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
     a2 = to_int(ax_osn)
 
     r = 2.4*cm if formato.upper()=="A5" else 3.0*cm
-    cy = 4.9*cm if formato.upper()=="A5" else 6.0*cm  # un filo più alto per non finire nel margine basso
+    cy = 7.2*cm if formato.upper()=="A5" else 9.0*cm  # un filo più alto per non finire nel margine basso
     dx = 3.2*cm if formato.upper()=="A5" else 4.2*cm
     cx1 = W/2 - dx
     cx2 = W/2 + dx
