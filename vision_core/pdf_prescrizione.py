@@ -253,23 +253,43 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
                 cell(x, y_table_top, w, row_h, txtv, bold=(i==0))
             x += w
         y_table_top -= row_h
-
-    # Tipo occhiale in fondo
-    tipi = dati.get("tipi_selezionati", []) or []
+    # Tipo occhiale (elenco verticale con checkbox) + firma a destra (non nel footer)
+    opzioni = ["Monofocale", "Progressivo", "Bifocale", "Office/Intermedio", "Da sole", "Altro"]
+    selezionati = set([str(x) for x in (dati.get("tipi_selezionati", []) or [])])
     note_tipo = _clean(dati.get("tipo_note"))
-    tipo_txt = ", ".join([str(x) for x in tipi]) if tipi else ""
-    if note_tipo:
-        tipo_txt = (tipo_txt + " – " if tipo_txt else "") + note_tipo
 
-    y_tipo = 4.4*cm if formato.upper()=="A4" else 3.8*cm
-    if tipo_txt:
-        c.setFont("Helvetica-Bold", 10.5 if formato.upper()=="A4" else 9.5)
-        c.drawString(2*cm, y_tipo+12, "Tipo occhiale prescritto:")
-        c.setFont("Helvetica", f_base)
-        c.drawString(2*cm, y_tipo, tipo_txt[:190])
+    y_box = 4.9*cm if formato.upper()=="A4" else 4.2*cm  # sopra gli indirizzi in carta intestata
+    x_box = 2.0*cm
+    box = 10  # dimensione checkbox
 
+    c.setFont("Helvetica-Bold", 10.5 if formato.upper()=="A4" else 9.5)
+    c.drawString(x_box, y_box + 26, "Tipo occhiale prescritto:")
     c.setFont("Helvetica", f_base)
-    c.drawString(2*cm, 2.0*cm, "Firma e Timbro")
+
+    y_list = y_box + 10
+    for opt in opzioni:
+        c.rect(x_box, y_list-2, box, box, stroke=1, fill=0)
+        if opt in selezionati:
+            c.setFont("Helvetica-Bold", f_base)
+            c.drawString(x_box+2, y_list-2, "X")
+            c.setFont("Helvetica", f_base)
+        c.drawString(x_box + box + 8, y_list, opt)
+        y_list -= 14
+
+    if note_tipo:
+        c.setFont("Helvetica-Bold", f_base)
+        c.drawString(x_box, y_list-2, "Note:")
+        c.setFont("Helvetica", f_base)
+        c.drawString(x_box + 36, y_list-2, note_tipo[:140])
+        y_list -= 14
+
+    # Firma a destra del testo
+    x_sig = W - (8.0*cm if formato.upper()=="A4" else 7.0*cm)
+    y_sig = y_box + 22
+    c.setFont("Helvetica-Bold", f_base)
+    c.drawString(x_sig, y_sig, "Firma / Timbro")
+    c.setLineWidth(0.8)
+    c.line(x_sig, y_sig-6, W-2.0*cm, y_sig-6)
 
     c.save()
     pdf_bytes = buf.getvalue()
