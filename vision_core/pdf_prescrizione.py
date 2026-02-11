@@ -32,34 +32,34 @@ def _overlay_on_template(content_pdf_bytes: bytes, template_path: str) -> bytes:
         return content_pdf_bytes
 
 def _draw_semiluna_tabo(c: canvas.Canvas, cx: float, cy: float, r: float, axis: int | None, label: str, mirror: bool = False):
-    """Semicerchio TABO 0–180° con tacche e freccia asse.
-    mirror=True per OSN (specchio), tipico ottico.
+    """Semicerchio TABO 0–180° con tacche + freccia asse.
+    mirror=True per OSN (specchio) come da convenzione ottica.
     """
-    c.setLineWidth(1.0)
-    # semicerchio superiore
+    # arco + base
+    c.setLineWidth(1.4)
     c.arc(cx-r, cy-r, cx+r, cy+r, startAng=0, extent=180)
-    # linea base
     c.line(cx-r, cy, cx+r, cy)
 
-    # tacche + numeri (ogni 10°, numeri ogni 30°)
+    # tacche
     for deg in range(0, 181, 10):
         ang_deg = (180 - deg) if mirror else deg
         ang = math.radians(ang_deg)
         x1 = cx + r*math.cos(ang)
         y1 = cy + r*math.sin(ang)
-        inner = r - (10 if deg % 30 == 0 else 6)
+        inner = r - (12 if deg % 30 == 0 else 7)
         x2 = cx + inner*math.cos(ang)
         y2 = cy + inner*math.sin(ang)
+        c.setLineWidth(1.0)
         c.line(x1, y1, x2, y2)
         if deg % 30 == 0:
             c.setFont("Helvetica", 7)
-            tx = cx + (r+10)*math.cos(ang)
-            ty = cy + (r+10)*math.sin(ang)
+            tx = cx + (r+12)*math.cos(ang)
+            ty = cy + (r+12)*math.sin(ang)
             c.drawCentredString(tx, ty-2, str(deg))
 
     # label
     c.setFont("Helvetica-Bold", 9)
-    c.drawCentredString(cx, cy - 14, f"TABO – {label}")
+    c.drawCentredString(cx, cy - 15, f"TABO – {label}")
 
     # freccia asse
     if axis is None:
@@ -71,14 +71,17 @@ def _draw_semiluna_tabo(c: canvas.Canvas, cx: float, cy: float, r: float, axis: 
 
     draw_axis = (180 - axis_i) if mirror else axis_i
     ang = math.radians(draw_axis)
-    x_end = cx + (r-8)*math.cos(ang)
-    y_end = cy + (r-8)*math.sin(ang)
-    c.setLineWidth(1.6)
+
+    x_end = cx + (r-10)*math.cos(ang)
+    y_end = cy + (r-10)*math.sin(ang)
+
+    c.setLineWidth(2.2)
     c.line(cx, cy, x_end, y_end)
 
-    ah = 7
-    left = ang + math.radians(150)
-    right = ang - math.radians(150)
+    # punta freccia ben visibile
+    ah = 10
+    left = ang + math.radians(155)
+    right = ang - math.radians(155)
     c.line(x_end, y_end, x_end + ah*math.cos(left), y_end + ah*math.sin(left))
     c.line(x_end, y_end, x_end + ah*math.cos(right), y_end + ah*math.sin(right))
 
@@ -96,7 +99,7 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
     template = template_a4 if formato.upper()=="A4" else template_a5
     has_template = os.path.exists(template)
 
-    # Start Y: scendi di 8cm se template presente (evita copertura intestazione)
+    # Start sotto riga verde (quota fissa dal bordo superiore)
     y = H - (START_UNDER_GREEN_CM*cm if has_template else 3.6*cm)
 
     # Header solo se non c'è template
@@ -118,25 +121,26 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
     if data:
         c.drawString(2*cm, y, f"Data: {data}"); y -= 14
     if pd:
-        c.drawString(2*cm, y, f"PD: {pd} mm"); y -= 18
+        c.drawString(2*cm, y, f"Distanza interpupillare (PD): {pd} mm"); y -= 18
     else:
         y -= 6
 
-    # Tipo occhiale (in una riga)
+    # Tipo occhiale (mancava!)
     tipi = dati.get("tipi_selezionati", []) or []
     note_tipo = _clean(dati.get("tipo_note"))
-    if tipi:
+    if tipi or note_tipo:
         c.setFont("Helvetica-Bold", f_bold)
-        c.drawString(2*cm, y, "Tipo:")
+        c.drawString(2*cm, y, "Tipo occhiale:")
         c.setFont("Helvetica", f_base)
-        c.drawString(3.5*cm, y, ", ".join([str(x) for x in tipi]))
-        y -= 14
-    if note_tipo:
-        c.setFont("Helvetica-Bold", f_bold)
-        c.drawString(2*cm, y, "Note:")
-        c.setFont("Helvetica", f_base)
-        c.drawString(3.5*cm, y, note_tipo[:120])
-        y -= 16
+        tipo_txt = ", ".join([str(x) for x in tipi]) if tipi else ""
+        if note_tipo:
+            if tipo_txt:
+                tipo_txt += f" – {note_tipo}"
+            else:
+                tipo_txt = note_tipo
+        # taglia per sicurezza
+        c.drawString(5.0*cm, y, tipo_txt[:140])
+        y -= 18
 
     # Dati refrazione
     presc = dati.get("prescrizione", {}) or {}
@@ -150,7 +154,7 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
     def any_eye(block):
         return any(g(block,"odx",k) for k in ["sf","cil","ax"]) or any(g(block,"osn",k) for k in ["sf","cil","ax"])
 
-    # Colonne (A4 più larghe; A5 più strette)
+    # Colonne (A4/A5)
     xD = 1.8*cm if formato.upper()=="A5" else 2.0*cm
     xOD = 6.1*cm if formato.upper()=="A5" else 7.2*cm
     xOS = 10.0*cm if formato.upper()=="A5" else 13.2*cm
@@ -191,19 +195,21 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
     row("Intermedio", inter)
     row("Vicino", vicino, add_val=(vicino.get("add","") if isinstance(vicino, dict) else ""))
 
-    # Semicerchi TABO in basso
+    # Semicerchi TABO (sempre) – in alto rispetto alla firma
     ax_odx = g(lont, "odx", "ax")
     ax_osn = g(lont, "osn", "ax")
+
     def to_int(s):
         try:
             return int(str(s).strip())
         except Exception:
             return None
+
     a1 = to_int(ax_odx)
     a2 = to_int(ax_osn)
 
     r = 2.4*cm if formato.upper()=="A5" else 3.0*cm
-    cy = 4.6*cm if formato.upper()=="A5" else 5.6*cm
+    cy = 4.9*cm if formato.upper()=="A5" else 6.0*cm  # un filo più alto per non finire nel margine basso
     dx = 3.2*cm if formato.upper()=="A5" else 4.2*cm
     cx1 = W/2 - dx
     cx2 = W/2 + dx
