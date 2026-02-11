@@ -8,7 +8,7 @@ import os
 import math
 from pypdf import PdfReader, PdfWriter
 
-TEMPLATE_TOP_OFFSET_CM = 8.0  # scendi di 7 cm quando c'è carta intestata
+START_UNDER_GREEN_CM = 5.0  # distanza dal bordo superiore (sotto riga verde)
 
 def _clean(v: Any) -> str:
     if v is None:
@@ -97,7 +97,7 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
     has_template = os.path.exists(template)
 
     # Start Y: scendi di 8cm se template presente (evita copertura intestazione)
-    y = H - (3.6*cm + (TEMPLATE_TOP_OFFSET_CM*cm if has_template else 0))
+    y = H - (START_UNDER_GREEN_CM*cm if has_template else 3.6*cm)
 
     # Header solo se non c'è template
     if not has_template:
@@ -208,9 +208,8 @@ def genera_prescrizione_occhiali_bytes(formato: str, dati: Dict[str, Any], with_
     cx1 = W/2 - dx
     cx2 = W/2 + dx
 
-    if a1 is not None or a2 is not None:
-        _draw_semiluna_tabo(c, cx1, cy, r, a1, "ODX", mirror=False)
-        _draw_semiluna_tabo(c, cx2, cy, r, a2, "OSN", mirror=True)
+    _draw_semiluna_tabo(c, cx1, cy, r, a1, "ODX", mirror=False)
+    _draw_semiluna_tabo(c, cx2, cy, r, a2, "OSN", mirror=True)
 
     c.setFont("Helvetica", f_base)
     c.drawString(2*cm, 2.0*cm, "Firma e Timbro")
