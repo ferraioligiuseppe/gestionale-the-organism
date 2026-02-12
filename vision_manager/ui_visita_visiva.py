@@ -263,32 +263,32 @@ if st.session_state.get("vv_show_versioni") and st.session_state.get("vv_selecte
         pdf_bytes = genera_referto_visita_bytes(dati)
 
 
-is_pg = is_pg_conn(conn)
-p = ph(conn)
-if is_pg:
-    import psycopg2
-    json_val = PgJson(dati)
-    blob = psycopg2.Binary(pdf_bytes)
-else:
-    json_val = json.dumps(dati, ensure_ascii=False)
-    blob = pdf_bytes
+        is_pg = is_pg_conn(conn)
+        p = ph(conn)
+        if is_pg:
+            import psycopg2
+            json_val = PgJson(dati)
+            blob = psycopg2.Binary(pdf_bytes)
+        else:
+            json_val = json.dumps(dati, ensure_ascii=False)
+            blob = pdf_bytes
 
-cur = conn.cursor()
-if do_upd and st.session_state.get("vv_selected_visit_id"):
-    vid = int(st.session_state.vv_selected_visit_id)
-    sql = f"UPDATE visite_visive SET paziente_id={p}, data_visita={p}, dati_json={p}, pdf_bytes={p} WHERE id={p}"
-    cur.execute(sql, (paz[0], data_visita_iso, json_val, blob, vid))
-    conn.commit()
-    st.success(f"Visita #{vid} aggiornata ✅ (creata nuova versione)")
-else:
-    sql = f"INSERT INTO visite_visive (paziente_id, data_visita, dati_json, pdf_bytes) VALUES ({p},{p},{p},{p})"
-    cur.execute(sql, (paz[0], data_visita_iso, json_val, blob))
-    conn.commit()
-    st.success("Visita salvata nel DB ✅")
+        cur = conn.cursor()
+        if do_upd and st.session_state.get("vv_selected_visit_id"):
+            vid = int(st.session_state.vv_selected_visit_id)
+            sql = f"UPDATE visite_visive SET paziente_id={p}, data_visita={p}, dati_json={p}, pdf_bytes={p} WHERE id={p}"
+            cur.execute(sql, (paz[0], data_visita_iso, json_val, blob, vid))
+            conn.commit()
+            st.success(f"Visita #{vid} aggiornata ✅ (creata nuova versione)")
+        else:
+            sql = f"INSERT INTO visite_visive (paziente_id, data_visita, dati_json, pdf_bytes) VALUES ({p},{p},{p},{p})"
+            cur.execute(sql, (paz[0], data_visita_iso, json_val, blob))
+            conn.commit()
+            st.success("Visita salvata nel DB ✅")
 
-safe = f"{paz[1]}_{paz[2]}".replace(" ", "_")
-st.download_button(
-    "Scarica referto PDF",
-    data=pdf_bytes,
-    file_name=f"referto_visita_{safe}_{data_visita_iso}.pdf"
-)
+        safe = f"{paz[1]}_{paz[2]}".replace(" ", "_")
+        st.download_button(
+            "Scarica referto PDF",
+            data=pdf_bytes,
+            file_name=f"referto_visita_{safe}_{data_visita_iso}.pdf"
+        )
