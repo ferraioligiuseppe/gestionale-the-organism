@@ -112,183 +112,183 @@ def ui_visita_visiva(conn):
     data_visita_eu = _date_to_eu(dv)
 
 
-# ----------------------------
-# Gestione visita esistente (Modifica / Elimina / Versioni)
-# ----------------------------
-st.markdown("---")
-st.subheader("Gestione visita esistente")
+    # ----------------------------
+    # Gestione visita esistente (Modifica / Elimina / Versioni)
+    # ----------------------------
+    st.markdown("---")
+    st.subheader("Gestione visita esistente")
 
-# elenco visite per paziente (solo attive)
-try:
-    visits_rows = list_visite_visive(conn, paz[0])
-except Exception:
-    visits_rows = []
+    # elenco visite per paziente (solo attive)
+    try:
+        visits_rows = list_visite_visive(conn, paz[0])
+    except Exception:
+        visits_rows = []
 
-visits_ids = [r[0] for r in visits_rows] if visits_rows else []
-if visits_ids:
-    sel_id = st.selectbox("Seleziona visita da modificare", [""] + visits_ids, format_func=lambda x: "" if x=="" else f"Visita #{x}", key="vv_sel_visita")
-    cA, cB, cC = st.columns([1,1,2])
+    visits_ids = [r[0] for r in visits_rows] if visits_rows else []
+    if visits_ids:
+        sel_id = st.selectbox("Seleziona visita da modificare", [""] + visits_ids, format_func=lambda x: "" if x=="" else f"Visita #{x}", key="vv_sel_visita")
+        cA, cB, cC = st.columns([1,1,2])
 
-    with cA:
-        if st.button("📥 Carica", key="vv_load_btn") and sel_id != "":
-            row = get_visita_corrente(conn, int(sel_id))
-            if row:
-                # row: (visita_id, paziente_id, data_visita, current_version, dati_json, pdf_bytes, ...)
-                dati_loaded = json_to_dict(row[4])
-                st.session_state.vv_selected_visit_id = int(sel_id)
-                _apply_loaded_visit_to_session(dati_loaded)
-                st.success(f"Caricata visita #{sel_id} (puoi modificare i campi sotto).")
+        with cA:
+            if st.button("📥 Carica", key="vv_load_btn") and sel_id != "":
+                row = get_visita_corrente(conn, int(sel_id))
+                if row:
+                    # row: (visita_id, paziente_id, data_visita, current_version, dati_json, pdf_bytes, ...)
+                    dati_loaded = json_to_dict(row[4])
+                    st.session_state.vv_selected_visit_id = int(sel_id)
+                    _apply_loaded_visit_to_session(dati_loaded)
+                    st.success(f"Caricata visita #{sel_id} (puoi modificare i campi sotto).")
+                    st.rerun()
+
+        with cB:
+            if st.button("🗑 Elimina", key="vv_del_btn") and sel_id != "":
+                soft_delete_visita(conn, int(sel_id))
+                st.session_state.vv_selected_visit_id = None
+                st.success("Visita eliminata (soft delete).")
                 st.rerun()
 
-    with cB:
-        if st.button("🗑 Elimina", key="vv_del_btn") and sel_id != "":
-            soft_delete_visita(conn, int(sel_id))
-            st.session_state.vv_selected_visit_id = None
-            st.success("Visita eliminata (soft delete).")
-            st.rerun()
+        with cC:
+            if st.button("🕘 Versioni", key="vv_ver_btn") and sel_id != "":
+                st.session_state.vv_show_versioni = True
+                st.session_state.vv_selected_visit_id = int(sel_id)
+                st.rerun()
 
-    with cC:
-        if st.button("🕘 Versioni", key="vv_ver_btn") and sel_id != "":
-            st.session_state.vv_show_versioni = True
-            st.session_state.vv_selected_visit_id = int(sel_id)
-            st.rerun()
-
-else:
-    st.info("Nessuna visita salvata per questo paziente (ancora).")
-
-if st.session_state.get("vv_show_versioni") and st.session_state.get("vv_selected_visit_id"):
-    vid = int(st.session_state.vv_selected_visit_id)
-    st.markdown("#### 🕘 Storico versioni")
-    vers = get_versioni_visita(conn, vid) or []
-    if not vers:
-        st.info("Nessuna versione trovata (tabella versioni non disponibile o vuota).")
     else:
-        # scegli versione
-        vnos = [v[0] for v in vers]
-        pick = st.selectbox("Apri versione", vnos, format_func=lambda x: f"Versione {x}", key="vv_pick_version")
-        rowv = get_visita_versione(conn, vid, int(pick))
-        if rowv:
-            pdfb = blob_to_bytes(rowv[5])
-            st.caption(f"Versione {rowv[3]} • by {rowv[7]} • {rowv[6]}")
-            if pdfb:
-                st.download_button("Scarica PDF di questa versione", data=pdfb, file_name=f"referto_visita_{vid}_v{pick}.pdf")
+        st.info("Nessuna visita salvata per questo paziente (ancora).")
+
+    if st.session_state.get("vv_show_versioni") and st.session_state.get("vv_selected_visit_id"):
+        vid = int(st.session_state.vv_selected_visit_id)
+        st.markdown("#### 🕘 Storico versioni")
+        vers = get_versioni_visita(conn, vid) or []
+        if not vers:
+            st.info("Nessuna versione trovata (tabella versioni non disponibile o vuota).")
+        else:
+            # scegli versione
+            vnos = [v[0] for v in vers]
+            pick = st.selectbox("Apri versione", vnos, format_func=lambda x: f"Versione {x}", key="vv_pick_version")
+            rowv = get_visita_versione(conn, vid, int(pick))
+            if rowv:
+                pdfb = blob_to_bytes(rowv[5])
+                st.caption(f"Versione {rowv[3]} • by {rowv[7]} • {rowv[6]}")
+                if pdfb:
+                    st.download_button("Scarica PDF di questa versione", data=pdfb, file_name=f"referto_visita_{vid}_v{pick}.pdf")
+                else:
+                    st.warning("PDF non presente per questa versione.")
+            if st.button("Chiudi versioni", key="vv_close_versioni"):
+                st.session_state.vv_show_versioni = False
+                st.rerun()
+
+        st.markdown("---")
+
+        st.subheader("Distanza interpupillare (PD)")
+        pd_mm = st.text_input("PD (mm) – es. 62", key="vv_pd")
+
+        st.subheader("Acuità visiva (decimi) – ODX / OSN")
+        av_opts = ["", "ONV", "NV","1/10","2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10","11/10","12/10"]
+        c1,c2,c3 = st.columns(3)
+        with c1:
+            av_l_odx = st.selectbox("Lontano ODX", av_opts, 0, key="av_l_odx")
+            av_l_osn = st.selectbox("Lontano OSN", av_opts, 0, key="av_l_osn")
+        with c2:
+            av_i_odx = st.selectbox("Intermedio ODX", av_opts, 0, key="av_i_odx")
+            av_i_osn = st.selectbox("Intermedio OSN", av_opts, 0, key="av_i_osn")
+        with c3:
+            av_v_odx = st.selectbox("Vicino ODX", av_opts, 0, key="av_v_odx")
+            av_v_osn = st.selectbox("Vicino OSN", av_opts, 0, key="av_v_osn")
+
+        st.subheader("Refrazione oggettiva (SF / CIL x AX)")
+        c1,c2 = st.columns(2)
+        with c1: ro_odx = _ref_eye("RO ODX")
+        with c2: ro_osn = _ref_eye("RO OSN")
+
+        st.subheader("Refrazione soggettiva (SF / CIL x AX)")
+        c1,c2 = st.columns(2)
+        with c1: rs_odx = _ref_eye("RS ODX")
+        with c2: rs_osn = _ref_eye("RS OSN")
+
+        st.subheader("Cheratometria (campo libero)")
+        c1,c2 = st.columns(2)
+        with c1: k_odx = st.text_input("ODX (es. K1 ...; K2 ...)", key="k_odx")
+        with c2: k_osn = st.text_input("OSN (es. K1 ...; K2 ...)", key="k_osn")
+
+        st.subheader("Tonometria")
+        c1,c2 = st.columns(2)
+        with c1: ton_odx = st.text_input("ODX (mmHg)", key="ton_odx")
+        with c2: ton_osn = st.text_input("OSN (mmHg)", key="ton_osn")
+
+        st.subheader("Motilità / Allineamento")
+        mot = st.text_area("PPC / cover test / note", key="mot")
+
+        st.subheader("Colori / Pachimetria")
+        col = st.text_input("Colori (note)", key="col")
+        c1,c2 = st.columns(2)
+        with c1: pach_odx = st.text_input("Pachimetria ODX (µm)", key="pach_odx")
+        with c2: pach_osn = st.text_input("Pachimetria OSN (µm)", key="pach_osn")
+
+        note = st.text_area("Note", key="note")
+
+
+        col_save1, col_save2 = st.columns(2)
+        with col_save1:
+            do_new = st.button("➕ Genera referto PDF + salva NUOVA visita", key="save_referto_new")
+        with col_save2:
+            do_upd = st.button(
+                "✏️ Genera referto PDF + salva MODIFICA (nuova versione)",
+                key="save_referto_update",
+                disabled=(st.session_state.get("vv_selected_visit_id") is None)
+            )
+
+        if do_new or do_upd:
+            dati = {
+                "paziente_id": paz[0],
+                "paziente_label": f"{paz[1]} {paz[2]}",
+                "data_nascita": dn_iso,
+                "data_visita": data_visita_eu,
+                "data_visita_iso": data_visita_iso,
+                "pd_mm": pd_mm,
+                "av_decimi": {
+                    "lontano_odx": av_l_odx, "lontano_osn": av_l_osn,
+                    "intermedio_odx": av_i_odx, "intermedio_osn": av_i_osn,
+                    "vicino_odx": av_v_odx, "vicino_osn": av_v_osn,
+                },
+                "ref_oggettiva": {"odx": ro_odx, "osn": ro_osn},
+                "ref_soggettiva": {"odx": rs_odx, "osn": rs_osn},
+                "cheratometria": {"odx": k_odx, "osn": k_osn},
+                "tonometria": {"odx": ton_odx, "osn": ton_osn},
+                "motilita_allineamento": mot,
+                "colori": col,
+                "pachimetria": {"odx": pach_odx, "osn": pach_osn},
+                "note": note,
+            }
+            pdf_bytes = genera_referto_visita_bytes(dati)
+
+
+            is_pg = is_pg_conn(conn)
+            p = ph(conn)
+            if is_pg:
+                import psycopg2
+                json_val = PgJson(dati)
+                blob = psycopg2.Binary(pdf_bytes)
             else:
-                st.warning("PDF non presente per questa versione.")
-        if st.button("Chiudi versioni", key="vv_close_versioni"):
-            st.session_state.vv_show_versioni = False
-            st.rerun()
+                json_val = json.dumps(dati, ensure_ascii=False)
+                blob = pdf_bytes
 
-    st.markdown("---")
+            cur = conn.cursor()
+            if do_upd and st.session_state.get("vv_selected_visit_id"):
+                vid = int(st.session_state.vv_selected_visit_id)
+                sql = f"UPDATE visite_visive SET paziente_id={p}, data_visita={p}, dati_json={p}, pdf_bytes={p} WHERE id={p}"
+                cur.execute(sql, (paz[0], data_visita_iso, json_val, blob, vid))
+                conn.commit()
+                st.success(f"Visita #{vid} aggiornata ✅ (creata nuova versione)")
+            else:
+                sql = f"INSERT INTO visite_visive (paziente_id, data_visita, dati_json, pdf_bytes) VALUES ({p},{p},{p},{p})"
+                cur.execute(sql, (paz[0], data_visita_iso, json_val, blob))
+                conn.commit()
+                st.success("Visita salvata nel DB ✅")
 
-    st.subheader("Distanza interpupillare (PD)")
-    pd_mm = st.text_input("PD (mm) – es. 62", key="vv_pd")
-
-    st.subheader("Acuità visiva (decimi) – ODX / OSN")
-    av_opts = ["", "ONV", "NV","1/10","2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10","11/10","12/10"]
-    c1,c2,c3 = st.columns(3)
-    with c1:
-        av_l_odx = st.selectbox("Lontano ODX", av_opts, 0, key="av_l_odx")
-        av_l_osn = st.selectbox("Lontano OSN", av_opts, 0, key="av_l_osn")
-    with c2:
-        av_i_odx = st.selectbox("Intermedio ODX", av_opts, 0, key="av_i_odx")
-        av_i_osn = st.selectbox("Intermedio OSN", av_opts, 0, key="av_i_osn")
-    with c3:
-        av_v_odx = st.selectbox("Vicino ODX", av_opts, 0, key="av_v_odx")
-        av_v_osn = st.selectbox("Vicino OSN", av_opts, 0, key="av_v_osn")
-
-    st.subheader("Refrazione oggettiva (SF / CIL x AX)")
-    c1,c2 = st.columns(2)
-    with c1: ro_odx = _ref_eye("RO ODX")
-    with c2: ro_osn = _ref_eye("RO OSN")
-
-    st.subheader("Refrazione soggettiva (SF / CIL x AX)")
-    c1,c2 = st.columns(2)
-    with c1: rs_odx = _ref_eye("RS ODX")
-    with c2: rs_osn = _ref_eye("RS OSN")
-
-    st.subheader("Cheratometria (campo libero)")
-    c1,c2 = st.columns(2)
-    with c1: k_odx = st.text_input("ODX (es. K1 ...; K2 ...)", key="k_odx")
-    with c2: k_osn = st.text_input("OSN (es. K1 ...; K2 ...)", key="k_osn")
-
-    st.subheader("Tonometria")
-    c1,c2 = st.columns(2)
-    with c1: ton_odx = st.text_input("ODX (mmHg)", key="ton_odx")
-    with c2: ton_osn = st.text_input("OSN (mmHg)", key="ton_osn")
-
-    st.subheader("Motilità / Allineamento")
-    mot = st.text_area("PPC / cover test / note", key="mot")
-
-    st.subheader("Colori / Pachimetria")
-    col = st.text_input("Colori (note)", key="col")
-    c1,c2 = st.columns(2)
-    with c1: pach_odx = st.text_input("Pachimetria ODX (µm)", key="pach_odx")
-    with c2: pach_osn = st.text_input("Pachimetria OSN (µm)", key="pach_osn")
-
-    note = st.text_area("Note", key="note")
-
-
-    col_save1, col_save2 = st.columns(2)
-    with col_save1:
-        do_new = st.button("➕ Genera referto PDF + salva NUOVA visita", key="save_referto_new")
-    with col_save2:
-        do_upd = st.button(
-            "✏️ Genera referto PDF + salva MODIFICA (nuova versione)",
-            key="save_referto_update",
-            disabled=(st.session_state.get("vv_selected_visit_id") is None)
-        )
-
-    if do_new or do_upd:
-        dati = {
-            "paziente_id": paz[0],
-            "paziente_label": f"{paz[1]} {paz[2]}",
-            "data_nascita": dn_iso,
-            "data_visita": data_visita_eu,
-            "data_visita_iso": data_visita_iso,
-            "pd_mm": pd_mm,
-            "av_decimi": {
-                "lontano_odx": av_l_odx, "lontano_osn": av_l_osn,
-                "intermedio_odx": av_i_odx, "intermedio_osn": av_i_osn,
-                "vicino_odx": av_v_odx, "vicino_osn": av_v_osn,
-            },
-            "ref_oggettiva": {"odx": ro_odx, "osn": ro_osn},
-            "ref_soggettiva": {"odx": rs_odx, "osn": rs_osn},
-            "cheratometria": {"odx": k_odx, "osn": k_osn},
-            "tonometria": {"odx": ton_odx, "osn": ton_osn},
-            "motilita_allineamento": mot,
-            "colori": col,
-            "pachimetria": {"odx": pach_odx, "osn": pach_osn},
-            "note": note,
-        }
-        pdf_bytes = genera_referto_visita_bytes(dati)
-
-
-        is_pg = is_pg_conn(conn)
-        p = ph(conn)
-        if is_pg:
-            import psycopg2
-            json_val = PgJson(dati)
-            blob = psycopg2.Binary(pdf_bytes)
-        else:
-            json_val = json.dumps(dati, ensure_ascii=False)
-            blob = pdf_bytes
-
-        cur = conn.cursor()
-        if do_upd and st.session_state.get("vv_selected_visit_id"):
-            vid = int(st.session_state.vv_selected_visit_id)
-            sql = f"UPDATE visite_visive SET paziente_id={p}, data_visita={p}, dati_json={p}, pdf_bytes={p} WHERE id={p}"
-            cur.execute(sql, (paz[0], data_visita_iso, json_val, blob, vid))
-            conn.commit()
-            st.success(f"Visita #{vid} aggiornata ✅ (creata nuova versione)")
-        else:
-            sql = f"INSERT INTO visite_visive (paziente_id, data_visita, dati_json, pdf_bytes) VALUES ({p},{p},{p},{p})"
-            cur.execute(sql, (paz[0], data_visita_iso, json_val, blob))
-            conn.commit()
-            st.success("Visita salvata nel DB ✅")
-
-        safe = f"{paz[1]}_{paz[2]}".replace(" ", "_")
-        st.download_button(
-            "Scarica referto PDF",
-            data=pdf_bytes,
-            file_name=f"referto_visita_{safe}_{data_visita_iso}.pdf"
-        )
+            safe = f"{paz[1]}_{paz[2]}".replace(" ", "_")
+            st.download_button(
+                "Scarica referto PDF",
+                data=pdf_bytes,
+                file_name=f"referto_visita_{safe}_{data_visita_iso}.pdf"
+            )
