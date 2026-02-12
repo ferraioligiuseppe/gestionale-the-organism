@@ -49,10 +49,10 @@ def ui_visita_visiva(conn):
 
 
     motivo_visita = st.text_area(
-        \"Motivo della visita\",
-        key=\"vv_motivo_visita\",
+        "Motivo della visita",
+        key="vv_motivo_visita",
         height=130,
-        placeholder=\"Es. controllo visivo, cefalea, difficoltà lettura, follow-up…\"
+        placeholder="Es. controllo visivo, cefalea, difficoltà lettura, follow-up…"
     )
     st.subheader("Distanza interpupillare (PD)")
     pd_mm = st.text_input("PD (mm) – es. 62", key="vv_pd")

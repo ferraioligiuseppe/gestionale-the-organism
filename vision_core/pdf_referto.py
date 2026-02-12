@@ -118,16 +118,18 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     c.drawString(2*cm, y, "Dettaglio clinico")
     y -= 18
 
+    # AV naturale (decimi)
+    avn = dati.get("av_naturale") or {}
+    avn_odx = _clean(avn.get("odx"))
+    avn_osn = _clean(avn.get("osn"))
+    if avn_odx or avn_osn:
+        y = _section_title(c, y, "AV naturale (decimi)")
+        y = _bullet(c, y, f"ODX: {avn_odx} | OSN: {avn_osn}")
+        y -= 6
+
     # AV decimi
     avd = dati.get("av_decimi", {}) or {}
     if any(_clean(avd.get(k)) for k in ["lontano_odx","lontano_osn","intermedio_odx","intermedio_osn","vicino_odx","vicino_osn"]):
-        # AV naturale (decimi)
-avn = dati.get("av_naturale") or {}
-if any(_clean(avn.get(k)) for k in ["odx","osn"]):
-    y = _section_title(c, y, "AV naturale (decimi)")
-    y = _bullet(c, y, f"ODX: {_clean(avn.get('odx'))} | OSN: {_clean(avn.get('osn'))}")
-    y -= 6
-
         y = _section_title(c, y, "Acuità visiva (decimi)")
         lon = f"Lontano: ODX {_clean(avd.get('lontano_odx'))} | OSN {_clean(avd.get('lontano_osn'))}"
         inte = f"Intermedio: ODX {_clean(avd.get('intermedio_odx'))} | OSN {_clean(avd.get('intermedio_osn'))}"
