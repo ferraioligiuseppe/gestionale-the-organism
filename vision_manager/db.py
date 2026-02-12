@@ -84,97 +84,160 @@ def init_db(conn):
     )
     """)
     conn.commit()
-import json
-from datetime import datetime
 
-def create_visita(conn, paziente_id: int, data_visita: str, dati_json: dict, pdf_bytes: bytes):
-    """Crea nuova visita + versione 1"""
-    with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO visite_visive (paziente_id, data_visita, dati_json, pdf_bytes, current_version, created_at, updated_at, is_deleted)
-            VALUES (%s, %s, %s::jsonb, %s, 1, NOW(), NOW(), FALSE)
-            RETURNING id
-        """, (paziente_id, data_visita, json.dumps(dati_json), psycopg2.Binary(pdf_bytes)))
-        visita_id = cur.fetchone()[0]
+# =========================
+# VISITE VISIVE – VERSIONING (Neon PG)
+# =========================
 
-        cur.execute("""
-            INSERT INTO visite_visive_versioni (visita_id, version_no, dati_json, pdf_bytes, note_modifica, created_at)
-            VALUES (%s, 1, %s::jsonb, %s, %s, NOW())
-        """, (visita_id, json.dumps(dati_json), psycopg2.Binary(pdf_bytes), "creazione visita"))
+def get_visita_corrente(conn, visita_id: int):
+    """Ritorna la versione corrente (join su visite_visive_versioni) se presente, altrimenti fallback su visite_visive."""
+    cur = conn.cursor()
+    if _is_pg(conn):
+        try:
+            cur.execute(
+                """
+                SELECT
+                  v.id AS visita_id,
+                  v.paziente_id,
+                  v.data_visita,
+                  v.current_version,
+                  vv.dati_json,
+                  vv.pdf_bytes,
+                  vv.created_at AS version_created_at,
+                  vv.created_by,
+                  vv.note_modifica
+                FROM visite_visive v
+                JOIN visite_visive_versioni vv
+                  ON vv.visita_id = v.id
+                 AND vv.version_no = v.current_version
+                WHERE v.id = %s
+                  AND COALESCE(v.is_deleted, FALSE) = FALSE;
+                """,
+                (visita_id,),
+            )
+            return cur.fetchone()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            cur.execute(
+                """SELECT id, paziente_id, data_visita, NULL, dati_json, pdf_bytes, NULL, NULL, NULL
+                     FROM visite_visive WHERE id = %s""",
+                (visita_id,),
+            )
+            return cur.fetchone()
 
-    conn.commit()
-    return visita_id
+    # SQLite / fallback
+    cur.execute(
+        """SELECT id, paziente_id, data_visita, NULL, dati_json, pdf_bytes, NULL, NULL, NULL
+             FROM visite_visive WHERE id = ?""",
+        (visita_id,),
+    )
+    return cur.fetchone()
 
-def update_visita_new_version(conn, visita_id: int, data_visita: str, dati_json: dict, pdf_bytes: bytes, note: str = "modifica visita"):
-    """Non sovrascrive: crea nuova versione e aggiorna la visita 'testa'."""
-    with conn.cursor() as cur:
-        cur.execute("SELECT COALESCE(current_version, 1) FROM visite_visive WHERE id=%s", (visita_id,))
-        current_version = cur.fetchone()[0] or 1
-        new_version = int(current_version) + 1
 
-        # aggiorna "testa"
-        cur.execute("""
-            UPDATE visite_visive
-            SET data_visita=%s,
-                dati_json=%s::jsonb,
-                pdf_bytes=%s,
-                current_version=%s,
-                updated_at=NOW()
-            WHERE id=%s
-        """, (data_visita, json.dumps(dati_json), psycopg2.Binary(pdf_bytes), new_version, visita_id))
+def get_versioni_visita(conn, visita_id: int):
+    """Lista versioni di una visita (version_no DESC)."""
+    cur = conn.cursor()
+    if _is_pg(conn):
+        try:
+            cur.execute(
+                """
+                SELECT version_no, created_at, created_by, note_modifica
+                FROM visite_visive_versioni
+                WHERE visita_id = %s
+                ORDER BY version_no DESC
+                """,
+                (visita_id,),
+            )
+            return cur.fetchall()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return []
+    return []
 
-        # inserisce versione
-        cur.execute("""
-            INSERT INTO visite_visive_versioni (visita_id, version_no, dati_json, pdf_bytes, note_modifica, created_at)
-            VALUES (%s, %s, %s::jsonb, %s, %s, NOW())
-        """, (visita_id, new_version, json.dumps(dati_json), psycopg2.Binary(pdf_bytes), note))
 
-    conn.commit()
-    return new_version
+def get_visita_versione(conn, visita_id: int, version_no: int):
+    """Ritorna una versione specifica."""
+    cur = conn.cursor()
+    if _is_pg(conn):
+        try:
+            cur.execute(
+                """
+                SELECT
+                  v.id AS visita_id,
+                  v.paziente_id,
+                  v.data_visita,
+                  vv.version_no,
+                  vv.dati_json,
+                  vv.pdf_bytes,
+                  vv.created_at,
+                  vv.created_by,
+                  vv.note_modifica
+                FROM visite_visive v
+                JOIN visite_visive_versioni vv
+                  ON vv.visita_id = v.id
+                WHERE v.id = %s
+                  AND vv.version_no = %s
+                  AND COALESCE(v.is_deleted, FALSE) = FALSE;
+                """,
+                (visita_id, version_no),
+            )
+            return cur.fetchone()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return None
+    return None
 
-def soft_delete_visita(conn, visita_id: int, reason: str = ""):
-    with conn.cursor() as cur:
-        cur.execute("""
-            UPDATE visite_visive
-            SET is_deleted=TRUE, deleted_at=NOW(), updated_at=NOW()
-            WHERE id=%s
-        """, (visita_id,))
-    conn.commit()
 
-def list_visite_by_paziente(conn, paziente_id: int, include_deleted: bool=False):
-    with conn.cursor() as cur:
-        if include_deleted:
-            cur.execute("""
-                SELECT id, data_visita, current_version, is_deleted
+def list_visite_visive(conn, paziente_id: int):
+    """Lista visite (solo non eliminate se colonna presente)."""
+    cur = conn.cursor()
+    if _is_pg(conn):
+        try:
+            cur.execute(
+                """
+                SELECT id, data_visita, current_version, updated_at
                 FROM visite_visive
-                WHERE paziente_id=%s
-                ORDER BY data_visita DESC
-            """, (paziente_id,))
-        else:
-            cur.execute("""
-                SELECT id, data_visita, current_version, is_deleted
-                FROM visite_visive
-                WHERE paziente_id=%s AND is_deleted=FALSE
-                ORDER BY data_visita DESC
-            """, (paziente_id,))
-        return cur.fetchall()
+                WHERE paziente_id = %s AND COALESCE(is_deleted, FALSE) = FALSE
+                ORDER BY data_visita DESC NULLS LAST, id DESC
+                """,
+                (paziente_id,),
+            )
+            return cur.fetchall()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            cur.execute(
+                """SELECT id, data_visita, NULL, NULL
+                     FROM visite_visive WHERE paziente_id = %s ORDER BY data_visita DESC NULLS LAST, id DESC""",
+                (paziente_id,),
+            )
+            return cur.fetchall()
 
-def list_versioni(conn, visita_id: int):
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT id, version_no, created_at, note_modifica
-            FROM visite_visive_versioni
-            WHERE visita_id=%s
-            ORDER BY version_no DESC
-        """, (visita_id,))
-        return cur.fetchall()
+    # SQLite
+    cur.execute(
+        """SELECT id, data_visita, NULL, NULL
+             FROM visite_visive WHERE paziente_id = ? ORDER BY data_visita DESC, id DESC""",
+        (paziente_id,),
+    )
+    return cur.fetchall()
 
-def load_version(conn, versione_row_id: int):
-    """Carica una versione specifica (per preview / ripristino / export)"""
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT visita_id, version_no, dati_json, pdf_bytes
-            FROM visite_visive_versioni
-            WHERE id=%s
-        """, (versione_row_id,))
-        return cur.fetchone()
+
+def soft_delete_visita(conn, visita_id: int):
+    """Elimina visita: su PG diventa soft delete via trigger; su SQLite delete fisica."""
+    cur = conn.cursor()
+    if _is_pg(conn):
+        cur.execute("DELETE FROM visite_visive WHERE id = %s", (visita_id,))
+    else:
+        cur.execute("DELETE FROM visite_visive WHERE id = ?", (visita_id,))
+    conn.commit()

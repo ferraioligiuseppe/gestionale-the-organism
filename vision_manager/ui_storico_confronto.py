@@ -21,7 +21,7 @@ def ui_storico_confronto(conn):
 
     # ---- Load visits ----
     if is_pg:
-        cur.execute("SELECT id, data_visita, dati_json, pdf_bytes FROM visite_visive WHERE paziente_id = %s ORDER BY data_visita", (pid,))
+        cur.execute("SELECT id, data_visita, dati_json, pdf_bytes FROM visite_visive WHERE paziente_id = %s AND COALESCE(is_deleted, FALSE)=FALSE ORDER BY data_visita", (pid,))
     else:
         cur.execute("SELECT id, data_visita, dati_json, pdf_bytes FROM visite_visive WHERE paziente_id = ? ORDER BY data_visita", (pid,))
     rows = cur.fetchall()
