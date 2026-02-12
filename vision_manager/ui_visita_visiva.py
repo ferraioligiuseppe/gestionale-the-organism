@@ -47,6 +47,12 @@ def ui_visita_visiva(conn):
     data_visita_iso = _date_to_iso(dv)
     data_visita_eu = _date_to_eu(dv)
 
+    motivo_visita = st.text_input(
+        "Motivo della visita",
+        key="vv_motivo_visita",
+        placeholder="Es. controllo visivo, cefalea, difficoltà lettura, follow-up…"
+    )
+
     st.subheader("Distanza interpupillare (PD)")
     pd_mm = st.text_input("PD (mm) – es. 62", key="vv_pd")
 
@@ -101,6 +107,7 @@ def ui_visita_visiva(conn):
             "data_nascita": dn_iso,
             "data_visita": data_visita_eu,
             "data_visita_iso": data_visita_iso,
+            "motivo_visita": motivo_visita,
             "pd_mm": pd_mm,
             "av_decimi": {
                 "lontano_odx": av_l_odx, "lontano_osn": av_l_osn,
