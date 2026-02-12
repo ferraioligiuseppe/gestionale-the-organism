@@ -47,14 +47,23 @@ def ui_visita_visiva(conn):
     data_visita_iso = _date_to_iso(dv)
     data_visita_eu = _date_to_eu(dv)
 
-    motivo_visita = st.text_input(
-        "Motivo della visita",
-        key="vv_motivo_visita",
-        placeholder="Es. controllo visivo, cefalea, difficoltà lettura, follow-up…"
-    )
 
+    motivo_visita = st.text_area(
+        \"Motivo della visita\",
+        key=\"vv_motivo_visita\",
+        height=130,
+        placeholder=\"Es. controllo visivo, cefalea, difficoltà lettura, follow-up…\"
+    )
     st.subheader("Distanza interpupillare (PD)")
     pd_mm = st.text_input("PD (mm) – es. 62", key="vv_pd")
+
+    st.subheader("AV naturale (decimi) – ODX / OSN")
+    av_nat_opts = ["", "ONV", "NV","1/10","2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10","11/10","12/10"]
+    cna1, cna2 = st.columns(2)
+    with cna1:
+        av_nat_odx = st.selectbox("AV naturale ODX", av_nat_opts, 0, key="av_nat_odx")
+    with cna2:
+        av_nat_osn = st.selectbox("AV naturale OSN", av_nat_opts, 0, key="av_nat_osn")
 
     st.subheader("Acuità visiva (decimi) – ODX / OSN")
     av_opts = ["", "ONV", "NV","1/10","2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10","11/10","12/10"]
@@ -109,6 +118,7 @@ def ui_visita_visiva(conn):
             "data_visita_iso": data_visita_iso,
             "motivo_visita": motivo_visita,
             "pd_mm": pd_mm,
+            "av_naturale": {"odx": av_nat_odx, "osn": av_nat_osn},
             "av_decimi": {
                 "lontano_odx": av_l_odx, "lontano_osn": av_l_osn,
                 "intermedio_odx": av_i_odx, "intermedio_osn": av_i_osn,
@@ -121,6 +131,8 @@ def ui_visita_visiva(conn):
             "motilita_allineamento": mot,
             "colori": col,
             "pachimetria": {"odx": pach_odx, "osn": pach_osn},
+            "esame_obiettivo": esame_obiettivo,
+            "fondo_oculare": fondo_oculare,
             "note": note,
         }
         pdf_bytes = genera_referto_visita_bytes(dati)

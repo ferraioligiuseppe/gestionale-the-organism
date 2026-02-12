@@ -31,7 +31,7 @@ def _bullet(c: canvas.Canvas, y: float, text: str, font="Helvetica", size=10) ->
 def _section_title(c: canvas.Canvas, y: float, title: str) -> float:
     c.setFont("Helvetica-Bold", 11)
     c.drawString(2*cm, y, title.upper())
-    return y - 14
+    return y - 16
 
 def _overlay_on_template(content_pdf_bytes: bytes, template_path: str) -> bytes:
     try:
@@ -91,19 +91,17 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     pd = _clean(dati.get("pd_mm"))
 
     motivo = _clean(dati.get("motivo_visita"))
-    y0 = y  # y di riferimento per header/anagrafica
+    y_hdr = y  # riferimento per la colonna destra nell'header
 
-    # Motivo della visita (colonna destra)
     if motivo:
         c.setFont("Helvetica-Bold", 9)
-        c.drawRightString(W-2*cm, y0, "Motivo della visita")
+        c.drawRightString(W-2*cm, y_hdr, "Motivo della visita")
         c.setFont("Helvetica", 10)
-        lines_m = simpleSplit(motivo, "Helvetica", 10, 7.5*cm)
-        yy = y0 - 14
-        for ln in lines_m[:3]:  # max 3 righe per non invadere
+        lines_m = simpleSplit(motivo, "Helvetica", 10, 9.0*cm)
+        yy = y_hdr - 14
+        for ln in lines_m[:5]:
             c.drawRightString(W-2*cm, yy, ln)
             yy -= 14
-
 
     if paz:
         c.drawString(2*cm, y, f"Paziente: {paz}"); y -= 14
@@ -112,17 +110,24 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     if dv:
         c.drawString(2*cm, y, f"Data visita: {dv}"); y -= 14
     if pd:
-        c.drawString(2*cm, y, f"PD: {pd} mm"); y -= 20
+        c.drawString(2*cm, y, f"PD: {pd} mm"); y -= 16
     else:
         y -= 4
 
     c.setFont("Helvetica-Bold", 11)
     c.drawString(2*cm, y, "Dettaglio clinico")
-    y -= 20
+    y -= 18
 
     # AV decimi
     avd = dati.get("av_decimi", {}) or {}
     if any(_clean(avd.get(k)) for k in ["lontano_odx","lontano_osn","intermedio_odx","intermedio_osn","vicino_odx","vicino_osn"]):
+        # AV naturale (decimi)
+avn = dati.get("av_naturale") or {}
+if any(_clean(avn.get(k)) for k in ["odx","osn"]):
+    y = _section_title(c, y, "AV naturale (decimi)")
+    y = _bullet(c, y, f"ODX: {_clean(avn.get('odx'))} | OSN: {_clean(avn.get('osn'))}")
+    y -= 6
+
         y = _section_title(c, y, "Acuità visiva (decimi)")
         lon = f"Lontano: ODX {_clean(avd.get('lontano_odx'))} | OSN {_clean(avd.get('lontano_osn'))}"
         inte = f"Intermedio: ODX {_clean(avd.get('intermedio_odx'))} | OSN {_clean(avd.get('intermedio_osn'))}"
@@ -184,6 +189,29 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
             if _clean(pach.get("odx")): y = _bullet(c, y, f"Pachimetria ODX: {_clean(pach.get('odx'))} µm")
             if _clean(pach.get("osn")): y = _bullet(c, y, f"Pachimetria OSN: {_clean(pach.get('osn'))} µm")
         y -= 6
+
+esame_obiettivo = _clean(dati.get("esame_obiettivo"))
+if esame_obiettivo:
+    y = _section_title(c, y, "Esame obiettivo")
+    # testo multi-riga senza perdere spaziatura
+    c.setFont("Helvetica", 10)
+    max_w = A4[0] - 4*cm
+    lines = simpleSplit(esame_obiettivo, "Helvetica", 10, max_w)
+    for ln in lines:
+        c.drawString(2*cm, y, ln)
+        y -= 14
+    y -= 6
+
+fondo_oculare = _clean(dati.get("fondo_oculare"))
+if fondo_oculare:
+    y = _section_title(c, y, "Fondo oculare")
+    c.setFont("Helvetica", 10)
+    max_w = A4[0] - 4*cm
+    lines = simpleSplit(fondo_oculare, "Helvetica", 10, max_w)
+    for ln in lines:
+        c.drawString(2*cm, y, ln)
+        y -= 14
+    y -= 6
 
     note = _clean(dati.get("note"))
     if note:
