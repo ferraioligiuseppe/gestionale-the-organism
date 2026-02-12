@@ -1,7 +1,6 @@
 import json
 import streamlit as st
 from datetime import date
-from vision_core.pdf_referto import genera_referto_visita_bytes
 from utils import is_pg_conn, ph
 from psycopg2.extras import Json as PgJson
 
@@ -31,6 +30,8 @@ def _ref_eye(prefix: str):
     return {"sf": sf, "cil": cil, "ax": ax}
 
 def ui_visita_visiva(conn):
+    from vision_core.pdf_referto import genera_referto_visita_bytes
+
     st.header("Visita visiva – Referto A4")
 
     cur = conn.cursor()
@@ -52,7 +53,7 @@ def ui_visita_visiva(conn):
         "Motivo della visita",
         key="vv_motivo_visita",
         height=130,
-        placeholder="Es. controllo visivo, cefalea, difficoltà lettura, follow-up…"
+        placeholder="Es. controllo visivo, cefalea, difficoltà lettura, follow-up..."
     )
     st.subheader("Distanza interpupillare (PD)")
     pd_mm = st.text_input("PD (mm) – es. 62", key="vv_pd")
