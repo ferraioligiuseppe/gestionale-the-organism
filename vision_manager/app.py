@@ -10,7 +10,40 @@ from ui_visita_visiva import ui_visita_visiva
 from ui_prescrizione import ui_prescrizione
 from ui_storico_confronto import ui_storico_confronto
 from ui_diagnostica import ui_diagnostica
-import streamlit as st
+import hmac
+
+def require_basic_login():
+    auth = st.secrets.get("auth_basic", None)
+    if not auth:
+        st.error("Auth non configurata nei Secrets (auth_basic).")
+        st.stop()
+
+    # Se già autenticato
+    if st.session_state.get("is_auth", False):
+        return
+
+    st.title("Login")
+
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
+
+    if st.button("Accedi"):
+        ok_user = hmac.compare_digest((u or "").strip(), str(auth.get("username", "")).strip())
+        ok_pass = hmac.compare_digest(p or "", str(auth.get("password", "")))
+        if ok_user and ok_pass:
+            st.session_state["is_auth"] = True
+            st.session_state["auth_user"] = u.strip()
+            st.rerun()
+        else:
+            st.error("Credenziali non valide")
+
+    st.stop()
+
+require_basic_login()
+if st.sidebar.button("Logout"):
+    st.session_state.clear()
+    st.rerun()
+
 
 st.set_page_config(page_title="The Organism – Vision Manager", layout="wide")
 
