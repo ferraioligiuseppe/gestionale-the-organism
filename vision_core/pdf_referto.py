@@ -89,19 +89,20 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     dn = _clean(dati.get("data_nascita"))
     dv = _clean(dati.get("data_visita"))
     pd = _clean(dati.get("pd_mm"))
+motivo = _clean(dati.get("motivo_visita"))
+y_anag_start = y  # riferimento per header/anagrafica
 
-    motivo = _clean(dati.get("motivo_visita"))
-    y_hdr = y  # riferimento per la colonna destra nell'header
+# Motivo della visita (colonna destra) - fino a 5 righe
+if motivo:
+    c.setFont("Helvetica-Bold", 9)
+    c.drawRightString(W-2*cm, y_anag_start, "Motivo della visita")
+    c.setFont("Helvetica", 10)
+    lines_m = simpleSplit(motivo, "Helvetica", 10, 9.0*cm)
+    yy = y_anag_start - 14
+    for ln in lines_m[:5]:
+        c.drawRightString(W-2*cm, yy, ln)
+        yy -= 14
 
-    if motivo:
-        c.setFont("Helvetica-Bold", 9)
-        c.drawRightString(W-2*cm, y_hdr, "Motivo della visita")
-        c.setFont("Helvetica", 10)
-        lines_m = simpleSplit(motivo, "Helvetica", 10, 9.0*cm)
-        yy = y_hdr - 14
-        for ln in lines_m[:5]:
-            c.drawRightString(W-2*cm, yy, ln)
-            yy -= 14
 
     if paz:
         c.drawString(2*cm, y, f"Paziente: {paz}"); y -= 14
@@ -110,7 +111,7 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     if dv:
         c.drawString(2*cm, y, f"Data visita: {dv}"); y -= 14
     if pd:
-        c.drawString(2*cm, y, f"PD: {pd} mm"); y -= 16
+        c.drawString(2*cm, y, f"PD: {pd} mm"); y -= 18
     else:
         y -= 4
 
@@ -118,14 +119,12 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     c.drawString(2*cm, y, "Dettaglio clinico")
     y -= 18
 
-    # AV naturale (decimi)
-    avn = dati.get("av_naturale") or {}
-    avn_odx = _clean(avn.get("odx"))
-    avn_osn = _clean(avn.get("osn"))
-    if avn_odx or avn_osn:
-        y = _section_title(c, y, "AV naturale (decimi)")
-        y = _bullet(c, y, f"ODX: {avn_odx} | OSN: {avn_osn}")
-        y -= 6
+# AV naturale (decimi)
+avn = dati.get("av_naturale") or {}
+if isinstance(avn, dict) and (_clean(avn.get("odx")) or _clean(avn.get("osn"))):
+    y = _section_title(c, y, "AV naturale (decimi)")
+    y = _bullet(c, y, f"ODX: {_clean(avn.get('odx'))} | OSN: {_clean(avn.get('osn'))}")
+    y -= 6
 
     # AV decimi
     avd = dati.get("av_decimi", {}) or {}
@@ -195,7 +194,6 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
 esame_obiettivo = _clean(dati.get("esame_obiettivo"))
 if esame_obiettivo:
     y = _section_title(c, y, "Esame obiettivo")
-    # testo multi-riga senza perdere spaziatura
     c.setFont("Helvetica", 10)
     max_w = A4[0] - 4*cm
     lines = simpleSplit(esame_obiettivo, "Helvetica", 10, max_w)
