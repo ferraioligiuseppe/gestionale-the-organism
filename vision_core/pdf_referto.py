@@ -8,7 +8,7 @@ from reportlab.lib.utils import simpleSplit
 from pypdf import PdfReader, PdfWriter
 import os
 
-START_UNDER_GREEN_CM = 5.0  # distanza dal bordo superiore (sotto riga verde)
+TEMPLATE_TOP_OFFSET_CM = 8.0  # scendi di 7 cm quando c'è carta intestata
 
 def _s(v: Any) -> str:
     if v is None:
@@ -75,7 +75,7 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     has_template = os.path.exists(template)
 
     # start position
-    y = H - (START_UNDER_GREEN_CM*cm if has_template else 3.0*cm)
+    y = H - (3.0*cm + (TEMPLATE_TOP_OFFSET_CM*cm if has_template else 0))
 
     if not has_template:
         c.setFont("Helvetica-Bold", 14)
