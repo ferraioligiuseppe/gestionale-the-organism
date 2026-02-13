@@ -104,6 +104,22 @@ def ui_visita_visiva(conn):
     c1,c2 = st.columns(2)
     with c1: pach_odx = st.text_input("Pachimetria ODX (µm)", key="pach_odx")
     with c2: pach_osn = st.text_input("Pachimetria OSN (µm)", key="pach_osn")
+st.subheader("Esame obiettivo")
+
+c1, c2 = st.columns(2)
+with c1:
+    cornea = st.text_input("Cornea", key="eo_cornea")
+    camera_ant = st.text_input("Camera anteriore", key="eo_camera")
+with c2:
+    congiuntiva = st.text_input("Congiuntiva", key="eo_congiuntiva")
+    cristallino = st.text_input("Cristallino", key="eo_cristallino")
+
+fondo_oculare = st.text_area(
+    "Fondo oculare",
+    key="eo_fondo",
+    height=90
+)
+
 
     note = st.text_area("Note", key="note")
 
@@ -129,7 +145,14 @@ def ui_visita_visiva(conn):
             "motilita_allineamento": mot,
             "colori": col,
             "pachimetria": {"odx": pach_odx, "osn": pach_osn},
-            "note": note,
+            "esame_obiettivo": {
+    "cornea": cornea,
+    "congiuntiva": congiuntiva,
+    "camera_anteriore": camera_ant,
+    "cristallino": cristallino,
+},
+"fondo_oculare": fondo_oculare,
+"note": note,
         }
         from vision_core.pdf_referto import genera_referto_visita_bytes
         pdf_bytes = genera_referto_visita_bytes(dati)

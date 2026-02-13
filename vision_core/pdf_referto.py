@@ -190,17 +190,15 @@ if isinstance(avn, dict) and (_clean(avn.get("odx")) or _clean(avn.get("osn"))):
             if _clean(pach.get("odx")): y = _bullet(c, y, f"Pachimetria ODX: {_clean(pach.get('odx'))} µm")
             if _clean(pach.get("osn")): y = _bullet(c, y, f"Pachimetria OSN: {_clean(pach.get('osn'))} µm")
         y -= 6
-
-esame_obiettivo = _clean(dati.get("esame_obiettivo"))
-if esame_obiettivo:
+eo = dati.get("esame_obiettivo") or {}
+if any(_clean(eo.get(k)) for k in ["cornea","congiuntiva","camera_anteriore","cristallino"]):
     y = _section_title(c, y, "Esame obiettivo")
-    c.setFont("Helvetica", 10)
-    max_w = A4[0] - 4*cm
-    lines = simpleSplit(esame_obiettivo, "Helvetica", 10, max_w)
-    for ln in lines:
-        c.drawString(2*cm, y, ln)
-        y -= 14
+    y = _bullet(c, y, f"Cornea: {_clean(eo.get('cornea'))}")
+    y = _bullet(c, y, f"Congiuntiva: {_clean(eo.get('congiuntiva'))}")
+    y = _bullet(c, y, f"Camera anteriore: {_clean(eo.get('camera_anteriore'))}")
+    y = _bullet(c, y, f"Cristallino: {_clean(eo.get('cristallino'))}")
     y -= 6
+
 
 fondo_oculare = _clean(dati.get("fondo_oculare"))
 if fondo_oculare:
