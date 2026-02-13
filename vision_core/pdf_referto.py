@@ -25,13 +25,13 @@ def _bullet(c: canvas.Canvas, y: float, text: str, font="Helvetica", size=10) ->
     for i, ln in enumerate(lines):
         prefix = "- " if i == 0 else "  "
         c.drawString(2*cm, y, prefix + ln)
-        y -= 14
+        y -= 12
     return y
 
 def _section_title(c: canvas.Canvas, y: float, title: str) -> float:
     c.setFont("Helvetica-Bold", 11)
     c.drawString(2*cm, y, title.upper())
-    return y - 16
+    return y - 14
 
 def _overlay_on_template(content_pdf_bytes: bytes, template_path: str) -> bytes:
     try:
@@ -89,42 +89,21 @@ def genera_referto_visita_bytes(dati: Dict[str, Any]) -> bytes:
     dn = _clean(dati.get("data_nascita"))
     dv = _clean(dati.get("data_visita"))
     pd = _clean(dati.get("pd_mm"))
-motivo = _clean(dati.get("motivo_visita"))
-y_anag_start = y  # riferimento per header/anagrafica
-
-# Motivo della visita (colonna destra) - fino a 5 righe
-if motivo:
-    c.setFont("Helvetica-Bold", 9)
-    c.drawRightString(W-2*cm, y_anag_start, "Motivo della visita")
-    c.setFont("Helvetica", 10)
-    lines_m = simpleSplit(motivo, "Helvetica", 10, 9.0*cm)
-    yy = y_anag_start - 14
-    for ln in lines_m[:5]:
-        c.drawRightString(W-2*cm, yy, ln)
-        yy -= 14
-
 
     if paz:
-        c.drawString(2*cm, y, f"Paziente: {paz}"); y -= 14
+        c.drawString(2*cm, y, f"Paziente: {paz}"); y -= 12
     if dn:
-        c.drawString(2*cm, y, f"Data di nascita: {dn}"); y -= 14
+        c.drawString(2*cm, y, f"Data di nascita: {dn}"); y -= 12
     if dv:
-        c.drawString(2*cm, y, f"Data visita: {dv}"); y -= 14
+        c.drawString(2*cm, y, f"Data visita: {dv}"); y -= 12
     if pd:
-        c.drawString(2*cm, y, f"PD: {pd} mm"); y -= 18
+        c.drawString(2*cm, y, f"PD: {pd} mm"); y -= 16
     else:
         y -= 4
 
     c.setFont("Helvetica-Bold", 11)
     c.drawString(2*cm, y, "Dettaglio clinico")
     y -= 18
-
-# AV naturale (decimi)
-avn = dati.get("av_naturale") or {}
-if isinstance(avn, dict) and (_clean(avn.get("odx")) or _clean(avn.get("osn"))):
-    y = _section_title(c, y, "AV naturale (decimi)")
-    y = _bullet(c, y, f"ODX: {_clean(avn.get('odx'))} | OSN: {_clean(avn.get('osn'))}")
-    y -= 6
 
     # AV abituale (decimi)
     ava = dati.get("av_abituale") or {}
@@ -133,7 +112,7 @@ if isinstance(avn, dict) and (_clean(avn.get("odx")) or _clean(avn.get("osn"))):
         y = _bullet(c, y, f"ODX: {_clean(ava.get('odx'))} | OSN: {_clean(ava.get('osn'))}")
         y -= 6
 
-    # AV decimi
+        # AV decimi
     avd = dati.get("av_decimi", {}) or {}
     if any(_clean(avd.get(k)) for k in ["lontano_odx","lontano_osn","intermedio_odx","intermedio_osn","vicino_odx","vicino_osn"]):
         y = _section_title(c, y, "Acuità visiva (decimi)")
@@ -197,26 +176,26 @@ if isinstance(avn, dict) and (_clean(avn.get("odx")) or _clean(avn.get("osn"))):
             if _clean(pach.get("odx")): y = _bullet(c, y, f"Pachimetria ODX: {_clean(pach.get('odx'))} µm")
             if _clean(pach.get("osn")): y = _bullet(c, y, f"Pachimetria OSN: {_clean(pach.get('osn'))} µm")
         y -= 6
-eo = dati.get("esame_obiettivo") or {}
-if any(_clean(eo.get(k)) for k in ["cornea","congiuntiva","camera_anteriore","cristallino"]):
-    y = _section_title(c, y, "Esame obiettivo")
-    y = _bullet(c, y, f"Cornea: {_clean(eo.get('cornea'))}")
-    y = _bullet(c, y, f"Congiuntiva: {_clean(eo.get('congiuntiva'))}")
-    y = _bullet(c, y, f"Camera anteriore: {_clean(eo.get('camera_anteriore'))}")
-    y = _bullet(c, y, f"Cristallino: {_clean(eo.get('cristallino'))}")
-    y -= 6
 
+    eo = dati.get("esame_obiettivo") or {}
+    if isinstance(eo, dict) and any(_clean(eo.get(k)) for k in ["cornea","congiuntiva","camera_anteriore","cristallino"]):
+        y = _section_title(c, y, "Esame obiettivo")
+        y = _bullet(c, y, f"Cornea: {_clean(eo.get('cornea'))}")
+        y = _bullet(c, y, f"Congiuntiva: {_clean(eo.get('congiuntiva'))}")
+        y = _bullet(c, y, f"Camera anteriore: {_clean(eo.get('camera_anteriore'))}")
+        y = _bullet(c, y, f"Cristallino: {_clean(eo.get('cristallino'))}")
+        y -= 6
 
-fondo_oculare = _clean(dati.get("fondo_oculare"))
-if fondo_oculare:
-    y = _section_title(c, y, "Fondo oculare")
-    c.setFont("Helvetica", 10)
-    max_w = A4[0] - 4*cm
-    lines = simpleSplit(fondo_oculare, "Helvetica", 10, max_w)
-    for ln in lines:
-        c.drawString(2*cm, y, ln)
-        y -= 14
-    y -= 6
+    fondo_oculare = _clean(dati.get("fondo_oculare"))
+    if fondo_oculare:
+        y = _section_title(c, y, "Fondo oculare")
+        c.setFont("Helvetica", 10)
+        max_w = A4[0] - 4*cm
+        lines = simpleSplit(fondo_oculare, "Helvetica", 10, max_w)
+        for ln in lines:
+            c.drawString(2*cm, y, ln)
+            y -= 14
+        y -= 6
 
     note = _clean(dati.get("note"))
     if note:
