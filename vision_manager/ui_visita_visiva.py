@@ -30,8 +30,6 @@ def _ref_eye(prefix: str):
     return {"sf": sf, "cil": cil, "ax": ax}
 
 def ui_visita_visiva(conn):
-    decimi_opts = ["", "0/10", "ONV", "NV", "1/10", "2/10", "3/10", "4/10", "5/10", "6/10", "7/10", "8/10", "9/10", "10/10", "11/10", "12/10"]
-
     st.header("Visita visiva – Referto A4")
 
     cur = conn.cursor()
@@ -48,6 +46,9 @@ def ui_visita_visiva(conn):
     data_visita_iso = _date_to_iso(dv)
     data_visita_eu = _date_to_eu(dv)
 
+    decimi_opts = ["", "0/10", "ONV", "NV", "1/10", "2/10", "3/10", "4/10", "5/10", "6/10", "7/10", "8/10", "9/10", "10/10", "11/10", "12/10"]
+
+
     motivo_visita = st.text_area(
         "Motivo della visita",
         key="vv_motivo_visita",
@@ -57,13 +58,19 @@ def ui_visita_visiva(conn):
 
     st.subheader("Distanza interpupillare (PD)")
     pd_mm = st.text_input("PD (mm) – es. 62", key="vv_pd")
-
     st.subheader("AV naturale (decimi) – ODX / OSN")
     cna1, cna2 = st.columns(2)
     with cna1:
-        av_nat_odx = st.text_input("AV naturale ODX", key="vv_av_nat_odx")
+        av_nat_odx = st.selectbox("AV naturale ODX", decimi_opts, 0, key="vv_av_nat_odx")
     with cna2:
-        av_nat_osn = st.text_input("AV naturale OSN", key="vv_av_nat_osn")
+        av_nat_osn = st.selectbox("AV naturale OSN", decimi_opts, 0, key="vv_av_nat_osn")
+
+    st.subheader("AV abituale (decimi) – ODX / OSN")
+    cab1, cab2 = st.columns(2)
+    with cab1:
+        av_abit_odx = st.selectbox("AV abituale ODX", decimi_opts, 0, key="vv_av_abit_odx")
+    with cab2:
+        av_abit_osn = st.selectbox("AV abituale OSN", decimi_opts, 0, key="vv_av_abit_osn")
 
     st.subheader("Acuità visiva (decimi) – ODX / OSN")
     av_opts = ["", "ONV", "NV","1/10","2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10","11/10","12/10"]
@@ -106,17 +113,17 @@ def ui_visita_visiva(conn):
     c1,c2 = st.columns(2)
     with c1: pach_odx = st.text_input("Pachimetria ODX (µm)", key="pach_odx")
     with c2: pach_osn = st.text_input("Pachimetria OSN (µm)", key="pach_osn")
-st.subheader("Esame obiettivo")
+    st.subheader("Esame obiettivo")
 
-c1, c2 = st.columns(2)
-with c1:
-    cornea = st.text_input("Cornea", key="eo_cornea")
-    camera_ant = st.text_input("Camera anteriore", key="eo_camera")
-with c2:
-    congiuntiva = st.text_input("Congiuntiva", key="eo_congiuntiva")
-    cristallino = st.text_input("Cristallino", key="eo_cristallino")
+    c_eo1, c_eo2 = st.columns(2)
+    with c_eo1:
+        cornea = st.text_input("Cornea", key="eo_cornea")
+        camera_ant = st.text_input("Camera anteriore", key="eo_camera_ant")
+    with c_eo2:
+        congiuntiva = st.text_input("Congiuntiva", key="eo_congiuntiva")
+        cristallino = st.text_input("Cristallino", key="eo_cristallino")
 
-fondo_oculare = st.text_area("Fondo oculare", key="eo_fondo", height=90)
+    fondo_oculare = st.text_area("Fondo oculare", key="eo_fondo_oculare", height=90)
 
 
     note = st.text_area("Note", key="note")
