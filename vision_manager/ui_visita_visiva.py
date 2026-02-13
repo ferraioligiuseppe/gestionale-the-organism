@@ -30,6 +30,8 @@ def _ref_eye(prefix: str):
     return {"sf": sf, "cil": cil, "ax": ax}
 
 def ui_visita_visiva(conn):
+    decimi_opts = ["", "0/10", "ONV", "NV", "1/10", "2/10", "3/10", "4/10", "5/10", "6/10", "7/10", "8/10", "9/10", "10/10", "11/10", "12/10"]
+
     st.header("Visita visiva – Referto A4")
 
     cur = conn.cursor()
