@@ -154,7 +154,14 @@ def ui_visita_visiva(conn):
             "fondo_oculare": fondo_oculare,
             "note": note,
         }
-        from vision_core.pdf_referto import genera_referto_visita_bytes
+import importlib, traceback
+try:
+    mod = importlib.import_module("vision_core.pdf_referto")
+    genera_referto_visita_bytes = getattr(mod, "genera_referto_visita_bytes")
+except Exception as e:
+    st.error("Errore nel modulo PDF (vision_core/pdf_referto.py).")
+    st.code(traceback.format_exc())
+    return
         pdf_bytes = genera_referto_visita_bytes(dati)
 
         is_pg = is_pg_conn(conn)
