@@ -1310,6 +1310,8 @@ def init_db() -> None:
                 Firma_Filename           TEXT,
                 Firma_URL                TEXT,
                 Firma_Source             TEXT,
+                Pdf_Blob               BLOB,
+                Pdf_Filename           TEXT,
                 Note                    TEXT
             )
     """
@@ -1326,6 +1328,8 @@ def init_db() -> None:
                 ("Firma_Filename", "TEXT"),
                 ("Firma_URL", "TEXT"),
                 ("Firma_Source", "TEXT"),
+                ("Pdf_Blob", "BLOB"),
+                ("Pdf_Filename", "TEXT"),
             ]
             for col, typ in mig_cols:
                 if col not in existing_cols:
@@ -1519,7 +1523,9 @@ def init_db() -> None:
                 ADD COLUMN IF NOT EXISTS Firma_Blob BYTEA,
                 ADD COLUMN IF NOT EXISTS Firma_Filename TEXT,
                 ADD COLUMN IF NOT EXISTS Firma_URL TEXT,
-                ADD COLUMN IF NOT EXISTS Firma_Source TEXT;
+                ADD COLUMN IF NOT EXISTS Firma_Source TEXT,
+                ADD COLUMN IF NOT EXISTS Pdf_Blob BYTEA,
+                ADD COLUMN IF NOT EXISTS Pdf_Filename TEXT;
             """
         )
     except Exception:
@@ -2131,8 +2137,9 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
         (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
          Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
          Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo,
-         Firma_Blob, Firma_Filename, Firma_URL, Firma_Source, Note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         Firma_Blob, Firma_Filename, Firma_URL, Firma_Source,
+         Pdf_Blob, Pdf_Filename, Note)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             paziente_id,
@@ -2153,6 +2160,8 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
             payload.get("Firma_Filename") or "",
             payload.get("Firma_URL") or "",
             payload.get("Firma_Source") or "",
+            payload.get("Pdf_Blob"),
+            payload.get("Pdf_Filename") or "",
             payload.get("Note") or "",
         ),
     )
@@ -4543,6 +4552,8 @@ ESAMI STRUTTURALI / FUNZIONALI
                 "Firma_Filename": (firma_file.name if firma_file is not None else ""),
                 "Firma_URL": "",
                 "Firma_Source": ("upload" if firma_file is not None else ""),
+                "Pdf_Blob": None,
+                "Pdf_Filename": "",
                 "Note": n_priv,
             }
             insert_privacy_consent(cur, paz_id, payload)
@@ -6184,7 +6195,40 @@ def ui_public_sign_page():
         else:
             _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
 
-        # Se il merge fallisce, archiviamo anche la pagina firma separata
+        
+        # --- SALVATAGGIO CONSENSO SU DB (Consensi_Privacy) ---
+        try:
+            cur = conn.cursor()
+            payload_db = {
+                "Data_Ora": _now_iso_dt(),
+                "Tipo": "MINORE" if doc_type == "minore" else "ADULTO",
+                "Tutore_Nome": "",
+                "Tutore_CF": "",
+                "Tutore_Telefono": "",
+                "Tutore_Email": "",
+                # mapping consensi (pagina online)
+                "Consenso_Trattamento": bool(cons_dati),
+                "Consenso_Comunicazioni": True,   # gestione appuntamenti / comunicazioni di servizio
+                "Consenso_Marketing": bool(cons_marketing),
+                "Canale_Email": True,
+                "Canale_SMS": False,
+                "Canale_WhatsApp": False,
+                "Usa_Klaviyo": bool(cons_marketing),
+                "Firma_Blob": sig_png,
+                "Firma_Filename": "firma_online.png",
+                "Firma_URL": "",
+                "Firma_Source": "online",
+                "Pdf_Blob": final_pdf,
+                "Pdf_Filename": f"Consenso_{doc_type}_online.pdf",
+                "Note": "Consenso firmato online",
+            }
+            insert_privacy_consent(cur, int(pid), payload_db)
+            conn.commit()
+        except Exception as e:
+            st.warning(f"Consenso inviato/archiviato, ma non salvato nello storico DB: {e}")
+
+
+# Se il merge fallisce, archiviamo anche la pagina firma separata
         extra_key = None
         if extra_pdf is not None and extra_name:
             extra_digest = _sha256_bytes(extra_pdf)
