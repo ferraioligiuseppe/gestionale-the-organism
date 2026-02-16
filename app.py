@@ -5656,8 +5656,13 @@ def _presign_expires():
     # default 24h
     return int(cfg.get("PRESIGN_EXPIRE_SECONDS", 86400))
 
-def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> bool:
-    """Upload bytes to private S3. Returns True on success; False on failure (does not crash the app)."""
+def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> tuple[bool, str]:
+    """Upload bytes to private S3.
+
+    Returns:
+        (True, "OK") on success
+        (False, "<errore>") on failure (does not crash the app)
+    """
     try:
         cli = _s3_client()
         cli.put_object(
@@ -5666,20 +5671,22 @@ def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"
             Body=data,
             ContentType=content_type,
         )
-        return True
+        return True, "OK"
     except Exception as e:
         # Try to surface useful info on Streamlit without leaking secrets
+        msg = f"{type(e).__name__}: {e}"
         try:
             import botocore
             if isinstance(e, botocore.exceptions.ClientError):
                 err = getattr(e, "response", {}).get("Error", {})
-                st.error(f"Upload S3 fallito: {err.get('Code','ClientError')} – {err.get('Message','')}")
-            else:
-                st.error(f"Upload S3 fallito: {type(e).__name__}: {e}")
+                msg = f"{err.get('Code','ClientError')} – {err.get('Message','')}"
         except Exception:
             pass
-        return False
-
+        try:
+            st.error(f"Upload S3 fallito: {msg}")
+        except Exception:
+            pass
+        return False, msg
 
 def _s3_presign_get(key: str) -> str:
     cli = _s3_client()
