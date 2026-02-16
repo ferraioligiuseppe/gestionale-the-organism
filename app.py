@@ -1,4 +1,5 @@
 import streamlit as st
+USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
 
 
 
@@ -5683,7 +5684,7 @@ def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"
         except Exception:
             pass
         try:
-            st.error(f"Upload S3 fallito: {msg}")
+            st.error(f"Upload S3 disabilitato: {msg}")
         except Exception:
             pass
         return False, msg
@@ -5975,9 +5976,9 @@ def ui_privacy_pdf():
             digest = _sha256_bytes(pdf_bytes)
             key = f"consensi/{pid}/template/privacy_{doc_type}_{digest[:10]}.pdf"
 
-            ok_s3, msg_s3 = _s3_put_private(key, pdf_bytes, content_type="application/pdf")
+            ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
             if not ok_s3:
-                st.error(f"S3 upload fallito: {msg_s3}")
+                st.error(f"Upload S3 disabilitato: {msg_s3}")
                 return
 
             # salva su DB SOLO se upload ok
@@ -6194,11 +6195,11 @@ def ui_public_sign_page():
         digest = _sha256_bytes(final_pdf)
         ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
-        ok_s3, msg_s3 = _s3_put_private(key, final_pdf, content_type="application/pdf")
+        ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
         ok_upload = ok_s3
         if not ok_upload:
-            st.error(f"S3 upload fallito: {msg_s3}")
-            st.warning("Documento NON archiviato su cloud (upload fallito). Il PDF verrà comunque inviato via email se configurata.")
+            st.error(f"Upload S3 disabilitato: {msg_s3}")
+            st.warning("Documento archiviato su Neon. (S3 disabilitato). Il PDF verrà comunque inviato via email se configurata.")
         else:
             _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
 
@@ -6245,18 +6246,20 @@ def ui_public_sign_page():
 
 
         # invio email a entrambi
-        try:
-            to_list = [email.strip(), _clinic_email()]
-            subject = "Consenso informato e privacy – Studio The Organism"
-            body = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
-            _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
-        except Exception as e:
-            st.warning(f"Consenso salvato, ma invio email non riuscito: {e}")
+    email_ok = True
+    try:
+        to_list = [email.strip(), _clinic_email()]
+        subject = "Consenso informato e privacy – Studio The Organism"
+        body = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
+        _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
+    except Exception as e:
+        email_ok = False
+        st.warning(f"Consenso archiviato su Neon, ma invio email non riuscito: {e}")
 
-        st.success("✅ Consenso inviato e archiviato. Puoi chiudere questa pagina.")
-        st.balloons()
-
-
+    if email_ok:
+        st.success("✅ Consenso archiviato su Neon e inviato via email. Puoi chiudere questa pagina.")
+    else:
+        st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
 def main():
     st.set_page_config(
         page_title="The Organism – Gestionale Studio",
