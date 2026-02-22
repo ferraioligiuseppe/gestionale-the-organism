@@ -1,4 +1,3 @@
-cat > vision_manager/app.py <<'PY'
 import os
 import sys
 import streamlit as st
