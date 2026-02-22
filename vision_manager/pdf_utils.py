@@ -13,6 +13,7 @@ def draw_tabo_semicircle(
     axis_deg: float,
     label: Optional[str] = None,
     tick_step: int = 5,
+    show_tabo_text: bool = True,
 ):
     """Semicerchio TABO stilizzato.
 
@@ -20,6 +21,7 @@ def draw_tabo_semicircle(
     - Tacche ogni `tick_step` gradi (default 5).
     - Etichette a 0/30/60/90/120/150/180.
     - Freccia asse lungo tutto il raggio.
+    - show_tabo_text: se False non stampa la scritta 'TABO' (utile se la vuoi solo su OSN).
     """
     # Arco esterno
     c.setLineWidth(1.4)
@@ -46,11 +48,12 @@ def draw_tabo_semicircle(
             c.setFont("Helvetica", 8.2)
             c.drawCentredString(lx, ly - 3, f"{deg}")
 
-    # Scritta TABO
-    c.setFont("Helvetica-Bold", 10)
-    c.drawCentredString(cx, cy + r * 0.33, "TABO")
+    # Scritta TABO (opzionale)
+    if show_tabo_text:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawCentredString(cx, cy + r * 0.33, "TABO")
 
-    # Label occhio
+    # Label (opzionale)
     if label:
         c.setFont("Helvetica-Bold", 10.5)
         c.drawCentredString(cx, cy - r - 12, label)
