@@ -3,7 +3,7 @@ import io
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
-from .pdf_utils import draw_axis_semicircle
+from vision_manager.pdf_utils import draw_axis_semicircle
 
 def _rx_line(c, x, y, label, rx):
     if not rx:

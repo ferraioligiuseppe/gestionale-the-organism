@@ -3,9 +3,9 @@ import datetime as dt
 import json
 from typing import Any, Dict, List
 import streamlit as st
-from .db import get_conn, init_db
-from .pdf_referto_oculistica import build_referto_oculistico_a4
-from .pdf_prescrizione import build_prescrizione_occhiali_a4
+from vision_manager.db import get_conn, init_db
+from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
+from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
 
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
@@ -155,16 +155,35 @@ def _restore_visita(conn, visita_id: int):
         except Exception: pass
 
 
-def _list_visite(conn, paziente_id: int) -> List[Dict[str, Any]]:
+def _list_visite(conn, paziente_id: int, include_deleted: bool = False) -> List[Dict[str, Any]]:
     cur = conn.cursor()
     ph = _ph(conn)
     try:
-        cur.execute(f"SELECT id, data_visita, dati_json FROM visite_visive WHERE paziente_id={ph} ORDER BY data_visita DESC, id DESC LIMIT 200", (paziente_id,))
+        # Proviamo prima con colonne soft-delete
+        try:
+            if include_deleted:
+                cur.execute(
+                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at FROM visite_visive WHERE paziente_id={ph} ORDER BY data_visita DESC, id DESC LIMIT 200",
+                    (paziente_id,),
+                )
+            else:
+                cur.execute(
+                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at FROM visite_visive WHERE paziente_id={ph} AND COALESCE(is_deleted,0)<>1 ORDER BY data_visita DESC, id DESC LIMIT 200",
+                    (paziente_id,),
+                )
+        except Exception:
+            # fallback se la tabella non ha ancora le colonne
+            cur.execute(
+                f"SELECT id, data_visita, dati_json FROM visite_visive WHERE paziente_id={ph} ORDER BY data_visita DESC, id DESC LIMIT 200",
+                (paziente_id,),
+            )
         rows = cur.fetchall()
         return [_dict_row(cur, r) for r in rows]
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 def _parse_json(s: str) -> Dict[str, Any]:
     try:
@@ -272,6 +291,9 @@ def ui_visita_visiva():
 
         lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, default=[])
 
+        note_v = st.text_area("Note visita", height=100)
+
+
         payload = {
             "tipo_visita": "oculistica",
             "data": str(data_visita),
@@ -298,7 +320,7 @@ def ui_visita_visiva():
                 "vicino": {"od": vicino_od, "os": vicino_os},
                 "lenti": lenti_sel,
             },
-            note_v = st.text_area("Note visita", height=100)
+            "note": note_v,
         }
         payload_str = json.dumps(payload, ensure_ascii=False)
 
