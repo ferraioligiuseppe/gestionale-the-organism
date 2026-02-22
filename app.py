@@ -5242,7 +5242,7 @@ def ui_osteopatia_section():
     try:
         from modules.osteopatia.ui_osteopatia import ui_osteopatia
     except Exception as e:
-        st.error("Modulo Osteopatia non trovato. Hai copiato la cartella modules/osteopatia nel progetto?")
+        st.error("Errore nel modulo Osteopatia. Verifica di aver copiato modules/osteopatia e che non ci siano errori di sintassi.")
         st.exception(e)
         return
 

@@ -124,100 +124,100 @@ def ui_osteopatia(paziente_id: int, get_conn, paziente_label: str = ""):
 
         conn = get_conn()
         anam_list = list_anamnesi(conn, paziente_id)
-        anam_options = ["(nessuna)"] + [f\"#{a['id']} — {a['data_anamnesi']} — {(a.get('motivo') or '')[:50]}\" for a in anam_list]
-        anam_map = {anam_options[i+1]: anam_list[i][\"id\"] for i in range(len(anam_list))}
+        anam_options = ["(nessuna)"] + [f"#{a['id']} — {a['data_anamnesi']} — {(a.get('motivo') or '')[:50]}" for a in anam_list]
+        anam_map = {anam_options[i+1]: anam_list[i]["id"] for i in range(len(anam_list))}
 
-        with st.form(\"osteo_seduta_form\", clear_on_submit=False):
+        with st.form("osteo_seduta_form", clear_on_submit=False):
             col1, col2, col3 = st.columns(3)
             with col1:
-                data_seduta = st.date_input(\"Data seduta\", value=dt.date.today())
-                tipo_seduta = st.selectbox(\"Tipo seduta\", [\"Prima visita\", \"Controllo\", \"Follow-up\"])
+                data_seduta = st.date_input("Data seduta", value=dt.date.today())
+                tipo_seduta = st.selectbox("Tipo seduta", ["Prima visita", "Controllo", "Follow-up"])
             with col2:
-                operatore = st.text_input(\"Operatore\")
-                dolore_pre = st.slider(\"Dolore pre (0-10)\", 0, 10, 0)
+                operatore = st.text_input("Operatore")
+                dolore_pre = st.slider("Dolore pre (0-10)", 0, 10, 0)
             with col3:
-                dolore_post = st.slider(\"Dolore post (0-10)\", 0, 10, 0)
-                anam_sel = st.selectbox(\"Collega ad anamnesi\", anam_options)
+                dolore_post = st.slider("Dolore post (0-10)", 0, 10, 0)
+                anam_sel = st.selectbox("Collega ad anamnesi", anam_options)
 
-            note_pre = st.text_area(\"Note pre-trattamento\", height=80)
+            note_pre = st.text_area("Note pre-trattamento", height=80)
 
-            st.markdown(\"#### Tecniche\")
+            st.markdown("#### Tecniche")
             tech_cols = st.columns(3)
             tecniche = {}
             for i, t in enumerate(TECNICHE_LIST):
                 with tech_cols[i % 3]:
                     tecniche[t] = st.checkbox(t)
 
-            descrizione = st.text_area(\"Descrizione trattamento\", height=130)
-            risposta = st.text_area(\"Risposta al trattamento\", height=80)
-            reazioni = st.text_area(\"Reazioni / note post-seduta\", height=80)
-            indicazioni = st.text_area(\"Indicazioni domiciliari / esercizi\", height=110)
-            prossimo_step = st.text_area(\"Piano / prossimo step\", height=80)
+            descrizione = st.text_area("Descrizione trattamento", height=130)
+            risposta = st.text_area("Risposta al trattamento", height=80)
+            reazioni = st.text_area("Reazioni / note post-seduta", height=80)
+            indicazioni = st.text_area("Indicazioni domiciliari / esercizi", height=110)
+            prossimo_step = st.text_area("Piano / prossimo step", height=80)
 
-            submitted = st.form_submit_button(\"💾 Salva seduta\")
+            submitted = st.form_submit_button("💾 Salva seduta")
             if submitted:
                 conn = get_conn()
-                anamnesi_id = None if anam_sel == \"(nessuna)\" else anam_map.get(anam_sel)
+                anamnesi_id = None if anam_sel == "(nessuna)" else anam_map.get(anam_sel)
                 seduta_id = insert_seduta(conn, paziente_id, {
-                    \"anamnesi_id\": anamnesi_id,
-                    \"data_seduta\": data_seduta,
-                    \"operatore\": operatore,
-                    \"tipo_seduta\": tipo_seduta,
-                    \"dolore_pre\": dolore_pre,
-                    \"note_pre\": note_pre,
-                    \"tecniche\": tecniche,
-                    \"descrizione\": descrizione,
-                    \"risposta\": risposta,
-                    \"dolore_post\": dolore_post,
-                    \"reazioni\": reazioni,
-                    \"indicazioni\": indicazioni,
-                    \"prossimo_step\": prossimo_step,
+                    "anamnesi_id": anamnesi_id,
+                    "data_seduta": data_seduta,
+                    "operatore": operatore,
+                    "tipo_seduta": tipo_seduta,
+                    "dolore_pre": dolore_pre,
+                    "note_pre": note_pre,
+                    "tecniche": tecniche,
+                    "descrizione": descrizione,
+                    "risposta": risposta,
+                    "dolore_post": dolore_post,
+                    "reazioni": reazioni,
+                    "indicazioni": indicazioni,
+                    "prossimo_step": prossimo_step,
                 })
-                st.success(f\"Seduta salvata (ID {seduta_id}).\")
+                st.success(f"Seduta salvata (ID {seduta_id}).")
 
     # -------------------------
     # TAB 3 - STORICO + PDF
     # -------------------------
     with tab3:
-        st.markdown(\"### Storico osteopatia\")
+        st.markdown("### Storico osteopatia")
         conn = get_conn()
         sedute = list_sedute(conn, paziente_id)
         anamnesi = list_anamnesi(conn, paziente_id)
 
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown(\"#### Anamnesi\")
+            st.markdown("#### Anamnesi")
             if not anamnesi:
-                st.info(\"Nessuna anamnesi.\")
+                st.info("Nessuna anamnesi.")
             else:
                 for a in anamnesi[:10]:
-                    with st.expander(f\"Anamnesi #{a['id']} — {a['data_anamnesi']}\"):
-                        full = get_anamnesi(conn, a[\"id\"])
-                        st.write(full.get(\"motivo\", \"\"))
-                        st.caption(f\"Dolore: {full.get('dolore_sede','')} — {full.get('dolore_intensita','')}/10\")
+                    with st.expander(f"Anamnesi #{a['id']} — {a['data_anamnesi']}"):
+                        full = get_anamnesi(conn, a["id"])
+                        st.write(full.get("motivo", ""))
+                        st.caption(f"Dolore: {full.get('dolore_sede','')} — {full.get('dolore_intensita','')}/10")
 
         with c2:
-            st.markdown(\"#### Sedute\")
+            st.markdown("#### Sedute")
             if not sedute:
-                st.info(\"Nessuna seduta.\")
+                st.info("Nessuna seduta.")
             else:
                 for s in sedute[:15]:
-                    with st.expander(f\"Seduta #{s['id']} — {s['data_seduta']} — {s.get('tipo_seduta','')}\"):
-                        full = get_seduta(conn, s[\"id\"])
-                        st.caption(f\"Operatore: {full.get('operatore','')}\")
-                        st.write(full.get(\"descrizione\", \"\"))
-                        st.caption(f\"Dolore pre/post: {full.get('dolore_pre','')} → {full.get('dolore_post','')}\")
+                    with st.expander(f"Seduta #{s['id']} — {s['data_seduta']} — {s.get('tipo_seduta','')}"):
+                        full = get_seduta(conn, s["id"])
+                        st.caption(f"Operatore: {full.get('operatore','')}")
+                        st.write(full.get("descrizione", ""))
+                        st.caption(f"Dolore pre/post: {full.get('dolore_pre','')} → {full.get('dolore_post','')}")
 
-                        if st.button(f\"📄 Genera PDF A4 seduta #{s['id']}\", key=f\"pdf_{s['id']}\"):
+                        if st.button(f"📄 Genera PDF A4 seduta #{s['id']}", key=f"pdf_{s['id']}"):
                             pdf_bytes = build_pdf_osteopatia_referto_a4(
-                                paziente_label=paziente_label or f\"Paziente ID {paziente_id}\",
+                                paziente_label=paziente_label or f"Paziente ID {paziente_id}",
                                 seduta=full
                             )
                             st.download_button(
-                                \"⬇️ Scarica PDF\",
+                                "⬇️ Scarica PDF",
                                 data=pdf_bytes,
-                                file_name=f\"referto_osteopatia_seduta_{s['id']}.pdf\",
-                                mime=\"application/pdf\"
+                                file_name=f"referto_osteopatia_seduta_{s['id']}.pdf",
+                                mime="application/pdf"
                             )
 
     # -------------------------
