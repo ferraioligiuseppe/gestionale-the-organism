@@ -193,16 +193,14 @@ def ui_visita_visiva():
             fondo_oculare = st.text_input("Fondo oculare (OD/OS)", value="")
 
         st.markdown("### Correzione abituale (lontano)")
-        rx_ab_od = _rx_input("OD abituale")
-        rx_ab_os = _rx_input("OS abituale")
-        add_ab = st.number_input("Addizione da vicino (abituale)", value=0.00, step=0.25, format="%0.2f")
+        rx_ab_od = _rx_input("OD abituale", "rx_ab_od")
+        rx_ab_os = _rx_input("OS abituale", "rx_ab_os")
+        add_ab = st.number_input("Addizione da vicino (abituale)", value=0.00, step=0.25, format="%0.2f", key="add_ab")
 
         st.markdown("### Correzione finale (lontano)")
-        rx_fin_od = _rx_input("OD finale")
-        rx_fin_os = _rx_input("OS finale")
-        add_fin = st.number_input("Addizione da vicino (finale)", value=0.00, step=0.25, format="%0.2f")
-
-        note = st.text_area("Note", height=90, key="note_anagrafica")
+        rx_fin_od = _rx_input("OD finale", "rx_fin_od")
+        rx_fin_os = _rx_input("OS finale", "rx_fin_os")
+        add_fin = st.number_input("Addizione da vicino (finale)", value=0.00, step=0.25, format="%0.2f", key="add_fin")
 
         def _near(rx, add):
             return {"sf": float(rx["sf"]) + float(add), "cyl": float(rx["cyl"]), "ax": int(rx["ax"])}
