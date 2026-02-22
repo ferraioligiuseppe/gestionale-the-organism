@@ -44,9 +44,13 @@ def insert_anamnesi(conn, paziente_id: int, payload: Dict[str, Any]) -> int:
         "valutazione": payload.get("valutazione"),
         "ipotesi": payload.get("ipotesi"),
     }
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(q, data)
         anamnesi_id = cur.fetchone()[0]
+    finally:
+        try: cur.close()
+        except Exception: pass
     conn.commit()
     return int(anamnesi_id)
 
@@ -57,20 +61,28 @@ def list_anamnesi(conn, paziente_id: int) -> List[Dict[str, Any]]:
     WHERE paziente_id = %s
     ORDER BY data_anamnesi DESC, id DESC;
     """
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(q, (paziente_id,))
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
+    finally:
+        try: cur.close()
+        except Exception: pass
     return [_row_to_dict(cols, r) for r in rows]
 
 def get_anamnesi(conn, anamnesi_id: int) -> Optional[Dict[str, Any]]:
     q = "SELECT * FROM osteo_anamnesi WHERE id = %s;"
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(q, (anamnesi_id,))
         row = cur.fetchone()
         if not row:
             return None
         cols = [d[0] for d in cur.description]
+    finally:
+        try: cur.close()
+        except Exception: pass
     return _row_to_dict(cols, row)
 
 # ---------------------------
@@ -112,9 +124,13 @@ def insert_seduta(conn, paziente_id: int, payload: Dict[str, Any]) -> int:
         "indicazioni": payload.get("indicazioni"),
         "prossimo_step": payload.get("prossimo_step"),
     }
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(q, data)
         seduta_id = cur.fetchone()[0]
+    finally:
+        try: cur.close()
+        except Exception: pass
     conn.commit()
     return int(seduta_id)
 
@@ -125,18 +141,26 @@ def list_sedute(conn, paziente_id: int) -> List[Dict[str, Any]]:
     WHERE paziente_id = %s
     ORDER BY data_seduta DESC, id DESC;
     """
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(q, (paziente_id,))
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
+    finally:
+        try: cur.close()
+        except Exception: pass
     return [_row_to_dict(cols, r) for r in rows]
 
 def get_seduta(conn, seduta_id: int) -> Optional[Dict[str, Any]]:
     q = "SELECT * FROM osteo_seduta WHERE id = %s;"
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(q, (seduta_id,))
         row = cur.fetchone()
         if not row:
             return None
         cols = [d[0] for d in cur.description]
+    finally:
+        try: cur.close()
+        except Exception: pass
     return _row_to_dict(cols, row)

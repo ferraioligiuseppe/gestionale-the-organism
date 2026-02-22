@@ -37,7 +37,7 @@ Esegui.
 Assicurati che nel tuo `requirements.txt` ci siano:
 - reportlab
 - pandas
-- matplotlib
+- matplotlib (opzionale)
 
 Se già li usi, ok.
 

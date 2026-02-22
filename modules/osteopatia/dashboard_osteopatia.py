@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 
 def render_dashboard_osteo(sedute_rows):
     st.markdown("### Dashboard osteopatia")
@@ -21,14 +20,21 @@ def render_dashboard_osteo(sedute_rows):
         c3.metric("Dolore post (ultimo)", int(df["dolore_post"].dropna().iloc[-1]))
 
     st.markdown("#### Andamento dolore (pre vs post)")
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.plot(df["data_seduta"], df.get("dolore_pre"), marker="o", label="Dolore pre")
-    ax.plot(df["data_seduta"], df.get("dolore_post"), marker="o", label="Dolore post")
-    ax.set_xlabel("Data")
-    ax.set_ylabel("Dolore (0-10)")
-    ax.legend()
-    st.pyplot(fig, clear_figure=True)
+
+    try:
+        import matplotlib.pyplot as plt
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.plot(df["data_seduta"], df.get("dolore_pre"), marker="o", label="Dolore pre")
+        ax.plot(df["data_seduta"], df.get("dolore_post"), marker="o", label="Dolore post")
+        ax.set_xlabel("Data")
+        ax.set_ylabel("Dolore (0-10)")
+        ax.legend()
+        st.pyplot(fig, clear_figure=True)
+    except ModuleNotFoundError:
+        st.warning("matplotlib non installato: uso grafico semplificato.")
+        chart_df = df.set_index("data_seduta")[["dolore_pre", "dolore_post"]]
+        st.line_chart(chart_df)
 
     st.markdown("#### Tabella sedute (ultime 20)")
     st.dataframe(df.sort_values("data_seduta", ascending=False).head(20), use_container_width=True)
