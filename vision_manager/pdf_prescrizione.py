@@ -1,85 +1,69 @@
 from __future__ import annotations
-from typing import Dict, Any
-from io import BytesIO
-from reportlab.lib.pagesizes import A4
+import io
 from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from .pdf_utils import draw_axis_semicircle
 
-def _fmt_rx(rx: Dict[str, Any]) -> str:
-    sf = rx.get("sf", "")
-    cyl = rx.get("cyl", "")
-    ax = rx.get("ax", "")
-    def f(v):
-        if v is None or v == "": return ""
-        try: return f"{float(v):+0.2f}"
-        except Exception: return str(v)
-    def axf(v):
-        if v is None or v == "": return ""
-        try: return f"{int(float(v))}°"
-        except Exception: return str(v)
-    return f"SF {f(sf)}  CIL {f(cyl)}  AX {axf(ax)}"
+def _rx_line(c, x, y, label, rx):
+    if not rx:
+        return y
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(x, y, label)
+    y -= 0.5*cm
+    c.setFont("Helvetica", 11)
+    od = rx.get("od") or {}
+    os_ = rx.get("os") or {}
+    c.drawString(x, y, f"OD  SF {od.get('sf','')}  CIL {od.get('cyl','')}  AX {od.get('ax','')}")
+    y -= 0.45*cm
+    c.drawString(x, y, f"OS  SF {os_.get('sf','')}  CIL {os_.get('cyl','')}  AX {os_.get('ax','')}")
+    y -= 0.55*cm
+    return y
 
-def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_jpeg_path: str) -> bytes:
-    buf = BytesIO()
+def build_prescrizione_occhiali_a4(data: dict, letterhead_path: str) -> bytes:
+    buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
+
     try:
-        c.drawImage(letterhead_jpeg_path, 0, 0, width=w, height=h, mask='auto')
+        c.drawImage(letterhead_path, 0, 0, width=w, height=h, preserveAspectRatio=True, mask="auto")
     except Exception:
         pass
 
-    x = 2.2*cm
-    y = h - 5.6*cm  # sotto intestazione/linea verde
-    c.setFont("Helvetica", 10)
-    c.drawRightString(w - 2.2*cm, y, f"Data: {data.get('data','')}")
-    y -= 18
+    x = 2.0*cm
+    y = h - 5.6*cm
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(x, y, "Prescrizione occhiali")
+    c.setFont("Helvetica", 11)
+    c.drawRightString(w - 2.0*cm, y, f"Data: {data.get('data','')}")
+    y -= 1.0*cm
+
     c.setFont("Helvetica-Bold", 11)
     c.drawString(x, y, f"Paziente: {data.get('paziente','')}")
-    y -= 28
+    y -= 0.9*cm
 
-    ax_od = (data.get("lontano") or {}).get("od", {}).get("ax", 0) or 0
-    ax_os = (data.get("lontano") or {}).get("os", {}).get("ax", 0) or 0
-    draw_axis_semicircle(c, cx=x+6.2*cm, cy=y-2.2*cm, r=3.4*cm, axis_deg=float(ax_od or 0), label="OD")
-    draw_axis_semicircle(c, cx=x+14.0*cm, cy=y-2.2*cm, r=3.4*cm, axis_deg=float(ax_os or 0), label="OS")
+    ax_od = ((data.get("lontano") or {}).get("od") or {}).get("ax", 0)
+    ax_os = ((data.get("lontano") or {}).get("os") or {}).get("ax", 0)
+
+    cy = y - 2.2*cm
+    draw_axis_semicircle(c, cx=x+6.2*cm, cy=cy, r=3.4*cm, axis_deg=float(ax_od or 0), label="OD")
+    draw_axis_semicircle(c, cx=x+14.0*cm, cy=cy, r=3.4*cm, axis_deg=float(ax_os or 0), label="OS")
     y -= 6.0*cm
 
-    def section(title: str, rx_block: Dict[str, Any]):
-        nonlocal y
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(x, y, title)
-        y -= 16
-        c.setFont("Helvetica", 10)
-        od = rx_block.get("od", {})
-        os_ = rx_block.get("os", {})
-        c.drawString(x, y, f"OD: {_fmt_rx(od)}")
-        y -= 14
-        c.drawString(x, y, f"OS: {_fmt_rx(os_)}")
-        y -= 22
+    y = _rx_line(c, x, y, "Lontano", data.get("lontano") or {})
+    y = _rx_line(c, x, y, "Intermedio", data.get("intermedio") or {})
+    y = _rx_line(c, x, y, "Vicino", data.get("vicino") or {})
 
-    if data.get("lontano"):
-        section("LONTANO", data["lontano"])
-    if data.get("intermedio"):
-        section("INTERMEDIO", data["intermedio"])
-    if data.get("vicino"):
-        section("VICINO", data["vicino"])
-
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(x, y, "Lenti consigliate:")
-    y -= 14
-    c.setFont("Helvetica", 10)
     lenti = data.get("lenti") or []
-    for item in lenti:
-        c.drawString(x, y, f"[x] {item}")
-        y -= 13
-    if not lenti:
-        c.drawString(x, y, "(nessuna selezionata)")
-        y -= 13
-
-    y_sig = 3.3*cm
-    c.setFont("Helvetica", 10)
-    c.drawRightString(w - 2.2*cm, y_sig + 10, "Firma / Timbro")
-    c.line(w - 6.2*cm, y_sig, w - 2.2*cm, y_sig)
+    if lenti:
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(x, y, "Tipo di lenti")
+        y -= 0.6*cm
+        c.setFont("Helvetica", 11)
+        for item in lenti:
+            c.drawString(x+0.3*cm, y, f"• {item}")
+            y -= 0.5*cm
 
     c.showPage()
     c.save()
