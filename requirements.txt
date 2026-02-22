@@ -16,3 +16,4 @@ streamlit-drawable-canvas
 numpy
 reportlab
 streamlit-drawable-canvas
+matplotlib
