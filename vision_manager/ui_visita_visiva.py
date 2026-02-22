@@ -159,24 +159,39 @@ def _list_visite(conn, paziente_id: int, include_deleted: bool = False) -> List[
     cur = conn.cursor()
     ph = _ph(conn)
     try:
-        # Proviamo prima con colonne soft-delete
         try:
+            # Proviamo prima con colonne soft-delete (se esistono)
             if include_deleted:
                 cur.execute(
-                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at FROM visite_visive WHERE paziente_id={ph} ORDER BY data_visita DESC, id DESC LIMIT 200",
+                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at "
+                    f"FROM visite_visive WHERE paziente_id={ph} "
+                    f"ORDER BY data_visita DESC, id DESC LIMIT 200",
                     (paziente_id,),
                 )
             else:
                 cur.execute(
-                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at FROM visite_visive WHERE paziente_id={ph} AND COALESCE(is_deleted,0)<>1 ORDER BY data_visita DESC, id DESC LIMIT 200",
+                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at "
+                    f"FROM visite_visive WHERE paziente_id={ph} AND COALESCE(is_deleted,0)<>1 "
+                    f"ORDER BY data_visita DESC, id DESC LIMIT 200",
                     (paziente_id,),
                 )
         except Exception:
+            # IMPORTANTISSIMO: su Postgres, se una query fallisce la transazione entra in aborted.
+            # Prima di fare una nuova query bisogna fare rollback.
+            if _is_pg(conn):
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
             # fallback se la tabella non ha ancora le colonne
             cur.execute(
-                f"SELECT id, data_visita, dati_json FROM visite_visive WHERE paziente_id={ph} ORDER BY data_visita DESC, id DESC LIMIT 200",
+                f"SELECT id, data_visita, dati_json "
+                f"FROM visite_visive WHERE paziente_id={ph} "
+                f"ORDER BY data_visita DESC, id DESC LIMIT 200",
                 (paziente_id,),
             )
+
         rows = cur.fetchall()
         return [_dict_row(cur, r) for r in rows]
     finally:
@@ -184,7 +199,6 @@ def _list_visite(conn, paziente_id: int, include_deleted: bool = False) -> List[
             cur.close()
         except Exception:
             pass
-
 def _parse_json(s: str) -> Dict[str, Any]:
     try:
         return json.loads(s) if s else {}
