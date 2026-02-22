@@ -402,3 +402,5 @@ def ui_visita_visiva():
                         st.download_button("⬇️ Prescrizione A4", data=pdf_pr, file_name=f"prescrizione_occhiali_{paziente_id}_{vid}.pdf", mime="application/pdf", key=f"p{vid}")
                 except Exception:
                     pass
+
+# redeploy
