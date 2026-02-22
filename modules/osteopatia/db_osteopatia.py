@@ -54,22 +54,47 @@ def insert_anamnesi(conn, paziente_id: int, payload: Dict[str, Any]) -> int:
     conn.commit()
     return int(anamnesi_id)
 
-def list_anamnesi(conn, paziente_id: int) -> List[Dict[str, Any]]:
-    q = """
-    SELECT id, data_anamnesi, motivo, dolore_sede, dolore_intensita, created_at
+def list_anamnesi(conn, paziente_id: int, include_deleted: bool = False) -> List[Dict[str, Any]]:
+    where = "WHERE paziente_id = %s"
+    # se la colonna is_deleted esiste, filtriamo (Postgres: la condizione su colonna inesistente darebbe errore)
+    # quindi facciamo una query robusta che tenta prima con is_deleted e, se fallisce, ripiega.
+    base_select = """
+    SELECT id, data_anamnesi, tipo_seduta, operatore, dolore_pre, dolore_post, created_at
     FROM osteo_anamnesi
-    WHERE paziente_id = %s
+    {where_clause}
     ORDER BY data_anamnesi DESC, id DESC;
     """
-    cur = conn.cursor()
+    if "osteo_anamnesi" == "osteo_anamnesi":
+        base_select = """
+        SELECT id, data_anamnesi, motivo, dolore_sede, dolore_intensita, created_at
+        FROM osteo_anamnesi
+        {where_clause}
+        ORDER BY data_anamnesi DESC, id DESC;
+        """
+
+    def _run(where_clause: str):
+        q = base_select.format(where_clause=where_clause)
+        cur = conn.cursor()
+        try:
+            cur.execute(q, (paziente_id,))
+            rows = cur.fetchall()
+            cols = [d[0] for d in cur.description]
+        finally:
+            try: cur.close()
+            except Exception: pass
+        return [_row_to_dict(cols, r) for r in rows]
+
+    if include_deleted:
+        return _run(where)
+    # prova con filtro is_deleted
     try:
-        cur.execute(q, (paziente_id,))
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-    finally:
-        try: cur.close()
-        except Exception: pass
-    return [_row_to_dict(cols, r) for r in rows]
+        return _run(where + " AND is_deleted = FALSE")
+    except Exception:
+        # fallback per schema vecchio (senza colonna)
+        return _run(where)
+
+
+
 
 def get_anamnesi(conn, anamnesi_id: int) -> Optional[Dict[str, Any]]:
     q = "SELECT * FROM osteo_anamnesi WHERE id = %s;"
@@ -134,22 +159,47 @@ def insert_seduta(conn, paziente_id: int, payload: Dict[str, Any]) -> int:
     conn.commit()
     return int(seduta_id)
 
-def list_sedute(conn, paziente_id: int) -> List[Dict[str, Any]]:
-    q = """
+def list_sedute(conn, paziente_id: int, include_deleted: bool = False) -> List[Dict[str, Any]]:
+    where = "WHERE paziente_id = %s"
+    # se la colonna is_deleted esiste, filtriamo (Postgres: la condizione su colonna inesistente darebbe errore)
+    # quindi facciamo una query robusta che tenta prima con is_deleted e, se fallisce, ripiega.
+    base_select = """
     SELECT id, data_seduta, tipo_seduta, operatore, dolore_pre, dolore_post, created_at
     FROM osteo_seduta
-    WHERE paziente_id = %s
+    {where_clause}
     ORDER BY data_seduta DESC, id DESC;
     """
-    cur = conn.cursor()
+    if "osteo_seduta" == "osteo_anamnesi":
+        base_select = """
+        SELECT id, data_anamnesi, motivo, dolore_sede, dolore_intensita, created_at
+        FROM osteo_anamnesi
+        {where_clause}
+        ORDER BY data_anamnesi DESC, id DESC;
+        """
+
+    def _run(where_clause: str):
+        q = base_select.format(where_clause=where_clause)
+        cur = conn.cursor()
+        try:
+            cur.execute(q, (paziente_id,))
+            rows = cur.fetchall()
+            cols = [d[0] for d in cur.description]
+        finally:
+            try: cur.close()
+            except Exception: pass
+        return [_row_to_dict(cols, r) for r in rows]
+
+    if include_deleted:
+        return _run(where)
+    # prova con filtro is_deleted
     try:
-        cur.execute(q, (paziente_id,))
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-    finally:
-        try: cur.close()
-        except Exception: pass
-    return [_row_to_dict(cols, r) for r in rows]
+        return _run(where + " AND is_deleted = FALSE")
+    except Exception:
+        # fallback per schema vecchio (senza colonna)
+        return _run(where)
+
+
+
 
 def get_seduta(conn, seduta_id: int) -> Optional[Dict[str, Any]]:
     q = "SELECT * FROM osteo_seduta WHERE id = %s;"
@@ -164,3 +214,132 @@ def get_seduta(conn, seduta_id: int) -> Optional[Dict[str, Any]]:
         try: cur.close()
         except Exception: pass
     return _row_to_dict(cols, row)
+
+
+# ---------------------------
+# UPDATE / DELETE (soft) / RESTORE
+# ---------------------------
+
+def update_anamnesi(conn, anamnesi_id: int, payload: Dict[str, Any], updated_by: Optional[str] = None) -> None:
+    q = """
+    UPDATE osteo_anamnesi SET
+      data_anamnesi=%(data_anamnesi)s,
+      motivo=%(motivo)s,
+      dolore_sede=%(dolore_sede)s,
+      dolore_intensita=%(dolore_intensita)s,
+      dolore_durata=%(dolore_durata)s,
+      aggravanti=%(aggravanti)s,
+      allevianti=%(allevianti)s,
+      storia_clinica=%(storia_clinica)s::jsonb,
+      area_neuro_post=%(area_neuro_post)s::jsonb,
+      stile_vita=%(stile_vita)s::jsonb,
+      area_pediatrica=%(area_pediatrica)s::jsonb,
+      valutazione=%(valutazione)s,
+      ipotesi=%(ipotesi)s,
+      updated_by=%(updated_by)s
+    WHERE id=%(id)s;
+    """
+    data = dict(payload)
+    data["id"] = anamnesi_id
+    data["updated_by"] = updated_by
+    # normalizza json
+    data["storia_clinica"] = _json(payload.get("storia_clinica"))
+    data["area_neuro_post"] = _json(payload.get("area_neuro_post"))
+    data["stile_vita"] = _json(payload.get("stile_vita"))
+    data["area_pediatrica"] = _json(payload.get("area_pediatrica"))
+
+    cur = conn.cursor()
+    try:
+        cur.execute(q, data)
+    finally:
+        try: cur.close()
+        except Exception: pass
+    conn.commit()
+
+def soft_delete_anamnesi(conn, anamnesi_id: int, deleted_by: Optional[str] = None) -> None:
+    q = """
+    UPDATE osteo_anamnesi
+    SET is_deleted=TRUE, deleted_at=NOW(), deleted_by=%s
+    WHERE id=%s;
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(q, (deleted_by, anamnesi_id))
+    finally:
+        try: cur.close()
+        except Exception: pass
+    conn.commit()
+
+def restore_anamnesi(conn, anamnesi_id: int) -> None:
+    q = """
+    UPDATE osteo_anamnesi
+    SET is_deleted=FALSE, deleted_at=NULL, deleted_by=NULL
+    WHERE id=%s;
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(q, (anamnesi_id,))
+    finally:
+        try: cur.close()
+        except Exception: pass
+    conn.commit()
+
+def update_seduta(conn, seduta_id: int, payload: Dict[str, Any], updated_by: Optional[str] = None) -> None:
+    q = """
+    UPDATE osteo_seduta SET
+      anamnesi_id=%(anamnesi_id)s,
+      data_seduta=%(data_seduta)s,
+      operatore=%(operatore)s,
+      tipo_seduta=%(tipo_seduta)s,
+      dolore_pre=%(dolore_pre)s,
+      note_pre=%(note_pre)s,
+      tecniche=%(tecniche)s::jsonb,
+      descrizione=%(descrizione)s,
+      risposta=%(risposta)s,
+      dolore_post=%(dolore_post)s,
+      reazioni=%(reazioni)s,
+      indicazioni=%(indicazioni)s,
+      prossimo_step=%(prossimo_step)s,
+      updated_by=%(updated_by)s
+    WHERE id=%(id)s;
+    """
+    data = dict(payload)
+    data["id"] = seduta_id
+    data["updated_by"] = updated_by
+    data["tecniche"] = _json(payload.get("tecniche"))
+
+    cur = conn.cursor()
+    try:
+        cur.execute(q, data)
+    finally:
+        try: cur.close()
+        except Exception: pass
+    conn.commit()
+
+def soft_delete_seduta(conn, seduta_id: int, deleted_by: Optional[str] = None) -> None:
+    q = """
+    UPDATE osteo_seduta
+    SET is_deleted=TRUE, deleted_at=NOW(), deleted_by=%s
+    WHERE id=%s;
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(q, (deleted_by, seduta_id))
+    finally:
+        try: cur.close()
+        except Exception: pass
+    conn.commit()
+
+def restore_seduta(conn, seduta_id: int) -> None:
+    q = """
+    UPDATE osteo_seduta
+    SET is_deleted=FALSE, deleted_at=NULL, deleted_by=NULL
+    WHERE id=%s;
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(q, (seduta_id,))
+    finally:
+        try: cur.close()
+        except Exception: pass
+    conn.commit()
