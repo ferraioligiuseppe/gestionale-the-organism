@@ -1,5 +1,3 @@
-
-cat > vision_manager/app.py <<'PY'
 import streamlit as st
 
 st.set_page_config(page_title="Vision Manager", layout="wide")
@@ -17,5 +15,4 @@ if hasattr(app, "main") and callable(app.main):
     app.main()
 else:
     st.error("Nel file app.py non trovo una funzione main().")
-    st.info("Soluzione: esponi main() oppure dimmi come si chiama la funzione entrypoint.")
-PY
+    st.info("Dimmi come si chiama la funzione entrypoint (es. run(), start(), ecc.).")
