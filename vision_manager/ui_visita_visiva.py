@@ -202,7 +202,7 @@ def ui_visita_visiva():
         rx_fin_os = _rx_input("OS finale")
         add_fin = st.number_input("Addizione da vicino (finale)", value=0.00, step=0.25, format="%0.2f")
 
-        note_v = st.text_area("Note", height=90)
+        note = st.text_area("Note", height=90, key="note_anagrafica")
 
         def _near(rx, add):
             return {"sf": float(rx["sf"]) + float(add), "cyl": float(rx["cyl"]), "ax": int(rx["ax"])}
