@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import streamlit as st
 USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
 
@@ -5226,6 +5227,67 @@ def ui_dashboard():
 
     conn.close()
 
+
+# ==========================
+# Osteopatia (AUTO) - sezione menu
+# ==========================
+def ui_osteopatia_section():
+    """
+    Sezione Osteopatia indipendente dalla sezione Pazienti:
+    - seleziona paziente
+    - apre UI osteopatia (anamnesi, seduta, storico+PDF A4, dashboard)
+    """
+    import streamlit as st
+
+    try:
+        from modules.osteopatia.ui_osteopatia import ui_osteopatia
+    except Exception as e:
+        st.error("Modulo Osteopatia non trovato. Hai copiato la cartella modules/osteopatia nel progetto?")
+        st.exception(e)
+        return
+
+    conn = get_connection()
+
+    paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
+    if not paz_list:
+        st.error("Nessun paziente trovato nel database (AUTO).")
+        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
+        if paz_table or paz_colmap:
+            st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
+        return
+
+    def _label(p):
+        pid, cogn, nome, dn, scuola, eta = p
+        dn_s = dn or ""
+        extra = ""
+        if eta: extra += f" • {eta} anni"
+        if scuola: extra += f" • {scuola}"
+        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
+
+    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
+
+    if isinstance(sel, dict):
+        paziente_id = sel.get("id") or sel.get("paziente_id")
+        cognome = sel.get("cognome") or ""
+        nome = sel.get("nome") or ""
+    else:
+        try:
+            paziente_id = sel[0]
+            cognome = sel[1] if len(sel) > 1 else ""
+            nome = sel[2] if len(sel) > 2 else ""
+        except Exception:
+            paziente_id = None
+            cognome = ""
+            nome = ""
+
+    if not paziente_id:
+        st.error("Errore: ID paziente non determinabile.")
+        return
+
+    paziente_label = f"{cognome} {nome}".strip() or f"Paziente ID {paziente_id}"
+
+    ui_osteopatia(paziente_id=int(paziente_id), get_conn=get_connection, paziente_label=paziente_label)
+
 # -----------------------------
 # Main
 # -----------------------------
@@ -6260,138 +6322,6 @@ def ui_public_sign_page():
         st.success("✅ Consenso archiviato su Neon e inviato via email. Puoi chiudere questa pagina.")
     else:
         st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
-
-# ==========================
-# Osteopatia (Anamnesi + Sedute + PDF)
-# ==========================
-def _ensure_osteo_tables_if_possible(conn):
-    """Crea le tabelle osteopatia su PostgreSQL (Neon) se non esistono.
-    Non fallisce mai: se non hai permessi o sei su SQLite, semplicemente esce.
-    """
-    try:
-        if _DB_BACKEND != "postgres":
-            return
-    except Exception:
-        return
-    try:
-        cur = conn.cursor()
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS osteo_anamnesi (
-          id               BIGSERIAL PRIMARY KEY,
-          paziente_id      BIGINT NOT NULL,
-          data_anamnesi    DATE NOT NULL DEFAULT CURRENT_DATE,
-          motivo           TEXT,
-          dolore_sede      TEXT,
-          dolore_intensita SMALLINT,
-          dolore_durata    TEXT,
-          aggravanti       TEXT,
-          allevianti       TEXT,
-          storia_clinica   JSONB DEFAULT '{}'::jsonb,
-          area_neuro_post  JSONB DEFAULT '{}'::jsonb,
-          stile_vita       JSONB DEFAULT '{}'::jsonb,
-          area_pediatrica  JSONB DEFAULT '{}'::jsonb,
-          valutazione      TEXT,
-          ipotesi          TEXT,
-          created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-        """)
-        cur.execute("""CREATE INDEX IF NOT EXISTS idx_osteo_anamnesi_paziente ON osteo_anamnesi(paziente_id);""")
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS osteo_seduta (
-          id               BIGSERIAL PRIMARY KEY,
-          paziente_id      BIGINT NOT NULL,
-          anamnesi_id      BIGINT REFERENCES osteo_anamnesi(id) ON DELETE SET NULL,
-          data_seduta      DATE NOT NULL DEFAULT CURRENT_DATE,
-          operatore        TEXT,
-          tipo_seduta      TEXT,
-          dolore_pre       SMALLINT,
-          note_pre         TEXT,
-          tecniche         JSONB DEFAULT '{}'::jsonb,
-          descrizione      TEXT,
-          risposta         TEXT,
-          dolore_post      SMALLINT,
-          reazioni         TEXT,
-          indicazioni      TEXT,
-          prossimo_step    TEXT,
-          created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-        """)
-        cur.execute("""CREATE INDEX IF NOT EXISTS idx_osteo_seduta_paziente ON osteo_seduta(paziente_id);""")
-        cur.execute("""CREATE INDEX IF NOT EXISTS idx_osteo_seduta_anamnesi ON osteo_seduta(anamnesi_id);""")
-        # trigger updated_at (idempotente)
-        cur.execute("""
-        CREATE OR REPLACE FUNCTION set_updated_at()
-        RETURNS TRIGGER AS $$
-        BEGIN
-          NEW.updated_at = NOW();
-          RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-        """)
-        cur.execute("""DROP TRIGGER IF EXISTS trg_osteo_anamnesi_updated ON osteo_anamnesi;""")
-        cur.execute("""CREATE TRIGGER trg_osteo_anamnesi_updated BEFORE UPDATE ON osteo_anamnesi FOR EACH ROW EXECUTE FUNCTION set_updated_at();""")
-        cur.execute("""DROP TRIGGER IF EXISTS trg_osteo_seduta_updated ON osteo_seduta;""")
-        cur.execute("""CREATE TRIGGER trg_osteo_seduta_updated BEFORE UPDATE ON osteo_seduta FOR EACH ROW EXECUTE FUNCTION set_updated_at();""")
-        conn.commit()
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
-def ui_osteopatia_section():
-    import streamlit as st
-    st.header("🦴 Osteopatia")
-    if _DB_BACKEND != "postgres":
-        st.error("Il modulo Osteopatia richiede PostgreSQL (Neon). Configura [db].DATABASE_URL nei Secrets.")
-        st.stop()
-
-    # Import lazy (così l'app non crasha se la cartella modules non è stata copiata)
-    try:
-        from modules.osteopatia.ui_osteopatia import ui_osteopatia
-    except Exception as e:
-        st.error("Modulo Osteopatia non trovato nel progetto.")
-        st.caption("Assicurati di avere la cartella: modules/osteopatia/ nel repo.")
-        st.exception(e)
-        st.stop()
-
-    conn = get_connection()
-    _ensure_osteo_tables_if_possible(conn)
-
-    # Selezione paziente (AUTO) - come nelle altre sezioni
-    paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
-    if not paz_list:
-        st.error("Nessun paziente trovato nel database.")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
-        if paz_table or paz_colmap:
-            st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
-        return
-
-    def _label(p):
-        pid, cogn, nome, dn, scuola, eta = p
-        dn_s = dn or ""
-        extra = ""
-        if eta: extra += f" • {eta} anni"
-        if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
-
-    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
-    try:
-        paziente_id = sel[0]
-        cogn = sel[1]; nome = sel[2]
-    except Exception:
-        st.error("Errore: ID paziente non determinabile.")
-        return
-
-    ui_osteopatia(
-        paziente_id=int(paziente_id),
-        get_conn=get_connection,
-        paziente_label=f"{cogn} {nome}".strip()
-    )
-
-
 def main():
     st.set_page_config(
         page_title="The Organism – Gestionale Studio",
@@ -6419,7 +6349,7 @@ def main():
         "Anamnesi",
         "Valutazioni visive / oculistiche",
         "Sedute / Terapie",
-        "🦴 Osteopatia",
+        "Osteopatia",
         "Coupon OF / SDS",
         "Dashboard incassi",
         "🗂️ Relazioni cliniche",
@@ -6439,10 +6369,10 @@ def main():
         ui_anamnesi()
     elif sezione == "Valutazioni visive / oculistiche":
         ui_valutazioni_visive()
-    elif sezione == "Sedute / Terapi    elif sezione == "🦴 Osteopatia":
-        ui_osteopatia_section()
-e":
+    elif sezione == "Sedute / Terapie":
         ui_sedute()
+    elif sezione == "Osteopatia":
+        ui_osteopatia_section()
     elif sezione == "Coupon OF / SDS":
         ui_coupons()
     elif sezione == "Dashboard incassi":
