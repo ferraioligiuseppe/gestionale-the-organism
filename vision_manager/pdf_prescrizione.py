@@ -19,12 +19,11 @@ def _safe_num(v: Any, default: float = 0.0) -> float:
 
 
 def _rx_get(rx: Optional[Dict[str, Any]], eye: str) -> Dict[str, Any]:
-    # supporta sia {"od": {...}, "os": {...}} che {"odx": {...}, "osn": {...}}
+    """Supporta sia {"od": {...}, "os": {...}} che {"odx": {...}, "osn": {...}}."""
     if not isinstance(rx, dict):
         return {}
     if eye in rx and isinstance(rx.get(eye), dict):
         return rx.get(eye) or {}
-    # fallback naming
     if eye == "od" and isinstance(rx.get("odx"), dict):
         return rx.get("odx") or {}
     if eye == "os" and isinstance(rx.get("osn"), dict):
@@ -32,138 +31,138 @@ def _rx_get(rx: Optional[Dict[str, Any]], eye: str) -> Dict[str, Any]:
     return {}
 
 
-def _draw_rx_grid(c: canvas.Canvas, x: float, y_top: float, col_w: float, row_h: float,
-                  header: bool = True):
-    # cornice esterna 3 colonne x 3 righe (+ header)
-    # header row
-    if header:
-        c.setLineWidth(1)
-        c.rect(x, y_top - row_h, col_w * 3, row_h, stroke=1, fill=0)
-        # vertical lines
-        c.line(x + col_w, y_top - row_h, x + col_w, y_top)
-        c.line(x + 2 * col_w, y_top - row_h, x + 2 * col_w, y_top)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(x + col_w * 0.5, y_top - row_h + 6, "SFERO")
-        c.drawCentredString(x + col_w * 1.5, y_top - row_h + 6, "CILINDRO")
-        c.drawCentredString(x + col_w * 2.5, y_top - row_h + 6, "ASSE")
+def _draw_rx_table(c: canvas.Canvas, x: float, y_top: float, w: float, h_row: float, title: str):
+    """Tabella 3 colonne (SF/CIL/AX) + 3 righe (Lontano/Intermedio/Vicino)."""
+    col_w = w / 3.0
 
-    # 3 righe dati
-    y = y_top - row_h
+    # Titolo sopra la tabella
+    c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(x + w/2, y_top + 8, title)
+
+    # Header
+    c.setLineWidth(1)
+    c.rect(x, y_top - h_row, w, h_row, stroke=1, fill=0)
+    c.line(x + col_w, y_top - h_row, x + col_w, y_top)
+    c.line(x + 2*col_w, y_top - h_row, x + 2*col_w, y_top)
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(x + col_w*0.5, y_top - h_row + 6, "SF")
+    c.drawCentredString(x + col_w*1.5, y_top - h_row + 6, "CIL")
+    c.drawCentredString(x + col_w*2.5, y_top - h_row + 6, "AX")
+
+    # Righe dati (3)
     for i in range(3):
-        y0 = y - (i + 1) * row_h
-        c.rect(x, y0, col_w * 3, row_h, stroke=1, fill=0)
-        c.line(x + col_w, y0, x + col_w, y0 + row_h)
-        c.line(x + 2 * col_w, y0, x + 2 * col_w, y0 + row_h)
+        y0 = y_top - h_row*(2+i)
+        c.rect(x, y0, w, h_row, stroke=1, fill=0)
+        c.line(x + col_w, y0, x + col_w, y0 + h_row)
+        c.line(x + 2*col_w, y0, x + 2*col_w, y0 + h_row)
 
-    return y_top - row_h * 4  # bottom y
+    return col_w
 
 
-def _put_cell(c: canvas.Canvas, x: float, y: float, col_w: float, row_h: float,
-              row_idx: int, col_idx: int, text: str):
-    # row_idx 0..2 (dati), col_idx 0..2
-    # y è y_top (top of header row)
-    # header row occupies row 0; data rows start at row 1
-    # data row top = y - row_h*(1+row_idx)
-    cell_x = x + col_w * col_idx
-    cell_y = y - row_h * (2 + row_idx)  # bottom of data row
+def _put_cell_center(c: canvas.Canvas, x: float, y_top: float, col_w: float, h_row: float, row_idx: int, col_idx: int, text: str):
+    # row_idx 0..2 in data rows
+    cell_x = x + col_w*col_idx
+    cell_y = y_top - h_row*(2+row_idx)
     c.setFont("Helvetica", 10)
-    c.drawCentredString(cell_x + col_w / 2, cell_y + row_h / 2 - 4, text or "")
+    c.drawCentredString(cell_x + col_w/2, cell_y + h_row/2 - 4, (text or "").strip())
 
 
 def build_prescrizione_occhiali_a4(data: dict, letterhead_path: str) -> bytes:
-    """Prescrizione occhiali A4 in stile modulo (TABO + griglie SF/CIL/AX)."""
+    """Prescrizione occhiali A4: layout pulito (no sovrapposizioni)."""
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
-    w, h = A4
+    W, H = A4
 
-    # letterhead come sfondo (jpeg)
+    # background letterhead
     try:
-        c.drawImage(letterhead_path, 0, 0, width=w, height=h, preserveAspectRatio=True, mask="auto")
+        c.drawImage(letterhead_path, 0, 0, width=W, height=H, preserveAspectRatio=True, mask="auto")
     except Exception:
         pass
 
-    # titolo e intestazione dati
     x_margin = 2.0 * cm
-    y = h - 5.6 * cm
 
+    # --- HEADER (sotto linea verde): posizioni fisse, così non va "sotto" i TABO ---
+    y_title = H - 6.2 * cm
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(x_margin, y, "Prescrizione occhiali")
-    c.setFont("Helvetica", 11)
-    c.drawRightString(w - x_margin, y, f"Data: {data.get('data','')}")
-    y -= 1.0 * cm
+    c.drawString(x_margin, y_title, "Prescrizione occhiali")
 
     c.setFont("Helvetica", 11)
-    c.drawString(x_margin, y, "Sig.:")
-    c.line(x_margin + 1.2 * cm, y - 2, w - x_margin, y - 2)
+    c.drawRightString(W - x_margin, y_title + 2, f"Data: {data.get('data','')}")
+
+    y_sig = H - 7.2 * cm
+    c.setFont("Helvetica", 11)
+    c.drawString(x_margin, y_sig, "Sig.:")
+    # linea firma nome (corta, non attraversa i semicirchi)
+    c.line(x_margin + 1.3*cm, y_sig - 2, x_margin + 8.5*cm, y_sig - 2)
     c.setFont("Helvetica-Bold", 11)
-    c.drawString(x_margin + 1.4 * cm, y, f"{data.get('paziente','')}")
-    y -= 1.1 * cm
+    c.drawString(x_margin + 1.5*cm, y_sig, f"{data.get('paziente','')}")
 
-    # TABO semicircles (più grandi e freccia lunga)
-    # centers
-    cy = y - 1.0 * cm
-    cx_od = x_margin + 6.3 * cm
-    cx_os = x_margin + 14.8 * cm
-    r = 3.8 * cm
+    # --- TABO (abbassati per evitare sovrapposizioni col titolo) ---
+    r = 3.6 * cm
+    cy = H - 11.2 * cm  # <--- punto chiave: più basso
+    cx_od = x_margin + 6.5 * cm
+    cx_os = x_margin + 14.7 * cm
 
     lont = data.get("lontano") or {}
     ax_od = _safe_num(_rx_get(lont, "od").get("ax"), 0.0)
     ax_os = _safe_num(_rx_get(lont, "os").get("ax"), 0.0)
 
-    draw_tabo_semicircle(c, cx=cx_od, cy=cy, r=r, axis_deg=ax_od, label="Occhio Destro", tick_step=5)
-    draw_tabo_semicircle(c, cx=cx_os, cy=cy, r=r, axis_deg=ax_os, label="Occhio Sinistro", tick_step=5)
+    draw_tabo_semicircle(c, cx=cx_od, cy=cy, r=r, axis_deg=ax_od, label="ODX", tick_step=5)
+    draw_tabo_semicircle(c, cx=cx_os, cy=cy, r=r, axis_deg=ax_os, label="OSN", tick_step=5)
 
-    # griglie diottrie sotto i semicirchi
-    grid_top = cy - r - 0.3 * cm
-    col_w = 2.0 * cm
-    row_h = 0.85 * cm
+    # --- TABELLE SF/CIL/AX ---
+    table_top = cy - r - 1.0*cm
+    table_w = 6.2 * cm
+    row_h = 0.9 * cm
 
-    grid_x_od = x_margin + 2.1 * cm
-    grid_x_os = x_margin + 11.0 * cm
+    x_od = x_margin + 1.6 * cm
+    x_os = x_margin + 10.9 * cm
 
-    _draw_rx_grid(c, grid_x_od, grid_top, col_w, row_h, header=True)
-    _draw_rx_grid(c, grid_x_os, grid_top, col_w, row_h, header=True)
+    col_w = _draw_rx_table(c, x_od, table_top, table_w, row_h, "Occhio Destro")
+    _draw_rx_table(c, x_os, table_top, table_w, row_h, "Occhio Sinistro")
 
-    # etichette righe centrali (LONTANO / INTERMEDIO / VICINO)
-    c.setFont("Helvetica-Bold", 9)
-    labels = ["LONTANO", "INTERMEDIO\n(COMPUTER)", "VICINO\n(LETTURA)"]
-    for i, lab in enumerate(labels):
-        ly = grid_top - row_h * (1 + i) - row_h * 0.55
-        for j, line in enumerate(lab.split("\n")):
-            c.drawCentredString(x_margin + 9.0 * cm, ly - j * 10, line)
+    # Etichette righe al centro (tra le tabelle)
+    c.setFont("Helvetica-Bold", 9.2)
+    mid_x = x_margin + 9.2 * cm
+    row_labels = [("LONTANO", 0), ("INTERMEDIO\n(COMPUTER)", 1), ("VICINO\n(LETTURA)", 2)]
+    for lab, i in row_labels:
+        y_row_center = table_top - row_h*(1.5+i)
+        for j, ln in enumerate(lab.split("\n")):
+            c.drawCentredString(mid_x, y_row_center - j*10, ln)
 
-    # riempi celle: lontano / intermedio / vicino
+    # Fill values
     inter = data.get("intermedio") or {}
     vic = data.get("vicino") or {}
 
-    def fill_row(src, row_idx):
+    def fill_row(src, row_idx: int):
         od = _rx_get(src, "od")
         os_ = _rx_get(src, "os")
-        # OD
-        _put_cell(c, grid_x_od, grid_top, col_w, row_h, row_idx, 0, str(od.get("sf","")))
-        _put_cell(c, grid_x_od, grid_top, col_w, row_h, row_idx, 1, str(od.get("cyl","")))
-        _put_cell(c, grid_x_od, grid_top, col_w, row_h, row_idx, 2, str(od.get("ax","")))
-        # OS
-        _put_cell(c, grid_x_os, grid_top, col_w, row_h, row_idx, 0, str(os_.get("sf","")))
-        _put_cell(c, grid_x_os, grid_top, col_w, row_h, row_idx, 1, str(os_.get("cyl","")))
-        _put_cell(c, grid_x_os, grid_top, col_w, row_h, row_idx, 2, str(os_.get("ax","")))
+
+        _put_cell_center(c, x_od, table_top, col_w, row_h, row_idx, 0, str(od.get("sf","")))
+        _put_cell_center(c, x_od, table_top, col_w, row_h, row_idx, 1, str(od.get("cyl","")))
+        _put_cell_center(c, x_od, table_top, col_w, row_h, row_idx, 2, str(od.get("ax","")))
+
+        _put_cell_center(c, x_os, table_top, col_w, row_h, row_idx, 0, str(os_.get("sf","")))
+        _put_cell_center(c, x_os, table_top, col_w, row_h, row_idx, 1, str(os_.get("cyl","")))
+        _put_cell_center(c, x_os, table_top, col_w, row_h, row_idx, 2, str(os_.get("ax","")))
 
     fill_row(lont, 0)
     fill_row(inter, 1)
     fill_row(vic, 2)
 
-    # sezione lenti consigliate (semplice elenco)
-    y_lenti = grid_top - row_h * 4 - 1.3 * cm
+    # --- LENTI CONSIGLIATE ---
+    y_lenti = table_top - row_h*4 - 1.4*cm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(x_margin, y_lenti, "LENTI CONSIGLIATE")
-    y_lenti -= 0.6 * cm
+    y_lenti -= 0.7*cm
 
     lenti = data.get("lenti") or []
     c.setFont("Helvetica", 10.5)
     for item in lenti[:10]:
         c.rect(x_margin, y_lenti - 3, 10, 10, stroke=1, fill=0)
-        c.drawString(x_margin + 0.5 * cm, y_lenti, str(item))
-        y_lenti -= 0.55 * cm
+        c.drawString(x_margin + 0.5*cm, y_lenti, str(item))
+        y_lenti -= 0.55*cm
 
     c.showPage()
     c.save()
