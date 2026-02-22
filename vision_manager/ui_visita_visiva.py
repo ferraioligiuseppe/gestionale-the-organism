@@ -116,11 +116,11 @@ def _format_paz(p) -> str:
     dn = p.get("data_nascita") or ""
     return f"{p['cognome']} {p['nome']} (ID {p['id']}) {dn}".strip()
 
-def _rx_input(label: str):
-    c1, c2, c3 = st.columns([1,1,1])
-    sf = c1.number_input(f"{label} SF", value=0.00, step=0.25, format="%0.2f")
-    cyl = c2.number_input(f"{label} CIL", value=0.00, step=0.25, format="%0.2f")
-    ax = c3.number_input(f"{label} AX (0-180)", min_value=0, max_value=180, value=0, step=1)
+def _rx_input(label: str, key_prefix: str):
+    c1, c2, c3 = st.columns([1, 1, 1])
+    sf = c1.number_input(f"{label} SF", value=0.00, step=0.25, format="%0.2f", key=f"{key_prefix}_sf")
+    cyl = c2.number_input(f"{label} CIL", value=0.00, step=0.25, format="%0.2f", key=f"{key_prefix}_cyl")
+    ax = c3.number_input(f"{label} AX (0-180)", min_value=0, max_value=180, value=0, step=1, key=f"{key_prefix}_ax")
     return {"sf": float(sf), "cyl": float(cyl), "ax": int(ax)}
 
 def ui_visita_visiva():
