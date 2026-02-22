@@ -298,7 +298,7 @@ def ui_visita_visiva():
                 "vicino": {"od": vicino_od, "os": vicino_os},
                 "lenti": lenti_sel,
             },
-            "note": note_v,
+            note_v = st.text_area("Note visita", height=100)
         }
         payload_str = json.dumps(payload, ensure_ascii=False)
 
