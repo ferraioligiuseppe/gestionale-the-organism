@@ -1,6 +1,27 @@
 import os
 import sqlite3
 
+def _add_col_if_missing(conn, table: str, col: str, ddl: str):
+    cur = conn.cursor()
+    try:
+        if conn.__class__.__module__.startswith("psycopg2"):
+            cur.execute("""
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema='public' AND table_name=%s AND column_name=%s
+            """, (table, col))
+            if cur.fetchone() is None:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+                conn.commit()
+        else:
+            cur.execute(f"PRAGMA table_info({table})")
+            cols = [r[1] for r in cur.fetchall()]
+            if col not in cols:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+                conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
 def _env(key: str, default: str = "") -> str:
     v = os.getenv(key)
     return v if v not in (None, "") else default
@@ -67,6 +88,9 @@ def init_db(conn):
         cur.execute("ALTER TABLE prescrizioni_occhiali ADD COLUMN IF NOT EXISTS pdf_bytes BYTEA;")
 
         conn.commit()
+    _add_col_if_missing(conn, 'visite_visive', 'is_deleted', 'is_deleted INTEGER DEFAULT 0')
+    _add_col_if_missing(conn, 'visite_visive', 'deleted_at', 'deleted_at TEXT')
+
         return
 
     # SQLite

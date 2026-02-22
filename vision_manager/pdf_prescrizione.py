@@ -30,7 +30,7 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_jpeg_path: s
         pass
 
     x = 2.2*cm
-    y = h - 3.5*cm
+    y = h - 5.6*cm  # sotto intestazione/linea verde
     c.setFont("Helvetica", 10)
     c.drawRightString(w - 2.2*cm, y, f"Data: {data.get('data','')}")
     y -= 18
@@ -40,9 +40,9 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_jpeg_path: s
 
     ax_od = (data.get("lontano") or {}).get("od", {}).get("ax", 0) or 0
     ax_os = (data.get("lontano") or {}).get("os", {}).get("ax", 0) or 0
-    draw_axis_semicircle(c, cx=x+5.2*cm, cy=y-0.5*cm, r=3.3*cm, axis_deg=float(ax_od or 0))
-    draw_axis_semicircle(c, cx=x+12.8*cm, cy=y-0.5*cm, r=3.3*cm, axis_deg=float(ax_os or 0))
-    y -= 5.2*cm
+    draw_axis_semicircle(c, cx=x+6.2*cm, cy=y-2.2*cm, r=3.4*cm, axis_deg=float(ax_od or 0), label="OD")
+    draw_axis_semicircle(c, cx=x+14.0*cm, cy=y-2.2*cm, r=3.4*cm, axis_deg=float(ax_os or 0), label="OS")
+    y -= 6.0*cm
 
     def section(title: str, rx_block: Dict[str, Any]):
         nonlocal y

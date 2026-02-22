@@ -5,6 +5,15 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 
+def _fmt_paziente(p):
+    if isinstance(p, dict):
+        cog = (p.get("cognome") or "").strip()
+        nom = (p.get("nome") or "").strip()
+        dn = (p.get("data_nascita") or "").strip()
+        s = (cog + " " + nom).strip()
+        return (s + (f" ({dn})" if dn else "")).strip() or str(p)
+    return str(p or "")
+
 def _ml(c, text: str, x: float, y: float, max_chars=98, line_h=13):
     if not text:
         return y
@@ -23,7 +32,7 @@ def _ml(c, text: str, x: float, y: float, max_chars=98, line_h=13):
         if line: chunks.append(line)
         chunks.append("")  # paragraph break
     if chunks and chunks[-1]=="": chunks.pop()
-    c.setFont("Helvetica", 10)
+    c.setFont("Helvetica", 11)
     for ln in chunks:
         if ln=="":
             y -= line_h//2
@@ -42,13 +51,13 @@ def build_referto_oculistico_a4(data: Dict[str, Any], letterhead_jpeg_path: str)
         pass
 
     x = 2.2*cm
-    y = h - 3.6*cm
+    y = h - 5.2*cm  # sotto intestazione/linea verde
 
-    c.setFont("Helvetica-Bold", 14)
+    c.setFont("Helvetica-Bold", 16)
     c.drawString(x, y, "Referto visita oculistica")
     y -= 18
 
-    c.setFont("Helvetica", 10)
+    c.setFont("Helvetica", 11)
     c.drawRightString(w - 2.2*cm, y+2, f"Data: {data.get('data','')}")
     c.setFont("Helvetica-Bold", 11)
     c.drawString(x, y, f"Paziente: {data.get('paziente','')}")
@@ -64,7 +73,7 @@ def build_referto_oculistico_a4(data: Dict[str, Any], letterhead_jpeg_path: str)
                 c.drawImage(letterhead_jpeg_path, 0, 0, width=w, height=h, mask='auto')
             except Exception:
                 pass
-            y = h - 3.6*cm
+            y = h - 5.2*cm  # sotto intestazione/linea verde
         c.setFont("Helvetica-Bold", 11)
         c.drawString(x, y, title)
         y -= 14
@@ -110,7 +119,7 @@ def build_referto_oculistico_a4(data: Dict[str, Any], letterhead_jpeg_path: str)
     section("Note", data.get("note",""))
 
     y_sig = 3.3*cm
-    c.setFont("Helvetica", 10)
+    c.setFont("Helvetica", 11)
     c.drawRightString(w - 2.2*cm, y_sig + 10, "Firma / Timbro")
     c.line(w - 6.2*cm, y_sig, w - 2.2*cm, y_sig)
 

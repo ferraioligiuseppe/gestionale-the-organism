@@ -95,6 +95,66 @@ def _insert_visita(conn, paziente_id: int, data_visita: str, dati_json: str) -> 
         try: cur.close()
         except Exception: pass
 
+
+def _update_visita(conn, visita_id: int, dati_json: str):
+    cur = conn.cursor()
+    ph = _ph(conn)
+    try:
+        cur.execute(f"UPDATE visite_visive SET dati_json={ph} WHERE id={ph}", (dati_json, visita_id))
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def _soft_delete_visita(conn, visita_id: int):
+    cur = conn.cursor()
+    ph = _ph(conn)
+    try:
+        try:
+            cur.execute(f"UPDATE visite_visive SET is_deleted={ph}, deleted_at={ph} WHERE id={ph}",
+                        (1, dt.datetime.now().isoformat(timespec="seconds"), visita_id))
+        except Exception:
+            cur.execute(f"SELECT dati_json FROM visite_visive WHERE id={ph}", (visita_id,))
+            row = cur.fetchone()
+            dj = row[0] if row else ""
+            try:
+                obj = json.loads(dj) if dj else {}
+            except Exception:
+                obj = {"raw": dj}
+            obj["_deleted"] = True
+            obj["_deleted_at"] = dt.datetime.now().isoformat(timespec="seconds")
+            cur.execute(f"UPDATE visite_visive SET dati_json={ph} WHERE id={ph}",
+                        (json.dumps(obj, ensure_ascii=False), visita_id))
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def _restore_visita(conn, visita_id: int):
+    cur = conn.cursor()
+    ph = _ph(conn)
+    try:
+        try:
+            cur.execute(f"UPDATE visite_visive SET is_deleted={ph}, deleted_at={ph} WHERE id={ph}",
+                        (0, None, visita_id))
+        except Exception:
+            cur.execute(f"SELECT dati_json FROM visite_visive WHERE id={ph}", (visita_id,))
+            row = cur.fetchone()
+            dj = row[0] if row else ""
+            try:
+                obj = json.loads(dj) if dj else {}
+            except Exception:
+                obj = {"raw": dj}
+            obj["_deleted"] = False
+            obj["_deleted_at"] = None
+            cur.execute(f"UPDATE visite_visive SET dati_json={ph} WHERE id={ph}",
+                        (json.dumps(obj, ensure_ascii=False), visita_id))
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
 def _list_visite(conn, paziente_id: int) -> List[Dict[str, Any]]:
     cur = conn.cursor()
     ph = _ph(conn)
@@ -249,10 +309,7 @@ def ui_visita_visiva():
                 st.success(f"Visita salvata (ID {vid}).")
         with cpdf1:
             if st.button("🧾 Genera PDF Referto A4"):
-                pdf_bytes = build_referto_oculistico_a4(
-                    {"data": str(data_visita), "paziente": paziente_label, **payload},
-                    LETTERHEAD
-                )
+                pdf_bytes = build_referto_oculistico_a4({**payload, "data": str(data_visita), "paziente": paziente_label}, LETTERHEAD)
                 st.download_button("⬇️ Scarica Referto A4", data=pdf_bytes, file_name=f"referto_oculistico_{paziente_id}_{data_visita}.pdf", mime="application/pdf")
         with cpdf2:
             if st.button("👓 Genera PDF Prescrizione A4"):
@@ -271,20 +328,63 @@ def ui_visita_visiva():
                 st.download_button("⬇️ Scarica Prescrizione A4", data=pdf_bytes, file_name=f"prescrizione_occhiali_{paziente_id}_{data_visita}.pdf", mime="application/pdf")
 
         st.markdown("---")
+        st.markdown("---")
         st.markdown("### Storico visite")
-        visite = _list_visite(conn, paziente_id)
+        show_deleted = st.checkbox("Mostra anche le visite eliminate", value=False)
+        visite = _list_visite(conn, paziente_id, include_deleted=show_deleted)
+
         for v in visite:
-            with st.expander(f"Visita #{v['id']} — {v.get('data_visita','')}"):
+            vid = int(v["id"])
+            with st.expander(f"Visita #{vid} — {v.get('data_visita','')}"):
                 pj = _parse_json(v.get("dati_json") or "")
+                is_del = False
+                if isinstance(pj, dict) and pj.get("_deleted") is True:
+                    is_del = True
+                if "is_deleted" in v and int(v.get("is_deleted") or 0) == 1:
+                    is_del = True
+
+                if is_del:
+                    st.warning(f"VISITA ELIMINATA (soft) — {v.get('deleted_at') or pj.get('_deleted_at','')}")
+
                 st.json(pj)
-                try:
-                    pdf_ref = build_referto_oculistico_a4(
-                        {"data": v.get("data_visita",""), "paziente": paziente_label, **pj},
-                        LETTERHEAD
+
+                c1, c2, c3 = st.columns([1,1,1])
+                if c1.button("✏️ Modifica", key=f"edit_{vid}"):
+                    st.session_state[f"edit_mode_{vid}"] = True
+
+                if (not is_del) and c2.button("🗑️ Elimina", key=f"del_{vid}"):
+                    _soft_delete_visita(conn, vid)
+                    st.rerun()
+
+                if is_del and c3.button("♻️ Ripristina", key=f"restore_{vid}"):
+                    _restore_visita(conn, vid)
+                    st.rerun()
+
+                if st.session_state.get(f"edit_mode_{vid}", False):
+                    new_json = st.text_area(
+                        "Modifica payload (JSON)",
+                        value=json.dumps(pj, ensure_ascii=False, indent=2),
+                        height=260,
+                        key=f"edit_ta_{vid}",
                     )
-                    st.download_button("⬇️ Referto A4", data=pdf_ref, file_name=f"referto_oculistico_{paziente_id}_{v['id']}.pdf", mime="application/pdf", key=f"r{v['id']}")
+                    cc1, cc2 = st.columns([1,1])
+                    if cc1.button("✅ Salva modifiche", key=f"save_{vid}"):
+                        _update_visita(conn, vid, new_json)
+                        st.session_state[f"edit_mode_{vid}"] = False
+                        st.success("Modifiche salvate.")
+                        st.rerun()
+                    if cc2.button("❌ Annulla", key=f"cancel_{vid}"):
+                        st.session_state[f"edit_mode_{vid}"] = False
+                        st.rerun()
+
+                st.divider()
+
+                try:
+                    pdf_ref = build_referto_oculistico_a4({**pj, "data": v.get("data_visita",""), "paziente": paziente_label}, LETTERHEAD)
+                    st.download_button("⬇️ Referto A4", data=pdf_ref, file_name=f"referto_oculistico_{paziente_id}_{vid}.pdf", mime="application/pdf", key=f"r{vid}")
                 except Exception:
                     st.warning("Referto non generabile da storico (payload non compatibile).")
+
                 try:
                     pr = (pj.get("prescrizione") or {})
                     if pr:
@@ -299,6 +399,6 @@ def ui_visita_visiva():
                             },
                             LETTERHEAD
                         )
-                        st.download_button("⬇️ Prescrizione A4", data=pdf_pr, file_name=f"prescrizione_occhiali_{paziente_id}_{v['id']}.pdf", mime="application/pdf", key=f"p{v['id']}")
+                        st.download_button("⬇️ Prescrizione A4", data=pdf_pr, file_name=f"prescrizione_occhiali_{paziente_id}_{vid}.pdf", mime="application/pdf", key=f"p{vid}")
                 except Exception:
                     pass
