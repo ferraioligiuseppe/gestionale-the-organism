@@ -1,8 +1,16 @@
 from __future__ import annotations
 import math
+from typing import Optional
 from reportlab.pdfgen.canvas import Canvas
 
-def draw_axis_semicircle(c: Canvas, cx: float, cy: float, r: float, axis_deg: float, label: str | None = None):
+def draw_axis_semicircle(
+    c: Canvas,
+    cx: float,
+    cy: float,
+    r: float,
+    axis_deg: float,
+    label: Optional[str] = None
+):
     """
     Semicerchio TABO (180° a sinistra → 0° a destra, 90° in alto) con freccia asse.
     axis_deg: 0..180 (TABO)
@@ -16,7 +24,7 @@ def draw_axis_semicircle(c: Canvas, cx: float, cy: float, r: float, axis_deg: fl
     c.drawString(cx + r + 6,  cy - 4, "0°")
 
     c.setFont("Helvetica-Bold", 10)
-    c.drawCentredString(cx, cy + r*0.35, "TABO")
+    c.drawCentredString(cx, cy + r * 0.35, "TABO")
 
     if label:
         c.setFont("Helvetica-Bold", 11)
@@ -37,5 +45,3 @@ def draw_axis_semicircle(c: Canvas, cx: float, cy: float, r: float, axis_deg: fl
     ang2 = theta - math.radians(150)
     c.line(x, y, x + ah * math.cos(ang1), y + ah * math.sin(ang1))
     c.line(x, y, x + ah * math.cos(ang2), y + ah * math.sin(ang2))
-
-
