@@ -17,3 +17,4 @@ numpy
 reportlab
 streamlit-drawable-canvas
 matplotlib
+openai
