@@ -24,11 +24,9 @@ def _add_col_if_missing(conn, table: str, col: str, ddl: str):
         except Exception:
             pass
 
-
 def _env(key: str, default: str = "") -> str:
     v = os.getenv(key)
     return v if v not in (None, "") else default
-
 
 def get_conn():
     db_url = _env("DATABASE_URL", "")
@@ -37,15 +35,12 @@ def get_conn():
         return psycopg2.connect(db_url)
     return sqlite3.connect("vision_manager.db", check_same_thread=False)
 
-
 def _is_pg(conn) -> bool:
     return conn.__class__.__module__.startswith("psycopg2")
-
 
 def init_db(conn):
     if conn is None:
         raise RuntimeError("init_db(conn): conn è None.")
-
     if callable(conn):
         conn = conn()
 
@@ -61,7 +56,6 @@ def init_db(conn):
             note TEXT
         );
         """)
-
         cur.execute("""
         CREATE TABLE IF NOT EXISTS visite_visive (
             id SERIAL PRIMARY KEY,
@@ -71,7 +65,6 @@ def init_db(conn):
             pdf_bytes BYTEA
         );
         """)
-
         cur.execute("""
         CREATE TABLE IF NOT EXISTS prescrizioni_occhiali (
             id SERIAL PRIMARY KEY,
@@ -83,16 +76,13 @@ def init_db(conn):
         cur.execute("ALTER TABLE prescrizioni_occhiali ADD COLUMN IF NOT EXISTS formato TEXT;")
         cur.execute("ALTER TABLE prescrizioni_occhiali ADD COLUMN IF NOT EXISTS dati_json JSONB;")
         cur.execute("ALTER TABLE prescrizioni_occhiali ADD COLUMN IF NOT EXISTS pdf_bytes BYTEA;")
-
         conn.commit()
 
-        # SOFT DELETE COLUMNS
-        _add_col_if_missing(conn, 'visite_visive', 'is_deleted', 'is_deleted INTEGER DEFAULT 0')
-        _add_col_if_missing(conn, 'visite_visive', 'deleted_at', 'deleted_at TEXT')
-
+        _add_col_if_missing(conn, "visite_visive", "is_deleted", "is_deleted INTEGER DEFAULT 0")
+        _add_col_if_missing(conn, "visite_visive", "deleted_at", "deleted_at TEXT")
         return
 
-    # SQLITE
+    # SQLite
     cur.execute("""
     CREATE TABLE IF NOT EXISTS pazienti_visivi (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +92,6 @@ def init_db(conn):
         note TEXT
     )
     """)
-
     cur.execute("""
     CREATE TABLE IF NOT EXISTS visite_visive (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,7 +101,6 @@ def init_db(conn):
         pdf_bytes BLOB
     )
     """)
-
     cur.execute("""
     CREATE TABLE IF NOT EXISTS prescrizioni_occhiali (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,5 +111,4 @@ def init_db(conn):
         pdf_bytes BLOB
     )
     """)
-
     conn.commit()
