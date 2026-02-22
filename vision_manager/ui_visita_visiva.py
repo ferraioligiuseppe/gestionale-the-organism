@@ -137,7 +137,7 @@ def ui_visita_visiva():
         nome = c1.text_input("Nome")
         cognome = c2.text_input("Cognome")
         data_nascita = c3.text_input("Data nascita (YYYY-MM-DD)", value="")
-        note = st.text_area("Note", height=90)
+        note_v = note_v = st.text_area("Note", height=90, key="note_visita")
 
         if st.button("💾 Salva paziente"):
             if not nome.strip() or not cognome.strip():
