@@ -80,7 +80,7 @@ def build_prescrizione_occhiali_a4(data: dict, letterhead_path: str) -> bytes:
     # HEADER
     y_title = H - 6.2 * cm
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(x_margin, y_title, "Prescrizione occhiali")
+    c.drawCentredString(W/2.0, y_title, "Prescrizione occhiali")
 
     c.setFont("Helvetica", 11)
     c.drawRightString(W - x_margin, y_title + 2, f"Data: {data.get('data','')}")
@@ -96,10 +96,8 @@ def build_prescrizione_occhiali_a4(data: dict, letterhead_path: str) -> bytes:
     r = 3.6 * cm
     cy = (H - 11.2 * cm) - 1.0 * cm  # già sceso di 1 cm
 
-    # spazio centrale per DI (distanza interpupillare)
-    di_box_w = 3.2 * cm
-    di_gap = di_box_w + 0.8 * cm  # gap totale tra i due semicirchi
-
+    # spazio centrale per DI (distanza interpupillare) - solo testo con puntini
+    di_gap = 4.2 * cm  # spazio totale al centro tra i due semicirchi (testo DI)
     cx_mid = W / 2.0
     cx_od = cx_mid - (di_gap / 2.0 + r)
     cx_os = cx_mid + (di_gap / 2.0 + r)
@@ -112,29 +110,27 @@ def build_prescrizione_occhiali_a4(data: dict, letterhead_path: str) -> bytes:
     draw_tabo_semicircle(c, cx=cx_od, cy=cy, r=r, axis_deg=ax_od, label=None, tick_step=5, show_tabo_text=False)
     draw_tabo_semicircle(c, cx=cx_os, cy=cy, r=r, axis_deg=ax_os, label=None, tick_step=5, show_tabo_text=True)
 
-    # Box DI al centro (sulla linea mediana dei centri dei semicirchi)
-    di_val = data.get("di") or data.get("DI") or data.get("pd_mm") or ""
-    c.setFont("Helvetica-Bold", 10)
-    c.drawCentredString(cx_mid, cy + 6, "DI")
-    c.setLineWidth(1)
-    c.rect(cx_mid - di_box_w/2, cy - 10, di_box_w, 20, stroke=1, fill=0)
-    c.setFont("Helvetica", 10)
-    c.drawCentredString(cx_mid, cy - 4, str(di_val))
+    # Testo DI (senza quadratino) centrato tra i semicirchi
+    c.setFont("Helvetica", 10.5)
+    c.drawCentredString(cx_mid, cy - 6, "Distanza interpupillare: ................")
 
     # Tabelle
     table_top = cy - r - 1.0*cm
     table_w = 6.2 * cm
     row_h = 0.9 * cm
 
-    x_od = x_margin + 1.6 * cm
-    x_os = x_margin + 10.9 * cm
+    # Centra le due tabelle sulla linea mediana, lasciando un gap centrale per le etichette righe
+    label_gap = 2.6 * cm
+    total_w = table_w * 2 + label_gap
+    x_od = (W - total_w) / 2.0
+    x_os = x_od + table_w + label_gap
 
     col_w = _draw_rx_table(c, x_od, table_top, table_w, row_h, "Occhio Destro")
     _draw_rx_table(c, x_os, table_top, table_w, row_h, "Occhio Sinistro")
 
     # Etichette righe al centro
     c.setFont("Helvetica-Bold", 9.2)
-    mid_x = x_margin + 9.2 * cm
+    mid_x = x_od + table_w + label_gap/2.0
     row_labels = [("LONTANO", 0), ("INTERMEDIO\n(COMPUTER)", 1), ("VICINO\n(LETTURA)", 2)]
     for lab, i in row_labels:
         y_row_center = table_top - row_h*(1.5+i)
