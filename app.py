@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-
+import base64
+import hashlib
+import hmac
+import json
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
 try:
