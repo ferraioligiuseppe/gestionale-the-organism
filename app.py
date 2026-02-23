@@ -2,6 +2,7 @@
 import streamlit as st
 
 import pnev_module as pnev
+import pnev_ai
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
 try:
@@ -298,6 +299,22 @@ def debug_secrets_auth():
 # chiama la funzione solo in test o solo per admin
 
 import sqlite3
+
+def _ai_enabled() -> bool:
+    """Enable AI helper ONLY in TEST unless explicitly allowed.
+
+    Controlled via Streamlit Secrets:
+    [ai]
+    ENABLED = true
+    """
+    try:
+        if str(APP_MODE).lower().strip() != "test":
+            return False
+        a = st.secrets.get("ai", {})
+        return bool(a.get("ENABLED", False))
+    except Exception:
+        return False
+
 APP_MODE = st.secrets.get("APP_MODE", "prod")
 if APP_MODE == "test":
     debug_secrets_auth()
@@ -1863,15 +1880,15 @@ def init_db() -> None:
         pass
 
 
-# Migrazione PNEV (PostgreSQL) – JSON strutturato + summary
-try:
-    cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
-except Exception:
-    pass
-try:
-    cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_summary TEXT;")
-except Exception:
-    pass
+    # Migrazione PNEV (PostgreSQL) – JSON strutturato + summary
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_summary TEXT;")
+    except Exception:
+        pass
 
     cur.execute(
         """
@@ -4395,6 +4412,25 @@ def ui_anamnesi():
 
         salva = st.form_submit_button("Salva anamnesi")
 
+
+    # --- IA helper (TEST only) ---
+    if 'ai_hyp' in locals() and (ai_hyp or ai_plan):
+        if not _ai_enabled():
+            st.warning("IA disattivata. Abilitala solo in TEST nei Secrets: [ai] ENABLED=true")
+        else:
+            try:
+                if ai_hyp:
+                    sug = pnev_ai.generate_hypothesis(visita_snapshot, pnev_data_new)
+                    pnev_ai.apply_to_session("pnev_new", sug)
+                    st.success("Bozza ipotesi applicata ai campi PNEV (modificabile).")
+                    st.rerun()
+                if ai_plan:
+                    sug = pnev_ai.generate_plan(visita_snapshot, pnev_data_new)
+                    pnev_ai.apply_to_session("pnev_new", sug)
+                    st.success("Bozza piano applicata ai campi PNEV (modificabile).")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Errore IA (stub): {e}")
     if salva:
         data_iso = None
         if data_str.strip():
@@ -4496,6 +4532,25 @@ Storia libera (narrazione):
         with col2:
             cancella = st.form_submit_button("Elimina anamnesi")
 
+
+    # --- IA helper (TEST only) per modifica ---
+    if 'ai_hyp_m' in locals() and (ai_hyp_m or ai_plan_m):
+        if not _ai_enabled():
+            st.warning("IA disattivata. Abilitala solo in TEST nei Secrets: [ai] ENABLED=true")
+        else:
+            try:
+                if ai_hyp_m:
+                    sug = pnev_ai.generate_hypothesis(visita_snapshot_m, pnev_data_m)
+                    pnev_ai.apply_to_session(f"pnev_edit_{val_id}", sug)
+                    st.success("Bozza ipotesi applicata ai campi PNEV (modificabile).")
+                    st.rerun()
+                if ai_plan_m:
+                    sug = pnev_ai.generate_plan(visita_snapshot_m, pnev_data_m)
+                    pnev_ai.apply_to_session(f"pnev_edit_{val_id}", sug)
+                    st.success("Bozza piano applicata ai campi PNEV (modificabile).")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Errore IA (stub): {e}")
     if salva_m:
         data_iso_m = None
         if data_m.strip():
@@ -4687,7 +4742,13 @@ def ui_valutazioni_visive():
         )
         pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(prefix="pnev_new", visita=visita_snapshot, existing=None)
 
-        salva = st.form_submit_button("Salva valutazione visiva")
+        col_ai1, col_ai2, col_save = st.columns([1,1,1])
+        with col_ai1:
+            ai_hyp = st.form_submit_button("🤖 IA: bozza ipotesi", help="Genera una bozza (TEST) basata sulla visita attuale + PNEV compilata.")
+        with col_ai2:
+            ai_plan = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su visita attuale + PNEV.")
+        with col_save:
+            salva = st.form_submit_button("Salva valutazione visiva")
 
     if salva:
         data_iso = None
@@ -5131,10 +5192,14 @@ ESAMI STRUTTURALI / FUNZIONALI
         )
         pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(prefix=f"pnev_edit_{val_id}", visita=visita_snapshot_m, existing=pnev_existing)
 
-        col9, col10 = st.columns(2)
-        with col9:
+        col_ai1, col_ai2, col_save, col_del = st.columns([1,1,1,1])
+        with col_ai1:
+            ai_hyp_m = st.form_submit_button("🤖 IA: bozza ipotesi", help="Genera una bozza (TEST) basata sulla visita attuale + PNEV.")
+        with col_ai2:
+            ai_plan_m = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su visita attuale + PNEV.")
+        with col_save:
             salva_m = st.form_submit_button("Salva modifiche")
-        with col10:
+        with col_del:
             cancella = st.form_submit_button("Elimina valutazione")
 
     if salva_m:
