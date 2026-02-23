@@ -4469,7 +4469,7 @@ def ui_pazienti():
     # -----------------------------
 
 def ui_anamnesi():
-    st.header("Anamnesi")
+    st.header("Valutazione PNEV")
 
     conn = get_connection()
     cur = conn.cursor()
@@ -4487,9 +4487,9 @@ def ui_anamnesi():
     paz_id = int(sel.split(" - ", 1)[0])
 
     with st.form("nuova_anamnesi"):
-        st.subheader("Nuova anamnesi")
+        st.subheader("Nuova valutazione PNEV")
 
-        data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
+        data_str = st.text_input("Data valutazione (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
         motivo = st.text_area("Motivo dell'invio / richiesta principale")
 
         st.markdown("**Area perinatale e sviluppo**")
@@ -4516,7 +4516,7 @@ def ui_anamnesi():
         storia_libera = st.text_area("Storia libera / osservazioni genitori (narrazione aperta)")
         note = st.text_area("Note cliniche aggiuntive (per uso interno)")
 
-        salva = st.form_submit_button("Salva anamnesi")
+        salva = st.form_submit_button("Salva valutazione PNEV")
 
     if salva:
         data_iso = None
@@ -4581,10 +4581,10 @@ Storia libera (narrazione):
             (paz_id, data_iso, motivo, storia_completa, note),
         )
         conn.commit()
-        st.success("Anamnesi salvata.")
+        st.success("Valutazione PNEV salvata.")
 
     st.markdown("---")
-    st.subheader("Anamnesi esistenti")
+    st.subheader("Valutazioni PNEV esistenti")
 
     cur.execute(
         "SELECT * FROM Anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC",
@@ -4592,7 +4592,7 @@ Storia libera (narrazione):
     )
     rows = cur.fetchall()
     if not rows:
-        st.info("Nessuna anamnesi per questo paziente.")
+        st.info("Nessuna valutazione PNEV per questo paziente.")
         conn.close()
         return
 
@@ -4600,7 +4600,7 @@ Storia libera (narrazione):
         f"{r['ID']} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
         for r in rows
     ]
-    sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
+    sel_an = st.selectbox("Seleziona una valutazione PNEV da modificare/cancellare", labels)
     an_id = int(sel_an.split(" - ", 1)[0])
     rec = next(r for r in rows if r["ID"] == an_id)
 
@@ -4617,7 +4617,7 @@ Storia libera (narrazione):
         with col1:
             salva_m = st.form_submit_button("Salva modifiche")
         with col2:
-            cancella = st.form_submit_button("Elimina anamnesi")
+            cancella = st.form_submit_button("Elimina valutazione PNEV")
 
     if salva_m:
         data_iso_m = None
@@ -4675,7 +4675,7 @@ def ui_valutazioni_visive():
 
     with st.form("nuova_val_visiva"):
         st.subheader("Nuova valutazione visiva / oculistica")
-        data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
+        data_str = st.text_input("Data valutazione (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
         tipo = st.text_input("Tipo visita (es. Valutazione optometrica, controllo, ecc.)")
         professionista = st.text_input("Professionista", "")
 
@@ -5429,7 +5429,7 @@ def ui_sedute():
 
     with st.form("nuova_seduta"):
         st.subheader("Nuova seduta")
-        data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
+        data_str = st.text_input("Data valutazione (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
         terapia = st.text_input("Tipo di terapia (es. logopedia, neuropsicomotricità, optometria...)", "")
         professionista = st.text_input("Professionista", "")
         col1, col2 = st.columns(2)
@@ -6883,7 +6883,7 @@ def main():
     st.sidebar.title("Navigazione")
     sections = [
         "Pazienti",
-        "Anamnesi",
+        "Valutazione PNEV",
         "Valutazioni visive / oculistiche",
         "Sedute / Terapie",
         "Osteopatia",
@@ -6905,7 +6905,7 @@ def main():
     # routing alle varie sezioni
     if sezione == "Pazienti":
         ui_pazienti()
-    elif sezione == "Anamnesi":
+    elif sezione == "Valutazione PNEV":
         ui_anamnesi()
     elif sezione == "Valutazioni visive / oculistiche":
         ui_valutazioni_visive()
