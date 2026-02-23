@@ -1,20 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import base64
-import hashlib
-import hmac
-import secrets
-import json
 USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
-# --- FIX: verifica disponibilità psycopg2 ---
-PSYCOPG2_AVAILABLE = False
 
-try:
-    import psycopg2
-    import psycopg2.extras
-    PSYCOPG2_AVAILABLE = True
-except Exception:
-    PSYCOPG2_AVAILABLE = False
 
 
 # --- PRIVACY PDF TEMPLATES (DIFFERENZIATI) ---
@@ -956,6 +943,11 @@ def login(get_conn) -> bool:
     password = st.text_input("Password", type="password")
 
     conn = get_conn()
+    # Clear any aborted transaction state from previous operations
+    try:
+        conn.rollback()
+    except Exception:
+        pass
     ensure_auth_schema(conn)
 
     # bootstrap primo admin se non ci sono utenti
@@ -1211,13 +1203,29 @@ class _PgCursor:
 
     def execute(self, sql, params=None):
         sql2 = self._adapt_sql(str(sql))
-        if params is None:
-            return self._cur.execute(sql2)
-        return self._cur.execute(sql2, params)
+        try:
+            if params is None:
+                return self._cur.execute(sql2)
+            return self._cur.execute(sql2, params)
+        except Exception:
+            # If a statement fails, PostgreSQL marks the transaction as aborted.
+            # Roll back so subsequent statements don't hit InFailedSqlTransaction.
+            try:
+                self._cur.connection.rollback()
+            except Exception:
+                pass
+            raise
 
     def executemany(self, sql, seq_of_params):
         sql2 = self._adapt_sql(str(sql))
-        return self._cur.executemany(sql2, seq_of_params)
+        try:
+            return self._cur.executemany(sql2, seq_of_params)
+        except Exception:
+            try:
+                self._cur.connection.rollback()
+            except Exception:
+                pass
+            raise
 
     def fetchone(self):
         row = self._cur.fetchone()
@@ -1264,6 +1272,9 @@ class _PgConn:
 
     def commit(self):
         return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
 
     def close(self):
         return self._conn.close()
