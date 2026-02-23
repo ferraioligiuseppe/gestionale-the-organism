@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+
+# --- standard libs needed across auth/audit ---
 import base64
 import hashlib
 import hmac
 import json
+
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
 try:
@@ -836,6 +839,14 @@ def ensure_auth_schema(conn):
 
 def _audit(conn, user_id: int | None, action: str, entity: str | None = None, entity_id: str | None = None, meta: dict | None = None):
     meta = meta or {}
+
+    # ✅ break-glass / invalid actor: avoid FK violations by storing NULL
+    try:
+        if user_id is not None and int(user_id) < 1:
+            user_id = None
+    except Exception:
+        user_id = None
+
     cur = conn.cursor()
     try:
         cur.execute(
@@ -984,7 +995,7 @@ def login(get_conn) -> bool:
         if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
             st.session_state["user"] = {
-                "id": -1,
+                "id": None,  # break-glass: no DB user_id
                 "username": u_in,
                 "email": None,
                 "roles": ["admin"],
