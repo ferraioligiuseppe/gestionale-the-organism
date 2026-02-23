@@ -778,7 +778,13 @@ def _pwd_verify(pw: str, stored: str) -> bool:
         return False
 
 def _breakglass_enabled() -> bool:
-    """Emergency login toggle (TEST only)."""
+    """Emergency login toggle (allowed ONLY in TEST)."""
+    try:
+        mode = str(APP_MODE).strip().lower()
+    except Exception:
+        mode = "prod"
+    if mode != "test":
+        return False
     bg = st.secrets.get("breakglass", {})
     return bool(bg.get("ENABLED", False))
 
@@ -1470,27 +1476,135 @@ _DB_URL = _normalize_db_url(_get_database_url())
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
 
+# =========================
+# ANTI-DISASTER GUARDS (TEST vs PROD)
+# =========================
+
+def _mode_norm() -> str:
+    try:
+        m = str(APP_MODE).strip().lower()
+    except Exception:
+        m = "prod"
+    return "test" if m == "test" else "prod"
+
+def _db_env_norm() -> str | None:
+    """Optional explicit DB environment tag from Secrets.
+    Supported keys:
+      - DB_ENV (root)
+      - [db].ENV
+      - [env].DB_ENV
+    """
+    sec = _safe_secrets()
+    for k in ("DB_ENV", "db_env"):
+        v = sec.get(k)
+        if v:
+            return str(v).strip().lower()
+    try:
+        dbsec = sec.get("db", {})
+        if isinstance(dbsec, dict):
+            v = dbsec.get("ENV") or dbsec.get("env")
+            if v:
+                return str(v).strip().lower()
+    except Exception:
+        pass
+    try:
+        envsec = sec.get("env", {})
+        if isinstance(envsec, dict):
+            v = envsec.get("DB_ENV") or envsec.get("db_env")
+            if v:
+                return str(v).strip().lower()
+    except Exception:
+        pass
+    return None
+
+def _looks_like_test_url(u: str) -> bool:
+    u = (u or "").lower()
+    return ("test" in u) or ("dev" in u) or ("staging" in u)
+
+def _looks_like_prod_url(u: str) -> bool:
+    u = (u or "").lower()
+    return ("prod" in u) or ("production" in u)
+
+def _anti_disaster_check_db_url(db_url: str) -> None:
+    """Hard stop on dangerous TEST/PROD mismatches.
+
+    Rules:
+    - If DB_ENV is set in Secrets, it MUST match APP_MODE (test/prod).
+    - If DB_ENV is NOT set:
+        * PROD cannot point to a URL that looks like TEST.
+        * TEST cannot point to a URL that looks like PROD.
+        * TEST on an unmarked URL is blocked unless explicitly acknowledged via DB_ENV='test'.
+    """
+    mode = _mode_norm()
+    db_env = _db_env_norm()
+    u = (db_url or "").strip()
+
+    if db_env:
+        db_env = "test" if db_env == "test" else ("prod" if db_env == "prod" else db_env)
+        if db_env in ("test", "prod") and db_env != mode:
+            st.error("🚨 BLOCCO ANTIDISASTRO: APP_MODE e DB_ENV non coincidono.")
+            st.write({"APP_MODE": mode, "DB_ENV": db_env})
+            st.info("""Correggi in Streamlit Cloud → Settings → Secrets, ad es.:
+
+APP_MODE = "test"
+DB_ENV  = "test"
+
+oppure
+
+APP_MODE = "prod"
+DB_ENV  = "prod"
+""")
+            st.stop()
+        return  # explicit tag wins
+
+    # Heuristics
+    if mode == "prod" and _looks_like_test_url(u):
+        st.error("🚨 BLOCCO ANTIDISASTRO: modalità PROD ma DATABASE_URL sembra di TEST/DEV.")
+        st.info("Imposta esplicitamente DB_ENV='prod' nei Secrets (root o [db].ENV) solo se sei sicuro.")
+        st.stop()
+
+    if mode == "test" and _looks_like_prod_url(u):
+        st.error("🚨 BLOCCO ANTIDISASTRO: modalità TEST ma DATABASE_URL sembra PROD.")
+        st.info("Correggi DATABASE_URL oppure imposta DB_ENV='test' su un DB di test.")
+        st.stop()
+
+    # Strong safety: require explicit tag for TEST if URL not clearly test
+    if mode == "test" and not _looks_like_test_url(u):
+        st.error("🚨 BLOCCO ANTIDISASTRO: modalità TEST ma DATABASE_URL non è marcata come TEST.")
+        st.info("""Per evitare di scrivere per errore sul DB PROD, imposta esplicitamente nei Secrets:
+
+APP_MODE = "test"
+DB_ENV  = "test"
+
+(oppure in [db] ENV = "test")
+""")
+        st.stop()
+
+
 def _sidebar_db_indicator():
     """Mostra in sidebar quale database sta usando l'app."""
     try:
         if _is_streamlit_cloud():
             if _DB_BACKEND == "postgres" and _DB_URL:
-                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
+                st.sidebar.success(f"🟢 DB: PostgreSQL (Neon) — {_mode_norm().upper()}")
             else:
                 st.sidebar.error("🔴 DB: PostgreSQL (Neon) NON configurato")
         else:
             if _DB_BACKEND == "postgres" and _DB_URL:
-                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
+                st.sidebar.success(f"🟢 DB: PostgreSQL (Neon) — {_mode_norm().upper()}")
             else:
                 # locale / test
                 db_path = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_TEST.db")
-                st.sidebar.warning(f"🟡 DB: SQLite ({db_path})")
+                st.sidebar.warning(f"🟡 DB: SQLite ({db_path}) — {_mode_norm().upper()}")
     except Exception:
         pass
 
 def _require_postgres_on_cloud():
     # Mostra sempre l'indicatore, anche in caso di errore
     _sidebar_db_indicator()
+    # ✅ Anti-disaster: stop if TEST/PROD mismatch
+    if _DB_BACKEND == "postgres" and _DB_URL:
+        _anti_disaster_check_db_url(_DB_URL)
     if _is_streamlit_cloud() and _DB_BACKEND != "postgres":
         st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
         diag = _secrets_diagnostics()
