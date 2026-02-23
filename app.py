@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+
+# --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
+PSYCOPG2_AVAILABLE = False
+try:
+    import psycopg2  # type: ignore
+    import psycopg2.extras  # type: ignore
+    PSYCOPG2_AVAILABLE = True
+except Exception:
+    PSYCOPG2_AVAILABLE = False
+
 USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
 
 
