@@ -1555,6 +1555,13 @@ def get_connection():
 
 def init_db() -> None:
     conn = get_connection()
+    # --- SCHEMA MANAGER: idempotent bootstrap (TEST/PROD safe) ---
+    try:
+        from schema_manager import ensure_all_schemas
+        ensure_all_schemas(conn, backend=_DB_BACKEND)
+    except Exception:
+        # Never block startup if schema_manager is missing.
+        pass
     cur = conn.cursor()
 
     if _DB_BACKEND == "sqlite":
