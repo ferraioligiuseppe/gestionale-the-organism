@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+import base64
+import hashlib
+import hmac
+import secrets
+import json
 USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
 # --- FIX: verifica disponibilità psycopg2 ---
 PSYCOPG2_AVAILABLE = False
