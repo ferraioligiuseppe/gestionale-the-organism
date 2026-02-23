@@ -771,6 +771,16 @@ def _pwd_verify(pw: str, stored: str) -> bool:
     except Exception:
         return False
 
+def _breakglass_enabled() -> bool:
+    """Emergency login toggle (TEST only)."""
+    bg = st.secrets.get("breakglass", {})
+    return bool(bg.get("ENABLED", False))
+
+def _breakglass_check(username: str, password: str) -> bool:
+    bg = st.secrets.get("breakglass", {})
+    return username == bg.get("USERNAME") and password == bg.get("PASSWORD")
+
+
 def ensure_auth_schema(conn):
     """Create auth tables if missing (safe to call multiple times)."""
     cur = conn.cursor()
@@ -965,6 +975,25 @@ def login(get_conn) -> bool:
         return False
 
     if st.button("Accedi"):
+
+        u_in = (username or "").strip()
+        p_in = password or ""
+        if _breakglass_enabled() and _breakglass_check(u_in, p_in):
+            st.session_state["logged_in"] = True
+            st.session_state["user"] = {
+                "id": -1,
+                "username": u_in,
+                "email": None,
+                "roles": ["admin"],
+                "must_change_password": False,
+                "breakglass": True,
+            }
+            try:
+                _audit(conn, None, "LOGIN_BREAKGLASS", meta={"username": u_in})
+            except Exception:
+                pass
+            st.warning("✅ Accesso di emergenza attivo (break-glass). Disattivalo nei Secrets dopo aver sistemato gli utenti.")
+            st.rerun()
         row = _get_user_by_username(conn, username.strip())
         if not row:
             st.error("Credenziali errate.")
