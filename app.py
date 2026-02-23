@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
+# --- FIX: verifica disponibilità psycopg2 ---
+PSYCOPG2_AVAILABLE = False
 
+try:
+    import psycopg2
+    import psycopg2.extras
+    PSYCOPG2_AVAILABLE = True
+except Exception:
+    PSYCOPG2_AVAILABLE = False
 
 
 # --- PRIVACY PDF TEMPLATES (DIFFERENZIATI) ---
