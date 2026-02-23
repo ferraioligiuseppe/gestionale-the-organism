@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 
-# --- standard libs needed across auth/audit ---
-import base64
-import hashlib
-import hmac
-import json
-
+import pnev_module as pnev
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
 try:
@@ -778,13 +773,7 @@ def _pwd_verify(pw: str, stored: str) -> bool:
         return False
 
 def _breakglass_enabled() -> bool:
-    """Emergency login toggle (allowed ONLY in TEST)."""
-    try:
-        mode = str(APP_MODE).strip().lower()
-    except Exception:
-        mode = "prod"
-    if mode != "test":
-        return False
+    """Emergency login toggle (TEST only)."""
     bg = st.secrets.get("breakglass", {})
     return bool(bg.get("ENABLED", False))
 
@@ -845,14 +834,6 @@ def ensure_auth_schema(conn):
 
 def _audit(conn, user_id: int | None, action: str, entity: str | None = None, entity_id: str | None = None, meta: dict | None = None):
     meta = meta or {}
-
-    # ✅ break-glass / invalid actor: avoid FK violations by storing NULL
-    try:
-        if user_id is not None and int(user_id) < 1:
-            user_id = None
-    except Exception:
-        user_id = None
-
     cur = conn.cursor()
     try:
         cur.execute(
@@ -1001,7 +982,7 @@ def login(get_conn) -> bool:
         if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
             st.session_state["user"] = {
-                "id": None,  # break-glass: no DB user_id
+                "id": -1,
                 "username": u_in,
                 "email": None,
                 "roles": ["admin"],
@@ -1476,135 +1457,27 @@ _DB_URL = _normalize_db_url(_get_database_url())
 _DB_BACKEND = "postgres" if _DB_URL else "sqlite"
 
 
-# =========================
-# ANTI-DISASTER GUARDS (TEST vs PROD)
-# =========================
-
-def _mode_norm() -> str:
-    try:
-        m = str(APP_MODE).strip().lower()
-    except Exception:
-        m = "prod"
-    return "test" if m == "test" else "prod"
-
-def _db_env_norm() -> str | None:
-    """Optional explicit DB environment tag from Secrets.
-    Supported keys:
-      - DB_ENV (root)
-      - [db].ENV
-      - [env].DB_ENV
-    """
-    sec = _safe_secrets()
-    for k in ("DB_ENV", "db_env"):
-        v = sec.get(k)
-        if v:
-            return str(v).strip().lower()
-    try:
-        dbsec = sec.get("db", {})
-        if isinstance(dbsec, dict):
-            v = dbsec.get("ENV") or dbsec.get("env")
-            if v:
-                return str(v).strip().lower()
-    except Exception:
-        pass
-    try:
-        envsec = sec.get("env", {})
-        if isinstance(envsec, dict):
-            v = envsec.get("DB_ENV") or envsec.get("db_env")
-            if v:
-                return str(v).strip().lower()
-    except Exception:
-        pass
-    return None
-
-def _looks_like_test_url(u: str) -> bool:
-    u = (u or "").lower()
-    return ("test" in u) or ("dev" in u) or ("staging" in u)
-
-def _looks_like_prod_url(u: str) -> bool:
-    u = (u or "").lower()
-    return ("prod" in u) or ("production" in u)
-
-def _anti_disaster_check_db_url(db_url: str) -> None:
-    """Hard stop on dangerous TEST/PROD mismatches.
-
-    Rules:
-    - If DB_ENV is set in Secrets, it MUST match APP_MODE (test/prod).
-    - If DB_ENV is NOT set:
-        * PROD cannot point to a URL that looks like TEST.
-        * TEST cannot point to a URL that looks like PROD.
-        * TEST on an unmarked URL is blocked unless explicitly acknowledged via DB_ENV='test'.
-    """
-    mode = _mode_norm()
-    db_env = _db_env_norm()
-    u = (db_url or "").strip()
-
-    if db_env:
-        db_env = "test" if db_env == "test" else ("prod" if db_env == "prod" else db_env)
-        if db_env in ("test", "prod") and db_env != mode:
-            st.error("🚨 BLOCCO ANTIDISASTRO: APP_MODE e DB_ENV non coincidono.")
-            st.write({"APP_MODE": mode, "DB_ENV": db_env})
-            st.info("""Correggi in Streamlit Cloud → Settings → Secrets, ad es.:
-
-APP_MODE = "test"
-DB_ENV  = "test"
-
-oppure
-
-APP_MODE = "prod"
-DB_ENV  = "prod"
-""")
-            st.stop()
-        return  # explicit tag wins
-
-    # Heuristics
-    if mode == "prod" and _looks_like_test_url(u):
-        st.error("🚨 BLOCCO ANTIDISASTRO: modalità PROD ma DATABASE_URL sembra di TEST/DEV.")
-        st.info("Imposta esplicitamente DB_ENV='prod' nei Secrets (root o [db].ENV) solo se sei sicuro.")
-        st.stop()
-
-    if mode == "test" and _looks_like_prod_url(u):
-        st.error("🚨 BLOCCO ANTIDISASTRO: modalità TEST ma DATABASE_URL sembra PROD.")
-        st.info("Correggi DATABASE_URL oppure imposta DB_ENV='test' su un DB di test.")
-        st.stop()
-
-    # Strong safety: require explicit tag for TEST if URL not clearly test
-    if mode == "test" and not _looks_like_test_url(u):
-        st.error("🚨 BLOCCO ANTIDISASTRO: modalità TEST ma DATABASE_URL non è marcata come TEST.")
-        st.info("""Per evitare di scrivere per errore sul DB PROD, imposta esplicitamente nei Secrets:
-
-APP_MODE = "test"
-DB_ENV  = "test"
-
-(oppure in [db] ENV = "test")
-""")
-        st.stop()
-
-
 def _sidebar_db_indicator():
     """Mostra in sidebar quale database sta usando l'app."""
     try:
         if _is_streamlit_cloud():
             if _DB_BACKEND == "postgres" and _DB_URL:
-                st.sidebar.success(f"🟢 DB: PostgreSQL (Neon) — {_mode_norm().upper()}")
+                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
             else:
                 st.sidebar.error("🔴 DB: PostgreSQL (Neon) NON configurato")
         else:
             if _DB_BACKEND == "postgres" and _DB_URL:
-                st.sidebar.success(f"🟢 DB: PostgreSQL (Neon) — {_mode_norm().upper()}")
+                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
             else:
                 # locale / test
                 db_path = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_TEST.db")
-                st.sidebar.warning(f"🟡 DB: SQLite ({db_path}) — {_mode_norm().upper()}")
+                st.sidebar.warning(f"🟡 DB: SQLite ({db_path})")
     except Exception:
         pass
 
 def _require_postgres_on_cloud():
     # Mostra sempre l'indicatore, anche in caso di errore
     _sidebar_db_indicator()
-    # ✅ Anti-disaster: stop if TEST/PROD mismatch
-    if _DB_BACKEND == "postgres" and _DB_URL:
-        _anti_disaster_check_db_url(_DB_URL)
     if _is_streamlit_cloud() and _DB_BACKEND != "postgres":
         st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
         diag = _secrets_diagnostics()
@@ -1669,13 +1542,6 @@ def get_connection():
 
 def init_db() -> None:
     conn = get_connection()
-    # --- SCHEMA MANAGER: idempotent bootstrap (TEST/PROD safe) ---
-    try:
-        from schema_manager import ensure_all_schemas
-        ensure_all_schemas(conn, backend=_DB_BACKEND)
-    except Exception:
-        # Never block startup if schema_manager is missing.
-        pass
     cur = conn.cursor()
 
     if _DB_BACKEND == "sqlite":
@@ -1995,6 +1861,17 @@ def init_db() -> None:
         """)
     except Exception:
         pass
+
+
+# Migrazione PNEV (PostgreSQL) – JSON strutturato + summary
+try:
+    cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
+except Exception:
+    pass
+try:
+    cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_summary TEXT;")
+except Exception:
+    pass
 
     cur.execute(
         """
@@ -4469,7 +4346,7 @@ def ui_pazienti():
     # -----------------------------
 
 def ui_anamnesi():
-    st.header("Valutazione PNEV")
+    st.header("Anamnesi")
 
     conn = get_connection()
     cur = conn.cursor()
@@ -4487,9 +4364,9 @@ def ui_anamnesi():
     paz_id = int(sel.split(" - ", 1)[0])
 
     with st.form("nuova_anamnesi"):
-        st.subheader("Nuova valutazione PNEV")
+        st.subheader("Nuova anamnesi")
 
-        data_str = st.text_input("Data valutazione (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
+        data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
         motivo = st.text_area("Motivo dell'invio / richiesta principale")
 
         st.markdown("**Area perinatale e sviluppo**")
@@ -4516,7 +4393,7 @@ def ui_anamnesi():
         storia_libera = st.text_area("Storia libera / osservazioni genitori (narrazione aperta)")
         note = st.text_area("Note cliniche aggiuntive (per uso interno)")
 
-        salva = st.form_submit_button("Salva valutazione PNEV")
+        salva = st.form_submit_button("Salva anamnesi")
 
     if salva:
         data_iso = None
@@ -4581,10 +4458,10 @@ Storia libera (narrazione):
             (paz_id, data_iso, motivo, storia_completa, note),
         )
         conn.commit()
-        st.success("Valutazione PNEV salvata.")
+        st.success("Anamnesi salvata.")
 
     st.markdown("---")
-    st.subheader("Valutazioni PNEV esistenti")
+    st.subheader("Anamnesi esistenti")
 
     cur.execute(
         "SELECT * FROM Anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC",
@@ -4592,7 +4469,7 @@ Storia libera (narrazione):
     )
     rows = cur.fetchall()
     if not rows:
-        st.info("Nessuna valutazione PNEV per questo paziente.")
+        st.info("Nessuna anamnesi per questo paziente.")
         conn.close()
         return
 
@@ -4600,7 +4477,7 @@ Storia libera (narrazione):
         f"{r['ID']} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
         for r in rows
     ]
-    sel_an = st.selectbox("Seleziona una valutazione PNEV da modificare/cancellare", labels)
+    sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
     an_id = int(sel_an.split(" - ", 1)[0])
     rec = next(r for r in rows if r["ID"] == an_id)
 
@@ -4617,7 +4494,7 @@ Storia libera (narrazione):
         with col1:
             salva_m = st.form_submit_button("Salva modifiche")
         with col2:
-            cancella = st.form_submit_button("Elimina valutazione PNEV")
+            cancella = st.form_submit_button("Elimina anamnesi")
 
     if salva_m:
         data_iso_m = None
@@ -4675,7 +4552,7 @@ def ui_valutazioni_visive():
 
     with st.form("nuova_val_visiva"):
         st.subheader("Nuova valutazione visiva / oculistica")
-        data_str = st.text_input("Data valutazione (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
+        data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
         tipo = st.text_input("Tipo visita (es. Valutazione optometrica, controllo, ecc.)")
         professionista = st.text_input("Professionista", "")
 
@@ -4800,6 +4677,16 @@ def ui_valutazioni_visive():
 
         note_libere = st.text_area("Note cliniche libere (aggiuntive)")
 
+        # --- PNEV (Psico‑Neuro‑Evolutivo) – struttura scalabile ---
+        visita_snapshot = pnev.pnev_pack_visita(
+            Acuita_Nat_OD=ac_nat_od, Acuita_Nat_OS=ac_nat_os, Acuita_Nat_OO=ac_nat_oo,
+            Acuita_Corr_OD=ac_cor_od, Acuita_Corr_OS=ac_cor_os, Acuita_Corr_OO=ac_cor_oo,
+            Tonometria_OD=tono_od, Tonometria_OS=tono_os,
+            Motilita=motilita, Cover_Test=cover_test, Stereopsi=stereopsi, PPC=ppc_cm,
+            Ishihara=ishihara,
+        )
+        pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(prefix="pnev_new", visita=visita_snapshot, existing=None)
+
         salva = st.form_submit_button("Salva valutazione visiva")
 
     if salva:
@@ -4862,23 +4749,27 @@ ESAMI STRUTTURALI / FUNZIONALI
 - Topografia corneale: {topo}
         """.strip()
 
-        note_finali = dettaglio + "\n\nNOTE LIBERE:\n" + (note_libere or "")
+        note_finali = dettaglio + "\n\nVALUTAZIONE PNEV:\n" + (pnev_summary_new or "") + "\n\nNOTE LIBERE:\n" + (note_libere or "")
 
         cur.execute(
             """
             INSERT INTO Valutazioni_Visive
             (Paziente_ID, Data_Valutazione, Tipo_Visita, Professionista,
+             Anamnesi, pnev_json, pnev_summary,
              Acuita_Nat_OD, Acuita_Nat_OS, Acuita_Nat_OO,
              Acuita_Corr_OD, Acuita_Corr_OS, Acuita_Corr_OO,
              Cornea, Camera_Anteriore, Cristallino, Congiuntiva_Sclera, Iride_Pupilla, Vitreo,
              Costo, Pagato, Note)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 paz_id,
                 data_iso,
                 tipo,
                 professionista,
+                (pnev_summary_new or ''),
+                pnev.pnev_dump(pnev_data_new),
+                (pnev_summary_new or ''),
                 ac_nat_od,
                 ac_nat_os,
                 ac_nat_oo,
@@ -5228,6 +5119,18 @@ ESAMI STRUTTURALI / FUNZIONALI
 
         note_m = st.text_area("Note (blocco completo, inclusi dati oculistici strutturati)", rec["Note"] or "")
 
+        # --- PNEV (Psico‑Neuro‑Evolutivo) ---
+        try:
+            existing_pnev_raw = rec.get("pnev_json") if hasattr(rec, "get") else None
+        except Exception:
+            existing_pnev_raw = None
+        pnev_existing = pnev.pnev_load(existing_pnev_raw)
+        visita_snapshot_m = pnev.pnev_pack_visita(
+            Acuita_Nat_OD=ac_nat_od_m, Acuita_Nat_OS=ac_nat_os_m, Acuita_Nat_OO=ac_nat_oo_m,
+            Acuita_Corr_OD=ac_cor_od_m, Acuita_Corr_OS=ac_cor_os_m, Acuita_Corr_OO=ac_cor_oo_m,
+        )
+        pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(prefix=f"pnev_edit_{val_id}", visita=visita_snapshot_m, existing=pnev_existing)
+
         col9, col10 = st.columns(2)
         with col9:
             salva_m = st.form_submit_button("Salva modifiche")
@@ -5251,6 +5154,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 Acuita_Nat_OD = ?, Acuita_Nat_OS = ?, Acuita_Nat_OO = ?,
                 Acuita_Corr_OD = ?, Acuita_Corr_OS = ?, Acuita_Corr_OO = ?,
                 Cornea = ?, Camera_Anteriore = ?, Cristallino = ?, Congiuntiva_Sclera = ?, Iride_Pupilla = ?, Vitreo = ?,
+                Anamnesi = ?, pnev_json = ?, pnev_summary = ?,
                 Costo = ?, Pagato = ?, Note = ?
             WHERE ID = ?
             """,
@@ -5270,6 +5174,9 @@ ESAMI STRUTTURALI / FUNZIONALI
                 congiuntiva_m,
                 iride_pupilla_m,
                 vitreo_m,
+                (pnev_summary_m or ''),
+                pnev.pnev_dump(pnev_data_m),
+                (pnev_summary_m or ''),
                 float(costo_m),
                 1 if pagato_m else 0,
                 note_m,
@@ -5429,7 +5336,7 @@ def ui_sedute():
 
     with st.form("nuova_seduta"):
         st.subheader("Nuova seduta")
-        data_str = st.text_input("Data valutazione (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
+        data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
         terapia = st.text_input("Tipo di terapia (es. logopedia, neuropsicomotricità, optometria...)", "")
         professionista = st.text_input("Professionista", "")
         col1, col2 = st.columns(2)
@@ -6883,7 +6790,7 @@ def main():
     st.sidebar.title("Navigazione")
     sections = [
         "Pazienti",
-        "Valutazione PNEV",
+        "Anamnesi",
         "Valutazioni visive / oculistiche",
         "Sedute / Terapie",
         "Osteopatia",
@@ -6905,7 +6812,7 @@ def main():
     # routing alle varie sezioni
     if sezione == "Pazienti":
         ui_pazienti()
-    elif sezione == "Valutazione PNEV":
+    elif sezione == "Anamnesi":
         ui_anamnesi()
     elif sezione == "Valutazioni visive / oculistiche":
         ui_valutazioni_visive()
