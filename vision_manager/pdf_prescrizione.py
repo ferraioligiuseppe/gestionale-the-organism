@@ -112,7 +112,8 @@ def build_prescrizione_occhiali_a4(data: dict, letterhead_path: str) -> bytes:
 
     # Testo DI (senza quadratino) centrato tra i semicirchi
     c.setFont("Helvetica", 10.5)
-    c.drawCentredString(cx_mid, cy - 6, "Distanza interpupillare: ................")
+    # DI: scesa di 1 cm per non intersecare i semicirchi
+    c.drawCentredString(cx_mid, cy - 6 - 1.0*cm, "DI ................")
 
     # Tabelle
     table_top = cy - r - 1.0*cm
