@@ -729,392 +729,53 @@ def load_users_dynamic() -> dict:
     # Fallback locale
     return {"admin": "admin123"}
 
-# =========================
-# AUTH (DB-based) + RBAC
-# =========================
-import secrets as _secrets_mod
-
-PBKDF2_ITERS = 260_000
-
-def _pwd_hash(pw: str, salt_b64: str | None = None, iters: int = PBKDF2_ITERS) -> str:
-    """Hash password with PBKDF2-HMAC-SHA256.
-    Format: pbkdf2_sha256$<iters>$<salt_b64>$<hash_b64>
-    """
-    if salt_b64 is None:
-        salt = _secrets_mod.token_bytes(16)
-        salt_b64 = base64.b64encode(salt).decode("utf-8")
-    else:
-        salt = base64.b64decode(salt_b64.encode("utf-8"))
-
-    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, iters, dklen=32)
-    hash_b64 = base64.b64encode(dk).decode("utf-8")
-    return f"pbkdf2_sha256${iters}${salt_b64}${hash_b64}"
-
-def _pwd_verify(pw: str, stored: str) -> bool:
-    try:
-        algo, iters_s, salt_b64, hash_b64 = stored.split("$", 3)
-        if algo != "pbkdf2_sha256":
-            return False
-        iters = int(iters_s)
-        candidate = _pwd_hash(pw, salt_b64=salt_b64, iters=iters)
-        return hmac.compare_digest(candidate, stored)
-    except Exception:
-        return False
-
-def ensure_auth_schema(conn):
-    """Create auth tables if missing (safe to call multiple times)."""
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS auth_users (
-          id BIGSERIAL PRIMARY KEY,
-          username TEXT UNIQUE NOT NULL,
-          email TEXT,
-          password_hash TEXT NOT NULL,
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          last_login_at TIMESTAMPTZ
-        );
-        """)
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS auth_roles (
-          id BIGSERIAL PRIMARY KEY,
-          name TEXT UNIQUE NOT NULL
-        );
-        """)
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS auth_user_roles (
-          user_id BIGINT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-          role_id BIGINT NOT NULL REFERENCES auth_roles(id) ON DELETE CASCADE,
-          PRIMARY KEY (user_id, role_id)
-        );
-        """)
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS auth_audit_log (
-          id BIGSERIAL PRIMARY KEY,
-          ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          user_id BIGINT REFERENCES auth_users(id) ON DELETE SET NULL,
-          action TEXT NOT NULL,
-          entity TEXT,
-          entity_id TEXT,
-          meta JSONB NOT NULL DEFAULT '{}'::jsonb
-        );
-        """)
-        cur.execute("""
-        INSERT INTO auth_roles(name) VALUES
-        ('admin'),('vision'),('osteo'),('segreteria'),('clinico')
-        ON CONFLICT (name) DO NOTHING;
-        """)
-        conn.commit()
-    finally:
-        try: cur.close()
-        except Exception: pass
-
-def _audit(conn, user_id: int | None, action: str, entity: str | None = None, entity_id: str | None = None, meta: dict | None = None):
-    meta = meta or {}
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "INSERT INTO auth_audit_log(user_id, action, entity, entity_id, meta) VALUES (%s,%s,%s,%s,%s::jsonb)",
-            (user_id, action, entity, entity_id, json.dumps(meta)),
-        )
-        conn.commit()
-    finally:
-        try: cur.close()
-        except Exception: pass
-
-def _get_user_by_username(conn, username: str):
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT id, username, email, password_hash, is_active, must_change_password
-            FROM auth_users
-            WHERE username = %s
-        """, (username,))
-        return cur.fetchone()
-    finally:
-        try: cur.close()
-        except Exception: pass
-
-def _get_roles_for_user(conn, user_id: int) -> list[str]:
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT r.name
-            FROM auth_user_roles ur
-            JOIN auth_roles r ON r.id = ur.role_id
-            WHERE ur.user_id = %s
-            ORDER BY r.name
-        """, (user_id,))
-        rows = cur.fetchall() or []
-        return [r[0] for r in rows]
-    finally:
-        try: cur.close()
-        except Exception: pass
-
-def current_user():
-    return st.session_state.get("user")
-
-def is_admin() -> bool:
-    u = current_user() or {}
-    return "admin" in (u.get("roles") or [])
-
-def can(role: str) -> bool:
-    u = current_user() or {}
-    roles = set(u.get("roles") or [])
-    return ("admin" in roles) or (role in roles)
-
-def _ensure_first_admin(conn) -> bool:
-    """If no users exist yet, allow creating the first admin from UI."""
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT COUNT(*) FROM auth_users;")
-        n = cur.fetchone()[0]
-    finally:
-        try: cur.close()
-        except Exception: pass
-
-    if n and int(n) > 0:
-        return True  # already bootstrapped
-
-    st.warning("⚠️ Nessun utente presente. Crea il primo amministratore.")
-    username = st.text_input("Username admin iniziale", value="admin")
-    pw1 = st.text_input("Password admin", type="password")
-    pw2 = st.text_input("Conferma password", type="password")
-    if st.button("Crea admin"):
-        if not username.strip() or not pw1:
-            st.error("Username e password sono obbligatori.")
-            return False
-        if pw1 != pw2:
-            st.error("Le password non coincidono.")
-            return False
-
-        ph = _pwd_hash(pw1)
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                "INSERT INTO auth_users(username, email, password_hash, must_change_password) VALUES (%s,%s,%s,%s) RETURNING id",
-                (username.strip(), None, ph, False),
-            )
-            uid = cur.fetchone()[0]
-
-            # assegna ruolo admin
-            cur.execute("SELECT id FROM auth_roles WHERE name = 'admin'")
-            rid = cur.fetchone()[0]
-            cur.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
-
-            conn.commit()
-        except Exception as e:
-            try: conn.rollback()
-            except Exception: pass
-            st.error(f"Errore creazione admin: {e}")
-            return False
-        finally:
-            try: cur.close()
-            except Exception: pass
-
-        _audit(conn, uid, "BOOTSTRAP_ADMIN", meta={"username": username.strip()})
-        st.success("Admin creato. Ora effettua il login.")
-        st.rerun()
-    return False
-
-def login(get_conn) -> bool:
-    """Login su DB con ruoli."""
+def login() -> bool:
+    """Login semplice con username/password."""
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
-    if "user" not in st.session_state:
-        st.session_state["user"] = None
+    if "logged_user" not in st.session_state:
+        st.session_state["logged_user"] = None
 
-    if st.session_state["logged_in"] and st.session_state["user"]:
-        u = st.session_state["user"]
-        st.sidebar.markdown(f"👤 Utente: **{u['username']}**")
-        st.sidebar.caption("Ruoli: " + (", ".join(u.get("roles", [])) or "(nessuno)"))
+    if st.session_state["logged_in"]:
+        st.sidebar.markdown(f"👤 Utente: **{st.session_state['logged_user']}**")
         if st.sidebar.button("Logout"):
             st.session_state["logged_in"] = False
-            st.session_state["user"] = None
+            st.session_state["logged_user"] = None
             st.rerun()
         return True
 
     st.title("The Organism – Login")
     st.caption(f"Versione: {APP_VERSION}")
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    users = load_users_dynamic()
 
-    conn = get_conn()
-    ensure_auth_schema(conn)
-
-    # bootstrap primo admin se non ci sono utenti
-    if not _ensure_first_admin(conn):
-        return False
+    user = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
 
     if st.button("Accedi"):
-        row = _get_user_by_username(conn, username.strip())
-        if not row:
+        if user in users and users[user] == pwd:
+            st.session_state["logged_in"] = True
+            st.session_state["logged_user"] = user
+            st.success("Accesso effettuato.")
+            st.rerun()
+        else:
             st.error("Credenziali errate.")
-            _audit(conn, None, "LOGIN_FAIL", meta={"username": username.strip()})
-            return False
-
-        user_id, uname, email, pwd_hash, is_active, must_change = row
-        if not is_active:
-            st.error("Utente disattivato.")
-            _audit(conn, user_id, "LOGIN_FAIL_DISABLED", meta={})
-            return False
-
-        if not _pwd_verify(password, pwd_hash):
-            st.error("Credenziali errate.")
-            _audit(conn, user_id, "LOGIN_FAIL", meta={})
-            return False
-
-        roles = _get_roles_for_user(conn, user_id)
-
-        # update last login
-        cur = conn.cursor()
-        try:
-            cur.execute("UPDATE auth_users SET last_login_at = NOW() WHERE id = %s", (user_id,))
-            conn.commit()
-        finally:
-            try: cur.close()
-            except Exception: pass
-
-        _audit(conn, user_id, "LOGIN_SUCCESS", meta={"roles": roles})
-
-        st.session_state["logged_in"] = True
-        st.session_state["user"] = {
-            "id": int(user_id),
-            "username": str(uname),
-            "email": email,
-            "roles": roles,
-            "must_change_password": bool(must_change),
-        }
-        st.success("Accesso effettuato.")
-        st.rerun()
-
     return False
 
-def ui_gestione_utenti(get_conn):
-    """UI admin: crea utenti/ruoli, reset password e attiva/disattiva."""
-    if not is_admin():
-        st.error("Accesso negato: solo admin.")
-        return
 
-    conn = get_conn()
-    ensure_auth_schema(conn)
+# -----------------------------
+# Database (SQLite locale / PostgreSQL-Neon in Cloud)
+# -----------------------------
 
-    st.header("Utenti / Ruoli")
+SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_v2.db")
 
-    # Crea utente
-    with st.expander("➕ Crea nuovo utente", expanded=True):
-        new_u = st.text_input("Nuovo username")
-        new_email = st.text_input("Email (opzionale)")
-        new_pw = st.text_input("Password iniziale", type="password")
-        roles = st.multiselect("Ruoli", ["admin","vision","osteo","segreteria","clinico"], default=["clinico"])
-        must_change = st.checkbox("Obbliga cambio password al primo accesso", value=True)
-
-        if st.button("Crea utente"):
-            if not new_u.strip() or not new_pw:
-                st.warning("Username e password obbligatori.")
-            else:
-                ph = _pwd_hash(new_pw)
-                try:
-                    cur = conn.cursor()
-                    cur.execute(
-                        "INSERT INTO auth_users(username, email, password_hash, must_change_password) VALUES (%s,%s,%s,%s) RETURNING id",
-                        (new_u.strip(), (new_email.strip() or None), ph, must_change),
-                    )
-                    uid = cur.fetchone()[0]
-
-                    for r in roles:
-                        cur.execute("SELECT id FROM auth_roles WHERE name=%s", (r,))
-                        rid = cur.fetchone()[0]
-                        cur.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
-
-                    conn.commit()
-                    try: cur.close()
-                    except Exception: pass
-                    _audit(conn, st.session_state["user"]["id"], "USER_CREATED", entity="auth_users", entity_id=str(uid), meta={"username": new_u.strip(), "roles": roles})
-                    st.success("Utente creato.")
-                    st.rerun()
-                except Exception as e:
-                    try: conn.rollback()
-                    except Exception: pass
-                    st.error(f"Errore creazione utente: {e}")
-
-    # Lista utenti
-    st.subheader("Elenco utenti")
-    cur = conn.cursor()
-    try:
-        cur.execute("SELECT id, username, email, is_active, must_change_password, last_login_at FROM auth_users ORDER BY username;")
-        rows = cur.fetchall() or []
-    finally:
-        try: cur.close()
-        except Exception: pass
-
-    if not rows:
-        st.info("Nessun utente.")
-        return
-
-    for r in rows:
-        uid = int(r[0])
-        uname = str(r[1])
-        email = r[2]
-        is_active = bool(r[3])
-        must_change = bool(r[4])
-        last_login = r[5]
-        with st.expander(f"👤 {uname} (id {uid})", expanded=False):
-            st.write({"email": email, "is_active": is_active, "must_change_password": must_change, "last_login_at": str(last_login) if last_login else None})
-            # ruoli
-            current_roles = _get_roles_for_user(conn, uid)
-            new_roles = st.multiselect(f"Ruoli per {uname}", ["admin","vision","osteo","segreteria","clinico"], default=current_roles, key=f"roles_{uid}")
-
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                new_pw = st.text_input(f"Reset password ({uname})", type="password", key=f"pw_{uid}")
-                if st.button(f"Imposta password", key=f"setpw_{uid}"):
-                    if not new_pw:
-                        st.warning("Inserisci una password.")
-                    else:
-                        ph = _pwd_hash(new_pw)
-                        c2 = conn.cursor()
-                        try:
-                            c2.execute("UPDATE auth_users SET password_hash=%s, must_change_password=TRUE WHERE id=%s", (ph, uid))
-                            conn.commit()
-                        finally:
-                            try: c2.close()
-                            except Exception: pass
-                        _audit(conn, st.session_state["user"]["id"], "PASSWORD_RESET", entity="auth_users", entity_id=str(uid), meta={})
-                        st.success("Password aggiornata (utente obbligato a cambiarla al prossimo accesso).")
-            with col2:
-                if st.button("Salva ruoli", key=f"saveroles_{uid}"):
-                    c3 = conn.cursor()
-                    try:
-                        # rimuovi e reinserisci
-                        c3.execute("DELETE FROM auth_user_roles WHERE user_id=%s", (uid,))
-                        for rr in new_roles:
-                            c3.execute("SELECT id FROM auth_roles WHERE name=%s", (rr,))
-                            rid = c3.fetchone()[0]
-                            c3.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
-                        conn.commit()
-                    finally:
-                        try: c3.close()
-                        except Exception: pass
-                    _audit(conn, st.session_state["user"]["id"], "ROLES_UPDATED", entity="auth_users", entity_id=str(uid), meta={"roles": new_roles})
-                    st.success("Ruoli salvati.")
-                    st.rerun()
-            with col3:
-                toggle_label = "Disattiva" if is_active else "Riattiva"
-                if st.button(toggle_label, key=f"toggle_{uid}"):
-                    c4 = conn.cursor()
-                    try:
-                        c4.execute("UPDATE auth_users SET is_active=%s WHERE id=%s", (not is_active, uid))
-                        conn.commit()
-                    finally:
-                        try: c4.close()
-                        except Exception: pass
-                    _audit(conn, st.session_state["user"]["id"], "USER_TOGGLED", entity="auth_users", entity_id=str(uid), meta={"is_active": (not is_active)})
-                    st.success("Stato aggiornato.")
-                    st.rerun()
+try:
+    import psycopg2
+    import psycopg2.extras
+    PSYCOPG2_AVAILABLE = True
+except Exception:
+    psycopg2 = None
+    PSYCOPG2_AVAILABLE = False
 
 
 
@@ -6678,7 +6339,7 @@ def main():
     init_db()
 
     # login obbligatorio
-    if not login(get_connection):
+    if not login():
         return
 
     # menu laterale
@@ -6697,9 +6358,6 @@ def main():
         "🛠️ Debug DB",
         "📥 Import Pazienti",
     ]
-    if is_admin():
-        sections.append("👥 Utenti / Ruoli")
-
     if APP_MODE == "test":
         sections.append("🧹 Pulizia DB (TEST)")
     sezione = st.sidebar.radio("Vai a", sections)
@@ -6729,8 +6387,6 @@ def main():
         ui_debug_db()
     elif sezione == "📥 Import Pazienti":
         ui_import_pazienti()
-    elif sezione == "👥 Utenti / Ruoli":
-        ui_gestione_utenti(get_connection)
     elif sezione == "🧹 Pulizia DB (TEST)":
         ui_db_cleanup()
 
