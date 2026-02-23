@@ -1,5 +1,17 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+
+import pnev_module as pnev
+import pnev_ai
+# --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
+PSYCOPG2_AVAILABLE = False
+try:
+    import psycopg2  # type: ignore
+    import psycopg2.extras  # type: ignore
+    PSYCOPG2_AVAILABLE = True
+except Exception:
+    PSYCOPG2_AVAILABLE = False
+
 USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
 
 
@@ -287,6 +299,22 @@ def debug_secrets_auth():
 # chiama la funzione solo in test o solo per admin
 
 import sqlite3
+
+def _ai_enabled() -> bool:
+    """Enable AI helper ONLY in TEST unless explicitly allowed.
+
+    Controlled via Streamlit Secrets:
+    [ai]
+    ENABLED = true
+    """
+    try:
+        if str(APP_MODE).lower().strip() != "test":
+            return False
+        a = st.secrets.get("ai", {})
+        return bool(a.get("ENABLED", False))
+    except Exception:
+        return False
+
 APP_MODE = st.secrets.get("APP_MODE", "prod")
 if APP_MODE == "test":
     debug_secrets_auth()
@@ -729,53 +757,426 @@ def load_users_dynamic() -> dict:
     # Fallback locale
     return {"admin": "admin123"}
 
-def login() -> bool:
-    """Login semplice con username/password."""
+# =========================
+# AUTH (DB-based) + RBAC
+# =========================
+import secrets as _secrets_mod
+
+PBKDF2_ITERS = 260_000
+
+def _pwd_hash(pw: str, salt_b64: str | None = None, iters: int = PBKDF2_ITERS) -> str:
+    """Hash password with PBKDF2-HMAC-SHA256.
+    Format: pbkdf2_sha256$<iters>$<salt_b64>$<hash_b64>
+    """
+    if salt_b64 is None:
+        salt = _secrets_mod.token_bytes(16)
+        salt_b64 = base64.b64encode(salt).decode("utf-8")
+    else:
+        salt = base64.b64decode(salt_b64.encode("utf-8"))
+
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, iters, dklen=32)
+    hash_b64 = base64.b64encode(dk).decode("utf-8")
+    return f"pbkdf2_sha256${iters}${salt_b64}${hash_b64}"
+
+def _pwd_verify(pw: str, stored: str) -> bool:
+    try:
+        algo, iters_s, salt_b64, hash_b64 = stored.split("$", 3)
+        if algo != "pbkdf2_sha256":
+            return False
+        iters = int(iters_s)
+        candidate = _pwd_hash(pw, salt_b64=salt_b64, iters=iters)
+        return hmac.compare_digest(candidate, stored)
+    except Exception:
+        return False
+
+def _breakglass_enabled() -> bool:
+    """Emergency login toggle (TEST only)."""
+    bg = st.secrets.get("breakglass", {})
+    return bool(bg.get("ENABLED", False))
+
+def _breakglass_check(username: str, password: str) -> bool:
+    bg = st.secrets.get("breakglass", {})
+    return username == bg.get("USERNAME") and password == bg.get("PASSWORD")
+
+
+def ensure_auth_schema(conn):
+    """Create auth tables if missing (safe to call multiple times)."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_users (
+          id BIGSERIAL PRIMARY KEY,
+          username TEXT UNIQUE NOT NULL,
+          email TEXT,
+          password_hash TEXT NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_login_at TIMESTAMPTZ
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_roles (
+          id BIGSERIAL PRIMARY KEY,
+          name TEXT UNIQUE NOT NULL
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_user_roles (
+          user_id BIGINT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+          role_id BIGINT NOT NULL REFERENCES auth_roles(id) ON DELETE CASCADE,
+          PRIMARY KEY (user_id, role_id)
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_audit_log (
+          id BIGSERIAL PRIMARY KEY,
+          ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          user_id BIGINT REFERENCES auth_users(id) ON DELETE SET NULL,
+          action TEXT NOT NULL,
+          entity TEXT,
+          entity_id TEXT,
+          meta JSONB NOT NULL DEFAULT '{}'::jsonb
+        );
+        """)
+        cur.execute("""
+        INSERT INTO auth_roles(name) VALUES
+        ('admin'),('vision'),('osteo'),('segreteria'),('clinico')
+        ON CONFLICT (name) DO NOTHING;
+        """)
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def _audit(conn, user_id: int | None, action: str, entity: str | None = None, entity_id: str | None = None, meta: dict | None = None):
+    meta = meta or {}
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO auth_audit_log(user_id, action, entity, entity_id, meta) VALUES (%s,%s,%s,%s,%s::jsonb)",
+            (user_id, action, entity, entity_id, json.dumps(meta)),
+        )
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def _get_user_by_username(conn, username: str):
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, username, email, password_hash, is_active, must_change_password
+            FROM auth_users
+            WHERE username = %s
+        """, (username,))
+        return cur.fetchone()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def _get_roles_for_user(conn, user_id: int) -> list[str]:
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT r.name
+            FROM auth_user_roles ur
+            JOIN auth_roles r ON r.id = ur.role_id
+            WHERE ur.user_id = %s
+            ORDER BY r.name
+        """, (user_id,))
+        rows = cur.fetchall() or []
+        return [r[0] for r in rows]
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def current_user():
+    return st.session_state.get("user")
+
+def is_admin() -> bool:
+    u = current_user() or {}
+    return "admin" in (u.get("roles") or [])
+
+def can(role: str) -> bool:
+    u = current_user() or {}
+    roles = set(u.get("roles") or [])
+    return ("admin" in roles) or (role in roles)
+
+def _ensure_first_admin(conn) -> bool:
+    """If no users exist yet, allow creating the first admin from UI."""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM auth_users;")
+        n = cur.fetchone()[0]
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+    if n and int(n) > 0:
+        return True  # already bootstrapped
+
+    st.warning("⚠️ Nessun utente presente. Crea il primo amministratore.")
+    username = st.text_input("Username admin iniziale", value="admin")
+    pw1 = st.text_input("Password admin", type="password")
+    pw2 = st.text_input("Conferma password", type="password")
+    if st.button("Crea admin"):
+        if not username.strip() or not pw1:
+            st.error("Username e password sono obbligatori.")
+            return False
+        if pw1 != pw2:
+            st.error("Le password non coincidono.")
+            return False
+
+        ph = _pwd_hash(pw1)
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO auth_users(username, email, password_hash, must_change_password) VALUES (%s,%s,%s,%s) RETURNING id",
+                (username.strip(), None, ph, False),
+            )
+            uid = cur.fetchone()[0]
+
+            # assegna ruolo admin
+            cur.execute("SELECT id FROM auth_roles WHERE name = 'admin'")
+            rid = cur.fetchone()[0]
+            cur.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
+
+            conn.commit()
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            st.error(f"Errore creazione admin: {e}")
+            return False
+        finally:
+            try: cur.close()
+            except Exception: pass
+
+        _audit(conn, uid, "BOOTSTRAP_ADMIN", meta={"username": username.strip()})
+        st.success("Admin creato. Ora effettua il login.")
+        st.rerun()
+    return False
+
+def login(get_conn) -> bool:
+    """Login su DB con ruoli."""
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
-    if "logged_user" not in st.session_state:
-        st.session_state["logged_user"] = None
+    if "user" not in st.session_state:
+        st.session_state["user"] = None
 
-    if st.session_state["logged_in"]:
-        st.sidebar.markdown(f"👤 Utente: **{st.session_state['logged_user']}**")
+    if st.session_state["logged_in"] and st.session_state["user"]:
+        u = st.session_state["user"]
+        st.sidebar.markdown(f"👤 Utente: **{u['username']}**")
+        st.sidebar.caption("Ruoli: " + (", ".join(u.get("roles", [])) or "(nessuno)"))
         if st.sidebar.button("Logout"):
             st.session_state["logged_in"] = False
-            st.session_state["logged_user"] = None
+            st.session_state["user"] = None
             st.rerun()
         return True
 
     st.title("The Organism – Login")
     st.caption(f"Versione: {APP_VERSION}")
 
-    users = load_users_dynamic()
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
 
-    user = st.text_input("Username")
-    pwd = st.text_input("Password", type="password")
+    conn = get_conn()
+    # Clear any aborted transaction state from previous operations
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+    ensure_auth_schema(conn)
+
+    # bootstrap primo admin se non ci sono utenti
+    if not _ensure_first_admin(conn):
+        return False
 
     if st.button("Accedi"):
-        if user in users and users[user] == pwd:
+
+        u_in = (username or "").strip()
+        p_in = password or ""
+        if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
-            st.session_state["logged_user"] = user
-            st.success("Accesso effettuato.")
+            st.session_state["user"] = {
+                "id": -1,
+                "username": u_in,
+                "email": None,
+                "roles": ["admin"],
+                "must_change_password": False,
+                "breakglass": True,
+            }
+            try:
+                _audit(conn, None, "LOGIN_BREAKGLASS", meta={"username": u_in})
+            except Exception:
+                pass
+            st.warning("✅ Accesso di emergenza attivo (break-glass). Disattivalo nei Secrets dopo aver sistemato gli utenti.")
             st.rerun()
-        else:
+        row = _get_user_by_username(conn, username.strip())
+        if not row:
             st.error("Credenziali errate.")
+            _audit(conn, None, "LOGIN_FAIL", meta={"username": username.strip()})
+            return False
+
+        user_id, uname, email, pwd_hash, is_active, must_change = row
+        if not is_active:
+            st.error("Utente disattivato.")
+            _audit(conn, user_id, "LOGIN_FAIL_DISABLED", meta={})
+            return False
+
+        if not _pwd_verify(password, pwd_hash):
+            st.error("Credenziali errate.")
+            _audit(conn, user_id, "LOGIN_FAIL", meta={})
+            return False
+
+        roles = _get_roles_for_user(conn, user_id)
+
+        # update last login
+        cur = conn.cursor()
+        try:
+            cur.execute("UPDATE auth_users SET last_login_at = NOW() WHERE id = %s", (user_id,))
+            conn.commit()
+        finally:
+            try: cur.close()
+            except Exception: pass
+
+        _audit(conn, user_id, "LOGIN_SUCCESS", meta={"roles": roles})
+
+        st.session_state["logged_in"] = True
+        st.session_state["user"] = {
+            "id": int(user_id),
+            "username": str(uname),
+            "email": email,
+            "roles": roles,
+            "must_change_password": bool(must_change),
+        }
+        st.success("Accesso effettuato.")
+        st.rerun()
+
     return False
 
+def ui_gestione_utenti(get_conn):
+    """UI admin: crea utenti/ruoli, reset password e attiva/disattiva."""
+    if not is_admin():
+        st.error("Accesso negato: solo admin.")
+        return
 
-# -----------------------------
-# Database (SQLite locale / PostgreSQL-Neon in Cloud)
-# -----------------------------
+    conn = get_conn()
+    ensure_auth_schema(conn)
 
-SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_v2.db")
+    st.header("Utenti / Ruoli")
 
-try:
-    import psycopg2
-    import psycopg2.extras
-    PSYCOPG2_AVAILABLE = True
-except Exception:
-    psycopg2 = None
-    PSYCOPG2_AVAILABLE = False
+    # Crea utente
+    with st.expander("➕ Crea nuovo utente", expanded=True):
+        new_u = st.text_input("Nuovo username")
+        new_email = st.text_input("Email (opzionale)")
+        new_pw = st.text_input("Password iniziale", type="password")
+        roles = st.multiselect("Ruoli", ["admin","vision","osteo","segreteria","clinico"], default=["clinico"])
+        must_change = st.checkbox("Obbliga cambio password al primo accesso", value=True)
+
+        if st.button("Crea utente"):
+            if not new_u.strip() or not new_pw:
+                st.warning("Username e password obbligatori.")
+            else:
+                ph = _pwd_hash(new_pw)
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "INSERT INTO auth_users(username, email, password_hash, must_change_password) VALUES (%s,%s,%s,%s) RETURNING id",
+                        (new_u.strip(), (new_email.strip() or None), ph, must_change),
+                    )
+                    uid = cur.fetchone()[0]
+
+                    for r in roles:
+                        cur.execute("SELECT id FROM auth_roles WHERE name=%s", (r,))
+                        rid = cur.fetchone()[0]
+                        cur.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
+
+                    conn.commit()
+                    try: cur.close()
+                    except Exception: pass
+                    _audit(conn, st.session_state["user"]["id"], "USER_CREATED", entity="auth_users", entity_id=str(uid), meta={"username": new_u.strip(), "roles": roles})
+                    st.success("Utente creato.")
+                    st.rerun()
+                except Exception as e:
+                    try: conn.rollback()
+                    except Exception: pass
+                    st.error(f"Errore creazione utente: {e}")
+
+    # Lista utenti
+    st.subheader("Elenco utenti")
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, username, email, is_active, must_change_password, last_login_at FROM auth_users ORDER BY username;")
+        rows = cur.fetchall() or []
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+    if not rows:
+        st.info("Nessun utente.")
+        return
+
+    for r in rows:
+        uid = int(r[0])
+        uname = str(r[1])
+        email = r[2]
+        is_active = bool(r[3])
+        must_change = bool(r[4])
+        last_login = r[5]
+        with st.expander(f"👤 {uname} (id {uid})", expanded=False):
+            st.write({"email": email, "is_active": is_active, "must_change_password": must_change, "last_login_at": str(last_login) if last_login else None})
+            # ruoli
+            current_roles = _get_roles_for_user(conn, uid)
+            new_roles = st.multiselect(f"Ruoli per {uname}", ["admin","vision","osteo","segreteria","clinico"], default=current_roles, key=f"roles_{uid}")
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                new_pw = st.text_input(f"Reset password ({uname})", type="password", key=f"pw_{uid}")
+                if st.button(f"Imposta password", key=f"setpw_{uid}"):
+                    if not new_pw:
+                        st.warning("Inserisci una password.")
+                    else:
+                        ph = _pwd_hash(new_pw)
+                        c2 = conn.cursor()
+                        try:
+                            c2.execute("UPDATE auth_users SET password_hash=%s, must_change_password=TRUE WHERE id=%s", (ph, uid))
+                            conn.commit()
+                        finally:
+                            try: c2.close()
+                            except Exception: pass
+                        _audit(conn, st.session_state["user"]["id"], "PASSWORD_RESET", entity="auth_users", entity_id=str(uid), meta={})
+                        st.success("Password aggiornata (utente obbligato a cambiarla al prossimo accesso).")
+            with col2:
+                if st.button("Salva ruoli", key=f"saveroles_{uid}"):
+                    c3 = conn.cursor()
+                    try:
+                        # rimuovi e reinserisci
+                        c3.execute("DELETE FROM auth_user_roles WHERE user_id=%s", (uid,))
+                        for rr in new_roles:
+                            c3.execute("SELECT id FROM auth_roles WHERE name=%s", (rr,))
+                            rid = c3.fetchone()[0]
+                            c3.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
+                        conn.commit()
+                    finally:
+                        try: c3.close()
+                        except Exception: pass
+                    _audit(conn, st.session_state["user"]["id"], "ROLES_UPDATED", entity="auth_users", entity_id=str(uid), meta={"roles": new_roles})
+                    st.success("Ruoli salvati.")
+                    st.rerun()
+            with col3:
+                toggle_label = "Disattiva" if is_active else "Riattiva"
+                if st.button(toggle_label, key=f"toggle_{uid}"):
+                    c4 = conn.cursor()
+                    try:
+                        c4.execute("UPDATE auth_users SET is_active=%s WHERE id=%s", (not is_active, uid))
+                        conn.commit()
+                    finally:
+                        try: c4.close()
+                        except Exception: pass
+                    _audit(conn, st.session_state["user"]["id"], "USER_TOGGLED", entity="auth_users", entity_id=str(uid), meta={"is_active": (not is_active)})
+                    st.success("Stato aggiornato.")
+                    st.rerun()
 
 
 
@@ -859,13 +1260,29 @@ class _PgCursor:
 
     def execute(self, sql, params=None):
         sql2 = self._adapt_sql(str(sql))
-        if params is None:
-            return self._cur.execute(sql2)
-        return self._cur.execute(sql2, params)
+        try:
+            if params is None:
+                return self._cur.execute(sql2)
+            return self._cur.execute(sql2, params)
+        except Exception:
+            # If a statement fails, PostgreSQL marks the transaction as aborted.
+            # Roll back so subsequent statements don't hit InFailedSqlTransaction.
+            try:
+                self._cur.connection.rollback()
+            except Exception:
+                pass
+            raise
 
     def executemany(self, sql, seq_of_params):
         sql2 = self._adapt_sql(str(sql))
-        return self._cur.executemany(sql2, seq_of_params)
+        try:
+            return self._cur.executemany(sql2, seq_of_params)
+        except Exception:
+            try:
+                self._cur.connection.rollback()
+            except Exception:
+                pass
+            raise
 
     def fetchone(self):
         row = self._cur.fetchone()
@@ -912,6 +1329,9 @@ class _PgConn:
 
     def commit(self):
         return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
 
     def close(self):
         return self._conn.close()
@@ -1456,6 +1876,17 @@ def init_db() -> None:
                 ADD COLUMN IF NOT EXISTS Iride_Pupilla       TEXT,
                 ADD COLUMN IF NOT EXISTS Vitreo              TEXT;
         """)
+    except Exception:
+        pass
+
+
+    # Migrazione PNEV (PostgreSQL) – JSON strutturato + summary
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_summary TEXT;")
     except Exception:
         pass
 
@@ -3981,6 +4412,25 @@ def ui_anamnesi():
 
         salva = st.form_submit_button("Salva anamnesi")
 
+
+    # --- IA helper (TEST only) ---
+    if 'ai_hyp' in locals() and (ai_hyp or ai_plan):
+        if not _ai_enabled():
+            st.warning("IA disattivata. Abilitala solo in TEST nei Secrets: [ai] ENABLED=true")
+        else:
+            try:
+                if ai_hyp:
+                    sug = pnev_ai.generate_hypothesis(visita_snapshot, pnev_data_new)
+                    pnev_ai.apply_to_session("pnev_new", sug)
+                    st.success("Bozza ipotesi applicata ai campi PNEV (modificabile).")
+                    st.rerun()
+                if ai_plan:
+                    sug = pnev_ai.generate_plan(visita_snapshot, pnev_data_new)
+                    pnev_ai.apply_to_session("pnev_new", sug)
+                    st.success("Bozza piano applicata ai campi PNEV (modificabile).")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Errore IA (stub): {e}")
     if salva:
         data_iso = None
         if data_str.strip():
@@ -4082,6 +4532,25 @@ Storia libera (narrazione):
         with col2:
             cancella = st.form_submit_button("Elimina anamnesi")
 
+
+    # --- IA helper (TEST only) per modifica ---
+    if 'ai_hyp_m' in locals() and (ai_hyp_m or ai_plan_m):
+        if not _ai_enabled():
+            st.warning("IA disattivata. Abilitala solo in TEST nei Secrets: [ai] ENABLED=true")
+        else:
+            try:
+                if ai_hyp_m:
+                    sug = pnev_ai.generate_hypothesis(visita_snapshot_m, pnev_data_m)
+                    pnev_ai.apply_to_session(f"pnev_edit_{val_id}", sug)
+                    st.success("Bozza ipotesi applicata ai campi PNEV (modificabile).")
+                    st.rerun()
+                if ai_plan_m:
+                    sug = pnev_ai.generate_plan(visita_snapshot_m, pnev_data_m)
+                    pnev_ai.apply_to_session(f"pnev_edit_{val_id}", sug)
+                    st.success("Bozza piano applicata ai campi PNEV (modificabile).")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Errore IA (stub): {e}")
     if salva_m:
         data_iso_m = None
         if data_m.strip():
@@ -4263,7 +4732,23 @@ def ui_valutazioni_visive():
 
         note_libere = st.text_area("Note cliniche libere (aggiuntive)")
 
-        salva = st.form_submit_button("Salva valutazione visiva")
+        # --- PNEV (Psico‑Neuro‑Evolutivo) – struttura scalabile ---
+        visita_snapshot = pnev.pnev_pack_visita(
+            Acuita_Nat_OD=ac_nat_od, Acuita_Nat_OS=ac_nat_os, Acuita_Nat_OO=ac_nat_oo,
+            Acuita_Corr_OD=ac_cor_od, Acuita_Corr_OS=ac_cor_os, Acuita_Corr_OO=ac_cor_oo,
+            Tonometria_OD=tono_od, Tonometria_OS=tono_os,
+            Motilita=motilita, Cover_Test=cover_test, Stereopsi=stereopsi, PPC=ppc_cm,
+            Ishihara=ishihara,
+        )
+        pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(prefix="pnev_new", visita=visita_snapshot, existing=None)
+
+        col_ai1, col_ai2, col_save = st.columns([1,1,1])
+        with col_ai1:
+            ai_hyp = st.form_submit_button("🤖 IA: bozza ipotesi", help="Genera una bozza (TEST) basata sulla visita attuale + PNEV compilata.")
+        with col_ai2:
+            ai_plan = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su visita attuale + PNEV.")
+        with col_save:
+            salva = st.form_submit_button("Salva valutazione visiva")
 
     if salva:
         data_iso = None
@@ -4325,23 +4810,27 @@ ESAMI STRUTTURALI / FUNZIONALI
 - Topografia corneale: {topo}
         """.strip()
 
-        note_finali = dettaglio + "\n\nNOTE LIBERE:\n" + (note_libere or "")
+        note_finali = dettaglio + "\n\nVALUTAZIONE PNEV:\n" + (pnev_summary_new or "") + "\n\nNOTE LIBERE:\n" + (note_libere or "")
 
         cur.execute(
             """
             INSERT INTO Valutazioni_Visive
             (Paziente_ID, Data_Valutazione, Tipo_Visita, Professionista,
+             Anamnesi, pnev_json, pnev_summary,
              Acuita_Nat_OD, Acuita_Nat_OS, Acuita_Nat_OO,
              Acuita_Corr_OD, Acuita_Corr_OS, Acuita_Corr_OO,
              Cornea, Camera_Anteriore, Cristallino, Congiuntiva_Sclera, Iride_Pupilla, Vitreo,
              Costo, Pagato, Note)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 paz_id,
                 data_iso,
                 tipo,
                 professionista,
+                (pnev_summary_new or ''),
+                pnev.pnev_dump(pnev_data_new),
+                (pnev_summary_new or ''),
                 ac_nat_od,
                 ac_nat_os,
                 ac_nat_oo,
@@ -4691,10 +5180,26 @@ ESAMI STRUTTURALI / FUNZIONALI
 
         note_m = st.text_area("Note (blocco completo, inclusi dati oculistici strutturati)", rec["Note"] or "")
 
-        col9, col10 = st.columns(2)
-        with col9:
+        # --- PNEV (Psico‑Neuro‑Evolutivo) ---
+        try:
+            existing_pnev_raw = rec.get("pnev_json") if hasattr(rec, "get") else None
+        except Exception:
+            existing_pnev_raw = None
+        pnev_existing = pnev.pnev_load(existing_pnev_raw)
+        visita_snapshot_m = pnev.pnev_pack_visita(
+            Acuita_Nat_OD=ac_nat_od_m, Acuita_Nat_OS=ac_nat_os_m, Acuita_Nat_OO=ac_nat_oo_m,
+            Acuita_Corr_OD=ac_cor_od_m, Acuita_Corr_OS=ac_cor_os_m, Acuita_Corr_OO=ac_cor_oo_m,
+        )
+        pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(prefix=f"pnev_edit_{val_id}", visita=visita_snapshot_m, existing=pnev_existing)
+
+        col_ai1, col_ai2, col_save, col_del = st.columns([1,1,1,1])
+        with col_ai1:
+            ai_hyp_m = st.form_submit_button("🤖 IA: bozza ipotesi", help="Genera una bozza (TEST) basata sulla visita attuale + PNEV.")
+        with col_ai2:
+            ai_plan_m = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su visita attuale + PNEV.")
+        with col_save:
             salva_m = st.form_submit_button("Salva modifiche")
-        with col10:
+        with col_del:
             cancella = st.form_submit_button("Elimina valutazione")
 
     if salva_m:
@@ -4714,6 +5219,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 Acuita_Nat_OD = ?, Acuita_Nat_OS = ?, Acuita_Nat_OO = ?,
                 Acuita_Corr_OD = ?, Acuita_Corr_OS = ?, Acuita_Corr_OO = ?,
                 Cornea = ?, Camera_Anteriore = ?, Cristallino = ?, Congiuntiva_Sclera = ?, Iride_Pupilla = ?, Vitreo = ?,
+                Anamnesi = ?, pnev_json = ?, pnev_summary = ?,
                 Costo = ?, Pagato = ?, Note = ?
             WHERE ID = ?
             """,
@@ -4733,6 +5239,9 @@ ESAMI STRUTTURALI / FUNZIONALI
                 congiuntiva_m,
                 iride_pupilla_m,
                 vitreo_m,
+                (pnev_summary_m or ''),
+                pnev.pnev_dump(pnev_data_m),
+                (pnev_summary_m or ''),
                 float(costo_m),
                 1 if pagato_m else 0,
                 note_m,
@@ -6339,7 +6848,7 @@ def main():
     init_db()
 
     # login obbligatorio
-    if not login():
+    if not login(get_connection):
         return
 
     # menu laterale
@@ -6358,6 +6867,9 @@ def main():
         "🛠️ Debug DB",
         "📥 Import Pazienti",
     ]
+    if is_admin():
+        sections.append("👥 Utenti / Ruoli")
+
     if APP_MODE == "test":
         sections.append("🧹 Pulizia DB (TEST)")
     sezione = st.sidebar.radio("Vai a", sections)
@@ -6387,6 +6899,8 @@ def main():
         ui_debug_db()
     elif sezione == "📥 Import Pazienti":
         ui_import_pazienti()
+    elif sezione == "👥 Utenti / Ruoli":
+        ui_gestione_utenti(get_connection)
     elif sezione == "🧹 Pulizia DB (TEST)":
         ui_db_cleanup()
 
