@@ -92,22 +92,34 @@ def build_prescrizione_occhiali_a4(data: dict, letterhead_path: str) -> bytes:
     c.setFont("Helvetica-Bold", 11)
     c.drawString(x_margin + 1.5*cm, y_sig, f"{data.get('paziente','')}")
 
-    # TABO (scendi 1 cm) + distanzia i due semicirchi di 1 cm in più al centro
+    # TABO: centrati rispetto alla linea mediana della pagina e spazio centrale per DI
     r = 3.6 * cm
-    cy = (H - 11.2 * cm) - 1.0 * cm  # <-- sceso di 1 cm
+    cy = (H - 11.2 * cm) - 1.0 * cm  # già sceso di 1 cm
 
-    # prima: gap tra centri ~8.2 cm; ora lo aumentiamo di 1 cm
-    # spostiamo ODX un po' a sinistra e OSN un po' a destra
-    cx_od = x_margin + 6.0 * cm
-    cx_os = x_margin + 15.2 * cm
+    # spazio centrale per DI (distanza interpupillare)
+    di_box_w = 3.2 * cm
+    di_gap = di_box_w + 0.8 * cm  # gap totale tra i due semicirchi
+
+    cx_mid = W / 2.0
+    cx_od = cx_mid - (di_gap / 2.0 + r)
+    cx_os = cx_mid + (di_gap / 2.0 + r)
 
     lont = data.get("lontano") or {}
     ax_od = _safe_num(_rx_get(lont, "od").get("ax"), 0.0)
     ax_os = _safe_num(_rx_get(lont, "os").get("ax"), 0.0)
 
-    # Richiesta: scritta TABO solo su OSN; niente etichette ODX/OSN se usi "Occhio Destro/Sinistro"
+    # Richiesta: scritta TABO solo su OSN
     draw_tabo_semicircle(c, cx=cx_od, cy=cy, r=r, axis_deg=ax_od, label=None, tick_step=5, show_tabo_text=False)
     draw_tabo_semicircle(c, cx=cx_os, cy=cy, r=r, axis_deg=ax_os, label=None, tick_step=5, show_tabo_text=True)
+
+    # Box DI al centro (sulla linea mediana dei centri dei semicirchi)
+    di_val = data.get("di") or data.get("DI") or data.get("pd_mm") or ""
+    c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(cx_mid, cy + 6, "DI")
+    c.setLineWidth(1)
+    c.rect(cx_mid - di_box_w/2, cy - 10, di_box_w, 20, stroke=1, fill=0)
+    c.setFont("Helvetica", 10)
+    c.drawCentredString(cx_mid, cy - 4, str(di_val))
 
     # Tabelle
     table_top = cy - r - 1.0*cm
