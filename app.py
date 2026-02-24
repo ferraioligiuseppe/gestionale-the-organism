@@ -321,6 +321,81 @@ def _ai_enabled() -> bool:
         return False
 
 APP_MODE = st.secrets.get("APP_MODE", "prod")
+
+
+def _is_empty_pnev(raw) -> bool:
+    """True if pnev_json is missing/empty (works for sqlite TEXT or postgres JSONB)."""
+    if raw is None:
+        return True
+    try:
+        if isinstance(raw, dict):
+            return len(raw) == 0
+    except Exception:
+        pass
+    s = str(raw).strip()
+    if s == "" or s.lower() == "null":
+        return True
+    return s in ("{}", "'{}'", '"{}"', "[]")
+
+def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: int = 5000) -> dict:
+    """Populate pnev_json/pnev_summary for legacy Anamnesi rows that have only Storia/Note.
+    Does NOT overwrite existing pnev_json (non-empty) or pnev_summary (non-empty).
+    Returns stats dict.
+    """
+    stats = {"scanned": 0, "updated": 0, "skipped_has_pnev": 0, "skipped_no_content": 0}
+
+    if paziente_id is None:
+        cur.execute("SELECT ID, Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary FROM Anamnesi ORDER BY ID DESC LIMIT ?", (int(limit),))
+    else:
+        cur.execute("SELECT ID, Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary FROM Anamnesi WHERE Paziente_ID = ? ORDER BY ID DESC LIMIT ?", (int(paziente_id), int(limit)))
+
+    rows = cur.fetchall() or []
+    for r in rows:
+        stats["scanned"] += 1
+        rid = int(r["ID"]) if hasattr(r, "__getitem__") else int(r[0])
+
+        motivo = (r.get("Motivo") if hasattr(r, "get") else r[3]) or ""
+        storia = (r.get("Storia") if hasattr(r, "get") else r[4]) or ""
+        note = (r.get("Note") if hasattr(r, "get") else r[5]) or ""
+        pnev_raw = (r.get("pnev_json") if hasattr(r, "get") else r[6])
+        pnev_sum = (r.get("pnev_summary") if hasattr(r, "get") else r[7]) or ""
+
+        if (not _is_empty_pnev(pnev_raw)) or (str(pnev_sum).strip() != ""):
+            stats["skipped_has_pnev"] += 1
+            continue
+
+        content = "\n\n".join([x.strip() for x in [motivo, storia, note] if str(x).strip()])
+        if not content.strip():
+            stats["skipped_no_content"] += 1
+            continue
+
+        payload = {
+            "meta": {
+                "source": "legacy_anamnesi_migration",
+                "migrated_at": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            },
+            "legacy": {
+                "motivo": motivo.strip(),
+                "storia": storia.strip(),
+                "note": note.strip(),
+            },
+        }
+
+        summary = (storia or "").strip() or content.strip()
+
+        try:
+            dump = pnev.pnev_dump(payload)
+        except Exception:
+            dump = json.dumps(payload, ensure_ascii=False)
+
+        cur.execute(
+            "UPDATE Anamnesi SET pnev_json = ?, pnev_summary = ? WHERE ID = ?",
+            (dump, summary, rid),
+        )
+        stats["updated"] += 1
+
+    return stats
+
 if APP_MODE == "test":
     debug_secrets_auth()
 if APP_MODE == "test":
@@ -4434,6 +4509,33 @@ def ui_anamnesi():
     options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
+
+    # --- Migrazione legacy -> PNEV (sicura, non sovrascrive) ---
+    with st.expander("🧬 Migrazione legacy → PNEV", expanded=False):
+        st.caption("Popola pnev_json/pnev_summary per le vecchie schede (che avevano solo testo libero). Non sovrascrive schede già migrate.")
+        colm1, colm2 = st.columns([1, 1])
+        with colm1:
+            do_migrate_this = st.button("Migra SOLO questo paziente", key="migrate_pnev_this")
+        with colm2:
+            do_migrate_all = st.button("Migra TUTTI i pazienti (TEST)", key="migrate_pnev_all")
+
+        if do_migrate_this or do_migrate_all:
+            try:
+                pid = None if do_migrate_all else paz_id
+                stats = migrate_anamnesi_legacy_to_pnev(cur, paziente_id=pid, limit=100000)
+                conn.commit()
+                st.success(
+                    f"Scansionate: {stats['scanned']} | Aggiornate: {stats['updated']} | "
+                    f"Già migrate: {stats['skipped_has_pnev']} | Vuote: {stats['skipped_no_content']}"
+                )
+                st.rerun()
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                st.error(f"Errore migrazione: {e}")
+
 
     # -----------------------------
     # NUOVA VALUTAZIONE PNEV
