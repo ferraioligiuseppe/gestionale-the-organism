@@ -1649,7 +1649,8 @@ def init_db() -> None:
             pnev_summary     TEXT
         )
         """
-    )
+        )
+
         # Valutazioni visive / oculistiche
         cur.execute(
             """
