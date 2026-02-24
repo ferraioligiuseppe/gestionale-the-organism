@@ -103,18 +103,18 @@ def init_db(conn):
 
     # SQLite
 
-# Tabella Pazienti (DB principale) - creata in SQLite per test/local mode
-cur.execute(
-    """
-    CREATE TABLE IF NOT EXISTS Pazienti (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        Cognome TEXT,
-        Nome TEXT,
-        Data_Nascita TEXT,
-        Note TEXT
+    # Tabella Pazienti (DB principale) - creata in SQLite per test/local mode
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Pazienti (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            Cognome TEXT,
+            Nome TEXT,
+            Data_Nascita TEXT,
+            Note TEXT
+        )
+        """
     )
-    """
-)
 
     cur.execute(
         """
