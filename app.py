@@ -4778,8 +4778,7 @@ def ui_anamnesi():
             pass
         # aggiorna summary (non distruttivo)
         if inpps_summary_new and (inpps_summary_new not in (pnev_summary_new or "")):
-            pnev_summary_new = ((pnev_summary_new or "").strip() + "
-" + inpps_summary_new).strip()
+            pnev_summary_new = ((pnev_summary_new or "").strip() + "\n" + inpps_summary_new).strip()
 
         note = st.text_area("Note cliniche aggiuntive (per uso interno)")
 
@@ -4890,8 +4889,7 @@ def ui_anamnesi():
         except Exception:
             pass
         if inpps_summary_m2 and (inpps_summary_m2 not in (pnev_summary_m or "")):
-            pnev_summary_m = ((pnev_summary_m or "").strip() + "
-" + inpps_summary_m2).strip()
+            pnev_summary_m = ((pnev_summary_m or "").strip() + "\n" + inpps_summary_m2).strip()
 
         note_m = st.text_area("Note cliniche aggiuntive (per uso interno)", rec["Note"] or "")
 
