@@ -1,50 +1,5 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
-USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
 
-
-
-# --- PRIVACY PDF TEMPLATES (DIFFERENZIATI) ---
-# STAMPABILE COMPLETO (UI stampa / download)
-PDF_PRIVACY_ADULTO_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Adulto_The_Organism_STAMPABILE_COMPLETO_v5.pdf"
-PDF_PRIVACY_MINORE_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Minore_The_Organism_STAMPABILE_COMPLETO_v5.pdf"
-
-# FIRMA ONLINE (pagina pubblica)
-PDF_PRIVACY_ADULTO_SIGN_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Adulto_The_Organism_v4_FINAL.pdf"
-PDF_PRIVACY_MINORE_SIGN_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Minore_The_Organism_v4_FINAL.pdf"
-
-
-
-def _privacy_abs_path(p: str) -> str:
-    """Resolve relative paths against app directory (works on Streamlit Cloud)."""
-    try:
-        base = os.path.dirname(__file__)
-    except Exception:
-        base = os.getcwd()
-    return p if os.path.isabs(p) else os.path.join(base, p)
-
-def _check_privacy_templates_ui():
-    """Mostra in UI lo stato dei file template privacy (senza crashare)."""
-    st.markdown("### ✅ Diagnostica template Privacy (file presenti?)")
-    files = [
-        ("STAMPABILE Adulto", PDF_PRIVACY_ADULTO_TEMPLATE),
-        ("STAMPABILE Minore", PDF_PRIVACY_MINORE_TEMPLATE),
-        ("FIRMA ONLINE Adulto", PDF_PRIVACY_ADULTO_SIGN_TEMPLATE),
-        ("FIRMA ONLINE Minore", PDF_PRIVACY_MINORE_SIGN_TEMPLATE),
-    ]
-    rows = []
-    for label, p in files:
-        ap = _privacy_abs_path(p)
-        ok = False
-        try:
-            ok = os.path.exists(ap)
-        except Exception:
-            ok = False
-        rows.append({"Template": label, "Path": p, "Path risolto": ap, "Presente": "✅" if ok else "❌"})
-    st.dataframe(rows, use_container_width=True, hide_index=True)
-    missing = [r for r in rows if r["Presente"] == "❌"]
-    if missing:
-        st.warning("Mancano uno o più file template. Caricali nel repo nella cartella indicata (assets/privacy).")
 
 def _valid_endpoint_url(url):
     if not url:
@@ -1312,8 +1267,6 @@ def init_db() -> None:
                 Firma_Filename           TEXT,
                 Firma_URL                TEXT,
                 Firma_Source             TEXT,
-                Pdf_Blob               BLOB,
-                Pdf_Filename           TEXT,
                 Note                    TEXT
             )
     """
@@ -1330,8 +1283,6 @@ def init_db() -> None:
                 ("Firma_Filename", "TEXT"),
                 ("Firma_URL", "TEXT"),
                 ("Firma_Source", "TEXT"),
-                ("Pdf_Blob", "BLOB"),
-                ("Pdf_Filename", "TEXT"),
             ]
             for col, typ in mig_cols:
                 if col not in existing_cols:
@@ -1525,9 +1476,7 @@ def init_db() -> None:
                 ADD COLUMN IF NOT EXISTS Firma_Blob BYTEA,
                 ADD COLUMN IF NOT EXISTS Firma_Filename TEXT,
                 ADD COLUMN IF NOT EXISTS Firma_URL TEXT,
-                ADD COLUMN IF NOT EXISTS Firma_Source TEXT,
-                ADD COLUMN IF NOT EXISTS Pdf_Blob BYTEA,
-                ADD COLUMN IF NOT EXISTS Pdf_Filename TEXT;
+                ADD COLUMN IF NOT EXISTS Firma_Source TEXT;
             """
         )
     except Exception:
@@ -2139,9 +2088,8 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
         (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
          Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
          Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo,
-         Firma_Blob, Firma_Filename, Firma_URL, Firma_Source,
-         Pdf_Blob, Pdf_Filename, Note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         Firma_Blob, Firma_Filename, Firma_URL, Firma_Source, Note)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             paziente_id,
@@ -2162,8 +2110,6 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
             payload.get("Firma_Filename") or "",
             payload.get("Firma_URL") or "",
             payload.get("Firma_Source") or "",
-            payload.get("Pdf_Blob"),
-            payload.get("Pdf_Filename") or "",
             payload.get("Note") or "",
         ),
     )
@@ -4554,8 +4500,6 @@ ESAMI STRUTTURALI / FUNZIONALI
                 "Firma_Filename": (firma_file.name if firma_file is not None else ""),
                 "Firma_URL": "",
                 "Firma_Source": ("upload" if firma_file is not None else ""),
-                "Pdf_Blob": None,
-                "Pdf_Filename": "",
                 "Note": n_priv,
             }
             insert_privacy_consent(cur, paz_id, payload)
@@ -5227,67 +5171,6 @@ def ui_dashboard():
 
     conn.close()
 
-
-# ==========================
-# Osteopatia (AUTO) - sezione menu
-# ==========================
-def ui_osteopatia_section():
-    """
-    Sezione Osteopatia indipendente dalla sezione Pazienti:
-    - seleziona paziente
-    - apre UI osteopatia (anamnesi, seduta, storico+PDF A4, dashboard)
-    """
-    import streamlit as st
-
-    try:
-        from modules.osteopatia.ui_osteopatia import ui_osteopatia
-    except Exception as e:
-        st.error("Errore nel modulo Osteopatia. Verifica di aver copiato modules/osteopatia e che non ci siano errori di sintassi.")
-        st.exception(e)
-        return
-
-    conn = get_connection()
-
-    paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
-    if not paz_list:
-        st.error("Nessun paziente trovato nel database (AUTO).")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
-        if paz_table or paz_colmap:
-            st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
-        return
-
-    def _label(p):
-        pid, cogn, nome, dn, scuola, eta = p
-        dn_s = dn or ""
-        extra = ""
-        if eta: extra += f" • {eta} anni"
-        if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
-
-    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
-
-    if isinstance(sel, dict):
-        paziente_id = sel.get("id") or sel.get("paziente_id")
-        cognome = sel.get("cognome") or ""
-        nome = sel.get("nome") or ""
-    else:
-        try:
-            paziente_id = sel[0]
-            cognome = sel[1] if len(sel) > 1 else ""
-            nome = sel[2] if len(sel) > 2 else ""
-        except Exception:
-            paziente_id = None
-            cognome = ""
-            nome = ""
-
-    if not paziente_id:
-        st.error("Errore: ID paziente non determinabile.")
-        return
-
-    paziente_label = f"{cognome} {nome}".strip() or f"Paziente ID {paziente_id}"
-
-    ui_osteopatia(paziente_id=int(paziente_id), get_conn=get_connection, paziente_label=paziente_label)
-
 # -----------------------------
 # Main
 # -----------------------------
@@ -5672,29 +5555,6 @@ def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"
             pass
         return False, f"{type(e).__name__}: {e}"
 
-
-def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> tuple[bool, str]:
-    """Upload bytes to private S3. Never raises. Returns (ok, message)."""
-    try:
-        cli = _s3_client()
-        cli.put_object(
-            Bucket=_s3_bucket(),
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-        )
-        return True, "OK"
-    except Exception as e:
-        try:
-            import botocore
-            if isinstance(e, botocore.exceptions.ClientError):
-                err = getattr(e, "response", {}).get("Error", {})
-                return False, f"{err.get('Code','ClientError')}: {err.get('Message','')}"
-        except Exception:
-            pass
-        return False, f"{type(e).__name__}: {e}"
-
-
 def _s3_client():
     if boto3 is None:
         raise RuntimeError("Manca boto3. Aggiungi 'boto3' in requirements.txt")
@@ -5719,13 +5579,8 @@ def _presign_expires():
     # default 24h
     return int(cfg.get("PRESIGN_EXPIRE_SECONDS", 86400))
 
-def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> tuple[bool, str]:
-    """Upload bytes to private S3.
-
-    Returns:
-        (True, "OK") on success
-        (False, "<errore>") on failure (does not crash the app)
-    """
+def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> bool:
+    """Upload bytes to private S3. Returns True on success; False on failure (does not crash the app)."""
     try:
         cli = _s3_client()
         cli.put_object(
@@ -5734,22 +5589,20 @@ def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"
             Body=data,
             ContentType=content_type,
         )
-        return True, "OK"
+        return True
     except Exception as e:
         # Try to surface useful info on Streamlit without leaking secrets
-        msg = f"{type(e).__name__}: {e}"
         try:
             import botocore
             if isinstance(e, botocore.exceptions.ClientError):
                 err = getattr(e, "response", {}).get("Error", {})
-                msg = f"{err.get('Code','ClientError')} – {err.get('Message','')}"
+                st.error(f"Upload S3 fallito: {err.get('Code','ClientError')} – {err.get('Message','')}")
+            else:
+                st.error(f"Upload S3 fallito: {type(e).__name__}: {e}")
         except Exception:
             pass
-        try:
-            st.error(f"Upload S3 disabilitato: {msg}")
-        except Exception:
-            pass
-        return False, msg
+        return False
+
 
 def _s3_presign_get(key: str) -> str:
     cli = _s3_client()
@@ -5968,13 +5821,6 @@ def _clinic_email() -> str:
 def ui_privacy_pdf():
     st.subheader("📄 Privacy & Consensi (PDF)")
 
-    # diagnostica rapida file template (non blocca la UI)
-    try:
-        _check_privacy_templates_ui()
-    except Exception:
-        pass
-
-
     # Sezione dedicata alla generazione/stampa dei PDF (cartaceo) e al salvataggio su cloud privato (se S3 configurato)
     conn = get_connection()
 
@@ -5995,30 +5841,14 @@ def ui_privacy_pdf():
     pid = options[sel]
 
     doc_type = st.radio("Tipo consenso", ["adulto", "minore"], horizontal=True)
-    template = PDF_PRIVACY_ADULTO_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_TEMPLATE
-
-    st.markdown("### ✍️ Firma online (link pubblico)")
-    st.caption("Genera un link pubblico per la firma (senza login). Il link scade secondo PRESIGN_EXPIRE_SECONDS o un valore dedicato.")
-    # scadenza token: usa privacy.TOKEN_EXPIRE_SECONDS se presente, altrimenti 48h
-    exp = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
-    if st.button("🔗 Genera link firma online", key=f"gen_sign_{pid}_{doc_type}"):
-        try:
-            token = _make_sign_token(int(pid), doc_type, exp)
-            url = _public_sign_url(token)
-            st.success("Link generato ✅")
-            st.code(url)
-            # Link rapidi
-            st.markdown(f"- 📩 Email: {_mailto_link('Firma consenso privacy – Studio The Organism', 'Apri questo link per firmare online:\n' + url)}")
-            st.markdown(f"- 💬 WhatsApp: {_whatsapp_link('Apri questo link per firmare online: ' + url)}")
-        except Exception as e:
-            st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
+    template = _privacy_template_path(doc_type)
 
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("### 🖨️ Stampa / Scarica (cartaceo)")
         try:
-            with open(_privacy_abs_path(template), "rb") as f:
+            with open(template, "rb") as f:
                 pdf_bytes = f.read()
             st.download_button(
                 "⬇️ Scarica PDF da stampare",
@@ -6038,9 +5868,9 @@ def ui_privacy_pdf():
             digest = _sha256_bytes(pdf_bytes)
             key = f"consensi/{pid}/template/privacy_{doc_type}_{digest[:10]}.pdf"
 
-            ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
+            ok_s3, msg_s3 = _s3_put_private(key, pdf_bytes, content_type="application/pdf")
             if not ok_s3:
-                st.error(f"Upload S3 disabilitato: {msg_s3}")
+                st.error(f"S3 upload fallito: {msg_s3}")
                 return
 
             # salva su DB SOLO se upload ok
@@ -6084,13 +5914,7 @@ def ui_public_sign_page():
     cogn = paz_row[1] if paz_row else ""
     nome = paz_row[2] if paz_row else ""
 
-    template_path = _privacy_abs_path(PDF_PRIVACY_ADULTO_SIGN_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_SIGN_TEMPLATE)
-
-    # diagnostica template (utile se manca il file in cloud)
-    try:
-        _check_privacy_templates_ui()
-    except Exception:
-        pass
+    template_path = PDF_PRIVACY_ADULTO_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_TEMPLATE
     if not os.path.exists(template_path):
         st.error("Template consenso non disponibile. Contatta lo studio.")
         return
@@ -6257,48 +6081,15 @@ def ui_public_sign_page():
         digest = _sha256_bytes(final_pdf)
         ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
-        ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
+        ok_s3, msg_s3 = _s3_put_private(key, final_pdf, content_type="application/pdf")
         ok_upload = ok_s3
         if not ok_upload:
-            st.error(f"Upload S3 disabilitato: {msg_s3}")
-            st.warning("Documento archiviato su Neon. (S3 disabilitato). Il PDF verrà comunque inviato via email se configurata.")
+            st.error(f"S3 upload fallito: {msg_s3}")
+            st.warning("Documento NON archiviato su cloud (upload fallito). Il PDF verrà comunque inviato via email se configurata.")
         else:
             _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
 
-        
-        # --- SALVATAGGIO CONSENSO SU DB (Consensi_Privacy) ---
-        try:
-            cur = conn.cursor()
-            payload_db = {
-                "Data_Ora": _now_iso_dt(),
-                "Tipo": "MINORE" if doc_type == "minore" else "ADULTO",
-                "Tutore_Nome": "",
-                "Tutore_CF": "",
-                "Tutore_Telefono": "",
-                "Tutore_Email": "",
-                # mapping consensi (pagina online)
-                "Consenso_Trattamento": bool(cons_dati),
-                "Consenso_Comunicazioni": True,   # gestione appuntamenti / comunicazioni di servizio
-                "Consenso_Marketing": bool(cons_marketing),
-                "Canale_Email": True,
-                "Canale_SMS": False,
-                "Canale_WhatsApp": False,
-                "Usa_Klaviyo": bool(cons_marketing),
-                "Firma_Blob": sig_png,
-                "Firma_Filename": "firma_online.png",
-                "Firma_URL": "",
-                "Firma_Source": "online",
-                "Pdf_Blob": final_pdf,
-                "Pdf_Filename": f"Consenso_{doc_type}_online.pdf",
-                "Note": "Consenso firmato online",
-            }
-            insert_privacy_consent(cur, int(pid), payload_db)
-            conn.commit()
-        except Exception as e:
-            st.warning(f"Consenso inviato/archiviato, ma non salvato nello storico DB: {e}")
-
-
-# Se il merge fallisce, archiviamo anche la pagina firma separata
+        # Se il merge fallisce, archiviamo anche la pagina firma separata
         extra_key = None
         if extra_pdf is not None and extra_name:
             extra_digest = _sha256_bytes(extra_pdf)
@@ -6308,20 +6099,18 @@ def ui_public_sign_page():
 
 
         # invio email a entrambi
-    email_ok = True
-    try:
-        to_list = [email.strip(), _clinic_email()]
-        subject = "Consenso informato e privacy – Studio The Organism"
-        body = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
-        _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
-    except Exception as e:
-        email_ok = False
-        st.warning(f"Consenso archiviato su Neon, ma invio email non riuscito: {e}")
+        try:
+            to_list = [email.strip(), _clinic_email()]
+            subject = "Consenso informato e privacy – Studio The Organism"
+            body = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
+            _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
+        except Exception as e:
+            st.warning(f"Consenso salvato, ma invio email non riuscito: {e}")
 
-    if email_ok:
-        st.success("✅ Consenso archiviato su Neon e inviato via email. Puoi chiudere questa pagina.")
-    else:
-        st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
+        st.success("✅ Consenso inviato e archiviato. Puoi chiudere questa pagina.")
+        st.balloons()
+
+
 def main():
     st.set_page_config(
         page_title="The Organism – Gestionale Studio",
@@ -6349,7 +6138,6 @@ def main():
         "Anamnesi",
         "Valutazioni visive / oculistiche",
         "Sedute / Terapie",
-        "Osteopatia",
         "Coupon OF / SDS",
         "Dashboard incassi",
         "🗂️ Relazioni cliniche",
@@ -6371,8 +6159,6 @@ def main():
         ui_valutazioni_visive()
     elif sezione == "Sedute / Terapie":
         ui_sedute()
-    elif sezione == "Osteopatia":
-        ui_osteopatia_section()
     elif sezione == "Coupon OF / SDS":
         ui_coupons()
     elif sezione == "Dashboard incassi":

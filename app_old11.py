@@ -1,60 +1,4 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
-USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
-
-
-
-# --- PRIVACY PDF TEMPLATES (DIFFERENZIATI) ---
-# STAMPABILE COMPLETO (UI stampa / download)
-PDF_PRIVACY_ADULTO_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Adulto_The_Organism_STAMPABILE_COMPLETO_v5.pdf"
-PDF_PRIVACY_MINORE_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Minore_The_Organism_STAMPABILE_COMPLETO_v5.pdf"
-
-# FIRMA ONLINE (pagina pubblica)
-PDF_PRIVACY_ADULTO_SIGN_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Adulto_The_Organism_v4_FINAL.pdf"
-PDF_PRIVACY_MINORE_SIGN_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Minore_The_Organism_v4_FINAL.pdf"
-
-
-
-def _privacy_abs_path(p: str) -> str:
-    """Resolve relative paths against app directory (works on Streamlit Cloud)."""
-    try:
-        base = os.path.dirname(__file__)
-    except Exception:
-        base = os.getcwd()
-    return p if os.path.isabs(p) else os.path.join(base, p)
-
-def _check_privacy_templates_ui():
-    """Mostra in UI lo stato dei file template privacy (senza crashare)."""
-    st.markdown("### ✅ Diagnostica template Privacy (file presenti?)")
-    files = [
-        ("STAMPABILE Adulto", PDF_PRIVACY_ADULTO_TEMPLATE),
-        ("STAMPABILE Minore", PDF_PRIVACY_MINORE_TEMPLATE),
-        ("FIRMA ONLINE Adulto", PDF_PRIVACY_ADULTO_SIGN_TEMPLATE),
-        ("FIRMA ONLINE Minore", PDF_PRIVACY_MINORE_SIGN_TEMPLATE),
-    ]
-    rows = []
-    for label, p in files:
-        ap = _privacy_abs_path(p)
-        ok = False
-        try:
-            ok = os.path.exists(ap)
-        except Exception:
-            ok = False
-        rows.append({"Template": label, "Path": p, "Path risolto": ap, "Presente": "✅" if ok else "❌"})
-    st.dataframe(rows, use_container_width=True, hide_index=True)
-    missing = [r for r in rows if r["Presente"] == "❌"]
-    if missing:
-        st.warning("Mancano uno o più file template. Caricali nel repo nella cartella indicata (assets/privacy).")
-
-def _valid_endpoint_url(url):
-    if not url:
-        return None
-    u = str(url).strip()
-    if not u:
-        return None
-    if not (u.startswith("http://") or u.startswith("https://")):
-        return None
-    return u
 
 # ---------- AUTO-DETECT TABella PAZIENTI (SQLite/PostgreSQL) ----------
 def _qident(name: str) -> str:
@@ -176,7 +120,6 @@ def fetch_pazienti_for_select(conn, limit=5000):
 
 # ---------- DEBUG DB (non mostra credenziali) ----------
 def _debug_list_tables(conn, limit=200):
-    """Ritorna lista di tuple (schema, table). Gestisce cursor che ritorna dict/RealDictRow."""
     cur = conn.cursor()
     # PostgreSQL: schema + table
     try:
@@ -186,38 +129,20 @@ def _debug_list_tables(conn, limit=200):
             WHERE table_type='BASE TABLE'
             ORDER BY table_schema, table_name
         """)
-        rows = cur.fetchall()
-        out = []
-        for r in rows:
-            if isinstance(r, dict):
-                out.append((r.get("table_schema"), r.get("table_name")))
-            else:
-                try:
-                    out.append((r[0], r[1]))
-                except Exception:
-                    out.append((None, str(r)))
-        return out[:limit]
+        tables = cur.fetchall()
+        return tables[:limit]
     except Exception:
         pass
-
     # SQLite fallback
     try:
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        rows = cur.fetchall()
-        out = []
-        for r in rows:
-            if isinstance(r, dict):
-                out.append(("main", r.get("name")))
-            else:
-                out.append(("main", r[0]))
-        return out[:limit]
+        tables = [("main", r[0]) for r in cur.fetchall()]
+        return tables[:limit]
     except Exception:
         return []
 
 def _debug_table_columns(conn, schema, table):
-    """Ritorna lista di tuple (colonna, tipo) gestendo righe dict/tuple."""
     cur = conn.cursor()
-    # PostgreSQL
     try:
         cur.execute("""
             SELECT column_name, data_type
@@ -226,31 +151,14 @@ def _debug_table_columns(conn, schema, table):
             ORDER BY ordinal_position
         """, (schema, table))
         rows = cur.fetchall()
-        out = []
-        for r in rows:
-            if isinstance(r, dict):
-                out.append((r.get("column_name"), r.get("data_type")))
-            else:
-                try:
-                    out.append((r[0], r[1]))
-                except Exception:
-                    out.append((str(r), ""))
-        if out:
-            return out
+        if rows:
+            return rows
     except Exception:
         pass
-
-    # SQLite
     try:
         cur.execute(f"PRAGMA table_info({table})")
         rows = cur.fetchall()
-        out = []
-        for r in rows:
-            if isinstance(r, dict):
-                out.append((r.get("name"), r.get("type")))
-            else:
-                out.append((r[1], r[2]))
-        return out
+        return [(r[1], r[2]) for r in rows]
     except Exception:
         return []
 
@@ -285,11 +193,10 @@ def debug_secrets_auth():
             st.write("Password vuota? =", (len(pw) == 0))
 
 # chiama la funzione solo in test o solo per admin
-
+if st.secrets.get("APP_MODE", "prod") == "test":
+    debug_secrets_auth()
 import sqlite3
 APP_MODE = st.secrets.get("APP_MODE", "prod")
-if APP_MODE == "test":
-    debug_secrets_auth()
 if APP_MODE == "test":
     st.warning("⚠️ MODALITÀ TEST — database separato (Neon TEST).")
 from datetime import date, datetime
@@ -797,34 +704,13 @@ def _is_streamlit_cloud() -> bool:
 
 
 class _RowCI(dict):
-    """Case-insensitive dict for row access, but also behaves like a sequence.
+    """Case-insensitive dict for row access.
 
-    We need BOTH:
-    - row['ID'] style access (case-insensitive) for legacy SQLite-style code
-    - row[0] / list(row) sequence-style access for code paths that expect tuples
-
-    psycopg2 DictRow supports both, but we wrap it to make key access case-insensitive.
+    The app was written against sqlite3.Row with mixed-case column names (e.g., 'ID', 'CAP').
+    PostgreSQL folds unquoted identifiers to lowercase, so DictCursor returns keys like 'id', 'cap'.
+    This wrapper allows row['ID'] to resolve to row['id'] transparently.
     """
-    def __init__(self, mapping, seq=None):
-        super().__init__(mapping or {})
-        # Preserve column order so row[0] works and list(row) returns values (not keys)
-        if seq is None:
-            seq = list((mapping or {}).values())
-        self._seq = list(seq)
-
-    def __iter__(self):
-        # Iterate VALUES (not keys) so list(row) behaves like a tuple row
-        return iter(self._seq)
-
-    def __len__(self):
-        return len(self._seq)
-
     def __getitem__(self, key):
-        # Numeric / slice access -> sequence behaviour
-        if isinstance(key, (int, slice)):
-            return self._seq[key]
-
-        # Case-insensitive string key access
         if isinstance(key, str):
             if dict.__contains__(self, key):
                 return dict.__getitem__(self, key)
@@ -834,17 +720,15 @@ class _RowCI(dict):
             uk = key.upper()
             if dict.__contains__(self, uk):
                 return dict.__getitem__(self, uk)
-
         return dict.__getitem__(self, key)
 
     def get(self, key, default=None):
         try:
             return self.__getitem__(key)
-        except Exception:
+        except KeyError:
             return default
 
 class _PgCursor:
-
     """Cursor wrapper to:
     - translate SQLite '?' placeholders -> psycopg2 '%s'
     - return psycopg2 DictRow (supports both dict and index access)
@@ -872,7 +756,7 @@ class _PgCursor:
         if row is None:
             return None
         try:
-            return _RowCI(dict(row), list(row))
+            return _RowCI(dict(row))
         except Exception:
             return row
 
@@ -881,7 +765,7 @@ class _PgCursor:
         out = []
         for r in rows:
             try:
-                out.append(_RowCI(dict(r), list(r)))
+                out.append(_RowCI(dict(r)))
             except Exception:
                 out.append(r)
         return out
@@ -1099,7 +983,7 @@ def _require_postgres_on_cloud():
         st.info("""Apri la tua app su Streamlit Cloud → Settings → Secrets e aggiungi:
 
 [db]
-DATABASE_URL = "postgresql://...sslmode=require"
+DATABASE_URL = \"postgresql://...sslmode=require\"
 
 Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
@@ -1312,8 +1196,6 @@ def init_db() -> None:
                 Firma_Filename           TEXT,
                 Firma_URL                TEXT,
                 Firma_Source             TEXT,
-                Pdf_Blob               BLOB,
-                Pdf_Filename           TEXT,
                 Note                    TEXT
             )
     """
@@ -1330,8 +1212,6 @@ def init_db() -> None:
                 ("Firma_Filename", "TEXT"),
                 ("Firma_URL", "TEXT"),
                 ("Firma_Source", "TEXT"),
-                ("Pdf_Blob", "BLOB"),
-                ("Pdf_Filename", "TEXT"),
             ]
             for col, typ in mig_cols:
                 if col not in existing_cols:
@@ -1525,9 +1405,7 @@ def init_db() -> None:
                 ADD COLUMN IF NOT EXISTS Firma_Blob BYTEA,
                 ADD COLUMN IF NOT EXISTS Firma_Filename TEXT,
                 ADD COLUMN IF NOT EXISTS Firma_URL TEXT,
-                ADD COLUMN IF NOT EXISTS Firma_Source TEXT,
-                ADD COLUMN IF NOT EXISTS Pdf_Blob BYTEA,
-                ADD COLUMN IF NOT EXISTS Pdf_Filename TEXT;
+                ADD COLUMN IF NOT EXISTS Firma_Source TEXT;
             """
         )
     except Exception:
@@ -2139,9 +2017,8 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
         (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
          Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
          Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo,
-         Firma_Blob, Firma_Filename, Firma_URL, Firma_Source,
-         Pdf_Blob, Pdf_Filename, Note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         Firma_Blob, Firma_Filename, Firma_URL, Firma_Source, Note)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             paziente_id,
@@ -2162,8 +2039,6 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
             payload.get("Firma_Filename") or "",
             payload.get("Firma_URL") or "",
             payload.get("Firma_Source") or "",
-            payload.get("Pdf_Blob"),
-            payload.get("Pdf_Filename") or "",
             payload.get("Note") or "",
         ),
     )
@@ -4554,8 +4429,6 @@ ESAMI STRUTTURALI / FUNZIONALI
                 "Firma_Filename": (firma_file.name if firma_file is not None else ""),
                 "Firma_URL": "",
                 "Firma_Source": ("upload" if firma_file is not None else ""),
-                "Pdf_Blob": None,
-                "Pdf_Filename": "",
                 "Note": n_priv,
             }
             insert_privacy_consent(cur, paz_id, payload)
@@ -5227,67 +5100,6 @@ def ui_dashboard():
 
     conn.close()
 
-
-# ==========================
-# Osteopatia (AUTO) - sezione menu
-# ==========================
-def ui_osteopatia_section():
-    """
-    Sezione Osteopatia indipendente dalla sezione Pazienti:
-    - seleziona paziente
-    - apre UI osteopatia (anamnesi, seduta, storico+PDF A4, dashboard)
-    """
-    import streamlit as st
-
-    try:
-        from modules.osteopatia.ui_osteopatia import ui_osteopatia
-    except Exception as e:
-        st.error("Errore nel modulo Osteopatia. Verifica di aver copiato modules/osteopatia e che non ci siano errori di sintassi.")
-        st.exception(e)
-        return
-
-    conn = get_connection()
-
-    paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
-    if not paz_list:
-        st.error("Nessun paziente trovato nel database (AUTO).")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
-        if paz_table or paz_colmap:
-            st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
-        return
-
-    def _label(p):
-        pid, cogn, nome, dn, scuola, eta = p
-        dn_s = dn or ""
-        extra = ""
-        if eta: extra += f" • {eta} anni"
-        if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
-
-    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
-
-    if isinstance(sel, dict):
-        paziente_id = sel.get("id") or sel.get("paziente_id")
-        cognome = sel.get("cognome") or ""
-        nome = sel.get("nome") or ""
-    else:
-        try:
-            paziente_id = sel[0]
-            cognome = sel[1] if len(sel) > 1 else ""
-            nome = sel[2] if len(sel) > 2 else ""
-        except Exception:
-            paziente_id = None
-            cognome = ""
-            nome = ""
-
-    if not paziente_id:
-        st.error("Errore: ID paziente non determinabile.")
-        return
-
-    paziente_label = f"{cognome} {nome}".strip() or f"Paziente ID {paziente_id}"
-
-    ui_osteopatia(paziente_id=int(paziente_id), get_conn=get_connection, paziente_label=paziente_label)
-
 # -----------------------------
 # Main
 # -----------------------------
@@ -5428,12 +5240,12 @@ def ui_debug_db():
     st.write(f"Tabelle rilevate: {len(tables)}")
 
     filtro = st.text_input("Filtro nome tabella (es. paz, patient)", value="paz")
-    filtered = [t for t in tables if filtro.lower() in str(t[1] or "").lower()] if filtro else tables
+    filtered = [t for t in tables if filtro.lower() in str(t[1]).lower()] if filtro else tables
 
     st.write(f"Mostrate: {len(filtered)}")
 
     def _lab(t):
-        return f"{t[0] or '?'} . {t[1] or '?'}"
+        return f"{t[0]}.{t[1]}"
     sel = st.selectbox("Seleziona tabella", filtered, format_func=_lab)
 
     schema, table = sel[0], sel[1]
@@ -5445,893 +5257,17 @@ def ui_debug_db():
 
     st.subheader("Colonne")
     if cols:
-        st.dataframe([{"colonna": (c[0] or ""), "tipo": (c[1] or "")} for c in cols], use_container_width=True)
+        st.dataframe([{"colonna": c[0], "tipo": c[1]} for c in cols], use_container_width=True)
     else:
         st.info("Nessuna colonna letta (schema diverso o permessi).")
 
 
 
-
-def ui_import_pazienti():
-    import streamlit as st
-    st.header("📥 Import Pazienti su Neon (Cloud)")
-    st.caption("Carica un file CSV o Excel con almeno: Cognome, Nome (consigliato anche Data_Nascita). I dati verranno inseriti su Neon.")
-
-    if _DB_BACKEND != "postgres":
-        st.error("Import disponibile solo con PostgreSQL (Neon). Configura [db].DATABASE_URL nei Secrets.")
-        return
-
-    up = st.file_uploader("Carica CSV / XLSX", type=["csv", "xlsx"])
-    if not up:
-        st.info("Carica un file per iniziare.")
-        return
-
-    try:
-        import pandas as pd
-    except Exception:
-        st.error("Dipendenza mancante: pandas. Aggiungi 'pandas' a requirements.txt")
-        return
-
-    try:
-        if up.name.lower().endswith(".csv"):
-            df = pd.read_csv(up)
-        else:
-            df = pd.read_excel(up)
-    except Exception as e:
-        st.error(f"Errore lettura file: {e}")
-        return
-
-    st.subheader("Anteprima")
-    st.dataframe(df.head(30), use_container_width=True)
-
-    cols = {str(c).lower().strip(): c for c in df.columns}
-
-    def pick(*names):
-        for n in names:
-            if n in cols:
-                return cols[n]
-        return None
-
-    col_cognome = pick("cognome", "surname", "last_name", "lastname")
-    col_nome = pick("nome", "name", "first_name", "firstname", "given_name")
-    col_dn = pick("data_nascita", "data nascita", "birth_date", "dob")
-
-    if not col_cognome or not col_nome:
-        st.error("Colonne minime non trovate. Servono almeno: Cognome e Nome (o equivalenti).")
-        st.write({"trovato_cognome": col_cognome, "trovato_nome": col_nome, "trovato_data_nascita": col_dn})
-        return
-
-    st.subheader("Mapping (auto)")
-    st.write({"Cognome": col_cognome, "Nome": col_nome, "Data_Nascita": col_dn})
-
-    if st.button("Importa su Neon"):
-        try:
-            init_db()
-        except Exception:
-            pass
-
-        conn = get_connection()
-        cur = conn.cursor()
-
-        def s(x):
-            if x is None:
-                return None
-            v = str(x).strip()
-            return v if v else None
-
-        records = []
-        for _, row in df.iterrows():
-            cogn = s(row.get(col_cognome))
-            nom = s(row.get(col_nome))
-            if not cogn or not nom:
-                continue
-            dn = s(row.get(col_dn)) if col_dn else None
-            records.append((cogn, nom, dn))
-
-        if not records:
-            st.warning("Nessun record valido trovato (serve almeno Cognome e Nome).")
-            return
-
-        try:
-            if col_dn:
-                cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_pazienti_nat ON "Pazienti" ("Cognome","Nome","Data_Nascita")')
-            else:
-                cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_pazienti_nat ON "Pazienti" ("Cognome","Nome")')
-            conn.commit()
-        except Exception:
-            try:
-                conn.commit()
-            except Exception:
-                pass
-
-        ok = 0
-        err = 0
-        for cogn, nom, dn in records:
-            if col_dn:
-                sql = 'INSERT INTO "Pazienti" ("Cognome","Nome","Data_Nascita") VALUES (?,?,?) ON CONFLICT ("Cognome","Nome","Data_Nascita") DO NOTHING;'
-                params = (cogn, nom, dn)
-            else:
-                sql = 'INSERT INTO "Pazienti" ("Cognome","Nome") VALUES (?,?) ON CONFLICT ("Cognome","Nome") DO NOTHING;'
-                params = (cogn, nom)
-            try:
-                cur.execute(sql, params)
-                ok += 1
-            except Exception:
-                err += 1
-
-        try:
-            conn.commit()
-        except Exception:
-            pass
-
-        st.success(f"Import completato. Righe valide: {len(records)} • Tentativi insert: {ok} • Errori: {err}")
-
-
-
-
-# ================================
-# PRIVACY PDF (Compilabili) + Cloud privato (Presigned 24h)
-# ================================
-import io
-import os
-import hashlib
-import datetime as _dt
-import urllib.parse as _urlparse
-import json
-import hmac
-
-try:
-    import boto3
-except Exception:
-    boto3 = None
-
-try:
-    from pypdf import PdfReader, PdfWriter
-except Exception:
-    PdfReader = None
-    PdfWriter = None
-
-try:
-    from PIL import Image
-except Exception:
-    Image = None
-
-try:
-    from streamlit_drawable_canvas import st_canvas
-except Exception:
-    st_canvas = None
-
-
-PDF_PRIVACY_ADULTO_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Adulto_The_Organism_STAMPABILE_COMPLETO_v5.pdf"
-PDF_PRIVACY_MINORE_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Minore_The_Organism_STAMPABILE_COMPLETO_v5.pdf"
-
-def _ensure_documenti_table(conn):
-    cur = conn.cursor()
-    if _DB_BACKEND == "sqlite":
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS documenti (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paziente_id INTEGER NOT NULL,
-                tipo TEXT NOT NULL,
-                s3_key TEXT NOT NULL,
-                filename TEXT,
-                sha256 TEXT NOT NULL,
-                mime TEXT DEFAULT 'application/pdf',
-                created_at TEXT DEFAULT (datetime('now'))
-            )
-            """
-        )
-        conn.commit()
-        return
-    # postgres
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS public.documenti (
-          id BIGSERIAL PRIMARY KEY,
-          paziente_id BIGINT NOT NULL,
-          tipo TEXT NOT NULL,
-          s3_key TEXT NOT NULL,
-          filename TEXT,
-          sha256 TEXT NOT NULL,
-          mime TEXT DEFAULT 'application/pdf',
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        );
-        """
-    )
-    try:
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_documenti_paziente ON public.documenti(paziente_id);")
-    except Exception:
-        pass
-    conn.commit()
-
-def _sha256_bytes(b: bytes) -> str:
-    return hashlib.sha256(b).hexdigest()
-
-
-def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> tuple[bool, str]:
-    """Upload bytes to private S3. Never raises. Returns (ok, message)."""
-    try:
-        cli = _s3_client()
-        cli.put_object(
-            Bucket=_s3_bucket(),
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-        )
-        return True, "OK"
-    except Exception as e:
-        try:
-            import botocore
-            if isinstance(e, botocore.exceptions.ClientError):
-                err = getattr(e, "response", {}).get("Error", {})
-                code = err.get("Code", "ClientError")
-                msg = err.get("Message", "")
-                return False, f"{code}: {msg}"
-        except Exception:
-            pass
-        return False, f"{type(e).__name__}: {e}"
-
-
-def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> tuple[bool, str]:
-    """Upload bytes to private S3. Never raises. Returns (ok, message)."""
-    try:
-        cli = _s3_client()
-        cli.put_object(
-            Bucket=_s3_bucket(),
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-        )
-        return True, "OK"
-    except Exception as e:
-        try:
-            import botocore
-            if isinstance(e, botocore.exceptions.ClientError):
-                err = getattr(e, "response", {}).get("Error", {})
-                return False, f"{err.get('Code','ClientError')}: {err.get('Message','')}"
-        except Exception:
-            pass
-        return False, f"{type(e).__name__}: {e}"
-
-
-def _s3_client():
-    if boto3 is None:
-        raise RuntimeError("Manca boto3. Aggiungi 'boto3' in requirements.txt")
-    cfg = st.secrets.get("storage", {})
-    return boto3.client(
-        "s3",
-        endpoint_url=_valid_endpoint_url(cfg.get("S3_ENDPOINT_URL")),
-        region_name=cfg.get("S3_REGION") or None,
-        aws_access_key_id=cfg.get("S3_ACCESS_KEY"),
-        aws_secret_access_key=cfg.get("S3_SECRET_KEY"),
-    )
-
-def _s3_bucket():
-    cfg = st.secrets.get("storage", {})
-    b = cfg.get("S3_BUCKET")
-    if not b:
-        raise RuntimeError("Secrets mancanti: [storage].S3_BUCKET")
-    return b
-
-def _presign_expires():
-    cfg = st.secrets.get("storage", {})
-    # default 24h
-    return int(cfg.get("PRESIGN_EXPIRE_SECONDS", 86400))
-
-def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf") -> tuple[bool, str]:
-    """Upload bytes to private S3.
-
-    Returns:
-        (True, "OK") on success
-        (False, "<errore>") on failure (does not crash the app)
-    """
-    try:
-        cli = _s3_client()
-        cli.put_object(
-            Bucket=_s3_bucket(),
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-        )
-        return True, "OK"
-    except Exception as e:
-        # Try to surface useful info on Streamlit without leaking secrets
-        msg = f"{type(e).__name__}: {e}"
-        try:
-            import botocore
-            if isinstance(e, botocore.exceptions.ClientError):
-                err = getattr(e, "response", {}).get("Error", {})
-                msg = f"{err.get('Code','ClientError')} – {err.get('Message','')}"
-        except Exception:
-            pass
-        try:
-            st.error(f"Upload S3 disabilitato: {msg}")
-        except Exception:
-            pass
-        return False, msg
-
-def _s3_presign_get(key: str) -> str:
-    cli = _s3_client()
-    return cli.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": _s3_bucket(), "Key": key},
-        ExpiresIn=_presign_expires(),
-    )
-
-def _db_insert_documento(conn, paziente_id: int, tipo: str, s3_key: str, sha256: str, filename: str):
-    cur = conn.cursor()
-    if _DB_BACKEND == "sqlite":
-        cur.execute(
-            """INSERT INTO documenti (paziente_id, tipo, s3_key, filename, sha256, mime)
-                 VALUES (?, ?, ?, ?, ?, 'application/pdf')""",
-            (paziente_id, tipo, s3_key, filename, sha256),
-        )
-    else:
-        cur.execute(
-            """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime)
-                 VALUES (%s, %s, %s, %s, %s, 'application/pdf')""",
-            (paziente_id, tipo, s3_key, filename, sha256),
-        )
-    conn.commit()
-
-def _db_list_documenti(conn, paziente_id: int, tipo: str | None = None):
-    cur = conn.cursor()
-    if _DB_BACKEND == "sqlite":
-        if tipo:
-            cur.execute(
-                "SELECT id, tipo, s3_key, filename, sha256, created_at FROM documenti WHERE paziente_id=? AND tipo=? ORDER BY id DESC",
-                (paziente_id, tipo),
-            )
-        else:
-            cur.execute(
-                "SELECT id, tipo, s3_key, filename, sha256, created_at FROM documenti WHERE paziente_id=? ORDER BY id DESC",
-                (paziente_id,),
-            )
-        return cur.fetchall()
-    else:
-        if tipo:
-            cur.execute(
-                "SELECT id, tipo, s3_key, filename, sha256, created_at FROM public.documenti WHERE paziente_id=%s AND tipo=%s ORDER BY id DESC",
-                (paziente_id, tipo),
-            )
-        else:
-            cur.execute(
-                "SELECT id, tipo, s3_key, filename, sha256, created_at FROM public.documenti WHERE paziente_id=%s ORDER BY id DESC",
-                (paziente_id,),
-            )
-        return cur.fetchall()
-
-def _prefill_pdf(template_path: str, fields: dict) -> bytes:
-    """SAFE VERSION: returns the static PDF template as-is (no AcroForm)."""
-    with open(template_path, "rb") as f:
-        return f.read()
-
-
-def _extract_pdf_field_values(pdf_bytes: bytes) -> dict:
-    """Legge valori dei campi modulo dal PDF (se presenti)."""
-    if PdfReader is None:
-        return {}
-    try:
-        r = PdfReader(io.BytesIO(pdf_bytes))
-        f = r.get_fields() or {}
-        out = {}
-        for k, v in f.items():
-            try:
-                val = v.get("/V")
-            except Exception:
-                val = None
-            # normalizza bytes / NameObject
-            if val is None:
-                out[k] = ""
-            else:
-                out[k] = str(val)
-        return out
-    except Exception:
-        return {}
-
-def _validate_required_fields(doc_type: str, values: dict) -> list[str]:
-    """Checklist minima: radio Sì/No devono essere selezionati."""
-    missing = []
-    if doc_type == "adulto":
-        required = ["a_gdpr_letto", "a_cons_dati", "a_cons_salute", "a_cons_marketing"]
-    else:
-        required = ["m_gdpr_letto", "m_cons_dati", "m_cons_salute", "m_cons_marketing"]
-    for k in required:
-        v = (values.get(k, "") or "").strip()
-        if v == "" or v.lower() in ("none", "null"):
-            missing.append(k)
-    return missing
-
-def _image_to_pdf_bytes(img_bytes: bytes) -> bytes:
-    if Image is None:
-        raise RuntimeError("Manca Pillow. Aggiungi 'Pillow' in requirements.txt")
-    img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-    buf = io.BytesIO()
-    img.save(buf, format="PDF", resolution=300.0)
-    return buf.getvalue()
-
-def _merge_files_to_single_pdf(files) -> tuple[bytes, str]:
-    if PdfReader is None or PdfWriter is None:
-        raise RuntimeError("Manca pypdf. Aggiungi 'pypdf' in requirements.txt")
-    writer = PdfWriter()
-    base_name = "consenso_cartaceo"
-    if files and getattr(files[0], "name", None):
-        base_name = os.path.splitext(files[0].name)[0]
-    for f in files:
-        raw = f.read()
-        ext = os.path.splitext(f.name)[1].lower()
-        if ext in (".jpg", ".jpeg", ".png"):
-            pdf_bytes = _image_to_pdf_bytes(raw)
-            reader = PdfReader(io.BytesIO(pdf_bytes))
-        else:
-            reader = PdfReader(io.BytesIO(raw))
-        for page in reader.pages:
-            writer.add_page(page)
-    out = io.BytesIO()
-    writer.write(out)
-    return out.getvalue(), f"{base_name}_FRONTE_RETRO.pdf"
-
-def _whatsapp_link(text: str) -> str:
-    return "https://wa.me/?text=" + _urlparse.quote(text)
-
-def _mailto_link(subject: str, body: str) -> str:
-    return "mailto:?subject=" + _urlparse.quote(subject) + "&body=" + _urlparse.quote(body)
-
-# --- TOKEN (link pubblico firma) ---
-def _b64url(b: bytes) -> str:
-    import base64
-    return base64.urlsafe_b64encode(b).decode("utf-8").rstrip("=")
-
-def _b64url_decode(s: str) -> bytes:
-    import base64
-    pad = "=" * ((4 - len(s) % 4) % 4)
-    return base64.urlsafe_b64decode(s + pad)
-
-def _token_secret() -> bytes:
-    sec = st.secrets.get("privacy", {}).get("TOKEN_SECRET")
-    if not sec:
-        raise RuntimeError("Secrets mancanti: [privacy].TOKEN_SECRET (string lunga e casuale)")
-    return sec.encode("utf-8")
-
-def _make_sign_token(paziente_id: int, doc_type: str, expires_seconds: int) -> str:
-    payload = {
-        "pid": int(paziente_id),
-        "doc": str(doc_type),
-        "exp": int(_dt.datetime.utcnow().timestamp()) + int(expires_seconds),
-        "v": 1,
-    }
-    raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    sig = hmac.new(_token_secret(), raw, hashlib.sha256).digest()
-    return _b64url(raw) + "." + _b64url(sig)
-
-def _parse_sign_token(tok: str) -> dict:
-    try:
-        a, b = tok.split(".", 1)
-        raw = _b64url_decode(a)
-        sig = _b64url_decode(b)
-        exp_sig = hmac.new(_token_secret(), raw, hashlib.sha256).digest()
-        if not hmac.compare_digest(sig, exp_sig):
-            raise ValueError("bad signature")
-        payload = json.loads(raw.decode("utf-8"))
-        if int(payload.get("exp", 0)) < int(_dt.datetime.utcnow().timestamp()):
-            raise ValueError("expired")
-        return payload
-    except Exception:
-        return {}
-
-def _public_sign_url(token: str) -> str:
-    # usa base url configurabile, altrimenti prova a ricostruire dal browser
-    base = st.secrets.get("privacy", {}).get("PUBLIC_BASE_URL", "")
-    if base:
-        return base.rstrip("/") + "/?sign=" + _urlparse.quote(token)
-    # fallback: url relativo
-    return "?sign=" + _urlparse.quote(token)
-
-# --- EMAIL (invio a entrambi) ---
-import smtplib
-from email.message import EmailMessage
-
-def _smtp_cfg():
-    cfg = st.secrets.get("smtp", {})
-    if not cfg.get("HOST") or not cfg.get("PORT") or not cfg.get("USERNAME") or not cfg.get("PASSWORD"):
-        raise RuntimeError("Secrets mancanti: [smtp] HOST, PORT, USERNAME, PASSWORD. (Facoltativi: FROM, USE_TLS)")
-    return cfg
-
-def _send_email_with_pdf(to_list: list[str], subject: str, body: str, pdf_bytes: bytes, filename: str, pdf2_bytes: bytes | None = None, filename2: str | None = None):
-    cfg = _smtp_cfg()
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = cfg.get("FROM") or cfg.get("USERNAME")
-    msg["To"] = ", ".join([x for x in to_list if x])
-    msg.set_content(body)
-    msg.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename=filename)
-    if pdf2_bytes and filename2:
-        msg.add_attachment(pdf2_bytes, maintype="application", subtype="pdf", filename=filename2)
-
-    host = cfg["HOST"]
-    port = int(cfg["PORT"])
-    use_tls = str(cfg.get("USE_TLS", "true")).lower() in ("1","true","yes","y")
-    if use_tls:
-        with smtplib.SMTP(host, port) as s:
-            s.starttls()
-            s.login(cfg["USERNAME"], cfg["PASSWORD"])
-            s.send_message(msg)
-    else:
-        with smtplib.SMTP_SSL(host, port) as s:
-            s.login(cfg["USERNAME"], cfg["PASSWORD"])
-            s.send_message(msg)
-
-def _clinic_email() -> str:
-    return st.secrets.get("privacy", {}).get("CLINIC_EMAIL") or st.secrets.get("smtp", {}).get("FROM") or st.secrets.get("smtp", {}).get("USERNAME") or ""
-
-def ui_privacy_pdf():
-    st.subheader("📄 Privacy & Consensi (PDF)")
-
-    # diagnostica rapida file template (non blocca la UI)
-    try:
-        _check_privacy_templates_ui()
-    except Exception:
-        pass
-
-
-    # Sezione dedicata alla generazione/stampa dei PDF (cartaceo) e al salvataggio su cloud privato (se S3 configurato)
-    conn = get_connection()
-
-    # (facoltativo) assicurati che esista la tabella documenti se la usi
-    try:
-        _ensure_documenti_table(conn)
-    except Exception:
-        pass
-
-    # Selezione paziente
-    paz, _ptab, _pcolmap = fetch_pazienti_for_select(conn)
-    if not paz:
-        st.info("Nessun paziente presente.")
-        return
-
-    options = {f"{cognome} {nome} (ID {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
-    sel = st.selectbox("Seleziona paziente", list(options.keys()))
-    pid = options[sel]
-
-    doc_type = st.radio("Tipo consenso", ["adulto", "minore"], horizontal=True)
-    template = PDF_PRIVACY_ADULTO_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_TEMPLATE
-
-    st.markdown("### ✍️ Firma online (link pubblico)")
-    st.caption("Genera un link pubblico per la firma (senza login). Il link scade secondo PRESIGN_EXPIRE_SECONDS o un valore dedicato.")
-    # scadenza token: usa privacy.TOKEN_EXPIRE_SECONDS se presente, altrimenti 48h
-    exp = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
-    if st.button("🔗 Genera link firma online", key=f"gen_sign_{pid}_{doc_type}"):
-        try:
-            token = _make_sign_token(int(pid), doc_type, exp)
-            url = _public_sign_url(token)
-            st.success("Link generato ✅")
-            st.code(url)
-            # Link rapidi
-            st.markdown(f"- 📩 Email: {_mailto_link('Firma consenso privacy – Studio The Organism', 'Apri questo link per firmare online:\n' + url)}")
-            st.markdown(f"- 💬 WhatsApp: {_whatsapp_link('Apri questo link per firmare online: ' + url)}")
-        except Exception as e:
-            st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### 🖨️ Stampa / Scarica (cartaceo)")
-        try:
-            with open(_privacy_abs_path(template), "rb") as f:
-                pdf_bytes = f.read()
-            st.download_button(
-                "⬇️ Scarica PDF da stampare",
-                data=pdf_bytes,
-                file_name=f"privacy_{doc_type}_stampabile.pdf",
-                mime="application/pdf",
-            )
-        except Exception as e:
-            st.error(f"Impossibile leggere il template PDF: {e}")
-            return
-
-    with col2:
-        st.markdown("### ☁️ Archivia su Cloud (opzionale)")
-        st.caption("Usa questa funzione solo se hai configurato S3 nei Secrets.")
-        if st.button("📤 Carica su cloud il PDF (template) per questo paziente"):
-            # Key univoca (template associato al paziente)
-            digest = _sha256_bytes(pdf_bytes)
-            key = f"consensi/{pid}/template/privacy_{doc_type}_{digest[:10]}.pdf"
-
-            ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
-            if not ok_s3:
-                st.error(f"Upload S3 disabilitato: {msg_s3}")
-                return
-
-            # salva su DB SOLO se upload ok
-            try:
-                _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_template", key, digest, f"privacy_{doc_type}_template.pdf")
-                st.success("Caricato e registrato nel DB ✅")
-            except Exception as e:
-                st.warning(f"Caricato su S3, ma DB non aggiornato: {e}")
-
-            # link presigned (se disponibile)
-            try:
-                url = _s3_presign_get(key)
-                st.write("Link (24h):")
-                st.code(url)
-            except Exception:
-                pass
-
-def ui_public_sign_page():
-    """Pagina pubblica: compilazione + firma online (canvas) + invio PDF a clinica e paziente."""
-    st.set_page_config(page_title="The Organism – Consenso online", layout="centered")
-    qp = st.query_params
-    tok = qp.get("sign", "")
-    payload = _parse_sign_token(tok) if tok else {}
-    if not payload:
-        st.error("Link non valido o scaduto. Richiedi un nuovo link allo studio.")
-        return
-
-    pid = int(payload["pid"])
-    doc_type = payload["doc"]  # 'adulto' / 'minore'
-    # connessione DB
-    conn = get_connection()
-    _ensure_documenti_table(conn)
-
-    # recupera paziente per prefill (se disponibile)
-    paz_list, _, _ = fetch_pazienti_for_select(conn)
-    paz_row = None
-    for r in paz_list:
-        if int(r[0]) == pid:
-            paz_row = r
-            break
-    cogn = paz_row[1] if paz_row else ""
-    nome = paz_row[2] if paz_row else ""
-
-    template_path = _privacy_abs_path(PDF_PRIVACY_ADULTO_SIGN_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_SIGN_TEMPLATE)
-
-    # diagnostica template (utile se manca il file in cloud)
-    try:
-        _check_privacy_templates_ui()
-    except Exception:
-        pass
-    if not os.path.exists(template_path):
-        st.error("Template consenso non disponibile. Contatta lo studio.")
-        return
-
-    st.title("Consenso informato e privacy")
-    st.caption("Compila i dati e firma. Alla conferma, riceverai una copia via email.")
-
-    # campi base
-    if doc_type == "adulto":
-        email = st.text_input("Email", value="")
-        tel = st.text_input("Telefono", value="")
-        nome_cognome = st.text_input("Nome e Cognome", value=f"{nome} {cogn}".strip())
-    else:
-        email = st.text_input("Email Genitore/Tutore (per ricevere copia)", value="")
-        tel = st.text_input("Telefono Genitore/Tutore", value="")
-        nome_cognome = st.text_input("Nome e Cognome del minore", value=f"{nome} {cogn}".strip())
-
-    st.subheader("Firma")
-    if st_canvas is None:
-        st.warning("Firma online non disponibile (manca dipendenza). Carica un PDF firmato oppure contatta lo studio.")
-        st.stop()
-
-    canvas = st_canvas(
-        fill_color="rgba(0, 0, 0, 0)",
-        stroke_width=3,
-        stroke_color="#000000",
-        background_color="#ffffff",
-        height=180,
-        width=520,
-        drawing_mode="freedraw",
-        key="sigcanvas"
-    )
-
-    st.subheader("Consensi (Sì/No)")
-    # radio minimi
-    if doc_type == "adulto":
-        gdpr_letto = st.radio("Ho letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
-        cons_dati = st.radio("Consenso trattamento dati personali", ["SI", "NO"], horizontal=True, index=0)
-        cons_salute = st.radio("Consenso trattamento dati salute", ["SI", "NO"], horizontal=True, index=0)
-        cons_marketing = st.radio("Consenso comunicazioni informative/marketing (facoltativo)", ["SI", "NO"], horizontal=True, index=1)
-    else:
-        gdpr_letto = st.radio("Abbiamo letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
-        cons_dati = st.radio("Consenso trattamento dati personali del minore", ["SI", "NO"], horizontal=True, index=0)
-        cons_salute = st.radio("Consenso trattamento dati salute del minore", ["SI", "NO"], horizontal=True, index=0)
-        cons_marketing = st.radio("Consenso comunicazioni informative/marketing (facoltativo)", ["SI", "NO"], horizontal=True, index=1)
-
-    confirm = st.checkbox("Confermo che i dati inseriti sono corretti e presto il consenso come sopra indicato.", value=False)
-
-    if st.button("Invia consenso"):
-        if not confirm:
-            st.error("Spunta la conferma prima di inviare.")
-            st.stop()
-        if not email.strip():
-            st.error("Inserisci un'email valida per ricevere la copia.")
-            st.stop()
-
-        # estrai firma come immagine PNG
-        try:
-            import numpy as np
-            import PIL.Image
-            arr = canvas.image_data
-            if arr is None:
-                raise ValueError("no canvas")
-            img = PIL.Image.fromarray(arr.astype('uint8'), 'RGBA')
-            # riduci trasparenza su bianco
-            bg = PIL.Image.new("RGBA", img.size, (255,255,255,255))
-            bg.alpha_composite(img)
-            sig_rgb = bg.convert("RGB")
-            sig_buf = io.BytesIO()
-            sig_rgb.save(sig_buf, format="PNG")
-            sig_png = sig_buf.getvalue()
-            has_sig = sig_rgb.getbbox() is not None
-        except Exception:
-            sig_png = b""
-            has_sig = False
-
-        if not has_sig:
-            st.error("Firma mancante: disegna la firma nel riquadro.")
-            st.stop()
-
-        # genera PDF precompilato
-        fields = {}
-        if doc_type == "adulto":
-            fields = {
-                "a_nome_cognome": nome_cognome.strip(),
-                "a_email": email.strip(),
-                "a_tel": tel.strip(),
-                "a_gdpr_letto": gdpr_letto,
-                "a_cons_dati": cons_dati,
-                "a_cons_salute": cons_salute,
-                "a_cons_marketing": cons_marketing,
-            }
-        else:
-            fields = {
-                "m_nome_cognome": nome_cognome.strip(),
-                "g1_email": email.strip(),
-                "g1_tel": tel.strip(),
-                "m_gdpr_letto": gdpr_letto,
-                "m_cons_dati": cons_dati,
-                "m_cons_salute": cons_salute,
-                "m_cons_marketing": cons_marketing,
-            }
-
-        base_pdf = _prefill_pdf(template_path, fields)
-        extra_pdf = None
-        extra_name = None
-
-        # crea una pagina "firma" con immagine + timestamp, e la unisce al PDF
-        from reportlab.pdfgen import canvas as _rl_canvas
-        from reportlab.lib.pagesizes import A4 as _A4
-        from reportlab.lib.units import mm as _mm
-        sig_page = io.BytesIO()
-        c = _rl_canvas.Canvas(sig_page, pagesize=_A4)
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(20*_mm, 285*_mm, "Firma elettronica (grafometrica) – Allegato")
-        c.setFont("Helvetica", 10)
-        c.drawString(20*_mm, 275*_mm, f"Paziente ID: {pid} – Tipo: {doc_type}")
-        c.drawString(20*_mm, 268*_mm, f"Data/ora (UTC): {_dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
-        c.drawString(20*_mm, 261*_mm, f"Email: {email.strip()}")
-        c.drawString(20*_mm, 254*_mm, "Firma acquisita tramite pagina web; copia inviata a studio e interessato.")
-        # disegna immagine firma
-        import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-            tmp.write(sig_png)
-            tmp_path = tmp.name
-        c.drawImage(tmp_path, 20*_mm, 190*_mm, width=120*_mm, height=40*_mm, preserveAspectRatio=True, mask='auto')
-        c.rect(20*_mm, 190*_mm, 120*_mm, 40*_mm)
-        c.showPage()
-        c.save()
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
-        sig_page_bytes = sig_page.getvalue()
-
-        # init
-        extra_pdf = None
-        extra_name = None
-
-        # merge base_pdf + sig_page (robusto: se il PDF base è illeggibile/monco, inviamo 2 allegati separati)
-        final_pdf = None
-        extra_pdf = None
-        extra_name = None
-        try:
-            r1 = PdfReader(io.BytesIO(base_pdf))
-            r2 = PdfReader(io.BytesIO(sig_page_bytes))
-            w = PdfWriter()
-            for p in r1.pages:
-                w.add_page(p)
-            for p in r2.pages:
-                w.add_page(p)
-            out = io.BytesIO()
-            w.write(out)
-            final_pdf = out.getvalue()
-        except Exception:
-            # fallback: non bloccare il consenso online
-            final_pdf = base_pdf
-            extra_pdf = sig_page_bytes
-            extra_name = f"Firma_Allegato_{doc_type}.pdf"
-        # --- ARCHIVIAZIONE SU CLOUD PRIVATO (NO AcroForm) ---
-        if not final_pdf or len(final_pdf) < 1000:
-            # fallback: at least send/archivia the base template
-            final_pdf = base_pdf
-        digest = _sha256_bytes(final_pdf)
-        ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
-        ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
-        ok_upload = ok_s3
-        if not ok_upload:
-            st.error(f"Upload S3 disabilitato: {msg_s3}")
-            st.warning("Documento archiviato su Neon. (S3 disabilitato). Il PDF verrà comunque inviato via email se configurata.")
-        else:
-            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
-
-        
-        # --- SALVATAGGIO CONSENSO SU DB (Consensi_Privacy) ---
-        try:
-            cur = conn.cursor()
-            payload_db = {
-                "Data_Ora": _now_iso_dt(),
-                "Tipo": "MINORE" if doc_type == "minore" else "ADULTO",
-                "Tutore_Nome": "",
-                "Tutore_CF": "",
-                "Tutore_Telefono": "",
-                "Tutore_Email": "",
-                # mapping consensi (pagina online)
-                "Consenso_Trattamento": bool(cons_dati),
-                "Consenso_Comunicazioni": True,   # gestione appuntamenti / comunicazioni di servizio
-                "Consenso_Marketing": bool(cons_marketing),
-                "Canale_Email": True,
-                "Canale_SMS": False,
-                "Canale_WhatsApp": False,
-                "Usa_Klaviyo": bool(cons_marketing),
-                "Firma_Blob": sig_png,
-                "Firma_Filename": "firma_online.png",
-                "Firma_URL": "",
-                "Firma_Source": "online",
-                "Pdf_Blob": final_pdf,
-                "Pdf_Filename": f"Consenso_{doc_type}_online.pdf",
-                "Note": "Consenso firmato online",
-            }
-            insert_privacy_consent(cur, int(pid), payload_db)
-            conn.commit()
-        except Exception as e:
-            st.warning(f"Consenso inviato/archiviato, ma non salvato nello storico DB: {e}")
-
-
-# Se il merge fallisce, archiviamo anche la pagina firma separata
-        extra_key = None
-        if extra_pdf is not None and extra_name:
-            extra_digest = _sha256_bytes(extra_pdf)
-            extra_key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{extra_digest[:10]}_{extra_name}"
-            _s3_put_private(extra_key, extra_pdf, content_type="application/pdf")
-            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online_firma", extra_key, extra_digest, extra_name)
-
-
-        # invio email a entrambi
-    email_ok = True
-    try:
-        to_list = [email.strip(), _clinic_email()]
-        subject = "Consenso informato e privacy – Studio The Organism"
-        body = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
-        _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
-    except Exception as e:
-        email_ok = False
-        st.warning(f"Consenso archiviato su Neon, ma invio email non riuscito: {e}")
-
-    if email_ok:
-        st.success("✅ Consenso archiviato su Neon e inviato via email. Puoi chiudere questa pagina.")
-    else:
-        st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
 def main():
     st.set_page_config(
         page_title="The Organism – Gestionale Studio",
         layout="wide"
     )
-
-    # --- PUBLIC SIGN PAGE (no login) ---
-    if st.query_params.get('sign'):
-        ui_public_sign_page()
-        return
 
     _sidebar_db_indicator()
 
@@ -6349,14 +5285,9 @@ def main():
         "Anamnesi",
         "Valutazioni visive / oculistiche",
         "Sedute / Terapie",
-        "Osteopatia",
         "Coupon OF / SDS",
         "Dashboard incassi",
-        "🗂️ Relazioni cliniche",
         "📊 Dashboard evolutiva",
-        "📄 Privacy & Consensi (PDF)",
-        "🛠️ Debug DB",
-        "📥 Import Pazienti",
     ]
     if APP_MODE == "test":
         sections.append("🧹 Pulizia DB (TEST)")
@@ -6371,8 +5302,6 @@ def main():
         ui_valutazioni_visive()
     elif sezione == "Sedute / Terapie":
         ui_sedute()
-    elif sezione == "Osteopatia":
-        ui_osteopatia_section()
     elif sezione == "Coupon OF / SDS":
         ui_coupons()
     elif sezione == "Dashboard incassi":
@@ -6381,12 +5310,8 @@ def main():
         ui_relazioni_cliniche()
     elif sezione == "📊 Dashboard evolutiva":
         ui_dashboard_evolutiva()
-    elif sezione == "📄 Privacy & Consensi (PDF)":
-        ui_privacy_pdf()
     elif sezione == "🛠️ Debug DB":
         ui_debug_db()
-    elif sezione == "📥 Import Pazienti":
-        ui_import_pazienti()
     elif sezione == "🧹 Pulizia DB (TEST)":
         ui_db_cleanup()
 
