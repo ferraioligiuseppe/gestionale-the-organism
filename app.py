@@ -323,6 +323,15 @@ def _ai_enabled() -> bool:
 APP_MODE = st.secrets.get("APP_MODE", "prod")
 
 
+def _inpps_cutoff() -> int:
+    """Cut-off operativo (screening) per INPPS. Configurabile via Secrets: [pnev] INPPS_CUTOFF=7"""
+    try:
+        return int(st.secrets.get("pnev", {}).get("INPPS_CUTOFF", 7))
+    except Exception:
+        return 7
+
+
+
 def _is_empty_pnev(raw) -> bool:
     """True if pnev_json is missing/empty (works for sqlite TEXT or postgres JSONB)."""
     if raw is None:
@@ -395,6 +404,213 @@ def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: 
         stats["updated"] += 1
 
     return stats
+
+
+def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, str]:
+    """
+    INPPS Screening bambini (genitori) -> dict scalabile + summary.
+    existing: dict precedente (pnev_json["questionari"]["inpps_screening_genitori"]) o None.
+    """
+    existing = existing or {}
+    st.markdown("### INPPS – Screening (Genitori)")
+
+    # --- Prima parte: Neurologica (1-29) ---
+    neuro_items = [
+        ("N01", "C'è qualche caso di difficoltà di apprendimento fra i genitori o le loro famiglie?"),
+        ("N02", "Durante la gravidanza c'è stato qualche problema medico? (es. pressione alta, nausea eccessiva, infezioni, stress emotivo)"),
+        ("N03", "È stata una gravidanza a termine, pre-termine o post-termine?"),
+        ("N04", "È stata la nascita particolarmente difficoltosa o anomala in qualche senso?"),
+        ("N05", "Il bimbo era particolarmente piccolo per la età gestazionale?"),
+        ("N06", "L'allattamento ha presentato particolari difficoltà?"),
+        ("N07", "Il bimbo soffriva di coliche?"),
+        ("N08", "Il bimbo ha avuto difficoltà a dormire (frequenti risvegli, addormentamento difficile)?"),
+        ("N09", "Il bimbo ha avuto difficoltà nell'alimentazione (suzione, deglutizione, masticazione, selettività)?"),
+        ("N10", "Ha gattonato? (se no, ha strisciato o ha saltato la fase?)"),
+        ("N11", "Ha camminato tardi rispetto ai coetanei?"),
+        ("N12", "È stato lento a diventare autonomo (vestirsi, allacciarsi, usare posate)?"),
+        ("N13", "È goffo / inciampa spesso?"),
+        ("N14", "Ha difficoltà con equilibrio (bicicletta, saltare, stare su un piede)?"),
+        ("N15", "Ha difficoltà a prendere / lanciare / colpire una palla?"),
+        ("N16", "Ha difficoltà con coordinazione fine (scrittura, forbici, puzzle)?"),
+        ("N17", "Ha difficoltà a stare seduto fermo a lungo?"),
+        ("N18", "È facilmente distraibile?"),
+        ("N19", "È impulsivo / agisce senza riflettere?"),
+        ("N20", "Ha difficoltà a seguire istruzioni (specialmente in sequenza)?"),
+        ("N21", "Ha difficoltà a organizzare i compiti / pianificare?"),
+        ("N22", "Ha difficoltà di lettura / comprensione del testo?"),
+        ("N23", "Ha difficoltà di scrittura / ortografia?"),
+        ("N24", "Ha difficoltà a copiare dalla lavagna?"),
+        ("N25", "Ha difficoltà con matematica / calcolo?"),
+        ("N26", "Ha difficoltà a ricordare ciò che ha letto/ascoltato?"),
+        ("N27", "Ha difficoltà nelle relazioni con i pari (amicizie, integrazione)?"),
+        ("N28", "Si frustra facilmente / scatti emotivi?"),
+        ("N29", "Se c'è un rumore o movimento inaspettato, si spaventa facilmente?"),
+    ]
+
+    # NOTE: le domande aperte del modulo cartaceo vengono raccolte qui:
+    diag_pregresse = st.text_area(
+        "Diagnosi pregresse (se presenti: dislessia, disprassia, ADHD, ecc.)",
+        value=str(existing.get("free_text", {}).get("diagnosi_pregresse", "")),
+        key=f"{prefix}_diag"
+    )
+
+    st.caption("Spunta le voci che descrivono tuo figlio/a.")
+    neuro_checked = {}
+    with st.expander("Prima parte – Neurologica / sviluppo / scuola (spunte)", expanded=True):
+        for code, label in neuro_items:
+            neuro_checked[code] = st.checkbox(
+                label,
+                value=bool(existing.get("items", {}).get(code, False)),
+                key=f"{prefix}_{code}",
+            )
+
+    # --- Seconda parte: Nutrizione ---
+    gi_opts = ["Colica", "Dolori addominali o aerofagia", "Frequenza anomala movimenti intestinali", "Stitichezza ricorrente", "Diarrea"]
+    skin_opts = ["Eczema", "Zone secche in viso o braccia", "“Pelle di gallina” su braccia/cosce", "Dermatite", "Altro"]
+    ent_opts = ["Ulcere sulla bocca", "Respirazione difficoltosa", "Tonsillite", "Dolori di orecchie", "Sinusite", "Muco persistente", "Russa", "Respirazione con la bocca", "Febbre da fieno (rinite allergica)"]
+    asthma_triggers = ["Esercizio", "Infezioni", "Polvere", "Muffa", "Animali", "Alimenti", "Altro"]
+    with st.expander("Seconda parte – Nutrizione / salute (spunte)", expanded=False):
+        nutr = existing.get("nutrizione", {}) or {}
+        st.markdown("**Problemi gastro-intestinali**")
+        gi_sel = {opt: st.checkbox(opt, value=bool(nutr.get("gastro", {}).get(opt, False)), key=f"{prefix}_GI_{opt}") for opt in gi_opts}
+
+        st.markdown("**Problemi di pelle**")
+        skin_sel = {opt: st.checkbox(opt, value=bool(nutr.get("pelle", {}).get(opt, False)), key=f"{prefix}_SK_{opt}") for opt in skin_opts}
+        skin_altro = st.text_input("Altro (pelle) – specificare", value=str(nutr.get("pelle_altro", "")), key=f"{prefix}_SK_altro_txt")
+
+        st.markdown("**Orecchio, Naso e Gola**")
+        ent_sel = {opt: st.checkbox(opt, value=bool(nutr.get("orlg", {}).get(opt, False)), key=f"{prefix}_ENT_{opt}") for opt in ent_opts}
+
+        st.markdown("**Asma – indotto da**")
+        asthma_sel = {opt: st.checkbox(opt, value=bool(nutr.get("asma", {}).get(opt, False)), key=f"{prefix}_AS_{opt}") for opt in asthma_triggers}
+        asma_altro = st.text_input("Altro (asma) – specificare", value=str(nutr.get("asma_altro", "")), key=f"{prefix}_AS_altro_txt")
+
+        sete = st.checkbox("Sete particolarmente esagerata?", value=bool(nutr.get("sete_esagerata", False)), key=f"{prefix}_sete")
+
+    # --- Terza parte: Udito (Madaule) ---
+    dev_hist = [
+        ("U_H01", "C'è stato un ritardo nello sviluppo motorio?"),
+        ("U_H02", "C'è stato un ritardo nello sviluppo del linguaggio?"),
+        ("U_H03", "Otite di ripetizione?"),
+        ("U_H04", "Sospetti di difficoltà uditive con accertamenti?"),
+    ]
+    ascolto_ric = [
+        ("U_R01", "Brevi tempi di attenzione"),
+        ("U_R02", "Distraibilità"),
+        ("U_R03", "Ipersensibile ai suoni"),
+        ("U_R04", "Mal intende le domande"),
+        ("U_R05", "Confonde parole simili / necessita spesso ripetizioni"),
+        ("U_R06", "Incapace di seguire ordini in sequenza"),
+    ]
+    energia = [
+        ("U_E01", "Stanchezza alla fine della giornata"),
+        ("U_E02", "Iperattività"),
+        ("U_E03", "Tendenze depressive"),
+    ]
+    espressivo = [
+        ("U_X01", "Voce piatta e monotona"),
+        ("U_X02", "Discorso dubitativo"),
+        ("U_X03", "Scarso vocabolario"),
+        ("U_X04", "Povera costruzione delle frasi"),
+        ("U_X05", "Incapacità a cantare intonato"),
+        ("U_X06", "Confusione o inversione di lettere"),
+        ("U_X07", "Scarsa comprensione della lettura"),
+        ("U_X08", "Povera lettura ad alta voce"),
+        ("U_X09", "Povera ortografia"),
+    ]
+    sociale = [
+        ("U_S01", "Scarsa tollerabilità per la frustrazione"),
+        ("U_S02", "Povera immagine di sé"),
+        ("U_S03", "Difficoltà a fare amici"),
+        ("U_S04", "Tendenza a rinchiudersi / evitare gli altri"),
+        ("U_S05", "Scarsa motivazione / disinteresse nei compiti scolastici"),
+        ("U_S06", "Immaturità"),
+        ("U_S07", "Irritabilità"),
+        ("U_S08", "Timidezza"),
+    ]
+    with st.expander("Terza parte – Udito (Madaule) (spunte)", expanded=False):
+        ud = existing.get("udito", {}) or {}
+        st.markdown("**Storia dello sviluppo**")
+        for code, label in dev_hist:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+        st.markdown("**Ascolto ricettivo (esterno)**")
+        for code, label in ascolto_ric:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+        st.markdown("**Livello di energia**")
+        for code, label in energia:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+        st.markdown("**Ascolto espressivo (interno)**")
+        for code, label in espressivo:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+        st.markdown("**Comportamento e integrazione sociale**")
+        for code, label in sociale:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+    # Build structured result
+    n_neuro = sum(1 for k,v in neuro_checked.items() if k.startswith("N") and v)
+    n_udito = sum(1 for k,v in neuro_checked.items() if k.startswith("U_") and v)
+
+    nutr_res = {
+        "gastro": {k: bool(v) for k,v in locals().get("gi_sel", {}).items()},
+        "pelle": {k: bool(v) for k,v in locals().get("skin_sel", {}).items()},
+        "pelle_altro": (locals().get("skin_altro") or "").strip(),
+        "orlg": {k: bool(v) for k,v in locals().get("ent_sel", {}).items()},
+        "asma": {k: bool(v) for k,v in locals().get("asthma_sel", {}).items()},
+        "asma_altro": (locals().get("asma_altro") or "").strip(),
+        "sete_esagerata": bool(locals().get("sete", False)),
+    }
+
+    # counts
+    nutr_count = 0
+    for group in ("gastro","pelle","orlg","asma"):
+        nutr_count += sum(1 for _,v in nutr_res.get(group, {}).items() if v)
+    nutr_count += 1 if nutr_res.get("sete_esagerata") else 0
+
+    result = {
+        "version": "inpps01it",
+        "mode": "genitori",
+        "date": datetime.date.today().isoformat(),
+        "positivi": {"neurologica_scuola": int(n_neuro), "nutrizione": int(nutr_count), "udito_madaule": int(n_udito)},
+        "items": {k: bool(v) for k,v in neuro_checked.items()},
+        "nutrizione": nutr_res,
+        "free_text": {"diagnosi_pregresse": (diag_pregresse or "").strip()},
+    }
+
+    cutoff = _inpps_cutoff()
+    totale = int(n_neuro) + int(nutr_count) + int(n_udito)
+    flag = totale >= cutoff
+
+    # Salva interpretazione (screening, non diagnosi)
+    result["screening"] = {
+        "cutoff": int(cutoff),
+        "totale_positivi": int(totale),
+        "flag_possibile_immaturita_neuromotoria": bool(flag),
+        "nota": "Criterio operativo di screening (protocollo PNEV/INPPS). Richiede conferma clinica diretta.",
+    }
+
+    # Semaforo in UI
+    if flag:
+        st.warning(
+            f"⚠️ Screening INPPS: {totale} positivi (cut-off ≥ {cutoff}) → possibile immaturità neuromotoria. "
+            "Richiede conferma con valutazione clinica diretta."
+        )
+    else:
+        st.success(f"✅ Screening INPPS: {totale} positivi (cut-off ≥ {cutoff}) → nessun alert da screening.")
+
+    summary = (
+        f"INPPS genitori: Neurologica/Scuola {n_neuro} • Nutrizione {nutr_count} • Udito {n_udito} "
+        f"(Totale {totale}, cut-off ≥ {cutoff})"
+    )
+    if flag:
+        summary += " → possibile immaturità neuromotoria (screening)."
+    else:
+        summary += "."
+    return result, summary
+
 
 if APP_MODE == "test":
     debug_secrets_auth()
@@ -4551,6 +4767,20 @@ def ui_anamnesi():
 
         pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(prefix="pnev_new", visita=visita_snapshot, existing=None)
 
+        # --- Questionario INPPS (Genitori) agganciato al PNEV ---
+        inpps_existing = (pnev_data_new.get("questionari", {}) or {}).get("inpps_screening_genitori") if isinstance(pnev_data_new, dict) else None
+        inpps_data_new, inpps_summary_new = inpps_collect_ui(prefix="inpps_new", existing=inpps_existing)
+        # merge nel PNEV JSON scalabile
+        try:
+            pnev_data_new.setdefault("questionari", {})
+            pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
+        except Exception:
+            pass
+        # aggiorna summary (non distruttivo)
+        if inpps_summary_new and (inpps_summary_new not in (pnev_summary_new or "")):
+            pnev_summary_new = ((pnev_summary_new or "").strip() + "
+" + inpps_summary_new).strip()
+
         note = st.text_area("Note cliniche aggiuntive (per uso interno)")
 
         col_ai1, col_ai2, col_save = st.columns([1, 1, 1])
@@ -4650,6 +4880,18 @@ def ui_anamnesi():
 
         visita_snapshot_m = {"paziente_id": paz_id, "motivo": motivo_m}
         pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(prefix=f"pnev_edit_{an_id}", visita=visita_snapshot_m, existing=pnev_existing)
+
+        # --- Questionario INPPS (Genitori) agganciato al PNEV ---
+        inpps_existing_m = (pnev_data_m.get("questionari", {}) or {}).get("inpps_screening_genitori") if isinstance(pnev_data_m, dict) else None
+        inpps_data_m, inpps_summary_m2 = inpps_collect_ui(prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m)
+        try:
+            pnev_data_m.setdefault("questionari", {})
+            pnev_data_m["questionari"]["inpps_screening_genitori"] = inpps_data_m
+        except Exception:
+            pass
+        if inpps_summary_m2 and (inpps_summary_m2 not in (pnev_summary_m or "")):
+            pnev_summary_m = ((pnev_summary_m or "").strip() + "
+" + inpps_summary_m2).strip()
 
         note_m = st.text_area("Note cliniche aggiuntive (per uso interno)", rec["Note"] or "")
 
@@ -7142,6 +7384,28 @@ def _convert_pdf_if_possible(docx_path, out_pdf_path):
     shutil.move(gen, out_pdf_path)
     return True, out_pdf_path
 
+# ==========================
+# Bibliografia (PNEV / INPP- INPPS) — inserita automaticamente in TUTTE le relazioni cliniche
+# Nota: nei template .docx inserisci il placeholder: {{ BIBLIOGRAFIA }}
+# ==========================
+BIBLIOGRAFIA_PNEV = """
+BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI (selezione)
+
+INPP / INPPS – neuromotor readiness, riflessi primitivi e apprendimento
+• Demiy A, Kalemba A, Lorent M, Pecuch A, Wolańska E, Telenga M, Gieysztor EZ. (2020).
+  A Child’s Perception of Their Developmental Difficulties in Relation to Their Adult Assessment.
+  Analysis of the INPP Questionnaire. Journal of Personalized Medicine, 10(4), 156.
+
+• Goddard Blythe S. (2005). Reflexes, Learning and Behavior: A Window into the Child’s Mind. Fern Ridge Press.
+• Goddard Blythe S. (2009). Attention, Balance and Coordination: The A.B.C. of Learning Success. Wiley-Blackwell.
+• Goddard Blythe S. (2012). Assessing Neuromotor Readiness for Learning:
+  The INPP Developmental Screening Test and School Intervention Programme. Wiley-Blackwell.
+
+Nota clinica (screening):
+Nel protocollo PNEV/INPPS, un numero elevato di affermazioni positive ai questionari di screening
+è considerato indicativo di possibile immaturità neuromotoria e richiede conferma tramite valutazione clinica diretta.
+"""
+
 TEMPLATES = {
   # Linguaggio (ospedaliero) - unico template
   "linguaggio_invio_ospedaliero": {
@@ -7268,6 +7532,34 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
 
     # Context placeholder comune
     nome_cognome = f"{paziente.get('cognome','')} {paziente.get('nome','')}".strip()
+    # --- Aggancio automatico screening INPPS (se presente in PNEV) ---
+    try:
+        cur2 = conn.cursor()
+        cur2.execute(
+            "SELECT pnev_json, pnev_summary FROM Anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
+            (paziente_id,),
+        )
+        r_inpps = cur2.fetchone()
+        if r_inpps:
+            pnev_obj = pnev.pnev_load(r_inpps.get("pnev_json") if hasattr(r_inpps, "get") else r_inpps[0])
+            inpps_obj = (pnev_obj.get("questionari", {}) or {}).get("inpps_screening_genitori")
+            if isinstance(inpps_obj, dict):
+                scr = inpps_obj.get("screening") or {}
+                if isinstance(scr, dict) and scr.get("totale_positivi") is not None:
+                    tot = scr.get("totale_positivi")
+                    cutoff = scr.get("cutoff", 7)
+                    flag = bool(scr.get("flag_possibile_immaturita_neuromotoria"))
+                    txt = f"Screening INPPS (genitori): totale positivi {tot} (cut-off ≥ {cutoff}). "
+                    if flag:
+                        txt += "Indicativo di possibile immaturità neuromotoria (screening) – raccomandata conferma clinica diretta."
+                    else:
+                        txt += "Nessun alert da screening."
+                    NOTE_CLINICHE = (NOTE_CLINICHE or "").strip()
+                    NOTE_CLINICHE = (NOTE_CLINICHE + "\n\n" + txt).strip() if NOTE_CLINICHE else txt
+    except Exception:
+        pass
+
+
     context = {
         "NOME_COGNOME": nome_cognome,
         "DATA_NASCITA": paziente.get("data_nascita",""),
@@ -7277,6 +7569,8 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
         "DATA_RELAZIONE": data_relazione.strftime("%d/%m/%Y"),
         "NOTE_CLINICHE": note.strip(),
         "PERIODO_FOLLOWUP": periodo_followup.strip(),
+        "BIBLIOGRAFIA": BIBLIOGRAFIA_PNEV.strip(),
+
     }
 
     template_file = rel["files"]["std"]
