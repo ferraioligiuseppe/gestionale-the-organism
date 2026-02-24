@@ -4407,7 +4407,7 @@ def ui_pazienti():
     # -----------------------------
 
 def ui_anamnesi():
-    st.header("Anamnesi")
+    st.header("Valutazione PNEV")
 
     conn = get_connection()
     cur = conn.cursor()
