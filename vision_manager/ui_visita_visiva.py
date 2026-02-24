@@ -41,37 +41,109 @@ def _dict_row(cur, row):
     cols = [d[0] for d in cur.description]
     return {cols[i]: row[i] for i in range(len(cols))}
 
-def _load_pazienti(conn) -> List[Dict[str, Any]]:
+
+def _normalize_row(d: Dict[str, Any]) -> Dict[str, Any]:
+    # Normalizza chiavi a lowercase per gestire DB diversi (Postgres/SQLite) e naming misto
+    return {str(k).lower(): v for k, v in (d or {}).items()}
+
+def _load_pazienti_vision(conn) -> List[Dict[str, Any]]:
+    """Legacy: pazienti salvati nel DB Vision separato (pazienti_visivi)."""
     cur = conn.cursor()
     try:
         cur.execute("SELECT id, cognome, nome, data_nascita, note FROM pazienti_visivi ORDER BY cognome, nome")
         rows = cur.fetchall()
-        return [_dict_row(cur, r) for r in rows]
+        return [_normalize_row(_dict_row(cur, r)) for r in rows]
     finally:
         try: cur.close()
         except Exception: pass
 
-def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str) -> int:
+def _load_pazienti(conn) -> List[Dict[str, Any]]:
+    """
+    Carica i pazienti dal DB principale del gestionale: tabella Pazienti con colonne
+    ID, Cognome, Nome, Data_Nascita (case-insensitive).
+    Fallback: usa pazienti_visivi se la tabella principale non esiste.
+    """
     cur = conn.cursor()
     ph = _ph(conn)
     try:
-        if _is_pg(conn):
+        # Tentativo DB principale (Gestionale)
+        try:
             cur.execute(
-                f"INSERT INTO pazienti_visivi (nome, cognome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
-                (nome, cognome, data_nascita or None, note),
+                "SELECT ID, Cognome, Nome, Data_Nascita FROM Pazienti ORDER BY Cognome, Nome"
             )
+            rows = cur.fetchall()
+            out = []
+            for r in rows:
+                d = _normalize_row(_dict_row(cur, r))
+                # Uniforma alle chiavi che usa il resto della UI
+                out.append({
+                    "id": d.get("id"),
+                    "cognome": d.get("cognome"),
+                    "nome": d.get("nome"),
+                    "data_nascita": d.get("data_nascita"),
+                    "note": d.get("note"),
+                    "_source": "Pazienti",
+                })
+            return out
+        except Exception:
+            # In Postgres, dopo errore serve rollback
+            if _is_pg(conn):
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            # Fallback al DB Vision separato
+            return _load_pazienti_vision(conn)
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str) -> int:
+    """
+    Inserisce paziente nel DB principale (tabella Pazienti).
+    Richiede: ID (autoincrement), Cognome, Nome, Data_Nascita.
+    Il campo note viene ignorato se la tabella non lo prevede.
+    """
+    cur = conn.cursor()
+    ph = _ph(conn)
+    try:
+        # Proviamo con le colonne minime (note opzionale)
+        if _is_pg(conn):
+            try:
+                cur.execute(
+                    f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita) VALUES ({ph},{ph},{ph}) RETURNING ID",
+                    (cognome, nome, data_nascita or None),
+                )
+            except Exception:
+                # rollback e riprova includendo Note se esiste (best effort)
+                try: conn.rollback()
+                except Exception: pass
+                cur.execute(
+                    f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita, Note) VALUES ({ph},{ph},{ph},{ph}) RETURNING ID",
+                    (cognome, nome, data_nascita or None, note),
+                )
             pid = cur.fetchone()[0]
         else:
-            cur.execute(
-                f"INSERT INTO pazienti_visivi (nome, cognome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph})",
-                (nome, cognome, data_nascita or None, note),
-            )
+            try:
+                cur.execute(
+                    f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita) VALUES ({ph},{ph},{ph})",
+                    (cognome, nome, data_nascita or None),
+                )
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+                cur.execute(
+                    f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita, Note) VALUES ({ph},{ph},{ph},{ph})",
+                    (cognome, nome, data_nascita or None, note),
+                )
             pid = cur.lastrowid
         conn.commit()
         return int(pid)
     finally:
         try: cur.close()
         except Exception: pass
+
 
 def _insert_visita(conn, paziente_id: int, data_visita: str, dati_json: str) -> int:
     cur = conn.cursor()
@@ -222,10 +294,10 @@ def ui_visita_visiva():
     conn = get_conn()
     init_db(conn)
 
-    tab_paz, tab_vis = st.tabs(["👤 Anagrafica (Vision)", "🗓️ Visita oculistica"])
+    tab_paz, tab_vis = st.tabs(["👤 Anagrafica (Gestionale)", "🗓️ Visita oculistica"])
 
     with tab_paz:
-        st.markdown("### Aggiungi paziente (DB Vision separato)")
+        st.markdown("### Aggiungi paziente (DB Gestionale)")
         c1, c2, c3 = st.columns([1, 1, 1])
         nome = c1.text_input("Nome")
         cognome = c2.text_input("Cognome")
@@ -243,10 +315,38 @@ def ui_visita_visiva():
         paz = _load_pazienti(conn)
         st.dataframe(paz, use_container_width=True)
 
+        st.markdown("### Modifica anagrafica paziente")
+        psel_edit = st.selectbox("Seleziona paziente da modificare", paz, format_func=_format_paz, key="paz_edit_sel")
+        if psel_edit:
+            e1, e2, e3 = st.columns([1,1,1])
+            new_nome = e1.text_input("Nome (modifica)", value=str(psel_edit.get("nome") or ""), key="edit_nome")
+            new_cognome = e2.text_input("Cognome (modifica)", value=str(psel_edit.get("cognome") or ""), key="edit_cognome")
+            new_dn = e3.text_input("Data nascita (YYYY-MM-DD) (modifica)", value=str(psel_edit.get("data_nascita") or ""), key="edit_dn")
+            if st.button("✏️ Salva modifiche anagrafiche", key="save_edit_anag"):
+                cur2 = conn.cursor()
+                ph = _ph(conn)
+                try:
+                    try:
+                        cur2.execute(
+                            f"UPDATE Pazienti SET Cognome={ph}, Nome={ph}, Data_Nascita={ph} WHERE ID={ph}",
+                            (new_cognome.strip(), new_nome.strip(), new_dn.strip() or None, int(psel_edit.get('id'))),
+                        )
+                        conn.commit()
+                        st.success("Anagrafica aggiornata.")
+                        st.rerun()
+                    except Exception as e:
+                        if _is_pg(conn):
+                            try: conn.rollback()
+                            except Exception: pass
+                        st.error(f"Impossibile aggiornare anagrafica su tabella Pazienti: {e}")
+                finally:
+                    try: cur2.close()
+                    except Exception: pass
+
     with tab_vis:
         paz = _load_pazienti(conn)
         if not paz:
-            st.info("Prima crea almeno un paziente nella tab 'Anagrafica (Vision)'.")
+            st.info("Prima crea almeno un paziente nella tab 'Anagrafica (Gestionale)'.")
             return
 
         psel = st.selectbox("Seleziona paziente", paz, format_func=_format_paz)
