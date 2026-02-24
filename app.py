@@ -381,7 +381,7 @@ def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: 
         payload = {
             "meta": {
                 "source": "legacy_anamnesi_migration",
-                "migrated_at": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                "migrated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
             },
             "legacy": {
                 "motivo": motivo.strip(),
@@ -573,7 +573,7 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
     result = {
         "version": "inpps01it",
         "mode": "genitori",
-        "date": datetime.date.today().isoformat(),
+        "date": date.today().isoformat(),
         "positivi": {"neurologica_scuola": int(n_neuro), "nutrizione": int(nutr_count), "udito_madaule": int(n_udito)},
         "items": {k: bool(v) for k,v in neuro_checked.items()},
         "nutrizione": nutr_res,
