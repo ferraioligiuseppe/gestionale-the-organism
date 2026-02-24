@@ -1,4 +1,9 @@
 streamlit
-psycopg2-binary
 reportlab
+openpyxl
+pandas
+psycopg2-binary
+openpyxl
+google-api-python-client
+google-auth
 pypdf
