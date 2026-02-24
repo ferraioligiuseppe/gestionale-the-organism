@@ -73,7 +73,7 @@ def init_db(conn):
             """
             CREATE TABLE IF NOT EXISTS visite_visive (
                 id SERIAL PRIMARY KEY,
-                paziente_id INTEGER REFERENCES pazienti_visivi(id),
+                paziente_id INTEGER NOT NULL REFERENCES Pazienti(ID),
                 data_visita TEXT,
                 dati_json JSONB,
                 pdf_bytes BYTEA
@@ -84,7 +84,7 @@ def init_db(conn):
             """
             CREATE TABLE IF NOT EXISTS prescrizioni_occhiali (
                 id SERIAL PRIMARY KEY,
-                paziente_id INTEGER REFERENCES pazienti_visivi(id),
+                paziente_id INTEGER NOT NULL REFERENCES Pazienti(ID),
                 data_prescrizione TEXT
             );
             """
@@ -102,6 +102,20 @@ def init_db(conn):
         return
 
     # SQLite
+
+# Tabella Pazienti (DB principale) - creata in SQLite per test/local mode
+cur.execute(
+    """
+    CREATE TABLE IF NOT EXISTS Pazienti (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Cognome TEXT,
+        Nome TEXT,
+        Data_Nascita TEXT,
+        Note TEXT
+    )
+    """
+)
+
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS pazienti_visivi (
