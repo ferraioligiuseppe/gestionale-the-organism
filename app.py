@@ -2,7 +2,12 @@
 import streamlit as st
 
 import pnev_module as pnev
-import pnev_ai
+try:
+    import pnev_ai
+    PNEV_AI_AVAILABLE = True
+except Exception:
+    pnev_ai = None
+    PNEV_AI_AVAILABLE = False
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
 try:
@@ -767,22 +772,34 @@ PBKDF2_ITERS = 260_000
 def _pwd_hash(pw: str, salt_b64: str | None = None, iters: int = PBKDF2_ITERS) -> str:
     """Hash password with PBKDF2-HMAC-SHA256.
     Format: pbkdf2_sha256$<iters>$<salt_b64>$<hash_b64>
+    NOTE: Imports are inside the function to avoid NameError if global imports change.
     """
+    import base64
+    import hashlib
+    import secrets as _secrets_mod_local
+
     if salt_b64 is None:
-        salt = _secrets_mod.token_bytes(16)
+        salt = _secrets_mod_local.token_bytes(16)
         salt_b64 = base64.b64encode(salt).decode("utf-8")
     else:
         salt = base64.b64decode(salt_b64.encode("utf-8"))
 
-    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, iters, dklen=32)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, int(iters), dklen=32)
     hash_b64 = base64.b64encode(dk).decode("utf-8")
-    return f"pbkdf2_sha256${iters}${salt_b64}${hash_b64}"
+    return f"pbkdf2_sha256${int(iters)}${salt_b64}${hash_b64}"
 
 def _pwd_verify(pw: str, stored: str) -> bool:
+    """Verify PBKDF2 password hash."""
+    import hmac
     try:
-        algo, iters_s, salt_b64, hash_b64 = stored.split("$", 3)
+        algo, iters_s, salt_b64, _hash_b64 = stored.split("$", 3)
         if algo != "pbkdf2_sha256":
             return False
+        iters = int(iters_s)
+        candidate = _pwd_hash(pw, salt_b64=salt_b64, iters=iters)
+        return hmac.compare_digest(candidate, stored)
+    except Exception:
+        return False
         iters = int(iters_s)
         candidate = _pwd_hash(pw, salt_b64=salt_b64, iters=iters)
         return hmac.compare_digest(candidate, stored)
@@ -791,6 +808,11 @@ def _pwd_verify(pw: str, stored: str) -> bool:
 
 def _breakglass_enabled() -> bool:
     """Emergency login toggle (TEST only)."""
+    try:
+        if str(st.secrets.get("APP_MODE", "prod")).lower().strip() != "test":
+            return False
+    except Exception:
+        return False
     bg = st.secrets.get("breakglass", {})
     return bool(bg.get("ENABLED", False))
 
@@ -850,7 +872,21 @@ def ensure_auth_schema(conn):
         except Exception: pass
 
 def _audit(conn, user_id: int | None, action: str, entity: str | None = None, entity_id: str | None = None, meta: dict | None = None):
+    """Write an audit log entry.
+    Safe for break-glass sessions (user_id < 1) by storing NULL user_id (allowed by FK).
+    Imports json locally to avoid NameError.
+    """
+    import json
+
     meta = meta or {}
+
+    # break-glass / invalid user id -> NULL
+    try:
+        if user_id is not None and int(user_id) < 1:
+            user_id = None
+    except Exception:
+        user_id = None
+
     cur = conn.cursor()
     try:
         cur.execute(
@@ -858,9 +894,17 @@ def _audit(conn, user_id: int | None, action: str, entity: str | None = None, en
             (user_id, action, entity, entity_id, json.dumps(meta)),
         )
         conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 def _get_user_by_username(conn, username: str):
     cur = conn.cursor()
@@ -999,7 +1043,7 @@ def login(get_conn) -> bool:
         if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
             st.session_state["user"] = {
-                "id": -1,
+                "id": None,
                 "username": u_in,
                 "email": None,
                 "roles": ["admin"],
