@@ -57,82 +57,85 @@ def _load_pazienti_vision(conn) -> List[Dict[str, Any]]:
         try: cur.close()
         except Exception: pass
 
+
 def _load_pazienti(conn) -> List[Dict[str, Any]]:
     """
-    Carica i pazienti dal DB principale del gestionale: tabella Pazienti con colonne
-    ID, Cognome, Nome, Data_Nascita (case-insensitive).
+    Carica i pazienti dal DB principale del gestionale.
+    - Postgres (Neon): tabella public.pazienti con colonne snake_case: id, cognome, nome, data_nascita, note
+    - SQLite locale: tabella Pazienti legacy: ID, Cognome, Nome, Data_Nascita, Note
     Fallback: usa pazienti_visivi se la tabella principale non esiste.
     """
     cur = conn.cursor()
-    ph = _ph(conn)
     try:
-        # Tentativo DB principale (Gestionale)
         try:
-            cur.execute(
-                "SELECT ID, Cognome, Nome, Data_Nascita FROM Pazienti ORDER BY Cognome, Nome"
-            )
+            if _is_pg(conn):
+                cur.execute("SELECT id, cognome, nome, data_nascita, note FROM pazienti ORDER BY cognome, nome")
+            else:
+                cur.execute("SELECT ID, Cognome, Nome, Data_Nascita, Note FROM Pazienti ORDER BY Cognome, Nome")
             rows = cur.fetchall()
             out = []
             for r in rows:
                 d = _normalize_row(_dict_row(cur, r))
-                # Uniforma alle chiavi che usa il resto della UI
                 out.append({
                     "id": d.get("id"),
                     "cognome": d.get("cognome"),
                     "nome": d.get("nome"),
                     "data_nascita": d.get("data_nascita"),
                     "note": d.get("note"),
-                    "_source": "Pazienti",
+                    "_source": "pazienti" if _is_pg(conn) else "Pazienti",
                 })
             return out
         except Exception:
-            # In Postgres, dopo errore serve rollback
             if _is_pg(conn):
                 try:
                     conn.rollback()
                 except Exception:
                     pass
-            # Fallback al DB Vision separato
             return _load_pazienti_vision(conn)
     finally:
-        try: cur.close()
-        except Exception: pass
-
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str) -> int:
     """
-    Inserisce paziente nel DB principale (tabella Pazienti).
-    Richiede: ID (autoincrement), Cognome, Nome, Data_Nascita.
-    Il campo note viene ignorato se la tabella non lo prevede.
+    Inserisce paziente nel DB principale.
+    Postgres (Neon): tabella pazienti (snake_case) -> id, cognome, nome, data_nascita, note
+    SQLite locale: tabella Pazienti (legacy) -> ID, Cognome, Nome, Data_Nascita, Note
     """
     cur = conn.cursor()
     ph = _ph(conn)
     try:
-        # Proviamo con le colonne minime (note opzionale)
         if _is_pg(conn):
+            # Schema Neon (gestionale centrale)
             try:
                 cur.execute(
-                    f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita) VALUES ({ph},{ph},{ph}) RETURNING ID",
+                    f"INSERT INTO pazienti (cognome, nome, data_nascita) VALUES ({ph},{ph},{ph}) RETURNING id",
                     (cognome, nome, data_nascita or None),
                 )
             except Exception:
-                # rollback e riprova includendo Note se esiste (best effort)
-                try: conn.rollback()
-                except Exception: pass
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 cur.execute(
-                    f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita, Note) VALUES ({ph},{ph},{ph},{ph}) RETURNING ID",
+                    f"INSERT INTO pazienti (cognome, nome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
                     (cognome, nome, data_nascita or None, note),
                 )
             pid = cur.fetchone()[0]
         else:
+            # SQLite legacy
             try:
                 cur.execute(
                     f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita) VALUES ({ph},{ph},{ph})",
                     (cognome, nome, data_nascita or None),
                 )
             except Exception:
-                try: conn.rollback()
-                except Exception: pass
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 cur.execute(
                     f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita, Note) VALUES ({ph},{ph},{ph},{ph})",
                     (cognome, nome, data_nascita or None, note),
@@ -141,9 +144,10 @@ def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str
         conn.commit()
         return int(pid)
     finally:
-        try: cur.close()
-        except Exception: pass
-
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 def _insert_visita(conn, paziente_id: int, data_visita: str, dati_json: str) -> int:
     cur = conn.cursor()
@@ -328,7 +332,7 @@ def ui_visita_visiva():
                 try:
                     try:
                         cur2.execute(
-                            f"UPDATE Pazienti SET Cognome={ph}, Nome={ph}, Data_Nascita={ph} WHERE ID={ph}",
+                            f"UPDATE pazienti SET cognome={ph}, nome={ph}, data_nascita={ph} WHERE id={ph}" if _is_pg(conn) else f"UPDATE Pazienti SET Cognome={ph}, Nome={ph}, Data_Nascita={ph} WHERE ID={ph}",
                             (new_cognome.strip(), new_nome.strip(), new_dn.strip() or None, int(psel_edit.get('id'))),
                         )
                         conn.commit()
