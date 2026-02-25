@@ -2,16 +2,21 @@
 import streamlit as st
 
 import pnev_module as pnev
+
+# --- Optional: PNEV AI helper (solo TEST, se presente) ---
 try:
-    import pnev_ai
-    import secrets
-import hmac
-import hashlib
-from datetime import timedelta, timezone
+    import pnev_ai  # type: ignore
     PNEV_AI_AVAILABLE = True
 except Exception:
     pnev_ai = None
     PNEV_AI_AVAILABLE = False
+
+# --- Token/public links helpers ---
+import secrets
+import hmac
+import hashlib
+from datetime import timedelta, timezone
+
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
 try:
@@ -336,6 +341,159 @@ def _inpps_cutoff() -> int:
 
 
 
+
+
+def _public_links_enabled() -> bool:
+    return bool(st.secrets.get("public_links", {}).get("ENABLED", False))
+
+def _public_base_url() -> str:
+    return str(st.secrets.get("public_links", {}).get("BASE_URL", "")).rstrip("/")
+
+def _token_secret() -> str:
+    return str(st.secrets.get("public_links", {}).get("TOKEN_SECRET", ""))
+
+def _hash_token(token: str) -> str:
+    key = _token_secret().encode("utf-8")
+    return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
+
+def create_questionario_link(cur, paziente_id: int, questionario: str, ttl_days: int | None = None) -> str:
+    """Crea un token per link pubblico. In DB viene salvato solo l'hash del token."""
+    token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(token)
+
+    ttl = ttl_days or int(st.secrets.get("public_links", {}).get("DEFAULT_TTL_DAYS", 7))
+    expires_at = datetime.now(timezone.utc) + timedelta(days=ttl)
+
+    cur.execute(
+        """
+        INSERT INTO questionari_links (paziente_id, questionario, token_hash, created_at, expires_at)
+        VALUES (?,?,?,?,?)
+        """,
+        (int(paziente_id), str(questionario), token_hash, datetime.now(timezone.utc).isoformat(), expires_at.isoformat()),
+    )
+    return token
+
+def validate_token(cur, token: str, questionario: str):
+    """Ritorna la riga se il token è valido (non scaduto e non usato), altrimenti None."""
+    th = _hash_token(token)
+    cur.execute(
+        """
+        SELECT * FROM questionari_links
+        WHERE token_hash = ? AND questionario = ?
+        LIMIT 1
+        """,
+        (th, str(questionario)),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    exp = row.get("expires_at") if hasattr(row, "get") else row["expires_at"]
+    used = row.get("used_at") if hasattr(row, "get") else row["used_at"]
+
+    try:
+        exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00")) if isinstance(exp, str) else exp
+    except Exception:
+        return None
+
+    if used:
+        return None
+    if datetime.now(timezone.utc) > exp_dt:
+        return None
+    return row
+
+def mark_token_used(cur, link_id: int):
+    cur.execute(
+        "UPDATE questionari_links SET used_at = ? WHERE id = ?",
+        (datetime.now(timezone.utc).isoformat(), int(link_id)),
+    )
+
+def maybe_handle_public_questionario(get_conn) -> bool:
+    """Gestisce pagina pubblica (senza login) per compilazione questionari via token."""
+    if not _public_links_enabled():
+        return False
+
+    qp = getattr(st, "query_params", None)
+    if qp is None:
+        qp = st.experimental_get_query_params()
+        q = (qp.get("q", [""])[0] or "").upper()
+        t = (qp.get("t", [""])[0] or "")
+    else:
+        q = (qp.get("q", "") or "").upper()
+        t = (qp.get("t", "") or "")
+
+    if q != "INPPS" or not t:
+        return False
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    link = validate_token(cur, t, "INPPS")
+    if not link:
+        st.error("Link non valido, scaduto o già utilizzato.")
+        try: conn.close()
+        except Exception: pass
+        return True
+
+    paziente_id = int(link.get("paziente_id") if hasattr(link, "get") else link["paziente_id"])
+
+    st.title("Questionario INPPS – Compilazione Genitori")
+    st.caption("Compila e premi INVIA. Il questionario verrà registrato nel gestionale.")
+
+    with st.form("public_inpps_form"):
+        inpps_data, inpps_summary = inpps_collect_ui(prefix="public_inpps", existing=None)
+        submitted = st.form_submit_button("INVIA QUESTIONARIO")
+
+    if submitted:
+        try:
+            cur.execute(
+                "SELECT ID, pnev_json, pnev_summary FROM Anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
+                (paziente_id,),
+            )
+            last = cur.fetchone()
+
+            pnev_obj = {}
+            if last:
+                raw = last.get("pnev_json") if hasattr(last, "get") else last[1]
+                if raw:
+                    pnev_obj = pnev.pnev_load(raw)
+
+            pnev_obj.setdefault("questionari", {})
+            pnev_obj["questionari"]["inpps_screening_genitori"] = inpps_data
+
+            dump = pnev.pnev_dump(pnev_obj)
+            prev_sum = ""
+            if last:
+                prev_sum = (last.get("pnev_summary") if hasattr(last, "get") else last[2]) or ""
+            summary = (prev_sum.strip() + "\n" + inpps_summary).strip() if prev_sum.strip() else inpps_summary
+
+            if last:
+                an_id = int(last.get("ID") if hasattr(last, "get") else last[0])
+                cur.execute(
+                    "UPDATE Anamnesi SET pnev_json = ?, pnev_summary = ? WHERE ID = ?",
+                    (dump, summary, an_id),
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO Anamnesi (Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary) VALUES (?,?,?,?,?,?,?)",
+                    (paziente_id, date.today().isoformat(), "INPPS (genitori)", summary, "", dump, summary),
+                )
+
+            mark_token_used(cur, int(link.get("id") if hasattr(link, "get") else link["id"]))
+            conn.commit()
+            st.success("✅ Grazie! Questionario inviato correttamente.")
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            st.error(f"Errore salvataggio: {e}")
+        finally:
+            try: conn.close()
+            except Exception: pass
+        st.stop()
+
+    try: conn.close()
+    except Exception: pass
+    return True
 def _is_empty_pnev(raw) -> bool:
     """True if pnev_json is missing/empty (works for sqlite TEXT or postgres JSONB)."""
     if raw is None:
@@ -1943,6 +2101,38 @@ def init_db() -> None:
                 pnev_json        TEXT,
                 pnev_summary     TEXT
             )
+
+
+        # questionari_links (token pubblici) — PostgreSQL
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS questionari_links (
+                id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                paziente_id BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+                questionario TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL,
+                used_at TIMESTAMPTZ NULL,
+                meta_json JSONB NOT NULL DEFAULT '{}'::jsonb
+            )
+            """
+        )
+        # questionari_links (token pubblici) — SQLite
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS questionari_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id INTEGER NOT NULL,
+                questionario TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT,
+                expires_at TEXT,
+                used_at TEXT,
+                meta_json TEXT
+            )
+            """
+        )
             """
         )
 
@@ -4730,6 +4920,27 @@ def ui_anamnesi():
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
+    # --- Link pubblico per INPPS (genitori) ---
+    with st.expander("🔗 Link INPPS (genitori)", expanded=False):
+        if not _public_links_enabled():
+            st.info("Link pubblici disattivati. Abilita in Secrets: [public_links] ENABLED=true")
+        else:
+            if not _public_base_url():
+                st.warning("BASE_URL mancante in Secrets: [public_links] BASE_URL='https://...streamlit.app'")
+            else:
+                if st.button("Genera link INPPS", key="gen_link_inpps"):
+                    try:
+                        token = create_questionario_link(cur, paz_id, "INPPS")
+                        conn.commit()
+                        url = f"{_public_base_url()}/?q=INPPS&t={token}"
+                        st.code(url, language="text")
+                        st.success("Link creato. Invia questo link al genitore (valido per i giorni configurati).")
+                    except Exception as e:
+                        try: conn.rollback()
+                        except Exception: pass
+                        st.error(f"Errore creazione link: {e}")
+
+
     # --- Migrazione legacy -> PNEV (sicura, non sovrascrive) ---
     with st.expander("🧬 Migrazione legacy → PNEV", expanded=False):
         st.caption("Popola pnev_json/pnev_summary per le vecchie schede (che avevano solo testo libero). Non sovrascrive schede già migrate.")
@@ -7220,6 +7431,10 @@ def ui_public_sign_page():
     else:
         st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
 def main():
+    # Pagina pubblica questionari (senza login)
+    if maybe_handle_public_questionario(get_connection):
+        return
+
     st.set_page_config(
         page_title="The Organism – Gestionale Studio",
         layout="wide"
