@@ -118,6 +118,19 @@ def _load_pazienti(conn) -> List[Dict[str, Any]]:
             pass
 
 def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str) -> int:
+    # Validazione campi obbligatori (DB centrale: NOT NULL su cognome/nome/data_nascita)
+    cognome = (cognome or "").strip()
+    nome = (nome or "").strip()
+    data_nascita = (data_nascita or "").strip()
+    note = (note or "").strip()
+
+    if not cognome:
+        raise ValueError("Cognome obbligatorio.")
+    if not nome:
+        raise ValueError("Nome obbligatorio.")
+    if not data_nascita:
+        raise ValueError("Data di nascita obbligatoria (formato YYYY-MM-DD).")
+
     """
     Inserisce paziente nel DB principale.
     Postgres (Neon): tabella pazienti (snake_case) -> id, cognome, nome, data_nascita, note
@@ -328,7 +341,11 @@ def ui_visita_visiva():
             if not nome.strip() or not cognome.strip():
                 st.error("Nome e cognome sono obbligatori.")
             else:
-                pid = _insert_paziente(conn, nome.strip(), cognome.strip(), data_nascita.strip(), note.strip())
+                try:
+        pid = _insert_paziente(conn, nome.strip(), cognome.strip(), data_nascita.strip(), note.strip())
+    except ValueError as ve:
+        st.error(str(ve))
+        return
                 st.success(f"Paziente salvato (ID {pid}).")
 
         st.markdown("### Elenco pazienti")
