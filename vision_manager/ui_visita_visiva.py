@@ -342,10 +342,10 @@ def ui_visita_visiva():
                 st.error("Nome e cognome sono obbligatori.")
             else:
                 try:
-        pid = _insert_paziente(conn, nome.strip(), cognome.strip(), data_nascita.strip(), note.strip())
-    except ValueError as ve:
-        st.error(str(ve))
-        return
+                    pid = _insert_paziente(conn, nome.strip(), cognome.strip(), data_nascita.strip(), note.strip())
+                except ValueError as ve:
+                    st.error(str(ve))
+                    return
                 st.success(f"Paziente salvato (ID {pid}).")
 
         st.markdown("### Elenco pazienti")
