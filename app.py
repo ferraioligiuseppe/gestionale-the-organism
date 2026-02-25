@@ -353,9 +353,11 @@ def _token_secret() -> str:
     return str(st.secrets.get("public_links", {}).get("TOKEN_SECRET", ""))
 
 def _hash_token(token: str) -> str:
-    key = _token_secret().encode("utf-8")
+    key = _token_secret()
+    if isinstance(key, str):
+        key = key.encode("utf-8")
     return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
-
+    
 def create_questionario_link(cur, paziente_id: int, questionario: str, ttl_days: int | None = None) -> str:
     """Crea un token per link pubblico. In DB viene salvato solo l'hash del token."""
     token = secrets.token_urlsafe(32)
