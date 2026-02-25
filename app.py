@@ -4,6 +4,10 @@ import streamlit as st
 import pnev_module as pnev
 try:
     import pnev_ai
+    import secrets
+import hmac
+import hashlib
+from datetime import timedelta, timezone
     PNEV_AI_AVAILABLE = True
 except Exception:
     pnev_ai = None
