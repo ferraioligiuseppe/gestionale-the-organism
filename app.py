@@ -449,7 +449,7 @@ def maybe_handle_public_questionario(get_conn) -> bool:
     if submitted:
         try:
             cur.execute(
-                "SELECT ID, pnev_json, pnev_summary FROM Anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
+                "SELECT ID, pnev_json, pnev_summary anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
                 (paziente_id,),
             )
             last = cur.fetchone()
@@ -518,9 +518,9 @@ def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: 
     stats = {"scanned": 0, "updated": 0, "skipped_has_pnev": 0, "skipped_no_content": 0}
 
     if paziente_id is None:
-        cur.execute("SELECT ID, Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary FROM Anamnesi ORDER BY ID DESC LIMIT ?", (int(limit),))
+        cur.execute("SELECT ID, Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary anamnesi ORDER BY ID DESC LIMIT ?", (int(limit),))
     else:
-        cur.execute("SELECT ID, Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary FROM Anamnesi WHERE Paziente_ID = ? ORDER BY ID DESC LIMIT ?", (int(paziente_id), int(limit)))
+        cur.execute("SELECT ID, Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary anamnesi WHERE Paziente_ID = ? ORDER BY ID DESC LIMIT ?", (int(paziente_id), int(limit)))
 
     rows = cur.fetchall() or []
     for r in rows:
@@ -4771,7 +4771,7 @@ def ui_pazienti():
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_c:
         if st.button("Elimina definitivamente", key="elimina"):
-            cur.execute("DELETE FROM Anamnesi WHERE Paziente_ID = ?", (sel_id,))
+            cur.execute("DELETE anamnesi WHERE Paziente_ID = ?", (sel_id,))
             cur.execute("DELETE FROM Valutazioni_Visive WHERE Paziente_ID = ?", (sel_id,))
             cur.execute("DELETE FROM Sedute WHERE Paziente_ID = ?", (sel_id,))
             cur.execute("DELETE FROM Coupons WHERE Paziente_ID = ?", (sel_id,))
@@ -5045,7 +5045,7 @@ def ui_anamnesi():
     st.subheader("Valutazioni PNEV esistenti")
 
     cur.execute(
-        "SELECT * FROM Anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC",
+        "SELECT * anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC",
         (paz_id,),
     )
     rows = cur.fetchall()
@@ -5154,7 +5154,7 @@ def ui_anamnesi():
         st.rerun()
 
     if 'cancella' in locals() and cancella:
-        cur.execute("DELETE FROM Anamnesi WHERE ID = ?", (an_id,))
+        cur.execute("DELETE anamnesi WHERE ID = ?", (an_id,))
         conn.commit()
         st.success("Valutazione PNEV eliminata.")
         st.rerun()
@@ -7738,7 +7738,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     try:
         cur2 = conn.cursor()
         cur2.execute(
-            "SELECT pnev_json, pnev_summary FROM Anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
+            "SELECT pnev_json, pnev_summary anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
             (paziente_id,),
         )
         r_inpps = cur2.fetchone()
