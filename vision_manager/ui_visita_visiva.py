@@ -153,7 +153,10 @@ def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str
                         f"INSERT INTO pazienti (cognome, nome, data_nascita, stato_paziente) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
                         (cognome, nome, data_nascita or None, "ATTIVO"),
                     )
-                pid = cur.fetchone()[0]
+                row = cur.fetchone()
+            if row is None:
+                raise RuntimeError("Inserimento paziente fallito: nessun ID restituito.")
+            pid = row.get("id") if hasattr(row, "get") else row[0]
             except Exception as e:
                 col = getattr(getattr(e, "diag", None), "column_name", None)
                 if col:
