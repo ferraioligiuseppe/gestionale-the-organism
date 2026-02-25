@@ -111,7 +111,7 @@ def _detect_patient_table_and_cols(conn):
         'pazienti','Pazienti','patients','Patients','patienti','Patienti',
         'anagrafica_pazienti','Anagrafica_Pazienti','tbl_pazienti','Tbl_Pazienti'
     ]
-    id_cols = ['id','ID','paziente_id','Paziente_ID','id_paziente','ID_Paziente','idPaziente']
+    id_cols = ['id','id','paziente_id','paziente_id','id_paziente','id_Paziente','idPaziente']
     cogn_cols = ['cognome','Cognome','last_name','LastName','lastname','cognome_paziente','Cognome_Paziente']
     nome_cols = ['nome','Nome','first_name','FirstName','firstname','nome_paziente','Nome_Paziente']
     dn_cols = ['data_nascita','Data_Nascita','birth_date','BirthDate','dataNascita','DataNascita','data_n']
@@ -449,7 +449,7 @@ def maybe_handle_public_questionario(get_conn) -> bool:
     if submitted:
         try:
             cur.execute(
-                "SELECT id, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = ? ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
+                "SELECT id, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
                 (paziente_id,),
             )
             last = cur.fetchone()
@@ -520,7 +520,7 @@ def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: 
     if paziente_id is None:
         cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi ORDER BY id DESC LIMIT ?", (int(limit),))
     else:
-        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = ? ORDER BY id DESC LIMIT ?", (int(paziente_id), int(limit)))
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY id DESC LIMIT ?", (int(paziente_id), int(limit)))
 
     rows = cur.fetchall() or []
     for r in rows:
@@ -1700,7 +1700,7 @@ class _RowCI(dict):
     """Case-insensitive dict for row access, but also behaves like a sequence.
 
     We need BOTH:
-    - row['ID'] style access (case-insensitive) for legacy SQLite-style code
+    - row['id'] style access (case-insensitive) for legacy SQLite-style code
     - row[0] / list(row) sequence-style access for code paths that expect tuples
 
     psycopg2 DictRow supports both, but we wrap it to make key access case-insensitive.
@@ -2066,7 +2066,7 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Pazienti (
-                ID              INTEGER PRIMARY KEY AUTOINCREMENT,
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 Cognome         TEXT NOT NULL,
                 Nome            TEXT NOT NULL,
                 Data_Nascita    TEXT,
@@ -2086,9 +2086,9 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Anamnesi (
-                ID              INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID     INTEGER NOT NULL,
-                Data_Anamnesi   TEXT,
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id     INTEGER NOT NULL,
+                data_anamnesi   TEXT,
                 Motivo          TEXT,
                 Storia          TEXT,
                 Note            TEXT,
@@ -2139,8 +2139,8 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Valutazioni_Visive (
-                ID                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID         INTEGER NOT NULL,
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id         INTEGER NOT NULL,
                 Data_Valutazione    TEXT,
                 Tipo_Visita         TEXT,
                 Professionista      TEXT,
@@ -2211,8 +2211,8 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Sedute (
-                ID              INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID     INTEGER NOT NULL,
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id     INTEGER NOT NULL,
                 Data_Seduta     TEXT,
                 Terapia         TEXT,
                 Professionista  TEXT,
@@ -2227,8 +2227,8 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Coupons (
-                ID                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID         INTEGER NOT NULL,
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id         INTEGER NOT NULL,
                 Tipo_Coupon         TEXT,
                 Codice_Coupon       TEXT,
                 Data_Assegnazione   TEXT,
@@ -2243,8 +2243,8 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Consensi_Privacy (
-                ID                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID         INTEGER NOT NULL,
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id         INTEGER NOT NULL,
                 Data_Ora            TEXT,
                 Tipo                TEXT,   -- ADULTO / MINORE
                 Tutore_Nome         TEXT,
@@ -2323,9 +2323,9 @@ def init_db() -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Anamnesi (
-            ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID     BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
-            Data_Anamnesi   TEXT,
+            id              BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id     BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
+            data_anamnesi   TEXT,
             Motivo          TEXT,
             Storia          TEXT,
             Note            TEXT,
@@ -2356,8 +2356,8 @@ def init_db() -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Valutazioni_Visive (
-            ID                  BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID         BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            id                  BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id         BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
             Data_Valutazione    TEXT,
             Tipo_Visita         TEXT,
             Professionista      TEXT,
@@ -2418,8 +2418,8 @@ def init_db() -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Sedute (
-            ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID     BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            id              BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id     BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
             Data_Seduta     TEXT,
             Terapia         TEXT,
             Professionista  TEXT,
@@ -2433,8 +2433,8 @@ def init_db() -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Coupons (
-            ID                BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID       BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            id                BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id       BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
             Tipo_Coupon       TEXT NOT NULL,     -- OF o SDS
             Codice_Coupon     TEXT,              -- numero / codice coupon
             Data_Assegnazione TEXT,
@@ -2452,8 +2452,8 @@ def init_db() -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Consensi_Privacy (
-            ID                  BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID         BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            id                  BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id         BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
             Data_Ora            TEXT,
             Tipo                TEXT,   -- ADULTO / MINORE
             Tutore_Nome         TEXT,
@@ -3091,7 +3091,7 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
     cur.execute(
         """
         INSERT INTO Consensi_Privacy
-        (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
+        (paziente_id, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
          Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
          Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo,
          Firma_Blob, Firma_Filename, Firma_URL, Firma_Source,
@@ -3125,7 +3125,7 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
 
 def fetch_privacy_consents(cur, paziente_id: int):
     cur.execute(
-        """SELECT * FROM Consensi_Privacy WHERE Paziente_ID = ? ORDER BY Data_Ora DESC, ID DESC""",
+        """SELECT * FROM Consensi_Privacy WHERE paziente_id = ? ORDER BY Data_Ora DESC, id DESC""",
         (paziente_id,),
     )
     return cur.fetchall()
@@ -3213,7 +3213,7 @@ def _read_csv_url(url: str):
 
 def import_privacy_from_sheet_csv(cur, paziente: dict, tipo: str) -> int | None:
     """Importa l'ultima risposta dallo Sheet (pubblicato CSV) e la registra in Consensi_Privacy.
-    Ritorna l'ID inserito (se disponibile) o None se non trova match.
+    Ritorna l'id inserito (se disponibile) o None se non trova match.
 
     Match per Codice Fiscale (preferito) oppure Email.
     """
@@ -3300,7 +3300,7 @@ def import_privacy_from_sheet_csv(cur, paziente: dict, tipo: str) -> int | None:
     # Klaviyo: lo abilitiamo solo se marketing=1 e firma/consenso presente
     usa_klaviyo = 1 if (consenso_mark == 1) else 0
 
-    paz_id = int(paziente.get("ID") or 0)
+    paz_id = int(paziente.get("id") or 0)
     now_iso = datetime.now().isoformat(timespec="seconds")
     tipo_db = "MINORE" if tipo.upper().startswith("M") else "ADULTO"
 
@@ -3324,7 +3324,7 @@ def import_privacy_from_sheet_csv(cur, paziente: dict, tipo: str) -> int | None:
     cur.execute(
         """
         INSERT INTO Consensi_Privacy
-        (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
+        (paziente_id, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
          Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
          Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo,
          Firma_Blob, Firma_Filename, Firma_URL, Firma_Source, Note)
@@ -4216,13 +4216,13 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
 # -----------------------------
 
 def _patient_child_tables():
-    # tabelle che referenziano Pazienti(ID) via Paziente_ID
+    # tabelle che referenziano Pazienti(id) via paziente_id
     return [
-        ("Valutazione PNEV", "Paziente_ID"),
-        ("Valutazioni_Visive", "Paziente_ID"),
-        ("Sedute", "Paziente_ID"),
-        ("Coupons", "Paziente_ID"),
-        ("Consensi_Privacy", "Paziente_ID"),
+        ("Valutazione PNEV", "paziente_id"),
+        ("Valutazioni_Visive", "paziente_id"),
+        ("Sedute", "paziente_id"),
+        ("Coupons", "paziente_id"),
+        ("Consensi_Privacy", "paziente_id"),
     ]
 
 
@@ -4258,10 +4258,10 @@ def db_find_duplicate_cf(cur):
         det = _fetchall_dicts(
             cur,
             '''
-            SELECT ID, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
+            SELECT id, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
             FROM Pazienti
             WHERE UPPER(TRIM(Codice_Fiscale)) = ?
-            ORDER BY ID
+            ORDER BY id
             ''',
             (cf,),
         )
@@ -4295,16 +4295,16 @@ def db_find_duplicate_identity(cur):
         det = _fetchall_dicts(
             cur,
             '''
-            SELECT ID, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
+            SELECT id, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
             FROM Pazienti
             WHERE UPPER(TRIM(Cognome)) = ?
               AND UPPER(TRIM(Nome)) = ?
               AND COALESCE(TRIM(Data_Nascita),'') = ?
-            ORDER BY ID
+            ORDER BY id
             ''',
             (cog, nom, dn),
         )
-        groups.append({"key": f"{cog} | {nom} | {dn or 'SENZA_DATA'}", "kind": "IDENTITA", "rows": det})
+        groups.append({"key": f"{cog} | {nom} | {dn or 'SENZA_DATA'}", "kind": "idENTITA", "rows": det})
     return groups
 
 
@@ -4325,7 +4325,7 @@ def _count_refs(cur, paziente_id: int) -> dict:
 
 
 def db_merge_patients(cur, master_id: int, dup_ids: list):
-    """Sposta tutti i riferimenti (Paziente_ID) dai duplicati verso master_id e cancella i duplicati."""
+    """Sposta tutti i riferimenti (paziente_id) dai duplicati verso master_id e cancella i duplicati."""
     report = {"master": int(master_id), "moved": {}, "deleted": [], "errors": []}
     for dup_id in dup_ids:
         dup_id = int(dup_id)
@@ -4341,7 +4341,7 @@ def db_merge_patients(cur, master_id: int, dup_ids: list):
             except Exception as e:
                 report["errors"].append(f"{tbl}: {e}")
         try:
-            cur.execute("DELETE FROM Pazienti WHERE ID = ?", (dup_id,))
+            cur.execute("DELETE FROM Pazienti WHERE id = ?", (dup_id,))
             report["deleted"].append(dup_id)
         except Exception as e:
             report["errors"].append(f"DELETE Pazienti({dup_id}): {e}")
@@ -4349,20 +4349,20 @@ def db_merge_patients(cur, master_id: int, dup_ids: list):
 
 
 def db_keep_latest_privacy_consent(cur, paziente_id: int):
-    """Mantiene SOLO l'ultimo consenso privacy del paziente (per Data_Ora/ID) ed elimina i precedenti."""
+    """Mantiene SOLO l'ultimo consenso privacy del paziente (per Data_Ora/id) ed elimina i precedenti."""
     cur.execute(
-        "SELECT ID, Data_Ora FROM Consensi_Privacy WHERE Paziente_ID=? ORDER BY COALESCE(Data_Ora,'') DESC, ID DESC",
+        "SELECT id, Data_Ora FROM Consensi_Privacy WHERE paziente_id=? ORDER BY COALESCE(Data_Ora,'') DESC, id DESC",
         (paziente_id,),
     )
     rows = cur.fetchall() or []
     if not rows:
         return {"kept": None, "deleted": 0}
 
-    keep_id = rows[0]["ID"]
+    keep_id = rows[0]["id"]
     deleted = 0
     if len(rows) > 1:
         cur.execute(
-            "DELETE FROM Consensi_Privacy WHERE Paziente_ID=? AND ID<>?",
+            "DELETE FROM Consensi_Privacy WHERE paziente_id=? AND id<>?",
             (paziente_id, keep_id),
         )
         deleted = len(rows) - 1
@@ -4371,8 +4371,8 @@ def db_keep_latest_privacy_consent(cur, paziente_id: int):
 
 def db_compact_all_privacy_consents(cur):
     """Per ogni paziente, mantiene SOLO l'ultimo consenso privacy."""
-    cur.execute("SELECT DISTINCT Paziente_ID FROM Consensi_Privacy")
-    pids = [r["Paziente_ID"] for r in (cur.fetchall() or [])]
+    cur.execute("SELECT DISTINCT paziente_id FROM Consensi_Privacy")
+    pids = [r["paziente_id"] for r in (cur.fetchall() or [])]
     total_deleted = 0
     total_patients = 0
     for pid in pids:
@@ -4420,14 +4420,14 @@ def ui_db_cleanup():
 
         st.markdown("### Record nel gruppo")
         for r in rows:
-            pid = int(r.get("ID") or r.get("id") or 0)
+            pid = int(r.get("id") or r.get("id") or 0)
             st.write(
-                f"**ID {pid}** — {r.get('Cognome','')} {r.get('Nome','')} | DN: {r.get('Data_Nascita','') or ''} | CF: {r.get('Codice_Fiscale','') or ''} | Email: {r.get('Email','') or ''}"
+                f"**id {pid}** — {r.get('Cognome','')} {r.get('Nome','')} | DN: {r.get('Data_Nascita','') or ''} | CF: {r.get('Codice_Fiscale','') or ''} | Email: {r.get('Email','') or ''}"
             )
             counts = _count_refs(cur, pid)
             st.caption("Riferimenti: " + ", ".join([f"{k}={v}" for k, v in counts.items()]))
 
-        ids = [int(r.get("ID") or r.get("id")) for r in rows]
+        ids = [int(r.get("id") or r.get("id")) for r in rows]
         master_id = st.selectbox("Scegli il record MASTER (quello da tenere)", ids, key=f"{key_prefix}_master")
         dup_ids = [i for i in ids if i != master_id]
 
@@ -4443,7 +4443,7 @@ def ui_db_cleanup():
                 try:
                     rep2 = db_keep_latest_privacy_consent(cur, paziente_id=master_id)
                     conn.commit()
-                    st.info(f"Consensi_Privacy: tenuto ID {rep2.get('kept')} — eliminati {rep2.get('deleted')} consensi precedenti.")
+                    st.info(f"Consensi_Privacy: tenuto id {rep2.get('kept')} — eliminati {rep2.get('deleted')} consensi precedenti.")
                 except Exception as e:
                     try:
                         conn.rollback()
@@ -4610,7 +4610,7 @@ def ui_pazienti():
                 "Puoi comunque salvarlo, ma verifica con attenzione."
             )
 
-        # Inserimento paziente + recupero ID
+        # Inserimento paziente + recupero id
         paz_id = None
         try:
             if _DB_BACKEND == "postgres":
@@ -4620,7 +4620,7 @@ def ui_pazienti():
                     (Cognome, Nome, Data_Nascita, Sesso, Telefono, Email,
                      Indirizzo, CAP, Citta, Provincia, Codice_Fiscale, Stato_Paziente)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                    RETURNING ID
+                    RETURNING id
                     """,
                     (
                         cognome.strip(),
@@ -4638,8 +4638,8 @@ def ui_pazienti():
                     ),
                 )
                 row = cur.fetchone()
-                # RowCI wrapper supports ["ID"] and ["id"]
-                paz_id = int(row["ID"]) if isinstance(row, dict) else int(row[0])
+                # RowCI wrapper supports ["id"] and ["id"]
+                paz_id = int(row["id"]) if isinstance(row, dict) else int(row[0])
             else:
                 cur.execute(
                     """
@@ -4673,7 +4673,7 @@ def ui_pazienti():
             cur.execute(
                 """
                 INSERT INTO Consensi_Privacy
-                (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
+                (paziente_id, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
                  Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
                  Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo, Note)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -4730,7 +4730,7 @@ def ui_pazienti():
         conn.close()
         return
 
-    # Etichette ricche: ID + Cognome Nome + data nascita + CF
+    # Etichette ricche: id + Cognome Nome + data nascita + CF
     options = []
     for r in rows:
         nascita_it = ""
@@ -4740,7 +4740,7 @@ def ui_pazienti():
             except Exception:
                 nascita_it = r["Data_Nascita"]
         cf = (r["Codice_Fiscale"] or "").upper()
-        label = f"{r['ID']} - {r['Cognome']} {r['Nome']}"
+        label = f"{r['id']} - {r['Cognome']} {r['Nome']}"
         extra = []
         if nascita_it:
             extra.append(f"nato il {nascita_it}")
@@ -4752,30 +4752,30 @@ def ui_pazienti():
 
     selected = st.selectbox("Seleziona un paziente per modificare / archiviare", options, key="pz_sel_mod")
     sel_id = int(selected.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == sel_id)
+    rec = next(r for r in rows if r["id"] == sel_id)
 
     st.write(f"Stato attuale: **{rec['Stato_Paziente']}**")
 
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         if st.button("Archivia paziente", key="archivia"):
-            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ARCHIVIATO' WHERE ID = ?", (sel_id,))
+            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ARCHIVIATO' WHERE id = ?", (sel_id,))
             conn.commit()
             st.success("Paziente archiviato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_b:
         if st.button("Riattiva paziente", key="riattiva"):
-            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ATTIVO' WHERE ID = ?", (sel_id,))
+            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ATTIVO' WHERE id = ?", (sel_id,))
             conn.commit()
             st.success("Paziente riattivato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_c:
         if st.button("Elimina definitivamente", key="elimina"):
-            cur.execute("DELETE anamnesi WHERE Paziente_ID = ?", (sel_id,))
-            cur.execute("DELETE FROM Valutazioni_Visive WHERE Paziente_ID = ?", (sel_id,))
-            cur.execute("DELETE FROM Sedute WHERE Paziente_ID = ?", (sel_id,))
-            cur.execute("DELETE FROM Coupons WHERE Paziente_ID = ?", (sel_id,))
-            cur.execute("DELETE FROM Pazienti WHERE ID = ?", (sel_id,))
+            cur.execute("DELETE anamnesi WHERE paziente_id = ?", (sel_id,))
+            cur.execute("DELETE FROM Valutazioni_Visive WHERE paziente_id = ?", (sel_id,))
+            cur.execute("DELETE FROM Sedute WHERE paziente_id = ?", (sel_id,))
+            cur.execute("DELETE FROM Coupons WHERE paziente_id = ?", (sel_id,))
+            cur.execute("DELETE FROM Pazienti WHERE id = ?", (sel_id,))
             conn.commit()
             st.success("Paziente e dati associati eliminati.")
             conn.close()
@@ -4857,7 +4857,7 @@ def ui_pazienti():
                 SET Cognome = ?, Nome = ?, Data_Nascita = ?, Sesso = ?,
                     Telefono = ?, Email = ?, Indirizzo = ?, CAP = ?, Citta = ?, Provincia = ?,
                     Codice_Fiscale = ?, Stato_Paziente = ?
-                WHERE ID = ?
+                WHERE id = ?
                 """,
                 (
                     cognome_m.strip(),
@@ -4894,14 +4894,14 @@ def ui_anamnesi():
     cur = conn.cursor()
 
     # Seleziona paziente
-    cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -5032,7 +5032,7 @@ def ui_anamnesi():
 
         cur.execute(
             """
-            INSERT INTO Anamnesi (Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary)
+            INSERT INTO Anamnesi (paziente_id, data_anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary)
             VALUES (?,?,?,?,?,?,?)
             """,
             (paz_id, data_iso, motivo, storia, note, pnev_dumped, (pnev_summary_new or "")),
@@ -5045,7 +5045,7 @@ def ui_anamnesi():
     st.subheader("Valutazioni PNEV esistenti")
 
     cur.execute(
-        "SELECT * anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC",
+        "SELECT * FROM anamnesi WHERE paziente_id = %s ORDER BY data_anamnesi DESC, id DESC",
         (paz_id,),
     )
     rows = cur.fetchall()
@@ -5055,12 +5055,12 @@ def ui_anamnesi():
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
+        f"{r['id']} - {r['data_anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
         for r in rows
     ]
     sel_an = st.selectbox("Seleziona una Valutazione PNEV da modificare/cancellare", labels)
     an_id = int(sel_an.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == an_id)
+    rec = next(r for r in rows if r["id"] == an_id)
 
     # carica json PNEV esistente (fallback: se manca usa {})
     try:
@@ -5072,8 +5072,8 @@ def ui_anamnesi():
     with st.form("modifica_pnev"):
         data_m = st.text_input(
             "Data (gg/mm/aaaa)",
-            datetime.strptime(rec["Data_Anamnesi"], "%Y-%m-%d").strftime("%d/%m/%Y")
-            if rec["Data_Anamnesi"] else "",
+            datetime.strptime(rec["data_anamnesi"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            if rec["data_anamnesi"] else "",
         )
         motivo_m = st.text_area("Domanda clinica / motivo", rec["Motivo"] or "")
 
@@ -5144,8 +5144,8 @@ def ui_anamnesi():
         cur.execute(
             """
             UPDATE Anamnesi
-            SET Data_Anamnesi = ?, Motivo = ?, Storia = ?, Note = ?, pnev_json = ?, pnev_summary = ?
-            WHERE ID = ?
+            SET data_anamnesi = ?, Motivo = ?, Storia = ?, Note = ?, pnev_json = ?, pnev_summary = ?
+            WHERE id = ?
             """,
             (data_iso_m, motivo_m, (pnev_summary_m or ""), note_m, pnev_dumped_m, (pnev_summary_m or ""), an_id),
         )
@@ -5154,7 +5154,7 @@ def ui_anamnesi():
         st.rerun()
 
     if 'cancella' in locals() and cancella:
-        cur.execute("DELETE anamnesi WHERE ID = ?", (an_id,))
+        cur.execute("DELETE anamnesi WHERE id = ?", (an_id,))
         conn.commit()
         st.success("Valutazione PNEV eliminata.")
         st.rerun()
@@ -5173,18 +5173,18 @@ def ui_valutazioni_visive():
     cur = conn.cursor()
 
     # Seleziona paziente
-    cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
-    cur.execute("SELECT * FROM Pazienti WHERE ID = ?", (paz_id,))
+    cur.execute("SELECT * FROM Pazienti WHERE id = ?", (paz_id,))
     paziente = cur.fetchone()
 
 
@@ -5398,7 +5398,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         cur.execute(
             """
             INSERT INTO Valutazioni_Visive
-            (Paziente_ID, Data_Valutazione, Tipo_Visita, Professionista,
+            (paziente_id, Data_Valutazione, Tipo_Visita, Professionista,
              Anamnesi, pnev_json, pnev_summary,
              Acuita_Nat_OD, Acuita_Nat_OS, Acuita_Nat_OO,
              Acuita_Corr_OD, Acuita_Corr_OS, Acuita_Corr_OO,
@@ -5471,7 +5471,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         preview = []
         for r in cons_rows:
             preview.append({
-                "ID": r["ID"],
+                "id": r["id"],
                 "Data/Ora": r.get("Data_Ora",""),
                 "Tipo": r.get("Tipo",""),
                 "Firmato": "✅" if _is_firmato(r) else "—",
@@ -5485,9 +5485,9 @@ ESAMI STRUTTURALI / FUNZIONALI
             })
         st.dataframe(preview, use_container_width=True, hide_index=True)
 
-        ids = [str(r["ID"]) for r in cons_rows]
+        ids = [str(r["id"]) for r in cons_rows]
         sel_cons_id = st.selectbox("Seleziona un consenso per stampare il PDF", ids, key="sel_privacy_id")
-        cons_rec = next(r for r in cons_rows if str(r["ID"]) == str(sel_cons_id))
+        cons_rec = next(r for r in cons_rows if str(r["id"]) == str(sel_cons_id))
 
         # Badge firma digitale (se presente URL firma importato da Google Sheet)
         firma_val = _extract_firma_url(cons_rec)
@@ -5552,7 +5552,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 try:
                     ins_id = import_privacy_from_sheet_csv(cur, paziente, tipo="ADULTO")
                     if ins_id:
-                        st.success(f"Import riuscito (ID consenso: {ins_id}). Aggiorna la pagina per vederlo nello storico.")
+                        st.success(f"Import riuscito (id consenso: {ins_id}). Aggiorna la pagina per vederlo nello storico.")
                     else:
                         st.warning("Nessun match trovato nello Sheet (per CF o Email) oppure CSV non configurato nei Secrets.")
                 except Exception as e:
@@ -5562,7 +5562,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 try:
                     ins_id = import_privacy_from_sheet_csv(cur, paziente, tipo="MINORE")
                     if ins_id:
-                        st.success(f"Import riuscito (ID consenso: {ins_id}). Aggiorna la pagina per vederlo nello storico.")
+                        st.success(f"Import riuscito (id consenso: {ins_id}). Aggiorna la pagina per vederlo nello storico.")
                     else:
                         st.warning("Nessun match trovato nello Sheet (per CF o Email) oppure CSV non configurato nei Secrets.")
                 except Exception as e:
@@ -5674,7 +5674,7 @@ ESAMI STRUTTURALI / FUNZIONALI
     st.subheader("Valutazioni esistenti")
 
     cur.execute(
-        "SELECT * FROM Valutazioni_Visive WHERE Paziente_ID = ? ORDER BY Data_Valutazione DESC, ID DESC",
+        "SELECT * FROM Valutazioni_Visive WHERE paziente_id = ? ORDER BY Data_Valutazione DESC, id DESC",
         (paz_id,),
     )
     rows = cur.fetchall()
@@ -5684,12 +5684,12 @@ ESAMI STRUTTURALI / FUNZIONALI
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
+        f"{r['id']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
         for r in rows
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
     val_id = int(sel_v.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == val_id)
+    rec = next(r for r in rows if r["id"] == val_id)
     st.markdown("#### Referto oculistico in PDF (A4)")
 
     if not REPORTLAB_AVAILABLE:
@@ -5804,7 +5804,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 Cornea = ?, Camera_Anteriore = ?, Cristallino = ?, Congiuntiva_Sclera = ?, Iride_Pupilla = ?, Vitreo = ?,
                 Anamnesi = ?, pnev_json = ?, pnev_summary = ?,
                 Costo = ?, Pagato = ?, Note = ?
-            WHERE ID = ?
+            WHERE id = ?
             """,
             (
                 data_iso_m,
@@ -5835,7 +5835,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         st.success("Valutazione aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Valutazioni_Visive WHERE ID = ?", (val_id,))
+        cur.execute("DELETE FROM Valutazioni_Visive WHERE id = ?", (val_id,))
         conn.commit()
         st.success("Valutazione eliminata.")
     st.markdown("---")
@@ -5971,14 +5971,14 @@ def ui_sedute():
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -6008,7 +6008,7 @@ def ui_sedute():
         cur.execute(
             """
             INSERT INTO Sedute
-            (Paziente_ID, Data_Seduta, Terapia, Professionista, Costo, Pagato, Note)
+            (paziente_id, Data_Seduta, Terapia, Professionista, Costo, Pagato, Note)
             VALUES (?,?,?,?,?,?,?)
             """,
             (
@@ -6028,7 +6028,7 @@ def ui_sedute():
     st.subheader("Sedute esistenti")
 
     cur.execute(
-        "SELECT * FROM Sedute WHERE Paziente_ID = ? ORDER BY Data_Seduta DESC, ID DESC",
+        "SELECT * FROM Sedute WHERE paziente_id = ? ORDER BY Data_Seduta DESC, id DESC",
         (paz_id,),
     )
     rows = cur.fetchall()
@@ -6038,12 +6038,12 @@ def ui_sedute():
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
+        f"{r['id']} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
         for r in rows
     ]
     sel_s = st.selectbox("Seleziona una seduta da modificare/cancellare", labels)
     sed_id = int(sel_s.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == sed_id)
+    rec = next(r for r in rows if r["id"] == sed_id)
 
     with st.form("modifica_seduta"):
         data_m = st.text_input(
@@ -6086,7 +6086,7 @@ def ui_sedute():
             """
             UPDATE Sedute
             SET Data_Seduta = ?, Terapia = ?, Professionista = ?, Costo = ?, Pagato = ?, Note = ?
-            WHERE ID = ?
+            WHERE id = ?
             """,
             (
                 data_iso_m,
@@ -6102,7 +6102,7 @@ def ui_sedute():
         st.success("Seduta aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Sedute WHERE ID = ?", (sed_id,))
+        cur.execute("DELETE FROM Sedute WHERE id = ?", (sed_id,))
         conn.commit()
         st.success("Seduta eliminata.")
 
@@ -6114,14 +6114,14 @@ def ui_coupons():
     cur = conn.cursor()
 
     # Elenco pazienti
-    cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    opt_paz = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    opt_paz = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -6162,7 +6162,7 @@ def ui_coupons():
         cur.execute(
             """
             INSERT INTO Coupons
-            (Paziente_ID, Tipo_Coupon, Codice_Coupon, Data_Assegnazione, Note, Utilizzato)
+            (paziente_id, Tipo_Coupon, Codice_Coupon, Data_Assegnazione, Note, Utilizzato)
             VALUES (?,?,?,?,?,?)
             """,
             (
@@ -6182,7 +6182,7 @@ def ui_coupons():
     st.subheader("Coupon del paziente selezionato")
 
     cur.execute(
-        "SELECT * FROM Coupons WHERE Paziente_ID = ? ORDER BY Data_Assegnazione DESC, ID DESC",
+        "SELECT * FROM Coupons WHERE paziente_id = ? ORDER BY Data_Assegnazione DESC, id DESC",
         (paz_id,),
     )
     coupons = cur.fetchall()
@@ -6205,7 +6205,7 @@ def ui_coupons():
         col1, col2, col3, col4 = st.columns([4, 2, 2, 2])
         with col1:
             st.write(
-                f"**ID {c['ID']}** – {c['Tipo_Coupon']} – "
+                f"**id {c['id']}** – {c['Tipo_Coupon']} – "
                 f"{c['Codice_Coupon'] or '-'} – {data_it or 'data n/d'}"
             )
             if c["Note"]:
@@ -6214,24 +6214,24 @@ def ui_coupons():
             st.write(f"Stato: **{stato}**")
         with col3:
             if c["Utilizzato"]:
-                if st.button("Segna NON usato", key=f"c_notused_{c['ID']}"):
+                if st.button("Segna NON usato", key=f"c_notused_{c['id']}"):
                     cur.execute(
-                        "UPDATE Coupons SET Utilizzato = 0 WHERE ID = ?",
-                        (c["ID"],),
+                        "UPDATE Coupons SET Utilizzato = 0 WHERE id = ?",
+                        (c["id"],),
                     )
                     conn.commit()
                     st.rerun()
             else:
-                if st.button("Segna USATO", key=f"c_used_{c['ID']}"):
+                if st.button("Segna USATO", key=f"c_used_{c['id']}"):
                     cur.execute(
-                        "UPDATE Coupons SET Utilizzato = 1 WHERE ID = ?",
-                        (c["ID"],),
+                        "UPDATE Coupons SET Utilizzato = 1 WHERE id = ?",
+                        (c["id"],),
                     )
                     conn.commit()
                     st.rerun()
         with col4:
-            if st.button("Elimina", key=f"c_del_{c['ID']}"):
-                cur.execute("DELETE FROM Coupons WHERE ID = ?", (c["ID"],))
+            if st.button("Elimina", key=f"c_del_{c['id']}"):
+                cur.execute("DELETE FROM Coupons WHERE id = ?", (c["id"],))
                 conn.commit()
                 st.rerun()
 
@@ -6354,7 +6354,7 @@ def ui_osteopatia_section():
         extra = ""
         if eta: extra += f" • {eta} anni"
         if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
+        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
     sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
 
@@ -6373,10 +6373,10 @@ def ui_osteopatia_section():
             nome = ""
 
     if not paziente_id:
-        st.error("Errore: ID paziente non determinabile.")
+        st.error("Errore: id paziente non determinabile.")
         return
 
-    paziente_label = f"{cognome} {nome}".strip() or f"Paziente ID {paziente_id}"
+    paziente_label = f"{cognome} {nome}".strip() or f"Paziente id {paziente_id}"
 
     ui_osteopatia(paziente_id=int(paziente_id), get_conn=get_connection, paziente_label=paziente_label)
 
@@ -6415,7 +6415,7 @@ def ui_dashboard_evolutiva():
         extra = ""
         if eta: extra += f" • {eta} anni"
         if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
+        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
     sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
     # robust handling for dict / tuple / sqlite Row
@@ -6428,7 +6428,7 @@ def ui_dashboard_evolutiva():
             paziente_id = None
 
     if not paziente_id:
-        st.error("Errore: ID paziente non determinabile dalla selezione.")
+        st.error("Errore: id paziente non determinabile dalla selezione.")
         return
     # Carica relazioni (PostgreSQL/SQLite)
     try:
@@ -7082,7 +7082,7 @@ def ui_privacy_pdf():
         st.info("Nessun paziente presente.")
         return
 
-    options = {f"{cognome} {nome} (ID {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
+    options = {f"{cognome} {nome} (id {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
     sel = st.selectbox("Seleziona paziente", list(options.keys()))
     pid = options[sel]
 
@@ -7300,7 +7300,7 @@ def ui_public_sign_page():
         c.setFont("Helvetica-Bold", 14)
         c.drawString(20*_mm, 285*_mm, "Firma elettronica (grafometrica) – Allegato")
         c.setFont("Helvetica", 10)
-        c.drawString(20*_mm, 275*_mm, f"Paziente ID: {pid} – Tipo: {doc_type}")
+        c.drawString(20*_mm, 275*_mm, f"Paziente id: {pid} – Tipo: {doc_type}")
         c.drawString(20*_mm, 268*_mm, f"Data/ora (UTC): {_dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
         c.drawString(20*_mm, 261*_mm, f"Email: {email.strip()}")
         c.drawString(20*_mm, 254*_mm, "Firma acquisita tramite pagina web; copia inviata a studio e interessato.")
@@ -7693,7 +7693,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
         extra = ""
         if eta: extra += f" • {eta} anni"
         if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
+        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
     sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
     try:
@@ -7701,7 +7701,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     except Exception:
         paziente_id = None
     if not paziente_id:
-        st.error("Errore: ID paziente non determinabile.")
+        st.error("Errore: id paziente non determinabile.")
         return
 
     # carica dati base paziente (nome/cognome/data nascita) per template
@@ -7738,7 +7738,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     try:
         cur2 = conn.cursor()
         cur2.execute(
-            "SELECT pnev_json, pnev_summary FROM anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
+            "SELECT pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
             (paziente_id,),
         )
         r_inpps = cur2.fetchone()
