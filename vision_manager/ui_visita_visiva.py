@@ -117,75 +117,74 @@ def _load_pazienti(conn) -> List[Dict[str, Any]]:
         except Exception:
             pass
 
-def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str) -> int:
-    # Validazione campi obbligatori (DB centrale: NOT NULL su cognome/nome/data_nascita)
+def _insert_paziente(conn, nome, cognome, data_nascita, note=""):
+    """
+    Inserisce paziente nel DB centrale Neon (tabella pazienti)
+    Gestisce:
+    - colonne obbligatorie
+    - stato_paziente NOT NULL
+    - cursor dict / tuple
+    - presenza o meno della colonna note
+    """
+
     cognome = (cognome or "").strip()
     nome = (nome or "").strip()
     data_nascita = (data_nascita or "").strip()
     note = (note or "").strip()
 
     if not cognome:
-        raise ValueError("Cognome obbligatorio.")
+        raise ValueError("Cognome obbligatorio")
     if not nome:
-        raise ValueError("Nome obbligatorio.")
+        raise ValueError("Nome obbligatorio")
     if not data_nascita:
-        raise ValueError("Data di nascita obbligatoria (formato YYYY-MM-DD).")
+        raise ValueError("Data nascita obbligatoria")
 
-    """
-    Inserisce paziente nel DB principale.
-    Postgres (Neon): tabella pazienti (snake_case) -> id, cognome, nome, data_nascita, note
-    SQLite locale: tabella Pazienti (legacy) -> ID, Cognome, Nome, Data_Nascita, Note
-    """
     cur = conn.cursor()
-    ph = _ph(conn)
-    try:
-        if _is_pg(conn):
-            # Schema Neon (gestionale centrale)
-            try:
-                has_note = _pazienti_has_note(conn)
-                if has_note:
-                    cur.execute(
-                        f"INSERT INTO pazienti (cognome, nome, data_nascita, note, stato_paziente) VALUES ({ph},{ph},{ph},{ph},{ph}) RETURNING id",
-                        (cognome, nome, data_nascita or None, note, "ATTIVO"),
-                    )
-                else:
-                    cur.execute(
-                        f"INSERT INTO pazienti (cognome, nome, data_nascita, stato_paziente) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
-                        (cognome, nome, data_nascita or None, "ATTIVO"),
-                    )
-                row = cur.fetchone()
-            if row is None:
-                raise RuntimeError("Inserimento paziente fallito: nessun ID restituito.")
-            pid = row.get("id") if hasattr(row, "get") else row[0]
-            except Exception as e:
-                col = getattr(getattr(e, "diag", None), "column_name", None)
-                if col:
-                    raise ValueError(f"Campo obbligatorio mancante nel DB pazienti: {col}")
-                raise
-        else:
-            # SQLite legacy
-            try:
-                cur.execute(
-                    f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita) VALUES ({ph},{ph},{ph})",
-                    (cognome, nome, data_nascita or None, "ATTIVO"),
-                )
-            except Exception:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-                cur.execute(
-                    f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita, Note) VALUES ({ph},{ph},{ph},{ph})",
-                    (cognome, nome, data_nascita or None, note, "ATTIVO"),
-                )
-            pid = cur.lastrowid
-        conn.commit()
-        return int(pid)
-    finally:
-        try:
-            cur.close()
-        except Exception:
-            pass
+
+    # placeholder corretto
+    ph = "%s"
+
+    # controlla se esiste colonna note
+    cur.execute("""
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='pazienti'
+        AND column_name='note'
+        LIMIT 1
+    """)
+    has_note = cur.fetchone() is not None
+
+    if has_note:
+        cur.execute(
+            f"""
+            INSERT INTO pazienti
+            (cognome, nome, data_nascita, note, stato_paziente)
+            VALUES ({ph},{ph},{ph},{ph},{ph})
+            RETURNING id
+            """,
+            (cognome, nome, data_nascita, note, "ATTIVO"),
+        )
+    else:
+        cur.execute(
+            f"""
+            INSERT INTO pazienti
+            (cognome, nome, data_nascita, stato_paziente)
+            VALUES ({ph},{ph},{ph},{ph})
+            RETURNING id
+            """,
+            (cognome, nome, data_nascita, "ATTIVO"),
+        )
+
+    row = cur.fetchone()
+
+    # compatibilità dict / tuple
+    if isinstance(row, dict):
+        pid = row["id"]
+    else:
+        pid = row[0]
+
+    conn.commit()
+    return pid
 
 def _insert_visita(conn, paziente_id: int, data_visita: str, dati_json: str) -> int:
     cur = conn.cursor()
