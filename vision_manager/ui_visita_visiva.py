@@ -7,7 +7,6 @@ from vision_manager.db import get_conn, init_db
 from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
 
-st.write("VISION VERSION = POSTGRES PATCH 2026")
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
 ACUITA_VALUES = [
@@ -34,6 +33,25 @@ LENTI_OPTIONS = [
 
 def _is_pg(conn) -> bool:
     return conn.__class__.__module__.startswith("psycopg2")
+
+
+_pazienti_note_cache = None
+
+def _pazienti_has_note(conn) -> bool:
+    """Rileva una volta se la tabella pubblica 'pazienti' ha la colonna 'note' (PostgreSQL)."""
+    global _pazienti_note_cache
+    if _pazienti_note_cache is not None:
+        return bool(_pazienti_note_cache)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='pazienti' AND column_name='note' LIMIT 1"
+        )
+        _pazienti_note_cache = bool(cur.fetchone())
+        return bool(_pazienti_note_cache)
+    except Exception:
+        _pazienti_note_cache = False
+        return False
 
 def _ph(conn) -> str:
     return "%s" if _is_pg(conn) else "?"
@@ -110,19 +128,16 @@ def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str
     try:
         if _is_pg(conn):
             # Schema Neon (gestionale centrale)
-            try:
-                cur.execute(
-                    f"INSERT INTO pazienti (cognome, nome, data_nascita) VALUES ({ph},{ph},{ph}) RETURNING id",
-                    (cognome, nome, data_nascita or None),
-                )
-            except Exception:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
+            has_note = _pazienti_has_note(conn)
+            if has_note:
                 cur.execute(
                     f"INSERT INTO pazienti (cognome, nome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
                     (cognome, nome, data_nascita or None, note),
+                )
+            else:
+                cur.execute(
+                    f"INSERT INTO pazienti (cognome, nome, data_nascita) VALUES ({ph},{ph},{ph}) RETURNING id",
+                    (cognome, nome, data_nascita or None),
                 )
             pid = cur.fetchone()[0]
         else:
