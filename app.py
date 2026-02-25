@@ -449,7 +449,7 @@ def maybe_handle_public_questionario(get_conn) -> bool:
     if submitted:
         try:
             cur.execute(
-                "SELECT ID, pnev_json, pnev_summary anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
+                "SELECT id, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = ? ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
                 (paziente_id,),
             )
             last = cur.fetchone()
@@ -470,14 +470,14 @@ def maybe_handle_public_questionario(get_conn) -> bool:
             summary = (prev_sum.strip() + "\n" + inpps_summary).strip() if prev_sum.strip() else inpps_summary
 
             if last:
-                an_id = int(last.get("ID") if hasattr(last, "get") else last[0])
+                an_id = int(last.get("id") if hasattr(last, "get") else last[0])
                 cur.execute(
-                    "UPDATE Anamnesi SET pnev_json = ?, pnev_summary = ? WHERE ID = ?",
+                    "UPDATE anamnesi SET pnev_json = ?, pnev_summary = ? WHERE id = ?",
                     (dump, summary, an_id),
                 )
             else:
                 cur.execute(
-                    "INSERT INTO Anamnesi (Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary) VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO anamnesi (paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary) VALUES (?,?,?,?,?,?,?)",
                     (paziente_id, date.today().isoformat(), "INPPS (genitori)", summary, "", dump, summary),
                 )
 
@@ -518,18 +518,18 @@ def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: 
     stats = {"scanned": 0, "updated": 0, "skipped_has_pnev": 0, "skipped_no_content": 0}
 
     if paziente_id is None:
-        cur.execute("SELECT ID, Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary anamnesi ORDER BY ID DESC LIMIT ?", (int(limit),))
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi ORDER BY id DESC LIMIT ?", (int(limit),))
     else:
-        cur.execute("SELECT ID, Paziente_ID, Data_Anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary anamnesi WHERE Paziente_ID = ? ORDER BY ID DESC LIMIT ?", (int(paziente_id), int(limit)))
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = ? ORDER BY id DESC LIMIT ?", (int(paziente_id), int(limit)))
 
     rows = cur.fetchall() or []
     for r in rows:
         stats["scanned"] += 1
-        rid = int(r["ID"]) if hasattr(r, "__getitem__") else int(r[0])
+        rid = int(r["id"]) if hasattr(r, "__getitem__") else int(r[0])
 
-        motivo = (r.get("Motivo") if hasattr(r, "get") else r[3]) or ""
-        storia = (r.get("Storia") if hasattr(r, "get") else r[4]) or ""
-        note = (r.get("Note") if hasattr(r, "get") else r[5]) or ""
+        motivo = (r.get("motivo") if hasattr(r, "get") else r[3]) or ""
+        storia = (r.get("storia") if hasattr(r, "get") else r[4]) or ""
+        note = (r.get("note") if hasattr(r, "get") else r[5]) or ""
         pnev_raw = (r.get("pnev_json") if hasattr(r, "get") else r[6])
         pnev_sum = (r.get("pnev_summary") if hasattr(r, "get") else r[7]) or ""
 
@@ -562,7 +562,7 @@ def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: 
             dump = json.dumps(payload, ensure_ascii=False)
 
         cur.execute(
-            "UPDATE Anamnesi SET pnev_json = ?, pnev_summary = ? WHERE ID = ?",
+            "UPDATE anamnesi SET pnev_json = ?, pnev_summary = ? WHERE id = ?",
             (dump, summary, rid),
         )
         stats["updated"] += 1
@@ -7738,7 +7738,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     try:
         cur2 = conn.cursor()
         cur2.execute(
-            "SELECT pnev_json, pnev_summary anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
+            "SELECT pnev_json, pnev_summary FROM anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC LIMIT 1",
             (paziente_id,),
         )
         r_inpps = cur2.fetchone()
