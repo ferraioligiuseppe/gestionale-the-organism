@@ -145,13 +145,13 @@ def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str
                 has_note = _pazienti_has_note(conn)
                 if has_note:
                     cur.execute(
-                        f"INSERT INTO pazienti (cognome, nome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
-                        (cognome, nome, data_nascita or None, note),
+                        f"INSERT INTO pazienti (cognome, nome, data_nascita, note, stato_paziente) VALUES ({ph},{ph},{ph},{ph},{ph}) RETURNING id",
+                        (cognome, nome, data_nascita or None, note, "ATTIVO"),
                     )
                 else:
                     cur.execute(
-                        f"INSERT INTO pazienti (cognome, nome, data_nascita) VALUES ({ph},{ph},{ph}) RETURNING id",
-                        (cognome, nome, data_nascita or None),
+                        f"INSERT INTO pazienti (cognome, nome, data_nascita, stato_paziente) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
+                        (cognome, nome, data_nascita or None, "ATTIVO"),
                     )
                 pid = cur.fetchone()[0]
             except Exception as e:
@@ -164,7 +164,7 @@ def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str
             try:
                 cur.execute(
                     f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita) VALUES ({ph},{ph},{ph})",
-                    (cognome, nome, data_nascita or None),
+                    (cognome, nome, data_nascita or None, "ATTIVO"),
                 )
             except Exception:
                 try:
@@ -173,7 +173,7 @@ def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str
                     pass
                 cur.execute(
                     f"INSERT INTO Pazienti (Cognome, Nome, Data_Nascita, Note) VALUES ({ph},{ph},{ph},{ph})",
-                    (cognome, nome, data_nascita or None, note),
+                    (cognome, nome, data_nascita or None, note, "ATTIVO"),
                 )
             pid = cur.lastrowid
         conn.commit()
