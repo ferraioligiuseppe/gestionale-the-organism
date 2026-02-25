@@ -141,18 +141,24 @@ def _insert_paziente(conn, nome: str, cognome: str, data_nascita: str, note: str
     try:
         if _is_pg(conn):
             # Schema Neon (gestionale centrale)
-            has_note = _pazienti_has_note(conn)
-            if has_note:
-                cur.execute(
-                    f"INSERT INTO pazienti (cognome, nome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
-                    (cognome, nome, data_nascita or None, note),
-                )
-            else:
-                cur.execute(
-                    f"INSERT INTO pazienti (cognome, nome, data_nascita) VALUES ({ph},{ph},{ph}) RETURNING id",
-                    (cognome, nome, data_nascita or None),
-                )
-            pid = cur.fetchone()[0]
+            try:
+                has_note = _pazienti_has_note(conn)
+                if has_note:
+                    cur.execute(
+                        f"INSERT INTO pazienti (cognome, nome, data_nascita, note) VALUES ({ph},{ph},{ph},{ph}) RETURNING id",
+                        (cognome, nome, data_nascita or None, note),
+                    )
+                else:
+                    cur.execute(
+                        f"INSERT INTO pazienti (cognome, nome, data_nascita) VALUES ({ph},{ph},{ph}) RETURNING id",
+                        (cognome, nome, data_nascita or None),
+                    )
+                pid = cur.fetchone()[0]
+            except Exception as e:
+                col = getattr(getattr(e, "diag", None), "column_name", None)
+                if col:
+                    raise ValueError(f"Campo obbligatorio mancante nel DB pazienti: {col}")
+                raise
         else:
             # SQLite legacy
             try:
