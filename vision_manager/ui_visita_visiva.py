@@ -7,6 +7,7 @@ from vision_manager.db import get_conn, init_db
 from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
 
+st.write("VISION VERSION = POSTGRES PATCH 2026")
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
 ACUITA_VALUES = [
