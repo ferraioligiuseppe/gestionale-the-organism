@@ -2,6 +2,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 from typing import Any, Dict, List
+from collections.abc import Mapping
 import streamlit as st
 from vision_manager.db import get_conn, init_db
 from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
@@ -57,6 +58,9 @@ def _ph(conn) -> str:
     return "%s" if _is_pg(conn) else "?"
 
 def _dict_row(cur, row):
+    # Compatibilità: su Postgres (psycopg2 extras) row può essere già un dict-like
+    if isinstance(row, Mapping):
+        return dict(row)
     cols = [d[0] for d in cur.description]
     return {cols[i]: row[i] for i in range(len(cols))}
 
