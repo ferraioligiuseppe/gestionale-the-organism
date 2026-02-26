@@ -88,7 +88,7 @@ def _load_pazienti(conn) -> List[Dict[str, Any]]:
     try:
         try:
             if _is_pg(conn):
-                cur.execute("SELECT id, cognome, nome, data_nascita, note FROM pazienti ORDER BY cognome, nome")
+                cur.execute("SELECT id, cognome, nome, data_nascita, note FROM pazienti ORDER BY cognome, nome") if _pazienti_has_note(conn) else cur.execute("SELECT id, cognome, nome, data_nascita FROM pazienti ORDER BY cognome, nome")
             else:
                 cur.execute("SELECT ID, Cognome, Nome, Data_Nascita, Note FROM Pazienti ORDER BY Cognome, Nome")
             rows = cur.fetchall()
@@ -195,7 +195,8 @@ def _insert_visita(conn, paziente_id: int, data_visita: str, dati_json: str) -> 
                 f"INSERT INTO visite_visive (paziente_id, data_visita, dati_json) VALUES ({ph},{ph},{ph}) RETURNING id",
                 (paziente_id, data_visita, dati_json),
             )
-            vid = cur.fetchone()[0]
+            row = cur.fetchone()
+            vid = (row.get("id") if hasattr(row, "get") else row[0])
         else:
             cur.execute(
                 f"INSERT INTO visite_visive (paziente_id, data_visita, dati_json) VALUES ({ph},{ph},{ph})",
@@ -355,6 +356,8 @@ def ui_visita_visiva():
                     st.error(str(ve))
                     return
                 st.success(f"Paziente salvato (ID {pid}).")
+                st.session_state["vision_last_pid"] = pid
+                st.rerun()
 
         st.markdown("### Elenco pazienti")
         paz = _load_pazienti(conn)
@@ -394,7 +397,19 @@ def ui_visita_visiva():
             st.info("Prima crea almeno un paziente nella tab 'Anagrafica (Gestionale)'.")
             return
 
-        psel = st.selectbox("Seleziona paziente", paz, format_func=_format_paz)
+        # Preseleziona l’ultimo paziente creato (se presente)
+        default_idx = 0
+        last_pid = st.session_state.get("vision_last_pid")
+        if last_pid is not None:
+            for i, p in enumerate(paz):
+                try:
+                    if int(p.get("id") or 0) == int(last_pid):
+                        default_idx = i
+                        break
+                except Exception:
+                    pass
+
+        psel = st.selectbox("Seleziona paziente", paz, format_func=_format_paz, index=default_idx)
         paziente_id = int(psel["id"])
         paziente_label = f"{psel.get('cognome','')} {psel.get('nome','')}".strip()
 
