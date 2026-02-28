@@ -7825,7 +7825,6 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
 if __name__ == "__main__":
     main()
 
-
 # ======================================
 # AUDIOGRAMMA FUNZIONALE (TEST) – MVP
 # ======================================
@@ -8083,3 +8082,4 @@ def ui_audiogramma_test():
     try: cur.close()
     except Exception: pass
     conn.close()
+
