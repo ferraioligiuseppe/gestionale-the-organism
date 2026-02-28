@@ -7822,11 +7822,8 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
         else:
             st.info("PDF non disponibile in cloud: apri il Word e salva in PDF dal PC in studio.")
 
-if __name__ == "__main__":
-    main()
 
-# ======================================
-# AUDIOGRAMMA FUNZIONALE (TEST) – MVP
+
 # ======================================
 # NOTE:
 # - Su Streamlit Cloud l'audio deve essere generato nel browser: qui usiamo st.audio con WAV sintetizzato.
@@ -8083,3 +8080,10 @@ def ui_audiogramma_test():
     except Exception: pass
     conn.close()
 
+
+if __name__ == "__main__":
+    main()
+
+
+# ======================================
+# AUDIOGRAMMA FUNZIONALE (TEST) – MVP
