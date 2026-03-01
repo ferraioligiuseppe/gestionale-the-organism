@@ -1255,12 +1255,7 @@ def _pwd_verify(pw: str, stored: str) -> bool:
         return hmac.compare_digest(candidate, stored)
     except Exception:
         return False
-        iters = int(iters_s)
-        candidate = _pwd_hash(pw, salt_b64=salt_b64, iters=iters)
-        return hmac.compare_digest(candidate, stored)
-    except Exception:
-        return False
-
+        
 def _breakglass_enabled() -> bool:
     """Emergency login toggle (TEST only)."""
     try:
