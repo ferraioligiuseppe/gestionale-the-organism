@@ -8,9 +8,11 @@ from typing import Dict, List, Tuple
 from .db_orl import FREQS_STD
 
 def _is_postgres(conn) -> bool:
-    mod = getattr(conn.__class__, "__module__", "") or ""
-    return "psycopg2" in mod or "pg8000" in mod or "psycopg" in mod
-
+    mod = (getattr(conn.__class__, "__module__", "") or "").lower()
+    name = (getattr(conn.__class__, "__name__", "") or "").lower()
+    if "sqlite3" in mod or "sqlite" in mod or "sqlite" in name:
+        return False
+    return True
 def save_eq_profile(
     conn,
     paziente_id: int,
