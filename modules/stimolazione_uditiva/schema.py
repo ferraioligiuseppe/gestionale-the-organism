@@ -7,20 +7,14 @@ def _is_postgres(conn) -> bool:
 
 def ensure_audio_schema(conn):
     """
-    NON lancia eccezioni (per evitare redaction Streamlit).
-    Ritorna: (ok: bool, message: str)
-
-    Se fallisce, message contiene:
-      - tipo errore psycopg2
-      - messaggio originale
-      - statement che stava eseguendo (in chiaro)
+    NON lancia eccezioni: ritorna (ok: bool, message: str)
+    Se fallisce, message contiene errore + SQL dell’ultimo statement.
     """
     cur = conn.cursor()
     last_sql = ""
     try:
         if _is_postgres(conn):
             stmts = [
-                # Nota: stile IDENTICO alle altre audio_* tables nel tuo app.py (BIGSERIAL + TIMESTAMPTZ + now()).
                 """
                 CREATE TABLE IF NOT EXISTS orl_esami (
                     id BIGSERIAL PRIMARY KEY,
@@ -58,7 +52,7 @@ def ensure_audio_schema(conn):
                 last_sql = s
                 cur.execute(s)
 
-            # indici
+            # indici (se falliscono non bloccare)
             try:
                 last_sql = "CREATE INDEX IF NOT EXISTS idx_orl_esami_paziente ON orl_esami(paziente_id);"
                 cur.execute(last_sql)
@@ -114,12 +108,10 @@ def ensure_audio_schema(conn):
         return True, "OK"
 
     except Exception as e:
-        # rollback per non lasciare transazione abortita
         try:
             conn.rollback()
         except Exception:
             pass
-        # messaggio completo (non contiene segreti)
         msg = f"{type(e).__name__}: {e}\n\n--- SQL (last) ---\n{last_sql.strip()}\n"
         return False, msg
 
