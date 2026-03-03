@@ -64,16 +64,20 @@ def save_eq_profile(
         try: cur.close()
         except Exception: pass
 
-def list_eq_profiles(conn, paziente_id: int, limit: int = 100) -> List[Tuple[int, str, str, int | None]]:
+def list_eq_profiles(conn, paziente_id: int, limit: int = 100):
     cur = conn.cursor()
     try:
         if _is_postgres(conn):
             cur.execute(
                 """
-                SELECT id, nome, to_char(created_at,'YYYY-MM-DD HH24:MI:SS') AS created_at, esame_id
+                SELECT
+                  id,
+                  nome,
+                  COALESCE(created_at::text,'') AS created_at,
+                  esame_id
                 FROM eq_profiles
                 WHERE paziente_id = %s
-                ORDER BY created_at DESC, id DESC
+                ORDER BY id DESC
                 LIMIT %s
                 """,
                 (int(paziente_id), int(limit)),
@@ -84,16 +88,14 @@ def list_eq_profiles(conn, paziente_id: int, limit: int = 100) -> List[Tuple[int
                 SELECT id, nome, COALESCE(created_at,'') AS created_at, esame_id
                 FROM eq_profiles
                 WHERE paziente_id = ?
-                ORDER BY created_at DESC, id DESC
+                ORDER BY id DESC
                 LIMIT ?
                 """,
                 (int(paziente_id), int(limit)),
             )
-        rows = cur.fetchall() or []
-        out = []
-        for r in rows:
-            out.append((int(r[0]), str(r[1] or ""), str(r[2] or ""), (int(r[3]) if r[3] is not None else None)))
-        return out
+        return cur.fetchall() or []
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
