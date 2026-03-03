@@ -16,39 +16,30 @@ from .db_eq import save_eq_profile, list_eq_profiles
 
 
 def _df_from_soglie(soglie: Dict[str, Dict[int, float | None]]) -> pd.DataFrame:
-    """DataFrame con indice frequenze e colonne DX/SX."""
     rows = []
     for f in FREQS_STD:
         rows.append({"Freq (Hz)": f, "DX (dB HL)": soglie["DX"].get(f), "SX (dB HL)": soglie["SX"].get(f)})
-    df = pd.DataFrame(rows).set_index("Freq (Hz)")
-    return df
+    return pd.DataFrame(rows).set_index("Freq (Hz)")
 
 
 def _soglie_from_df(df: pd.DataFrame) -> Tuple[Dict[int, float | None], Dict[int, float | None]]:
-    """Estrae dict soglie DX/SX da DataFrame."""
     dx: Dict[int, float | None] = {}
     sx: Dict[int, float | None] = {}
+
+    def _coerce(v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        if s == "" or s.lower() == "nan":
+            return None
+        try:
+            return float(v)
+        except Exception:
+            return None
+
     for f in FREQS_STD:
-        try:
-            vdx = df.loc[f, "DX (dB HL)"]
-        except Exception:
-            vdx = None
-        try:
-            vsx = df.loc[f, "SX (dB HL)"]
-        except Exception:
-            vsx = None
-
-        def _coerce(v):
-            if v is None:
-                return None
-            s = str(v).strip()
-            if s == "" or s.lower() == "nan":
-                return None
-            try:
-                return float(v)
-            except Exception:
-                return None
-
+        vdx = df.loc[f, "DX (dB HL)"] if f in df.index else None
+        vsx = df.loc[f, "SX (dB HL)"] if f in df.index else None
         dx[f] = _coerce(vdx)
         sx[f] = _coerce(vsx)
     return dx, sx
@@ -89,7 +80,7 @@ def _download_csv_button(label: str, gain_dx: Dict[int, float], gain_sx: Dict[in
 
 
 def ui_orl_eq(get_conn, paziente_selector_fn):
-    st.header("🎧 Stimolazione uditiva — ORL + EQ baseline (STEP A)")
+    st.header("🎧 Stimolazione uditiva — ORL + EQ baseline (MODULO)")
 
     conn = get_conn()
     ensure_audio_schema(conn)
@@ -103,12 +94,8 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
 
     tab1, tab2, tab3 = st.tabs(["1) Inserimento ORL", "2) EQ baseline", "3) Profili EQ"])
 
-    # ---------------------------
-    # TAB 1: Inserimento ORL
-    # ---------------------------
     with tab1:
         st.subheader("Nuovo esame ORL (griglia DX/SX)")
-        # griglia vuota “standard”
         soglie_blank = {"DX": {f: 0.0 for f in FREQS_STD}, "SX": {f: 0.0 for f in FREQS_STD}}
         df_blank = _df_from_soglie(soglie_blank)
 
@@ -118,7 +105,6 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
                 d = st.date_input("Data esame", value=date.today())
             with c2:
                 fonte = st.text_input("Fonte", value="ORL")
-
             note = st.text_area("Note (opzionale)", value="")
 
             st.markdown("### Soglie (dB HL)")
@@ -131,7 +117,6 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
                     "SX (dB HL)": st.column_config.NumberColumn(step=5.0),
                 },
             )
-
             ok = st.form_submit_button("💾 Salva esame ORL")
 
         if ok:
@@ -154,12 +139,8 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
             soglie = get_orl_soglie(conn, esame_id)
             st.dataframe(_df_from_soglie(soglie), use_container_width=True)
 
-    # ---------------------------
-    # TAB 2: EQ baseline
-    # ---------------------------
     with tab2:
         st.subheader("Calcolo EQ baseline + grafico + export")
-
         esami = list_orl_esami(conn, paziente_id, limit=50)
         if not esami:
             st.warning("Inserisci prima almeno un esame ORL.")
@@ -186,18 +167,8 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
             smoothing = st.checkbox("Smoothing inviluppo", value=True)
 
         if st.button("⚙️ Calcola EQ", key="btn_calc_eq"):
-            gain_dx = compute_eq_baseline(
-                soglie["DX"],
-                boost_max_db=float(boost_max),
-                cut_max_db=float(cut_max),
-                smoothing=bool(smoothing),
-            )
-            gain_sx = compute_eq_baseline(
-                soglie["SX"],
-                boost_max_db=float(boost_max),
-                cut_max_db=float(cut_max),
-                smoothing=bool(smoothing),
-            )
+            gain_dx = compute_eq_baseline(soglie["DX"], boost_max_db=float(boost_max), cut_max_db=float(cut_max), smoothing=bool(smoothing))
+            gain_sx = compute_eq_baseline(soglie["SX"], boost_max_db=float(boost_max), cut_max_db=float(cut_max), smoothing=bool(smoothing))
 
             st.session_state["eq_last"] = {
                 "paziente_id": int(paziente_id),
@@ -235,20 +206,9 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
             st.subheader("Salva profilo EQ")
             nome = st.text_input("Nome profilo", value=f"EQ ORL {sel[1]} (V0)")
             if st.button("💾 Salva profilo EQ", key="btn_save_eq"):
-                pid = save_eq_profile(
-                    conn,
-                    paziente_id=paziente_id,
-                    esame_id=esame_id,
-                    nome=nome,
-                    params=eq_last["params"],
-                    gain_dx=eq_last["gain_dx"],
-                    gain_sx=eq_last["gain_sx"],
-                )
+                pid = save_eq_profile(conn, paziente_id=paziente_id, esame_id=esame_id, nome=nome, params=eq_last["params"], gain_dx=eq_last["gain_dx"], gain_sx=eq_last["gain_sx"])
                 st.success(f"Profilo EQ salvato (id {pid}).")
 
-    # ---------------------------
-    # TAB 3: Profili salvati
-    # ---------------------------
     with tab3:
         st.subheader("Profili EQ salvati (per paziente)")
         prof = list_eq_profiles(conn, paziente_id, limit=100)
@@ -260,4 +220,4 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
                 use_container_width=True,
                 hide_index=True,
             )
-            st.caption("Suggerimento: aprire un profilo specifico e ricaricare i JSON lo aggiungiamo nello STEP A2.")
+            st.caption("Step A2: aggiungiamo apertura profilo + replot/export da profilo salvato.")
