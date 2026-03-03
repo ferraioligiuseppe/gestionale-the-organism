@@ -83,7 +83,11 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
     st.header("🎧 Stimolazione uditiva — ORL + EQ baseline (MODULO)")
 
     conn = get_conn()
-    ensure_audio_schema(conn)
+    ok, msg = ensure_audio_schema(conn)
+if not ok:
+    st.error("Errore creazione tabelle ORL/EQ (mostro SQL):")
+    st.code(msg)
+    return
 
     paziente_id, paz_label = paziente_selector_fn(conn)
     if not paziente_id:
