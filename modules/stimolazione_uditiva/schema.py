@@ -2,8 +2,22 @@
 from __future__ import annotations
 
 def _is_postgres(conn) -> bool:
-    mod = getattr(conn.__class__, "__module__", "") or ""
-    return "psycopg2" in mod or "pg8000" in mod or "psycopg" in mod
+    """
+    Rilevazione robusta:
+    - se è sqlite3 -> False
+    - altrimenti (Neon/psycopg2/wrapper custom) -> True
+    """
+    mod = (getattr(conn.__class__, "__module__", "") or "").lower()
+    name = (getattr(conn.__class__, "__name__", "") or "").lower()
+
+    # casi SQLite
+    if "sqlite3" in mod or "sqlite" in mod or "sqlite" in name:
+        return False
+
+    # casi Postgres (anche con wrapper)
+    # molti wrapper non espongono "psycopg2" nel __module__,
+    # quindi qui assumiamo Postgres se non è chiaramente sqlite.
+    return True
 
 def ensure_audio_schema(conn):
     """
