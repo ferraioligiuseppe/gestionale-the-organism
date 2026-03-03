@@ -16,6 +16,7 @@ import secrets
 import hmac
 import hashlib
 from datetime import timedelta, timezone
+from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
 
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
