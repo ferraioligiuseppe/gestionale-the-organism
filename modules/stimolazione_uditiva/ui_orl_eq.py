@@ -1,13 +1,14 @@
 # modules/stimolazione_uditiva/ui_orl_eq.py
 from __future__ import annotations
 
-import json
 import io
+import json
+from datetime import date
+from typing import Dict, Tuple
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import date
-from typing import Dict, Tuple
 
 from .schema import ensure_audio_schema
 from .db_orl import FREQS_STD, list_orl_esami, get_orl_soglie, upsert_orl_esame
@@ -23,9 +24,6 @@ def _df_from_soglie(soglie: Dict[str, Dict[int, float | None]]) -> pd.DataFrame:
 
 
 def _soglie_from_df(df: pd.DataFrame) -> Tuple[Dict[int, float | None], Dict[int, float | None]]:
-    dx: Dict[int, float | None] = {}
-    sx: Dict[int, float | None] = {}
-
     def _coerce(v):
         if v is None:
             return None
@@ -37,6 +35,8 @@ def _soglie_from_df(df: pd.DataFrame) -> Tuple[Dict[int, float | None], Dict[int
         except Exception:
             return None
 
+    dx: Dict[int, float | None] = {}
+    sx: Dict[int, float | None] = {}
     for f in FREQS_STD:
         vdx = df.loc[f, "DX (dB HL)"] if f in df.index else None
         vsx = df.loc[f, "SX (dB HL)"] if f in df.index else None
@@ -66,12 +66,12 @@ def _plot_eq(gain_dx: Dict[int, float], gain_sx: Dict[int, float]) -> None:
     st.pyplot(fig)
 
 
-def _download_json_button(label: str, obj: dict, filename: str):
+def _download_json(label: str, obj: dict, filename: str):
     payload = json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
     st.download_button(label, data=payload, file_name=filename, mime="application/json")
 
 
-def _download_csv_button(label: str, gain_dx: Dict[int, float], gain_sx: Dict[int, float], filename: str):
+def _download_csv(label: str, gain_dx: Dict[int, float], gain_sx: Dict[int, float], filename: str):
     out = io.StringIO()
     out.write("freq_hz,gain_dx_db,gain_sx_db\n")
     for f in FREQS_STD:
@@ -83,11 +83,12 @@ def ui_orl_eq(get_conn, paziente_selector_fn):
     st.header("🎧 Stimolazione uditiva — ORL + EQ baseline (MODULO)")
 
     conn = get_conn()
+
     ok, msg = ensure_audio_schema(conn)
-if not ok:
-    st.error("Errore creazione tabelle ORL/EQ (mostro SQL):")
-    st.code(msg)
-    return
+    if not ok:
+        st.error("Errore creazione tabelle ORL/EQ (mostro SQL):")
+        st.code(msg)
+        return
 
     paziente_id, paz_label = paziente_selector_fn(conn)
     if not paziente_id:
@@ -100,8 +101,8 @@ if not ok:
 
     with tab1:
         st.subheader("Nuovo esame ORL (griglia DX/SX)")
-        soglie_blank = {"DX": {f: 0.0 for f in FREQS_STD}, "SX": {f: 0.0 for f in FREQS_STD}}
-        df_blank = _df_from_soglie(soglie_blank)
+
+        df_blank = _df_from_soglie({"DX": {f: 0.0 for f in FREQS_STD}, "SX": {f: 0.0 for f in FREQS_STD}})
 
         with st.form("orl_new_editor"):
             c1, c2 = st.columns(2)
@@ -121,9 +122,10 @@ if not ok:
                     "SX (dB HL)": st.column_config.NumberColumn(step=5.0),
                 },
             )
-            ok = st.form_submit_button("💾 Salva esame ORL")
 
-        if ok:
+            ok_save = st.form_submit_button("💾 Salva esame ORL")
+
+        if ok_save:
             soglie_dx, soglie_sx = _soglie_from_df(df_edit)
             esame_id = upsert_orl_esame(conn, paziente_id, d, fonte, note, soglie_dx, soglie_sx)
             st.success(f"Esame ORL salvato (id {esame_id}).")
@@ -145,6 +147,7 @@ if not ok:
 
     with tab2:
         st.subheader("Calcolo EQ baseline + grafico + export")
+
         esami = list_orl_esami(conn, paziente_id, limit=50)
         if not esami:
             st.warning("Inserisci prima almeno un esame ORL.")
@@ -192,25 +195,30 @@ if not ok:
         if not eq_last or int(eq_last.get("esame_id", -1)) != esame_id:
             st.info("Premi **Calcola EQ** per vedere risultato, grafico ed export.")
         else:
-            st.markdown("### Risultato EQ (tabella)")
             df_eq = pd.DataFrame(
                 [{"Freq (Hz)": f, "Gain DX (dB)": eq_last["gain_dx"][f], "Gain SX (dB)": eq_last["gain_sx"][f]} for f in FREQS_STD]
             ).set_index("Freq (Hz)")
             st.dataframe(df_eq, use_container_width=True)
 
-            st.markdown("### Grafico EQ")
             _plot_eq(eq_last["gain_dx"], eq_last["gain_sx"])
 
-            st.markdown("### Export")
             base = f"eq_paz{paziente_id}_esame{esame_id}"
-            _download_json_button("⬇️ Scarica JSON (EQ)", eq_last, filename=f"{base}.json")
-            _download_csv_button("⬇️ Scarica CSV (EQ)", eq_last["gain_dx"], eq_last["gain_sx"], filename=f"{base}.csv")
+            _download_json("⬇️ Scarica JSON (EQ)", eq_last, filename=f"{base}.json")
+            _download_csv("⬇️ Scarica CSV (EQ)", eq_last["gain_dx"], eq_last["gain_sx"], filename=f"{base}.csv")
 
             st.divider()
             st.subheader("Salva profilo EQ")
             nome = st.text_input("Nome profilo", value=f"EQ ORL {sel[1]} (V0)")
             if st.button("💾 Salva profilo EQ", key="btn_save_eq"):
-                pid = save_eq_profile(conn, paziente_id=paziente_id, esame_id=esame_id, nome=nome, params=eq_last["params"], gain_dx=eq_last["gain_dx"], gain_sx=eq_last["gain_sx"])
+                pid = save_eq_profile(
+                    conn,
+                    paziente_id=paziente_id,
+                    esame_id=esame_id,
+                    nome=nome,
+                    params=eq_last["params"],
+                    gain_dx=eq_last["gain_dx"],
+                    gain_sx=eq_last["gain_sx"],
+                )
                 st.success(f"Profilo EQ salvato (id {pid}).")
 
     with tab3:
@@ -224,4 +232,3 @@ if not ok:
                 use_container_width=True,
                 hide_index=True,
             )
-            st.caption("Step A2: aggiungiamo apertura profilo + replot/export da profilo salvato.")
