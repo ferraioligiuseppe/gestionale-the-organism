@@ -52,33 +52,47 @@ def _smooth_3pt(vals: Dict[int, float]) -> Dict[int, float]:
             v = 0.25 * vals[freqs[i-1]] + 0.5 * vals[f] + 0.25 * vals[freqs[i+1]]
         out[f] = float(v)
     return out
-
 def compute_eq_baseline(
-    soglie_db_hl: Dict[int, float | None],
-    boost_max_db: float = 12.0,
-    cut_max_db: float = 12.0,
-    smoothing: bool = True,
-) -> Dict[int, float]:
-    """
-    EQ baseline V0 (pragmatica):
-    - Riempie i buchi (interp).
-    - Inverte la curva rispetto alla media: chi sente peggio → più boost, chi sente meglio → cut.
-    - Clamp su +/-.
-    NOTA: non è "dB HL → dB SPL" (serve calibrazione). Qui è solo un profilo relativo e tracciabile.
-    """
-    filled = _fill_missing(soglie_db_hl)
-    if smoothing:
-        filled = _smooth_3pt(filled)
+    soglie,
+    boost_max_db=12,
+    cut_max_db=12,
+    smoothing=True,
+):
+    from .db_orl import FREQS_STD
 
-    mean = sum(filled[f] for f in FREQS_STD) / float(len(FREQS_STD))
-    gain = {}
+    TOMATIS_TARGET = {
+        125: -5,
+        250: -3,
+        500: 0,
+        1000: 2,
+        2000: 4,
+        4000: 6,
+        6000: 8,
+        8000: 6,
+    }
+
+    eq = {}
+
     for f in FREQS_STD:
-        # invert: sopra media (peggio) -> positivo
-        g = filled[f] - mean
-        # clamp
-        if g > float(boost_max_db):
-            g = float(boost_max_db)
-        if g < -float(cut_max_db):
-            g = -float(cut_max_db)
-        gain[f] = float(round(g, 2))
-    return gain
+
+        soglia = soglie.get(f)
+
+        if soglia is None:
+            eq[f] = 0
+            continue
+
+        target = TOMATIS_TARGET.get(f, 0)
+
+        # differenza rispetto alla curva target
+        gain = target - soglia
+
+        # clamp sicurezza
+        if gain > boost_max_db:
+            gain = boost_max_db
+
+        if gain < -cut_max_db:
+            gain = -cut_max_db
+
+        eq[f] = round(gain, 2)
+
+    return eq
