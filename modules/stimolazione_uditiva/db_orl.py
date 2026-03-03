@@ -13,16 +13,21 @@ def _is_postgres(conn) -> bool:
         return False
     return True
 
-def list_orl_esami(conn, paziente_id: int, limit: int = 50) -> List[Tuple[int, str, str]]:
+def list_orl_esami(conn, paziente_id: int, limit: int = 50):
     cur = conn.cursor()
     try:
         if _is_postgres(conn):
+            # NIENTE to_char, NIENTE cast pericolosi: prendo testo e ordino su created_at
             cur.execute(
                 """
-                SELECT id, COALESCE(to_char(data_esame,'YYYY-MM-DD'),'') AS data_esame, COALESCE(fonte,'') AS fonte
+                SELECT
+                  id,
+                  COALESCE(data_esame::text,'') AS data_esame,
+                  COALESCE(fonte,'') AS fonte,
+                  COALESCE(note,'') AS note
                 FROM orl_esami
                 WHERE paziente_id = %s
-                ORDER BY data_esame DESC NULLS LAST, id DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT %s
                 """,
                 (int(paziente_id), int(limit)),
@@ -30,19 +35,23 @@ def list_orl_esami(conn, paziente_id: int, limit: int = 50) -> List[Tuple[int, s
         else:
             cur.execute(
                 """
-                SELECT id, COALESCE(data_esame,'') AS data_esame, COALESCE(fonte,'') AS fonte
+                SELECT id,
+                       COALESCE(data_esame,'') AS data_esame,
+                       COALESCE(fonte,'') AS fonte,
+                       COALESCE(note,'') AS note
                 FROM orl_esami
                 WHERE paziente_id = ?
-                ORDER BY data_esame DESC, id DESC
+                ORDER BY id DESC
                 LIMIT ?
                 """,
                 (int(paziente_id), int(limit)),
             )
-        rows = cur.fetchall() or []
-        return [(int(r[0]), str(r[1] or ""), str(r[2] or "")) for r in rows]
+        return cur.fetchall() or []
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 def get_orl_soglie(conn, esame_id: int) -> Dict[str, Dict[int, float | None]]:
     cur = conn.cursor()
