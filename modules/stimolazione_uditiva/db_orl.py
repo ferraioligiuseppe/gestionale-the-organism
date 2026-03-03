@@ -7,8 +7,11 @@ from typing import Dict, List, Tuple
 FREQS_STD = [125, 250, 500, 1000, 2000, 4000, 6000, 8000]
 
 def _is_postgres(conn) -> bool:
-    mod = getattr(conn.__class__, "__module__", "") or ""
-    return "psycopg2" in mod or "pg8000" in mod or "psycopg" in mod
+    mod = (getattr(conn.__class__, "__module__", "") or "").lower()
+    name = (getattr(conn.__class__, "__name__", "") or "").lower()
+    if "sqlite3" in mod or "sqlite" in mod or "sqlite" in name:
+        return False
+    return True
 
 def list_orl_esami(conn, paziente_id: int, limit: int = 50) -> List[Tuple[int, str, str]]:
     cur = conn.cursor()
