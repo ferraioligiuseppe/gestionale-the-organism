@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
+from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 import pnev_module as pnev
 
@@ -9508,6 +9509,7 @@ def main():
     if APP_MODE == "test":
         sections.append("🎧 Audiogramma funzionale (TEST)")
         sections.append("🎧 ORL + EQ (MODULO)")
+        sections.append("🎧 Genera stimolazione (JOB)")
         sections.append("🩺 Esami ORL – soglie tonali (TEST)")
         sections.append("🎚️ EQ stimolazione uditiva (TEST)")
         sections.append("🎧 Stimolazione uditiva (TEST)")
@@ -9550,6 +9552,8 @@ def main():
         ui_esami_orl_tonali_test()
     elif sezione == "🎧 ORL + EQ (MODULO)":
         ui_orl_eq(get_connection, paziente_selector_fn=_select_paziente_minimal)
+    elif sezione == "🎧 Genera stimolazione (JOB)":
+        ui_generatore_stimolazione(get_connection, paziente_selector_fn=_select_paziente_minimal)
     elif sezione == "🎚️ EQ stimolazione uditiva (TEST)":
         ui_eq_stimolazione_uditiva_test()
     elif sezione == "🎧 Stimolazione uditiva (TEST)":
