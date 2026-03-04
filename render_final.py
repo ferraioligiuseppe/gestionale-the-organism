@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import io
+import os
 import random
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from typing import Any, Dict, Tuple, Optional
 
@@ -14,38 +18,51 @@ from .audio_dsp import (
 from .db_orl import FREQS_STD
 
 
+# =============================================================================
+# IO helpers
+# =============================================================================
+
+def _ffmpeg_available() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+
+def _read_wav16_bytes(data: bytes) -> Tuple[np.ndarray, int]:
+    """Read WAV PCM 16-bit via stdlib (stable on Streamlit)."""
+    import wave
+    bio = io.BytesIO(data)
+    with wave.open(bio, "rb") as wf:
+        ch = wf.getnchannels()
+        fs = wf.getframerate()
+        sampw = wf.getsampwidth()
+        nframes = wf.getnframes()
+        raw = wf.readframes(nframes)
+
+    if sampw != 2:
+        raise ValueError("WAV input deve essere PCM 16-bit. Converti in WAV 16-bit.")
+    x = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
+    if ch == 1:
+        x = np.stack([x, x], axis=1)
+    elif ch == 2:
+        x = x.reshape(-1, 2)
+    else:
+        raise ValueError("Supporto solo mono o stereo.")
+    return x.astype(np.float32, copy=False), int(fs)
+
+
 def _read_audio_bytes_any(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
     """
-    Best-effort decoder:
-      - WAV 16-bit PCM: sempre OK (stdlib wave)
-      - FLAC/WAV/OGG/AIFF: se 'soundfile' è disponibile
-      - MP3: se 'pydub' + ffmpeg sono disponibili
-    Ritorna float32 stereo shape (n,2) e sample_rate.
+    Decoder robusto:
+      1) WAV 16-bit -> ok sempre
+      2) soundfile (se disponibile) -> FLAC/WAV ecc.
+      3) pydub (se disponibile) -> MP3
+      4) ffmpeg (se disponibile) -> qualunque formato -> WAV 16-bit temporaneo
     """
     name = (filename or "").lower().strip()
 
     if name.endswith(".wav"):
-        import wave
-        bio = io.BytesIO(data)
-        with wave.open(bio, "rb") as wf:
-            ch = wf.getnchannels()
-            fs = wf.getframerate()
-            sampw = wf.getsampwidth()
-            nframes = wf.getnframes()
-            raw = wf.readframes(nframes)
+        return _read_wav16_bytes(data)
 
-        if sampw != 2:
-            raise ValueError("WAV input deve essere PCM 16-bit. Converti in WAV 16-bit.")
-        x = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
-        if ch == 1:
-            x = np.stack([x, x], axis=1)
-        elif ch == 2:
-            x = x.reshape(-1, 2)
-        else:
-            raise ValueError("Supporto solo mono o stereo.")
-        return x, int(fs)
-
-    # soundfile (FLAC ecc.)
+    # soundfile (molto comodo per FLAC) se presente
     try:
         import soundfile as sf  # type: ignore
         bio = io.BytesIO(data)
@@ -58,20 +75,52 @@ def _read_audio_bytes_any(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
     except Exception:
         pass
 
-    # MP3 via pydub/ffmpeg
+    # pydub (MP3) se presente + ffmpeg
     if name.endswith(".mp3"):
         try:
             from pydub import AudioSegment  # type: ignore
-        except Exception as e:
-            raise ValueError("Per MP3 serve 'pydub' + ffmpeg. Converti MP3→WAV 16-bit e ricarica.") from e
-        seg = AudioSegment.from_file(io.BytesIO(data), format="mp3").set_channels(2)
-        fs = int(seg.frame_rate)
-        samples = np.array(seg.get_array_of_samples()).reshape((-1, 2)).astype(np.float32)
-        maxv = float(2 ** (8 * seg.sample_width - 1))
-        x = samples / maxv
-        return x.astype(np.float32, copy=False), fs
+            seg = AudioSegment.from_file(io.BytesIO(data), format="mp3").set_channels(2)
+            fs = int(seg.frame_rate)
+            samples = np.array(seg.get_array_of_samples()).reshape((-1, 2)).astype(np.float32)
+            maxv = float(2 ** (8 * seg.sample_width - 1))
+            x = samples / maxv
+            return x.astype(np.float32, copy=False), fs
+        except Exception:
+            pass
 
-    raise ValueError("Formato non supportato. Usa WAV 16-bit (consigliato) oppure abilita soundfile/pydub.")
+    # ffmpeg fallback
+    if _ffmpeg_available():
+        with tempfile.TemporaryDirectory() as td:
+            # keep extension to help ffmpeg sniff format
+            ext = os.path.splitext(name)[1] or ".bin"
+            in_guess = os.path.join(td, f"in{ext}")
+            out_wav = os.path.join(td, "out.wav")
+            with open(in_guess, "wb") as f:
+                f.write(data)
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", in_guess,
+                "-ac", "2",
+                "-ar", "44100",
+                "-sample_fmt", "s16",
+                out_wav
+            ]
+            p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if p.returncode != 0:
+                raise ValueError(
+                    "ffmpeg non riesce a decodificare questo file. "
+                    "Consiglio: converti in WAV 16-bit e ricarica.\n"
+                    + p.stderr.decode("utf-8", errors="ignore")[:4000]
+                )
+            wav_bytes = open(out_wav, "rb").read()
+            return _read_wav16_bytes(wav_bytes)
+
+    raise ValueError(
+        "Formato non supportato in questa installazione. "
+        "Soluzione consigliata: converti l'input in WAV PCM 16-bit e ricarica. "
+        "Per MP3/FLAC su Streamlit Cloud, spesso serve ffmpeg/libsndfile."
+    )
 
 
 def _write_wav16_bytes(x: np.ndarray, fs: int) -> bytes:
@@ -87,33 +136,82 @@ def _write_wav16_bytes(x: np.ndarray, fs: int) -> bytes:
     return bio.getvalue()
 
 
-def _write_flac_bytes(x: np.ndarray, fs: int) -> bytes:
+def _write_flac_bytes_from_wav(wav_bytes: bytes) -> bytes:
+    """
+    FLAC export:
+      - prefer soundfile (se disponibile)
+      - fallback ffmpeg (se disponibile)
+    """
     try:
         import soundfile as sf  # type: ignore
-    except Exception as e:
-        raise ValueError("Per esportare FLAC serve 'soundfile' (libsndfile).") from e
-    bio = io.BytesIO()
-    sf.write(bio, np.clip(x, -1.0, 1.0), int(fs), format="FLAC", subtype="PCM_16")
-    return bio.getvalue()
+        bio = io.BytesIO(wav_bytes)
+        x, fs = sf.read(bio, dtype="float32", always_2d=True)
+        out = io.BytesIO()
+        sf.write(out, np.clip(x, -1.0, 1.0), int(fs), format="FLAC", subtype="PCM_16")
+        return out.getvalue()
+    except Exception:
+        pass
+
+    if not _ffmpeg_available():
+        raise ValueError(
+            "Per FLAC serve 'soundfile' (libsndfile) oppure ffmpeg. "
+            "Nel tuo Streamlit Cloud sembra mancare: per ora usa WAV."
+        )
+
+    with tempfile.TemporaryDirectory() as td:
+        in_wav = os.path.join(td, "in.wav")
+        out_flac = os.path.join(td, "out.flac")
+        with open(in_wav, "wb") as f:
+            f.write(wav_bytes)
+        cmd = ["ffmpeg", "-y", "-i", in_wav, "-c:a", "flac", out_flac]
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if p.returncode != 0:
+            raise ValueError(
+                "ffmpeg non riesce a esportare FLAC.\n"
+                + p.stderr.decode("utf-8", errors="ignore")[:4000]
+            )
+        return open(out_flac, "rb").read()
 
 
-def _write_mp3_bytes(x: np.ndarray, fs: int, bitrate: str = "192k") -> bytes:
+def _write_mp3_bytes_from_wav(wav_bytes: bytes, bitrate: str = "192k") -> bytes:
+    """
+    MP3 export:
+      - prefer pydub (se disponibile)
+      - fallback ffmpeg (se disponibile)
+    """
     try:
         from pydub import AudioSegment  # type: ignore
-    except Exception as e:
-        raise ValueError("Per esportare MP3 serve 'pydub' + ffmpeg.") from e
-    x = np.clip(x, -1.0, 1.0)
-    pcm16 = (x * 32767.0).astype(np.int16)
-    seg = AudioSegment(
-        data=pcm16.tobytes(),
-        sample_width=2,
-        frame_rate=int(fs),
-        channels=2,
-    )
-    out = io.BytesIO()
-    seg.export(out, format="mp3", bitrate=str(bitrate))
-    return out.getvalue()
+        seg = AudioSegment.from_file(io.BytesIO(wav_bytes), format="wav")
+        out = io.BytesIO()
+        seg.export(out, format="mp3", bitrate=str(bitrate))
+        return out.getvalue()
+    except Exception:
+        pass
 
+    if not _ffmpeg_available():
+        raise ValueError(
+            "Per MP3 serve 'pydub'+ffmpeg oppure ffmpeg. "
+            "Nel tuo Streamlit Cloud sembra mancare: per ora usa WAV."
+        )
+
+    with tempfile.TemporaryDirectory() as td:
+        in_wav = os.path.join(td, "in.wav")
+        out_mp3 = os.path.join(td, "out.mp3")
+        with open(in_wav, "wb") as f:
+            f.write(wav_bytes)
+        cmd = ["ffmpeg", "-y", "-i", in_wav, "-b:a", str(bitrate), out_mp3]
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if p.returncode != 0:
+            raise ValueError(
+                "ffmpeg non riesce a esportare MP3.\n"
+                + p.stderr.decode("utf-8", errors="ignore")[:4000]
+            )
+        return open(out_mp3, "rb").read()
+
+
+# =============================================================================
+# DSP engine (streaming a blocchi)
+# =============================================================================
 
 @dataclass
 class GateState:
@@ -176,8 +274,11 @@ def render_full(
     max_seconds: Optional[float] = None,
 ) -> Dict[str, bytes]:
     """
-    Render file finale in memoria (best-effort).
-    Nota: file lunghi possono essere pesanti su Streamlit Cloud.
+    Render finale:
+      - decode best-effort (WAV consigliato)
+      - EQ DX/SX
+      - gating Tomatis-like
+      - export WAV sempre; FLAC/MP3 se possibile (soundfile/pydub/ffmpeg) altrimenti errore chiaro.
     """
     x, fs = _read_audio_bytes_any(audio_bytes, filename)
     if max_seconds is not None:
@@ -278,8 +379,7 @@ def render_full(
             # env value
             if st.mode == "open":
                 if st.attack_left_s > 0.0:
-                    # linear ramp closed_wet -> 1
-                    # fraction based on remaining in attack window (approx.)
+                    # linear ramp closed_wet -> 1 (approx)
                     frac = 1.0 - max(0.0, min(1.0, st.attack_left_s / max(att_max, 1e-6)))
                     env[k] = closed_wet + (1.0 - closed_wet) * frac
                     st.attack_left_s -= dt
@@ -311,11 +411,14 @@ def render_full(
 
     out = soft_limiter(out, peak_dbfs=float(limiter_peak_dbfs))
 
+    # Always produce WAV first (guaranteed)
+    wav_bytes = _write_wav16_bytes(out, fs)
+
     outputs: Dict[str, bytes] = {}
     if "wav" in out_formats:
-        outputs["wav"] = _write_wav16_bytes(out, fs)
+        outputs["wav"] = wav_bytes
     if "flac" in out_formats:
-        outputs["flac"] = _write_flac_bytes(out, fs)
+        outputs["flac"] = _write_flac_bytes_from_wav(wav_bytes)
     if "mp3" in out_formats:
-        outputs["mp3"] = _write_mp3_bytes(out, fs, bitrate=str(mp3_bitrate))
+        outputs["mp3"] = _write_mp3_bytes_from_wav(wav_bytes, bitrate=str(mp3_bitrate))
     return outputs
