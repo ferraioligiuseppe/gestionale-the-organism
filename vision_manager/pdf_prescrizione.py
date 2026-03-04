@@ -64,43 +64,54 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
     margin_x = 18 * mm
     top_y = H - 18 * mm
 
-    # optional background/letterhead (top strip)
-    if letterhead_path and os.path.exists(letterhead_path):
+    # optional background/letterhead
+    has_letterhead = bool(letterhead_path and os.path.exists(letterhead_path))
+    header_h = 35 * mm  # reserved header height when using a letterhead image
+
+    if has_letterhead:
+        # draw the letterhead only; do NOT redraw doctor/brand text to avoid duplicates
         try:
             img = ImageReader(letterhead_path)
             iw, ih = img.getSize()
             target_w = W
-            scale = target_w / iw
-            target_h = ih * scale
+            # scale letterhead to full page width, but clamp visible height to header_h
+            scale = target_w / float(iw)
+            target_h = float(ih) * scale
+            # draw anchored to top; we let it spill above header_h if needed, but content starts below header_h
             c.drawImage(img, 0, H - target_h, width=target_w, height=target_h, mask="auto")
         except Exception:
-            pass
+            has_letterhead = False  # fallback to drawn header if image fails
 
-    # header (left)
-    c.setFillColor(dark)
-    c.setFont("Times-Bold", 12)
-    c.drawString(margin_x, top_y, "Dott. Salvatore Adriano Cirillo")
-    c.setFont("Times-Bold", 11)
-    c.drawString(margin_x, top_y - 14, "Medico Chirurgo")
-    c.drawString(margin_x, top_y - 28, "Oculista")
+    # Header
+    if not has_letterhead:
+        # header (left)
+        c.setFillColor(dark)
+        c.setFont("Times-Bold", 12)
+        c.drawString(margin_x, top_y, "Dott. Salvatore Adriano Cirillo")
+        c.setFont("Times-Bold", 11)
+        c.drawString(margin_x, top_y - 14, "Medico Chirurgo")
+        c.drawString(margin_x, top_y - 28, "Oculista")
 
-    # header (right) - text fallback; if you have a logo image, you can place it here
-    c.setFillColor(green)
-    c.setFont("Helvetica", 10)
-    c.drawRightString(W - margin_x, top_y - 2, "Studio Associato")
-    c.setFont("Helvetica-Bold", 22)
-    c.drawRightString(W - margin_x, top_y - 24, "THE")
-    c.setFont("Helvetica-Bold", 28)
-    c.drawRightString(W - margin_x, top_y - 52, "ORGANISM")
-    c.setFillColor(dark)
+        # header (right) - text fallback (no logo)
+        c.setFillColor(green)
+        c.setFont("Helvetica", 10)
+        c.drawRightString(W - margin_x, top_y - 2, "Studio Associato")
+        c.setFont("Helvetica-Bold", 22)
+        c.drawRightString(W - margin_x, top_y - 24, "THE")
+        c.setFont("Helvetica-Bold", 28)
+        c.drawRightString(W - margin_x, top_y - 52, "ORGANISM")
+        c.setFillColor(dark)
 
-    # green line
-    line_y = top_y - 64
-    c.setStrokeColor(green)
-    c.setLineWidth(1.5)
-    c.line(margin_x, line_y, W - margin_x, line_y)
-    c.setStrokeColor(dark)
-    c.setLineWidth(1)
+        # green line under header
+        line_y = top_y - 64
+        c.setStrokeColor(green)
+        c.setLineWidth(1.5)
+        c.line(margin_x, line_y, W - margin_x, line_y)
+        c.setStrokeColor(dark)
+        c.setLineWidth(1)
+    else:
+        # when letterhead is present, start content below the reserved header area
+        line_y = H - 18 * mm - header_h
 
     # Date & patient lines
     date_str = str(data.get("data") or "").strip()
@@ -124,12 +135,13 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
     # Place TABO vertically so its top never touches the patient/date lines
     # Patient/date block occupies ~28mm; keep at least 8mm clearance.
     header_clearance = 8 * mm
-    cy = (y - header_clearance) - r  # so that (cy + r) = y - header_clearance
+    tabo_drop = 10 * mm  # requested: push TABO 1 cm lower
+    cy = (y - header_clearance) - r - 10*mm - tabo_drop  # keep top clear + extra drop
 
     c.setFont("Times-Roman", 11)
 
     # Date (right) -> push further right with a short line
-    date_label_x = W - margin_x - 68 * mm
+    date_label_x = W - margin_x - 40 * mm
     c.drawString(date_label_x, y, "Data")
     line_x0 = date_label_x + 18 * mm
     line_x1 = W - margin_x
@@ -304,14 +316,18 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
     ]
     selected = set([str(x) for x in (data.get("lenti") or [])])
 
+    # checkbox primitive (same style used later)
+    def _cb(x, y, checked=False):
+        c.rect(x, y - 2, 9, 9, stroke=1, fill=0)
+        if checked:
+            c.setFont("Times-Bold", 10)
+            c.drawString(x + 2, y - 1, "✓")
+            c.setFont("Times-Roman", 9)
+
     for i, (key, label) in enumerate(left_items):
         yy = lenti_y - 12 * (i + 1)
-        c.drawString(margin_x + 6, yy, label)
-        # small marker if selected
-        if key in selected:
-            c.setFont("Times-Bold", 10)
-            c.drawString(margin_x + 2, yy, "✓")
-            c.setFont("Times-Roman", 9)
+        _cb(margin_x + 6, yy, checked=(key in selected))
+        c.drawString(margin_x + 20, yy, label)
 
     # right checkboxes
     cxr = W / 2 + 40 * mm
