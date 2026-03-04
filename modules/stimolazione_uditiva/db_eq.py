@@ -7,6 +7,50 @@ from typing import Dict, List, Tuple
 
 from .db_orl import FREQS_STD
 
+# --- B2 ADDON: read_eq_profile -------------------------------------------------
+import json
+
+def read_eq_profile(conn, eq_profile_id: int):
+    """
+    Legge un profilo EQ salvato e ritorna:
+      (nome, params_dict, gain_dx_dict, gain_sx_dict)
+
+    gain_* sono dict con chiavi int (freq Hz) e valori float (dB).
+    Compatibile con psycopg2: i JSONB possono arrivare come dict oppure come stringa.
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT nome, params_json, gain_dx_json, gain_sx_json FROM eq_profiles WHERE id=%s",
+            (int(eq_profile_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+
+        nome, params_j, dx_j, sx_j = row
+
+        def _load(x):
+            if x is None:
+                return {}
+            if isinstance(x, (dict, list)):
+                return x
+            return json.loads(x)
+
+        params = _load(params_j)
+
+        dx_raw = _load(dx_j)
+        sx_raw = _load(sx_j)
+
+        gain_dx = {int(k): float(v) for k, v in dx_raw.items()}
+        gain_sx = {int(k): float(v) for k, v in sx_raw.items()}
+
+        return str(nome), params, gain_dx, gain_sx
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
 def _is_postgres(conn) -> bool:
     mod = (getattr(conn.__class__, "__module__", "") or "").lower()
     name = (getattr(conn.__class__, "__name__", "") or "").lower()
