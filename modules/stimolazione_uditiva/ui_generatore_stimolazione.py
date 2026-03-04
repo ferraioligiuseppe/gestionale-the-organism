@@ -109,6 +109,62 @@ def ui_generatore_stimolazione(get_conn, paziente_selector_fn):
         st.success(f"JOB creato! id = {jid} (status = queued)")
 
     st.divider()
+    st.subheader("Preview render (B2) — WAV 16-bit")
+
+    st.caption(
+        "Preview veloce in Streamlit: applica EQ (DX/SX) + gating Tomatis-like su una clip breve.\n"
+        "⚠️ In questa fase supporto SOLO WAV PCM 16-bit per stabilità."
+    )
+
+    prev_secs = st.slider("Durata preview (secondi)", 5, 60, 30)
+
+    wav_prev = st.file_uploader(
+        "Carica WAV 16-bit per preview",
+        type=["wav"],
+        key="wav_prev"
+    )
+
+    if st.button("🎧 Render preview adesso", disabled=(wav_prev is None)):
+        # Import locali: se manca un file, non crasha tutta la pagina
+        try:
+            from .db_eq import read_eq_profile
+            from .db_jobs import read_tomatis_preset
+            from .render_preview import render_preview_wav
+        except Exception as e:
+            st.error("Manca qualche file della patch B2 (render_preview/db_eq/db_jobs).")
+            st.code(f"{type(e).__name__}: {e}")
+        else:
+            eq = read_eq_profile(conn, int(eq_profile_id))
+            if not eq:
+                st.error("EQ profile non trovato.")
+            else:
+                _, _params_eq, gain_dx, gain_sx = eq
+                pres = read_tomatis_preset(conn, int(preset_id))
+                if not pres:
+                    st.error("Preset Tomatis non trovato.")
+                else:
+                    _pname, preset_params = pres
+                    try:
+                        out_bytes, _fs = render_preview_wav(
+                            wav_prev.getvalue(),
+                            eq_gain_dx=gain_dx,
+                            eq_gain_sx=gain_sx,
+                            preset_params=preset_params,
+                            seconds=float(prev_secs),
+                        )
+                        st.success("Preview pronta!")
+                        st.audio(out_bytes, format="audio/wav")
+                        st.download_button(
+                            "⬇️ Scarica preview WAV",
+                            data=out_bytes,
+                            file_name=f"preview_paz{paziente_id}_eq{eq_profile_id}_preset{preset_id}.wav",
+                            mime="audio/wav",
+                        )
+                    except Exception as e:
+                        st.error("Errore render preview (B2).")
+                        st.code(f"{type(e).__name__}: {e}")
+
+    st.divider()
     st.subheader("Coda JOB (paziente)")
     jobs = list_render_jobs(conn, paziente_id, limit=50)
     if not jobs:
