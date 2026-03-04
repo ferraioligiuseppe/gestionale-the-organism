@@ -76,52 +76,80 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         except Exception:
             pass
 
-    # header text + green line: draw ONLY if we don't have a letterhead image already containing them
-    if not (letterhead_path and os.path.exists(letterhead_path)):
-        # header (left)
-        c.setFillColor(dark)
-        c.setFont("Times-Bold", 12)
-        c.drawString(margin_x, top_y, "Dott. Salvatore Adriano Cirillo")
-        c.setFont("Times-Bold", 11)
-        c.drawString(margin_x, top_y - 14, "Medico Chirurgo")
-        c.drawString(margin_x, top_y - 28, "Oculista")
+    # header (left)
+    c.setFillColor(dark)
+    c.setFont("Times-Bold", 12)
+    c.drawString(margin_x, top_y, "Dott. Salvatore Adriano Cirillo")
+    c.setFont("Times-Bold", 11)
+    c.drawString(margin_x, top_y - 14, "Medico Chirurgo")
+    c.drawString(margin_x, top_y - 28, "Oculista")
 
-        # header (right) - text fallback
-        c.setFillColor(green)
-        c.setFont("Helvetica", 10)
-        c.drawRightString(W - margin_x, top_y - 2, "Studio Associato")
-        c.setFont("Helvetica-Bold", 22)
-        c.drawRightString(W - margin_x, top_y - 24, "THE")
-        c.setFont("Helvetica-Bold", 28)
-        c.drawRightString(W - margin_x, top_y - 52, "ORGANISM")
-        c.setFillColor(dark)
+    # header (right) - text fallback; if you have a logo image, you can place it here
+    c.setFillColor(green)
+    c.setFont("Helvetica", 10)
+    c.drawRightString(W - margin_x, top_y - 2, "Studio Associato")
+    c.setFont("Helvetica-Bold", 22)
+    c.drawRightString(W - margin_x, top_y - 24, "THE")
+    c.setFont("Helvetica-Bold", 28)
+    c.drawRightString(W - margin_x, top_y - 52, "ORGANISM")
+    c.setFillColor(dark)
 
-        # green line
-        line_y = top_y - 64
-        c.setStrokeColor(green)
-        c.setLineWidth(1.5)
-        c.line(margin_x, line_y, W - margin_x, line_y)
-        c.setStrokeColor(dark)
-        c.setLineWidth(1)
-    else:
-        # If letterhead already has the green line, start content a bit below it
-        line_y = top_y - 64
+    # green line
+    line_y = top_y - 64
+    c.setStrokeColor(green)
+    c.setLineWidth(1.5)
+    c.line(margin_x, line_y, W - margin_x, line_y)
+    c.setStrokeColor(dark)
+    c.setLineWidth(1)
 
     # Date & patient lines
     date_str = str(data.get("data") or "").strip()
     paziente = str(data.get("paziente") or "").strip()
 
-    y = line_y - 28
+    # we draw "boxed" lines in dedicated spaces, avoiding the TABO area.
+    y = line_y - 24
+
+    # Compute TABO geometry early (we'll use it to keep header lines clear)
+    content_left = margin_x
+    content_right = W - margin_x
+    content_w = content_right - content_left
+    gap = 18 * mm  # central gap (DI space / breathing)
+    r_max = (content_w - gap) / 4.0
+    r = min(34 * mm, r_max)  # keep TABO compact to avoid overlapping header lines
+
+    mid = W / 2.0
+    left_cx = mid - (gap / 2.0 + r)
+    right_cx = mid + (gap / 2.0 + r)
+
+    # Place TABO vertically so its top never touches the patient/date lines
+    # Patient/date block occupies ~28mm; keep at least 8mm clearance.
+    header_clearance = 8 * mm
+    cy = (y - header_clearance) - r  # so that (cy + r) = y - header_clearance
+
     c.setFont("Times-Roman", 11)
-    c.drawRightString(W - margin_x, y, f"Data {date_str}".ljust(6) + "__________________________")
-    y -= 28
+
+    # Date (right) -> push further right with a short line
+    date_label_x = W - margin_x - 68 * mm
+    c.drawString(date_label_x, y, "Data")
+    line_x0 = date_label_x + 18 * mm
+    line_x1 = W - margin_x
+    c.line(line_x0, y - 2, line_x1, y - 2)
+    c.drawRightString(line_x1, y, date_str)
+
+    # Patient (left) -> short line that stops BEFORE the left semicircle
+    y -= 22
     paz_label = paziente
     if paz_label.lower().startswith("sig."):
         paz_label = paz_label[4:].strip()
-    c.drawString(margin_x + 10, y, f"Sig. {paz_label}" + "__________________________")
-    c.line(margin_x + 36, y - 2, W - margin_x, y - 2)
+    c.drawString(margin_x, y, "Sig.")
+    pat_line_x0 = margin_x + 14 * mm
+    left_tabo_left = left_cx - r
+    pat_line_x1 = min(left_tabo_left - 6 * mm, mid - 20 * mm)
+    c.line(pat_line_x0, y - 2, pat_line_x1, y - 2)
+    c.drawString(pat_line_x0 + 2 * mm, y, paz_label)
 
     # TABO semicircles
+
     def _filled_band(cx, cy, r1, r2, col):
         path = c.beginPath()
         steps = 60
@@ -175,8 +203,8 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         c.setFont("Helvetica", 7)
         for deg in (0, 30, 60, 90, 120, 150, 180):
             ang = math.radians(deg)
-            lx = cx + (r + 10) * math.cos(ang)
-            ly = cy + (r + 10) * math.sin(ang)
+            lx = cx + (r + 6) * math.cos(ang)
+            ly = cy + (r + 6) * math.sin(ang)
             c.drawCentredString(lx, ly - 2, str(deg))
 
         # center dot
@@ -184,13 +212,10 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
 
         if show_tabo:
             c.setFont("Times-Bold", 10)
-            c.drawCentredString(cx, cy + r * 0.62, "TABO")
+            c.drawCentredString(cx, cy + r * 0.55, "TABO")
 
-    tabo_y = y - 42
-    r = 43 * mm
-    left_cx = margin_x + 52 * mm
-    right_cx = W - margin_x - 52 * mm
-    cy = tabo_y - 20 * mm
+    # cy, left_cx, right_cx, r already computed above (keeps TABO compact and clear of header lines)
+
 
     draw_semicircle(left_cx, cy, r, show_tabo=False)
     draw_semicircle(right_cx, cy, r, show_tabo=True)
@@ -201,7 +226,7 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
 
     # RX table (3 rows x 3 cols)
     table_top = cy - 24 * mm
-    box_w = 44 * mm  # slightly narrower to create a wider central gap for row labels
+    box_w = 48 * mm
     box_h = 8 * mm
     gap_col = 2 * mm
     col_w = (box_w - 2 * gap_col) / 3
@@ -253,10 +278,10 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
 
     # middle distance labels
     mid_x = W / 2
-    c.setFont("Times-Roman", 8.5)
+    c.setFont("Times-Roman", 9)
     labels = ["LONTANO", "INTERMEDIO\n(COMPUTER)", "VICINO\n(LETTURA)"]
     for row, lab in enumerate(labels):
-        yb = y0 - row * (box_h + 5) + box_h / 2 + 2  # nudge labels upward a bit
+        yb = y0 - row * (box_h + 5) + box_h / 2 - 2
         lines = lab.split("\n")
         if len(lines) == 1:
             c.drawCentredString(mid_x, yb, lines[0])
