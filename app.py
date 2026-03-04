@@ -1,36 +1,32 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-from pathlib import Path
+from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
+from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
-# =========================
-# PNEV UI (Streamlit Pro) – Theme + CSS + tiny UI kit
-# =========================
-def load_pnev_css():
-    """Load assets/pnev.css if present (safe in Cloud/local)."""
-    try:
-        css_path = Path("assets/pnev.css")
-        if css_path.exists():
-            st.markdown(f"<style>{css_path.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
-    except Exception:
-        pass
+import pnev_module as pnev
 
-def pnev_card(title: str, subtitle: str | None = None):
-    sub = f"<div class='pnev-muted'>{subtitle}</div>" if subtitle else ""
-    st.markdown(
-        f"<div class='pnev-card'><div class='pnev-title'>{title}</div>{sub}</div>",
-        unsafe_allow_html=True
-    )
+# --- Optional: PNEV AI helper (solo TEST, se presente) ---
+try:
+    import pnev_ai  # type: ignore
+    PNEV_AI_AVAILABLE = True
+except Exception:
+    pnev_ai = None
+    PNEV_AI_AVAILABLE = False
 
-def pnev_section(title: str, subtitle: str | None = None):
-    st.markdown(f"### {title}")
-    if subtitle:
-        st.caption(subtitle)
+# --- Token/public links helpers ---
+import secrets
+import hmac
+import hashlib
+from datetime import timedelta, timezone
 
-def pnev_kpis(items: list[tuple[str, str]]):
-    cols = st.columns(len(items)) if items else []
-    for c, (label, value) in zip(cols, items):
-        with c:
-            st.metric(label, value)
+# --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
+PSYCOPG2_AVAILABLE = False
+try:
+    import psycopg2  # type: ignore
+    import psycopg2.extras  # type: ignore
+    PSYCOPG2_AVAILABLE = True
+except Exception:
+    PSYCOPG2_AVAILABLE = False
 
 USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
 
@@ -117,7 +113,7 @@ def _detect_patient_table_and_cols(conn):
         'pazienti','Pazienti','patients','Patients','patienti','Patienti',
         'anagrafica_pazienti','Anagrafica_Pazienti','tbl_pazienti','Tbl_Pazienti'
     ]
-    id_cols = ['id','ID','paziente_id','Paziente_ID','id_paziente','ID_Paziente','idPaziente']
+    id_cols = ['id','id','paziente_id','paziente_id','id_paziente','id_Paziente','idPaziente']
     cogn_cols = ['cognome','Cognome','last_name','LastName','lastname','cognome_paziente','Cognome_Paziente']
     nome_cols = ['nome','Nome','first_name','FirstName','firstname','nome_paziente','Nome_Paziente']
     dn_cols = ['data_nascita','Data_Nascita','birth_date','BirthDate','dataNascita','DataNascita','data_n']
@@ -207,6 +203,23 @@ def fetch_pazienti_for_select(conn, limit=5000):
 
 
 # ---------- DEBUG DB (non mostra credenziali) ----------
+
+
+def _select_paziente_minimal(conn):
+    """
+    Selector paziente minimal riusando fetch_pazienti_for_select del gestionale.
+    Ritorna (paziente_id, label).
+    """
+    rows, _, _ = fetch_pazienti_for_select(conn, limit=5000)
+    if not rows:
+        return None, ""
+    options = []
+    for r in rows:
+        pid, cogn, nome, dn, scuola, eta = r
+        label = f"{cogn} {nome} • {dn or ''} • id {pid}"
+        options.append((int(pid), label))
+    sel = st.selectbox("Paziente", options=options, format_func=lambda x: x[1], key="paz_sel_minimal")
+    return sel[0], sel[1]
 def _debug_list_tables(conn, limit=200):
     """Ritorna lista di tuple (schema, table). Gestisce cursor che ritorna dict/RealDictRow."""
     cur = conn.cursor()
@@ -319,7 +332,469 @@ def debug_secrets_auth():
 # chiama la funzione solo in test o solo per admin
 
 import sqlite3
+
+def _ai_enabled() -> bool:
+    """Enable AI helper ONLY in TEST unless explicitly allowed.
+
+    Controlled via Streamlit Secrets:
+    [ai]
+    ENABLED = true
+    """
+    try:
+        if str(APP_MODE).lower().strip() != "test":
+            return False
+        a = st.secrets.get("ai", {})
+        return bool(a.get("ENABLED", False))
+    except Exception:
+        return False
+
 APP_MODE = st.secrets.get("APP_MODE", "prod")
+
+
+def _inpps_cutoff() -> int:
+    """Cut-off operativo (screening) per INPPS. Configurabile via Secrets: [pnev] INPPS_CUTOFF=7"""
+    try:
+        return int(st.secrets.get("pnev", {}).get("INPPS_CUTOFF", 7))
+    except Exception:
+        return 7
+
+
+
+
+
+def _public_links_enabled() -> bool:
+    return bool(st.secrets.get("public_links", {}).get("ENABLED", False))
+
+def _public_base_url() -> str:
+    return str(st.secrets.get("public_links", {}).get("BASE_URL", "")).rstrip("/")
+
+def _token_secret() -> str:
+    return str(st.secrets.get("public_links", {}).get("TOKEN_SECRET", ""))
+
+def _hash_token(token: str) -> str:
+    key = _token_secret()
+    if isinstance(key, str):
+        key = key.encode("utf-8")
+    return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
+    
+def create_questionario_link(cur, paziente_id: int, questionario: str, ttl_days: int | None = None) -> str:
+    """Crea un token per link pubblico. In DB viene salvato solo l'hash del token."""
+    token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(token)
+
+    ttl = ttl_days or int(st.secrets.get("public_links", {}).get("DEFAULT_TTL_DAYS", 7))
+    expires_at = datetime.now(timezone.utc) + timedelta(days=ttl)
+
+    cur.execute(
+        """
+        INSERT INTO questionari_links (paziente_id, questionario, token_hash, created_at, expires_at)
+        VALUES (?,?,?,?,?)
+        """,
+        (int(paziente_id), str(questionario), token_hash, datetime.now(timezone.utc).isoformat(), expires_at.isoformat()),
+    )
+    return token
+
+def validate_token(cur, token: str, questionario: str):
+    """Ritorna la riga se il token è valido (non scaduto e non usato), altrimenti None."""
+    th = _hash_token(token)
+    cur.execute(
+        """
+        SELECT * FROM questionari_links
+        WHERE token_hash = ? AND questionario = ?
+        LIMIT 1
+        """,
+        (th, str(questionario)),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    exp = row.get("expires_at") if hasattr(row, "get") else row["expires_at"]
+    used = row.get("used_at") if hasattr(row, "get") else row["used_at"]
+
+    try:
+        exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00")) if isinstance(exp, str) else exp
+    except Exception:
+        return None
+
+    if used:
+        return None
+    if datetime.now(timezone.utc) > exp_dt:
+        return None
+    return row
+
+def mark_token_used(cur, link_id: int):
+    cur.execute(
+        "UPDATE questionari_links SET used_at = ? WHERE id = ?",
+        (datetime.now(timezone.utc).isoformat(), int(link_id)),
+    )
+
+def maybe_handle_public_questionario(get_conn) -> bool:
+    """Gestisce pagina pubblica (senza login) per compilazione questionari via token."""
+    if not _public_links_enabled():
+        return False
+
+    qp = getattr(st, "query_params", None)
+    if qp is None:
+        qp = st.experimental_get_query_params()
+        q = (qp.get("q", [""])[0] or "").upper()
+        t = (qp.get("t", [""])[0] or "")
+    else:
+        q = (qp.get("q", "") or "").upper()
+        t = (qp.get("t", "") or "")
+
+    if q != "INPPS" or not t:
+        return False
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    link = validate_token(cur, t, "INPPS")
+    if not link:
+        st.error("Link non valido, scaduto o già utilizzato.")
+        try: conn.close()
+        except Exception: pass
+        return True
+
+    paziente_id = int(link.get("paziente_id") if hasattr(link, "get") else link["paziente_id"])
+
+    st.title("Questionario INPPS – Compilazione Genitori")
+    st.caption("Compila e premi INVIA. Il questionario verrà registrato nel gestionale.")
+
+    with st.form("public_inpps_form"):
+        inpps_data, inpps_summary = inpps_collect_ui(prefix="public_inpps", existing=None)
+        submitted = st.form_submit_button("INVIA QUESTIONARIO")
+
+    if submitted:
+        try:
+            cur.execute(
+                "SELECT id, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
+                (paziente_id,),
+            )
+            last = cur.fetchone()
+
+            pnev_obj = {}
+            if last:
+                raw = last.get("pnev_json") if hasattr(last, "get") else last[1]
+                if raw:
+                    pnev_obj = pnev.pnev_load(raw)
+
+            pnev_obj.setdefault("questionari", {})
+            pnev_obj["questionari"]["inpps_screening_genitori"] = inpps_data
+
+            dump = pnev.pnev_dump(pnev_obj)
+            prev_sum = ""
+            if last:
+                prev_sum = (last.get("pnev_summary") if hasattr(last, "get") else last[2]) or ""
+            summary = (prev_sum.strip() + "\n" + inpps_summary).strip() if prev_sum.strip() else inpps_summary
+
+            if last:
+                an_id = int(last.get("id") if hasattr(last, "get") else last[0])
+                cur.execute(
+                    "UPDATE anamnesi SET pnev_json = ?, pnev_summary = ? WHERE id = ?",
+                    (dump, summary, an_id),
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO anamnesi (paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary) VALUES (?,?,?,?,?,?,?)",
+                    (paziente_id, date.today().isoformat(), "INPPS (genitori)", summary, "", dump, summary),
+                )
+
+            mark_token_used(cur, int(link.get("id") if hasattr(link, "get") else link["id"]))
+            conn.commit()
+            st.success("✅ Grazie! Questionario inviato correttamente.")
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            st.error(f"Errore salvataggio: {e}")
+        finally:
+            try: conn.close()
+            except Exception: pass
+        st.stop()
+
+    try: conn.close()
+    except Exception: pass
+    return True
+def _is_empty_pnev(raw) -> bool:
+    """True if pnev_json is missing/empty (works for sqlite TEXT or postgres JSONB)."""
+    if raw is None:
+        return True
+    try:
+        if isinstance(raw, dict):
+            return len(raw) == 0
+    except Exception:
+        pass
+    s = str(raw).strip()
+    if s == "" or s.lower() == "null":
+        return True
+    return s in ("{}", "'{}'", '"{}"', "[]")
+
+def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: int = 5000) -> dict:
+    """Populate pnev_json/pnev_summary for legacy Anamnesi rows that have only Storia/Note.
+    Does NOT overwrite existing pnev_json (non-empty) or pnev_summary (non-empty).
+    Returns stats dict.
+    """
+    stats = {"scanned": 0, "updated": 0, "skipped_has_pnev": 0, "skipped_no_content": 0}
+
+    if paziente_id is None:
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi ORDER BY id DESC LIMIT ?", (int(limit),))
+    else:
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY id DESC LIMIT ?", (int(paziente_id), int(limit)))
+
+    rows = cur.fetchall() or []
+    for r in rows:
+        stats["scanned"] += 1
+        rid = int(r["id"]) if hasattr(r, "__getitem__") else int(r[0])
+
+        motivo = (r.get("motivo") if hasattr(r, "get") else r[3]) or ""
+        storia = (r.get("storia") if hasattr(r, "get") else r[4]) or ""
+        note = (r.get("note") if hasattr(r, "get") else r[5]) or ""
+        pnev_raw = (r.get("pnev_json") if hasattr(r, "get") else r[6])
+        pnev_sum = (r.get("pnev_summary") if hasattr(r, "get") else r[7]) or ""
+
+        if (not _is_empty_pnev(pnev_raw)) or (str(pnev_sum).strip() != ""):
+            stats["skipped_has_pnev"] += 1
+            continue
+
+        content = "\n\n".join([x.strip() for x in [motivo, storia, note] if str(x).strip()])
+        if not content.strip():
+            stats["skipped_no_content"] += 1
+            continue
+
+        payload = {
+            "meta": {
+                "source": "legacy_anamnesi_migration",
+                "migrated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            },
+            "legacy": {
+                "motivo": motivo.strip(),
+                "storia": storia.strip(),
+                "note": note.strip(),
+            },
+        }
+
+        summary = (storia or "").strip() or content.strip()
+
+        try:
+            dump = pnev.pnev_dump(payload)
+        except Exception:
+            dump = json.dumps(payload, ensure_ascii=False)
+
+        cur.execute(
+            "UPDATE anamnesi SET pnev_json = ?, pnev_summary = ? WHERE id = ?",
+            (dump, summary, rid),
+        )
+        stats["updated"] += 1
+
+    return stats
+
+
+def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, str]:
+    """
+    INPPS Screening bambini (genitori) -> dict scalabile + summary.
+    existing: dict precedente (pnev_json["questionari"]["inpps_screening_genitori"]) o None.
+    """
+    existing = existing or {}
+    st.markdown("### INPPS – Screening (Genitori)")
+
+    # --- Prima parte: Neurologica (1-29) ---
+    neuro_items = [
+        ("N01", "C'è qualche caso di difficoltà di apprendimento fra i genitori o le loro famiglie?"),
+        ("N02", "Durante la gravidanza c'è stato qualche problema medico? (es. pressione alta, nausea eccessiva, infezioni, stress emotivo)"),
+        ("N03", "È stata una gravidanza a termine, pre-termine o post-termine?"),
+        ("N04", "È stata la nascita particolarmente difficoltosa o anomala in qualche senso?"),
+        ("N05", "Il bimbo era particolarmente piccolo per la età gestazionale?"),
+        ("N06", "L'allattamento ha presentato particolari difficoltà?"),
+        ("N07", "Il bimbo soffriva di coliche?"),
+        ("N08", "Il bimbo ha avuto difficoltà a dormire (frequenti risvegli, addormentamento difficile)?"),
+        ("N09", "Il bimbo ha avuto difficoltà nell'alimentazione (suzione, deglutizione, masticazione, selettività)?"),
+        ("N10", "Ha gattonato? (se no, ha strisciato o ha saltato la fase?)"),
+        ("N11", "Ha camminato tardi rispetto ai coetanei?"),
+        ("N12", "È stato lento a diventare autonomo (vestirsi, allacciarsi, usare posate)?"),
+        ("N13", "È goffo / inciampa spesso?"),
+        ("N14", "Ha difficoltà con equilibrio (bicicletta, saltare, stare su un piede)?"),
+        ("N15", "Ha difficoltà a prendere / lanciare / colpire una palla?"),
+        ("N16", "Ha difficoltà con coordinazione fine (scrittura, forbici, puzzle)?"),
+        ("N17", "Ha difficoltà a stare seduto fermo a lungo?"),
+        ("N18", "È facilmente distraibile?"),
+        ("N19", "È impulsivo / agisce senza riflettere?"),
+        ("N20", "Ha difficoltà a seguire istruzioni (specialmente in sequenza)?"),
+        ("N21", "Ha difficoltà a organizzare i compiti / pianificare?"),
+        ("N22", "Ha difficoltà di lettura / comprensione del testo?"),
+        ("N23", "Ha difficoltà di scrittura / ortografia?"),
+        ("N24", "Ha difficoltà a copiare dalla lavagna?"),
+        ("N25", "Ha difficoltà con matematica / calcolo?"),
+        ("N26", "Ha difficoltà a ricordare ciò che ha letto/ascoltato?"),
+        ("N27", "Ha difficoltà nelle relazioni con i pari (amicizie, integrazione)?"),
+        ("N28", "Si frustra facilmente / scatti emotivi?"),
+        ("N29", "Se c'è un rumore o movimento inaspettato, si spaventa facilmente?"),
+    ]
+
+    # NOTE: le domande aperte del modulo cartaceo vengono raccolte qui:
+    diag_pregresse = st.text_area(
+        "Diagnosi pregresse (se presenti: dislessia, disprassia, ADHD, ecc.)",
+        value=str(existing.get("free_text", {}).get("diagnosi_pregresse", "")),
+        key=f"{prefix}_diag"
+    )
+
+    st.caption("Spunta le voci che descrivono tuo figlio/a.")
+    neuro_checked = {}
+    with st.expander("Prima parte – Neurologica / sviluppo / scuola (spunte)", expanded=True):
+        for code, label in neuro_items:
+            neuro_checked[code] = st.checkbox(
+                label,
+                value=bool(existing.get("items", {}).get(code, False)),
+                key=f"{prefix}_{code}",
+            )
+
+    # --- Seconda parte: Nutrizione ---
+    gi_opts = ["Colica", "Dolori addominali o aerofagia", "Frequenza anomala movimenti intestinali", "Stitichezza ricorrente", "Diarrea"]
+    skin_opts = ["Eczema", "Zone secche in viso o braccia", "“Pelle di gallina” su braccia/cosce", "Dermatite", "Altro"]
+    ent_opts = ["Ulcere sulla bocca", "Respirazione difficoltosa", "Tonsillite", "Dolori di orecchie", "Sinusite", "Muco persistente", "Russa", "Respirazione con la bocca", "Febbre da fieno (rinite allergica)"]
+    asthma_triggers = ["Esercizio", "Infezioni", "Polvere", "Muffa", "Animali", "Alimenti", "Altro"]
+    with st.expander("Seconda parte – Nutrizione / salute (spunte)", expanded=False):
+        nutr = existing.get("nutrizione", {}) or {}
+        st.markdown("**Problemi gastro-intestinali**")
+        gi_sel = {opt: st.checkbox(opt, value=bool(nutr.get("gastro", {}).get(opt, False)), key=f"{prefix}_GI_{opt}") for opt in gi_opts}
+
+        st.markdown("**Problemi di pelle**")
+        skin_sel = {opt: st.checkbox(opt, value=bool(nutr.get("pelle", {}).get(opt, False)), key=f"{prefix}_SK_{opt}") for opt in skin_opts}
+        skin_altro = st.text_input("Altro (pelle) – specificare", value=str(nutr.get("pelle_altro", "")), key=f"{prefix}_SK_altro_txt")
+
+        st.markdown("**Orecchio, Naso e Gola**")
+        ent_sel = {opt: st.checkbox(opt, value=bool(nutr.get("orlg", {}).get(opt, False)), key=f"{prefix}_ENT_{opt}") for opt in ent_opts}
+
+        st.markdown("**Asma – indotto da**")
+        asthma_sel = {opt: st.checkbox(opt, value=bool(nutr.get("asma", {}).get(opt, False)), key=f"{prefix}_AS_{opt}") for opt in asthma_triggers}
+        asma_altro = st.text_input("Altro (asma) – specificare", value=str(nutr.get("asma_altro", "")), key=f"{prefix}_AS_altro_txt")
+
+        sete = st.checkbox("Sete particolarmente esagerata?", value=bool(nutr.get("sete_esagerata", False)), key=f"{prefix}_sete")
+
+    # --- Terza parte: Udito (Madaule) ---
+    dev_hist = [
+        ("U_H01", "C'è stato un ritardo nello sviluppo motorio?"),
+        ("U_H02", "C'è stato un ritardo nello sviluppo del linguaggio?"),
+        ("U_H03", "Otite di ripetizione?"),
+        ("U_H04", "Sospetti di difficoltà uditive con accertamenti?"),
+    ]
+    ascolto_ric = [
+        ("U_R01", "Brevi tempi di attenzione"),
+        ("U_R02", "Distraibilità"),
+        ("U_R03", "Ipersensibile ai suoni"),
+        ("U_R04", "Mal intende le domande"),
+        ("U_R05", "Confonde parole simili / necessita spesso ripetizioni"),
+        ("U_R06", "Incapace di seguire ordini in sequenza"),
+    ]
+    energia = [
+        ("U_E01", "Stanchezza alla fine della giornata"),
+        ("U_E02", "Iperattività"),
+        ("U_E03", "Tendenze depressive"),
+    ]
+    espressivo = [
+        ("U_X01", "Voce piatta e monotona"),
+        ("U_X02", "Discorso dubitativo"),
+        ("U_X03", "Scarso vocabolario"),
+        ("U_X04", "Povera costruzione delle frasi"),
+        ("U_X05", "Incapacità a cantare intonato"),
+        ("U_X06", "Confusione o inversione di lettere"),
+        ("U_X07", "Scarsa comprensione della lettura"),
+        ("U_X08", "Povera lettura ad alta voce"),
+        ("U_X09", "Povera ortografia"),
+    ]
+    sociale = [
+        ("U_S01", "Scarsa tollerabilità per la frustrazione"),
+        ("U_S02", "Povera immagine di sé"),
+        ("U_S03", "Difficoltà a fare amici"),
+        ("U_S04", "Tendenza a rinchiudersi / evitare gli altri"),
+        ("U_S05", "Scarsa motivazione / disinteresse nei compiti scolastici"),
+        ("U_S06", "Immaturità"),
+        ("U_S07", "Irritabilità"),
+        ("U_S08", "Timidezza"),
+    ]
+    with st.expander("Terza parte – Udito (Madaule) (spunte)", expanded=False):
+        ud = existing.get("udito", {}) or {}
+        st.markdown("**Storia dello sviluppo**")
+        for code, label in dev_hist:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+        st.markdown("**Ascolto ricettivo (esterno)**")
+        for code, label in ascolto_ric:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+        st.markdown("**Livello di energia**")
+        for code, label in energia:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+        st.markdown("**Ascolto espressivo (interno)**")
+        for code, label in espressivo:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+        st.markdown("**Comportamento e integrazione sociale**")
+        for code, label in sociale:
+            neuro_checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+    # Build structured result
+    n_neuro = sum(1 for k,v in neuro_checked.items() if k.startswith("N") and v)
+    n_udito = sum(1 for k,v in neuro_checked.items() if k.startswith("U_") and v)
+
+    nutr_res = {
+        "gastro": {k: bool(v) for k,v in locals().get("gi_sel", {}).items()},
+        "pelle": {k: bool(v) for k,v in locals().get("skin_sel", {}).items()},
+        "pelle_altro": (locals().get("skin_altro") or "").strip(),
+        "orlg": {k: bool(v) for k,v in locals().get("ent_sel", {}).items()},
+        "asma": {k: bool(v) for k,v in locals().get("asthma_sel", {}).items()},
+        "asma_altro": (locals().get("asma_altro") or "").strip(),
+        "sete_esagerata": bool(locals().get("sete", False)),
+    }
+
+    # counts
+    nutr_count = 0
+    for group in ("gastro","pelle","orlg","asma"):
+        nutr_count += sum(1 for _,v in nutr_res.get(group, {}).items() if v)
+    nutr_count += 1 if nutr_res.get("sete_esagerata") else 0
+
+    result = {
+        "version": "inpps01it",
+        "mode": "genitori",
+        "date": date.today().isoformat(),
+        "positivi": {"neurologica_scuola": int(n_neuro), "nutrizione": int(nutr_count), "udito_madaule": int(n_udito)},
+        "items": {k: bool(v) for k,v in neuro_checked.items()},
+        "nutrizione": nutr_res,
+        "free_text": {"diagnosi_pregresse": (diag_pregresse or "").strip()},
+    }
+
+    cutoff = _inpps_cutoff()
+    totale = int(n_neuro) + int(nutr_count) + int(n_udito)
+    flag = totale >= cutoff
+
+    # Salva interpretazione (screening, non diagnosi)
+    result["screening"] = {
+        "cutoff": int(cutoff),
+        "totale_positivi": int(totale),
+        "flag_possibile_immaturita_neuromotoria": bool(flag),
+        "nota": "Criterio operativo di screening (protocollo PNEV/INPPS). Richiede conferma clinica diretta.",
+    }
+
+    # Semaforo in UI
+    if flag:
+        st.warning(
+            f"⚠️ Screening INPPS: {totale} positivi (cut-off ≥ {cutoff}) → possibile immaturità neuromotoria. "
+            "Richiede conferma con valutazione clinica diretta."
+        )
+    else:
+        st.success(f"✅ Screening INPPS: {totale} positivi (cut-off ≥ {cutoff}) → nessun alert da screening.")
+
+    summary = (
+        f"INPPS genitori: Neurologica/Scuola {n_neuro} • Nutrizione {nutr_count} • Udito {n_udito} "
+        f"(Totale {totale}, cut-off ≥ {cutoff})"
+    )
+    if flag:
+        summary += " → possibile immaturità neuromotoria (screening)."
+    else:
+        summary += "."
+    return result, summary
+
+
 if APP_MODE == "test":
     debug_secrets_auth()
 if APP_MODE == "test":
@@ -761,53 +1236,465 @@ def load_users_dynamic() -> dict:
     # Fallback locale
     return {"admin": "admin123"}
 
-def login() -> bool:
-    """Login semplice con username/password."""
+# =========================
+# AUTH (DB-based) + RBAC
+# =========================
+import secrets as _secrets_mod
+
+PBKDF2_ITERS = 260_000
+
+def _pwd_hash(pw: str, salt_b64: str | None = None, iters: int = PBKDF2_ITERS) -> str:
+    """Hash password with PBKDF2-HMAC-SHA256.
+    Format: pbkdf2_sha256$<iters>$<salt_b64>$<hash_b64>
+    NOTE: Imports are inside the function to avoid NameError if global imports change.
+    """
+    import base64
+    import hashlib
+    import secrets as _secrets_mod_local
+
+    if salt_b64 is None:
+        salt = _secrets_mod_local.token_bytes(16)
+        salt_b64 = base64.b64encode(salt).decode("utf-8")
+    else:
+        salt = base64.b64decode(salt_b64.encode("utf-8"))
+
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, int(iters), dklen=32)
+    hash_b64 = base64.b64encode(dk).decode("utf-8")
+    return f"pbkdf2_sha256${int(iters)}${salt_b64}${hash_b64}"
+
+def _pwd_verify(pw: str, stored: str) -> bool:
+    """Verify PBKDF2 password hash."""
+    import hmac
+    try:
+        algo, iters_s, salt_b64, _hash_b64 = stored.split("$", 3)
+        if algo != "pbkdf2_sha256":
+            return False
+        iters = int(iters_s)
+        candidate = _pwd_hash(pw, salt_b64=salt_b64, iters=iters)
+        return hmac.compare_digest(candidate, stored)
+    except Exception:
+        return False
+        iters = int(iters_s)
+        candidate = _pwd_hash(pw, salt_b64=salt_b64, iters=iters)
+        return hmac.compare_digest(candidate, stored)
+    except Exception:
+        return False
+
+def _breakglass_enabled() -> bool:
+    """Emergency login toggle (TEST only)."""
+    try:
+        if str(st.secrets.get("APP_MODE", "prod")).lower().strip() != "test":
+            return False
+    except Exception:
+        return False
+    bg = st.secrets.get("breakglass", {})
+    return bool(bg.get("ENABLED", False))
+
+def _breakglass_check(username: str, password: str) -> bool:
+    bg = st.secrets.get("breakglass", {})
+    return username == bg.get("USERNAME") and password == bg.get("PASSWORD")
+
+
+def ensure_auth_schema(conn):
+    """Create auth tables if missing (safe to call multiple times)."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_users (
+          id BIGSERIAL PRIMARY KEY,
+          username TEXT UNIQUE NOT NULL,
+          email TEXT,
+          password_hash TEXT NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_login_at TIMESTAMPTZ
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_roles (
+          id BIGSERIAL PRIMARY KEY,
+          name TEXT UNIQUE NOT NULL
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_user_roles (
+          user_id BIGINT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+          role_id BIGINT NOT NULL REFERENCES auth_roles(id) ON DELETE CASCADE,
+          PRIMARY KEY (user_id, role_id)
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_audit_log (
+          id BIGSERIAL PRIMARY KEY,
+          ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          user_id BIGINT REFERENCES auth_users(id) ON DELETE SET NULL,
+          action TEXT NOT NULL,
+          entity TEXT,
+          entity_id TEXT,
+          meta JSONB NOT NULL DEFAULT '{}'::jsonb
+        );
+        """)
+        cur.execute("""
+        INSERT INTO auth_roles(name) VALUES
+        ('admin'),('vision'),('osteo'),('segreteria'),('clinico')
+        ON CONFLICT (name) DO NOTHING;
+        """)
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def _audit(conn, user_id: int | None, action: str, entity: str | None = None, entity_id: str | None = None, meta: dict | None = None):
+    """Write an audit log entry.
+    Safe for break-glass sessions (user_id < 1) by storing NULL user_id (allowed by FK).
+    Imports json locally to avoid NameError.
+    """
+    import json
+
+    meta = meta or {}
+
+    # break-glass / invalid user id -> NULL
+    try:
+        if user_id is not None and int(user_id) < 1:
+            user_id = None
+    except Exception:
+        user_id = None
+
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO auth_audit_log(user_id, action, entity, entity_id, meta) VALUES (%s,%s,%s,%s,%s::jsonb)",
+            (user_id, action, entity, entity_id, json.dumps(meta)),
+        )
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+
+def _get_user_by_username(conn, username: str):
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, username, email, password_hash, is_active, must_change_password
+            FROM auth_users
+            WHERE username = %s
+        """, (username,))
+        return cur.fetchone()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def _get_roles_for_user(conn, user_id: int) -> list[str]:
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT r.name
+            FROM auth_user_roles ur
+            JOIN auth_roles r ON r.id = ur.role_id
+            WHERE ur.user_id = %s
+            ORDER BY r.name
+        """, (user_id,))
+        rows = cur.fetchall() or []
+        return [r[0] for r in rows]
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+def current_user():
+    return st.session_state.get("user")
+
+def is_admin() -> bool:
+    u = current_user() or {}
+    return "admin" in (u.get("roles") or [])
+
+def can(role: str) -> bool:
+    u = current_user() or {}
+    roles = set(u.get("roles") or [])
+    return ("admin" in roles) or (role in roles)
+
+def _ensure_first_admin(conn) -> bool:
+    """If no users exist yet, allow creating the first admin from UI."""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM auth_users;")
+        n = cur.fetchone()[0]
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+    if n and int(n) > 0:
+        return True  # already bootstrapped
+
+    st.warning("⚠️ Nessun utente presente. Crea il primo amministratore.")
+    username = st.text_input("Username admin iniziale", value="admin")
+    pw1 = st.text_input("Password admin", type="password")
+    pw2 = st.text_input("Conferma password", type="password")
+    if st.button("Crea admin"):
+        if not username.strip() or not pw1:
+            st.error("Username e password sono obbligatori.")
+            return False
+        if pw1 != pw2:
+            st.error("Le password non coincidono.")
+            return False
+
+        ph = _pwd_hash(pw1)
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO auth_users(username, email, password_hash, must_change_password) VALUES (%s,%s,%s,%s) RETURNING id",
+                (username.strip(), None, ph, False),
+            )
+            uid = cur.fetchone()[0]
+
+            # assegna ruolo admin
+            cur.execute("SELECT id FROM auth_roles WHERE name = 'admin'")
+            rid = cur.fetchone()[0]
+            cur.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
+
+            conn.commit()
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            st.error(f"Errore creazione admin: {e}")
+            return False
+        finally:
+            try: cur.close()
+            except Exception: pass
+
+        _audit(conn, uid, "BOOTSTRAP_ADMIN", meta={"username": username.strip()})
+        st.success("Admin creato. Ora effettua il login.")
+        st.rerun()
+    return False
+
+def login(get_conn) -> bool:
+    """Login su DB con ruoli."""
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
-    if "logged_user" not in st.session_state:
-        st.session_state["logged_user"] = None
+    if "user" not in st.session_state:
+        st.session_state["user"] = None
 
-    if st.session_state["logged_in"]:
-        st.sidebar.markdown(f"👤 Utente: **{st.session_state['logged_user']}**")
+    if st.session_state["logged_in"] and st.session_state["user"]:
+        u = st.session_state["user"]
+        st.sidebar.markdown(f"👤 Utente: **{u['username']}**")
+        st.sidebar.caption("Ruoli: " + (", ".join(u.get("roles", [])) or "(nessuno)"))
         if st.sidebar.button("Logout"):
             st.session_state["logged_in"] = False
-            st.session_state["logged_user"] = None
+            st.session_state["user"] = None
             st.rerun()
         return True
 
     st.title("The Organism – Login")
     st.caption(f"Versione: {APP_VERSION}")
 
-    users = load_users_dynamic()
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
 
-    user = st.text_input("Username")
-    pwd = st.text_input("Password", type="password")
+    conn = get_conn()
+    # Clear any aborted transaction state from previous operations
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+    ensure_auth_schema(conn)
+
+    # bootstrap primo admin se non ci sono utenti
+    if not _ensure_first_admin(conn):
+        return False
 
     if st.button("Accedi"):
-        if user in users and users[user] == pwd:
+
+        u_in = (username or "").strip()
+        p_in = password or ""
+        if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
-            st.session_state["logged_user"] = user
-            st.success("Accesso effettuato.")
+            st.session_state["user"] = {
+                "id": None,
+                "username": u_in,
+                "email": None,
+                "roles": ["admin"],
+                "must_change_password": False,
+                "breakglass": True,
+            }
+            try:
+                _audit(conn, None, "LOGIN_BREAKGLASS", meta={"username": u_in})
+            except Exception:
+                pass
+            st.warning("✅ Accesso di emergenza attivo (break-glass). Disattivalo nei Secrets dopo aver sistemato gli utenti.")
             st.rerun()
-        else:
+        row = _get_user_by_username(conn, username.strip())
+        if not row:
             st.error("Credenziali errate.")
+            _audit(conn, None, "LOGIN_FAIL", meta={"username": username.strip()})
+            return False
+
+        user_id, uname, email, pwd_hash, is_active, must_change = row
+        if not is_active:
+            st.error("Utente disattivato.")
+            _audit(conn, user_id, "LOGIN_FAIL_DISABLED", meta={})
+            return False
+
+        if not _pwd_verify(password, pwd_hash):
+            st.error("Credenziali errate.")
+            _audit(conn, user_id, "LOGIN_FAIL", meta={})
+            return False
+
+        roles = _get_roles_for_user(conn, user_id)
+
+        # update last login
+        cur = conn.cursor()
+        try:
+            cur.execute("UPDATE auth_users SET last_login_at = NOW() WHERE id = %s", (user_id,))
+            conn.commit()
+        finally:
+            try: cur.close()
+            except Exception: pass
+
+        _audit(conn, user_id, "LOGIN_SUCCESS", meta={"roles": roles})
+
+        st.session_state["logged_in"] = True
+        st.session_state["user"] = {
+            "id": int(user_id),
+            "username": str(uname),
+            "email": email,
+            "roles": roles,
+            "must_change_password": bool(must_change),
+        }
+        st.success("Accesso effettuato.")
+        st.rerun()
+
     return False
 
+def ui_gestione_utenti(get_conn):
+    """UI admin: crea utenti/ruoli, reset password e attiva/disattiva."""
+    if not is_admin():
+        st.error("Accesso negato: solo admin.")
+        return
 
-# -----------------------------
-# Database (SQLite locale / PostgreSQL-Neon in Cloud)
-# -----------------------------
+    conn = get_conn()
+    ensure_auth_schema(conn)
 
-SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_v2.db")
+    st.header("Utenti / Ruoli")
 
-try:
-    import psycopg2
-    import psycopg2.extras
-    PSYCOPG2_AVAILABLE = True
-except Exception:
-    psycopg2 = None
-    PSYCOPG2_AVAILABLE = False
+    # Crea utente
+    with st.expander("➕ Crea nuovo utente", expanded=True):
+        new_u = st.text_input("Nuovo username")
+        new_email = st.text_input("Email (opzionale)")
+        new_pw = st.text_input("Password iniziale", type="password")
+        roles = st.multiselect("Ruoli", ["admin","vision","osteo","segreteria","clinico"], default=["clinico"])
+        must_change = st.checkbox("Obbliga cambio password al primo accesso", value=True)
+
+        if st.button("Crea utente"):
+            if not new_u.strip() or not new_pw:
+                st.warning("Username e password obbligatori.")
+            else:
+                ph = _pwd_hash(new_pw)
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "INSERT INTO auth_users(username, email, password_hash, must_change_password) VALUES (%s,%s,%s,%s) RETURNING id",
+                        (new_u.strip(), (new_email.strip() or None), ph, must_change),
+                    )
+                    uid = cur.fetchone()[0]
+
+                    for r in roles:
+                        cur.execute("SELECT id FROM auth_roles WHERE name=%s", (r,))
+                        rid = cur.fetchone()[0]
+                        cur.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
+
+                    conn.commit()
+                    try: cur.close()
+                    except Exception: pass
+                    _audit(conn, st.session_state["user"]["id"], "USER_CREATED", entity="auth_users", entity_id=str(uid), meta={"username": new_u.strip(), "roles": roles})
+                    st.success("Utente creato.")
+                    st.rerun()
+                except Exception as e:
+                    try: conn.rollback()
+                    except Exception: pass
+                    st.error(f"Errore creazione utente: {e}")
+
+    # Lista utenti
+    st.subheader("Elenco utenti")
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, username, email, is_active, must_change_password, last_login_at FROM auth_users ORDER BY username;")
+        rows = cur.fetchall() or []
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+    if not rows:
+        st.info("Nessun utente.")
+        return
+
+    for r in rows:
+        uid = int(r[0])
+        uname = str(r[1])
+        email = r[2]
+        is_active = bool(r[3])
+        must_change = bool(r[4])
+        last_login = r[5]
+        with st.expander(f"👤 {uname} (id {uid})", expanded=False):
+            st.write({"email": email, "is_active": is_active, "must_change_password": must_change, "last_login_at": str(last_login) if last_login else None})
+            # ruoli
+            current_roles = _get_roles_for_user(conn, uid)
+            new_roles = st.multiselect(f"Ruoli per {uname}", ["admin","vision","osteo","segreteria","clinico"], default=current_roles, key=f"roles_{uid}")
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                new_pw = st.text_input(f"Reset password ({uname})", type="password", key=f"pw_{uid}")
+                if st.button(f"Imposta password", key=f"setpw_{uid}"):
+                    if not new_pw:
+                        st.warning("Inserisci una password.")
+                    else:
+                        ph = _pwd_hash(new_pw)
+                        c2 = conn.cursor()
+                        try:
+                            c2.execute("UPDATE auth_users SET password_hash=%s, must_change_password=TRUE WHERE id=%s", (ph, uid))
+                            conn.commit()
+                        finally:
+                            try: c2.close()
+                            except Exception: pass
+                        _audit(conn, st.session_state["user"]["id"], "PASSWORD_RESET", entity="auth_users", entity_id=str(uid), meta={})
+                        st.success("Password aggiornata (utente obbligato a cambiarla al prossimo accesso).")
+            with col2:
+                if st.button("Salva ruoli", key=f"saveroles_{uid}"):
+                    c3 = conn.cursor()
+                    try:
+                        # rimuovi e reinserisci
+                        c3.execute("DELETE FROM auth_user_roles WHERE user_id=%s", (uid,))
+                        for rr in new_roles:
+                            c3.execute("SELECT id FROM auth_roles WHERE name=%s", (rr,))
+                            rid = c3.fetchone()[0]
+                            c3.execute("INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) ON CONFLICT DO NOTHING", (uid, rid))
+                        conn.commit()
+                    finally:
+                        try: c3.close()
+                        except Exception: pass
+                    _audit(conn, st.session_state["user"]["id"], "ROLES_UPDATED", entity="auth_users", entity_id=str(uid), meta={"roles": new_roles})
+                    st.success("Ruoli salvati.")
+                    st.rerun()
+            with col3:
+                toggle_label = "Disattiva" if is_active else "Riattiva"
+                if st.button(toggle_label, key=f"toggle_{uid}"):
+                    c4 = conn.cursor()
+                    try:
+                        c4.execute("UPDATE auth_users SET is_active=%s WHERE id=%s", (not is_active, uid))
+                        conn.commit()
+                    finally:
+                        try: c4.close()
+                        except Exception: pass
+                    _audit(conn, st.session_state["user"]["id"], "USER_TOGGLED", entity="auth_users", entity_id=str(uid), meta={"is_active": (not is_active)})
+                    st.success("Stato aggiornato.")
+                    st.rerun()
 
 
 
@@ -832,7 +1719,7 @@ class _RowCI(dict):
     """Case-insensitive dict for row access, but also behaves like a sequence.
 
     We need BOTH:
-    - row['ID'] style access (case-insensitive) for legacy SQLite-style code
+    - row['id'] style access (case-insensitive) for legacy SQLite-style code
     - row[0] / list(row) sequence-style access for code paths that expect tuples
 
     psycopg2 DictRow supports both, but we wrap it to make key access case-insensitive.
@@ -891,13 +1778,29 @@ class _PgCursor:
 
     def execute(self, sql, params=None):
         sql2 = self._adapt_sql(str(sql))
-        if params is None:
-            return self._cur.execute(sql2)
-        return self._cur.execute(sql2, params)
+        try:
+            if params is None:
+                return self._cur.execute(sql2)
+            return self._cur.execute(sql2, params)
+        except Exception:
+            # If a statement fails, PostgreSQL marks the transaction as aborted.
+            # Roll back so subsequent statements don't hit InFailedSqlTransaction.
+            try:
+                self._cur.connection.rollback()
+            except Exception:
+                pass
+            raise
 
     def executemany(self, sql, seq_of_params):
         sql2 = self._adapt_sql(str(sql))
-        return self._cur.executemany(sql2, seq_of_params)
+        try:
+            return self._cur.executemany(sql2, seq_of_params)
+        except Exception:
+            try:
+                self._cur.connection.rollback()
+            except Exception:
+                pass
+            raise
 
     def fetchone(self):
         row = self._cur.fetchone()
@@ -944,6 +1847,9 @@ class _PgConn:
 
     def commit(self):
         return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
 
     def close(self):
         return self._conn.close()
@@ -1179,7 +2085,7 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Pazienti (
-                ID              INTEGER PRIMARY KEY AUTOINCREMENT,
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 Cognome         TEXT NOT NULL,
                 Nome            TEXT NOT NULL,
                 Data_Nascita    TEXT,
@@ -1195,34 +2101,65 @@ def init_db() -> None:
             )
             """
         )
-
         # Anamnesi
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Anamnesi (
-                ID              INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID     INTEGER NOT NULL,
-                Data_Anamnesi   TEXT,
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id     INTEGER NOT NULL,
+                data_anamnesi   TEXT,
                 Motivo          TEXT,
                 Storia          TEXT,
                 Note            TEXT,
-                -- campi strutturati
+                -- campi strutturati legacy
                 Perinatale      TEXT,
                 Sviluppo        TEXT,
                 Scuola          TEXT,
                 Emotivo         TEXT,
                 Sensoriale      TEXT,
-                Stile_Vita      TEXT
+                Stile_Vita      TEXT,
+                -- PNEV scalabile (JSON)
+                pnev_json        TEXT,
+                pnev_summary     TEXT
             )
             """
         )
+
+        # questionari_links (token pubblici) — SQLite
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS questionari_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id INTEGER NOT NULL,
+                questionario TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT,
+                expires_at TEXT,
+                used_at TEXT,
+                meta_json TEXT
+            )
+            """
+        )
+        # Migrazione PNEV (SQLite) – aggiunge colonne se mancanti
+        try:
+            cur.execute("PRAGMA table_info(Anamnesi)")
+            existing_cols = {r[1] for r in cur.fetchall()}
+            mig_cols = [
+                ("pnev_json", "TEXT"),
+                ("pnev_summary", "TEXT"),
+            ]
+            for col, typ in mig_cols:
+                if col not in existing_cols:
+                    cur.execute(f"ALTER TABLE Anamnesi ADD COLUMN {col} {typ}")
+        except Exception:
+            pass
 
         # Valutazioni visive / oculistiche
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Valutazioni_Visive (
-                ID                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID         INTEGER NOT NULL,
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id         INTEGER NOT NULL,
                 Data_Valutazione    TEXT,
                 Tipo_Visita         TEXT,
                 Professionista      TEXT,
@@ -1289,12 +2226,12 @@ def init_db() -> None:
         except Exception:
             # Non bloccare l'avvio se la migrazione fallisce
             pass
-# Sedute / terapie
+    # Sedute / terapie
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Sedute (
-                ID              INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID     INTEGER NOT NULL,
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id     INTEGER NOT NULL,
                 Data_Seduta     TEXT,
                 Terapia         TEXT,
                 Professionista  TEXT,
@@ -1309,8 +2246,8 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Coupons (
-                ID                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID         INTEGER NOT NULL,
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id         INTEGER NOT NULL,
                 Tipo_Coupon         TEXT,
                 Codice_Coupon       TEXT,
                 Data_Assegnazione   TEXT,
@@ -1325,8 +2262,8 @@ def init_db() -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS Consensi_Privacy (
-                ID                  INTEGER PRIMARY KEY AUTOINCREMENT,
-                Paziente_ID         INTEGER NOT NULL,
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                paziente_id         INTEGER NOT NULL,
                 Data_Ora            TEXT,
                 Tipo                TEXT,   -- ADULTO / MINORE
                 Tutore_Nome         TEXT,
@@ -1349,7 +2286,7 @@ def init_db() -> None:
                 Note                    TEXT
             )
     """
-)
+    )
 
 
         
@@ -1401,32 +2338,13 @@ def init_db() -> None:
     # PostgreSQL (Neon) init
     # -------------------------
     # Nota: usiamo tipi compatibili e vincoli FK corretti.
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS Pazienti (
-            ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Cognome         TEXT NOT NULL,
-            Nome            TEXT NOT NULL,
-            Data_Nascita    TEXT,
-            Sesso           TEXT,
-            Telefono        TEXT,
-            Email           TEXT,
-            Indirizzo       TEXT,
-            CAP             TEXT,
-            Citta           TEXT,
-            Provincia       TEXT,
-            Codice_Fiscale  TEXT,
-            Stato_Paziente  TEXT NOT NULL DEFAULT 'ATTIVO'
-        )
-        """
-    )
-
+        # Anamnesi (Valutazione PNEV) – tabella centrale (PostgreSQL)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Anamnesi (
-            ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID     BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
-            Data_Anamnesi   TEXT,
+            id              BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id     BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
+            data_anamnesi   TEXT,
             Motivo          TEXT,
             Storia          TEXT,
             Note            TEXT,
@@ -1435,16 +2353,30 @@ def init_db() -> None:
             Scuola          TEXT,
             Emotivo         TEXT,
             Sensoriale      TEXT,
-            Stile_Vita      TEXT
+            Stile_Vita      TEXT,
+            pnev_json        JSONB NOT NULL DEFAULT '{}'::jsonb,
+            pnev_summary     TEXT
         )
         """
     )
 
+    # Migrazione PNEV (PostgreSQL) – Anamnesi: JSON strutturato + summary
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Anamnesi ADD COLUMN IF NOT EXISTS pnev_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Anamnesi ADD COLUMN IF NOT EXISTS pnev_summary TEXT;")
+    except Exception:
+        pass
+
+
+
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Valutazioni_Visive (
-            ID                  BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID         BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            id                  BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id         BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
             Data_Valutazione    TEXT,
             Tipo_Visita         TEXT,
             Professionista      TEXT,
@@ -1491,11 +2423,22 @@ def init_db() -> None:
     except Exception:
         pass
 
+
+    # Migrazione PNEV (PostgreSQL) – JSON strutturato + summary
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_summary TEXT;")
+    except Exception:
+        pass
+
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Sedute (
-            ID              BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID     BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            id              BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id     BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
             Data_Seduta     TEXT,
             Terapia         TEXT,
             Professionista  TEXT,
@@ -1509,8 +2452,8 @@ def init_db() -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Coupons (
-            ID                BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID       BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            id                BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id       BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
             Tipo_Coupon       TEXT NOT NULL,     -- OF o SDS
             Codice_Coupon     TEXT,              -- numero / codice coupon
             Data_Assegnazione TEXT,
@@ -1528,8 +2471,8 @@ def init_db() -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS Consensi_Privacy (
-            ID                  BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-            Paziente_ID         BIGINT NOT NULL REFERENCES Pazienti(ID) ON DELETE CASCADE,
+            id                  BIGINT GENERATED BY DEFAULT AS idENTITY PRIMARY KEY,
+            paziente_id         BIGINT NOT NULL REFERENCES Pazienti(id) ON DELETE CASCADE,
             Data_Ora            TEXT,
             Tipo                TEXT,   -- ADULTO / MINORE
             Tutore_Nome         TEXT,
@@ -1565,9 +2508,8 @@ def init_db() -> None:
     except Exception:
         pass
 
-# Relazioni Cliniche (PostgreSQL)
-# (Inizializzazione spostata dentro init_db / funzioni helper per evitare NameError in import)
-
+    # Relazioni Cliniche (PostgreSQL)
+    # (Inizializzazione spostata dentro init_db / funzioni helper per evitare NameError in import)
 
 def _solo_lettere(s: str) -> str:
     return "".join(ch for ch in s.upper() if ch.isalpha())
@@ -2168,7 +3110,7 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
     cur.execute(
         """
         INSERT INTO Consensi_Privacy
-        (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
+        (paziente_id, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
          Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
          Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo,
          Firma_Blob, Firma_Filename, Firma_URL, Firma_Source,
@@ -2202,7 +3144,7 @@ def insert_privacy_consent(cur, paziente_id: int, payload: dict):
 
 def fetch_privacy_consents(cur, paziente_id: int):
     cur.execute(
-        """SELECT * FROM Consensi_Privacy WHERE Paziente_ID = ? ORDER BY Data_Ora DESC, ID DESC""",
+        """SELECT * FROM Consensi_Privacy WHERE paziente_id = ? ORDER BY Data_Ora DESC, id DESC""",
         (paziente_id,),
     )
     return cur.fetchall()
@@ -2290,7 +3232,7 @@ def _read_csv_url(url: str):
 
 def import_privacy_from_sheet_csv(cur, paziente: dict, tipo: str) -> int | None:
     """Importa l'ultima risposta dallo Sheet (pubblicato CSV) e la registra in Consensi_Privacy.
-    Ritorna l'ID inserito (se disponibile) o None se non trova match.
+    Ritorna l'id inserito (se disponibile) o None se non trova match.
 
     Match per Codice Fiscale (preferito) oppure Email.
     """
@@ -2377,7 +3319,7 @@ def import_privacy_from_sheet_csv(cur, paziente: dict, tipo: str) -> int | None:
     # Klaviyo: lo abilitiamo solo se marketing=1 e firma/consenso presente
     usa_klaviyo = 1 if (consenso_mark == 1) else 0
 
-    paz_id = int(paziente.get("ID") or 0)
+    paz_id = int(paziente.get("id") or 0)
     now_iso = datetime.now().isoformat(timespec="seconds")
     tipo_db = "MINORE" if tipo.upper().startswith("M") else "ADULTO"
 
@@ -2401,7 +3343,7 @@ def import_privacy_from_sheet_csv(cur, paziente: dict, tipo: str) -> int | None:
     cur.execute(
         """
         INSERT INTO Consensi_Privacy
-        (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
+        (paziente_id, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
          Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
          Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo,
          Firma_Blob, Firma_Filename, Firma_URL, Firma_Source, Note)
@@ -3293,13 +4235,13 @@ def genera_referto_oculistico_a4_pdf(paziente, valutazione, with_header: bool) -
 # -----------------------------
 
 def _patient_child_tables():
-    # tabelle che referenziano Pazienti(ID) via Paziente_ID
+    # tabelle che referenziano Pazienti(id) via paziente_id
     return [
-        ("Anamnesi", "Paziente_ID"),
-        ("Valutazioni_Visive", "Paziente_ID"),
-        ("Sedute", "Paziente_ID"),
-        ("Coupons", "Paziente_ID"),
-        ("Consensi_Privacy", "Paziente_ID"),
+        ("Valutazione PNEV", "paziente_id"),
+        ("Valutazioni_Visive", "paziente_id"),
+        ("Sedute", "paziente_id"),
+        ("Coupons", "paziente_id"),
+        ("Consensi_Privacy", "paziente_id"),
     ]
 
 
@@ -3335,10 +4277,10 @@ def db_find_duplicate_cf(cur):
         det = _fetchall_dicts(
             cur,
             '''
-            SELECT ID, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
+            SELECT id, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
             FROM Pazienti
             WHERE UPPER(TRIM(Codice_Fiscale)) = ?
-            ORDER BY ID
+            ORDER BY id
             ''',
             (cf,),
         )
@@ -3372,16 +4314,16 @@ def db_find_duplicate_identity(cur):
         det = _fetchall_dicts(
             cur,
             '''
-            SELECT ID, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
+            SELECT id, Cognome, Nome, Data_Nascita, Email, Telefono, Stato_Paziente, Codice_Fiscale
             FROM Pazienti
             WHERE UPPER(TRIM(Cognome)) = ?
               AND UPPER(TRIM(Nome)) = ?
               AND COALESCE(TRIM(Data_Nascita),'') = ?
-            ORDER BY ID
+            ORDER BY id
             ''',
             (cog, nom, dn),
         )
-        groups.append({"key": f"{cog} | {nom} | {dn or 'SENZA_DATA'}", "kind": "IDENTITA", "rows": det})
+        groups.append({"key": f"{cog} | {nom} | {dn or 'SENZA_DATA'}", "kind": "idENTITA", "rows": det})
     return groups
 
 
@@ -3402,7 +4344,7 @@ def _count_refs(cur, paziente_id: int) -> dict:
 
 
 def db_merge_patients(cur, master_id: int, dup_ids: list):
-    """Sposta tutti i riferimenti (Paziente_ID) dai duplicati verso master_id e cancella i duplicati."""
+    """Sposta tutti i riferimenti (paziente_id) dai duplicati verso master_id e cancella i duplicati."""
     report = {"master": int(master_id), "moved": {}, "deleted": [], "errors": []}
     for dup_id in dup_ids:
         dup_id = int(dup_id)
@@ -3418,7 +4360,7 @@ def db_merge_patients(cur, master_id: int, dup_ids: list):
             except Exception as e:
                 report["errors"].append(f"{tbl}: {e}")
         try:
-            cur.execute("DELETE FROM Pazienti WHERE ID = ?", (dup_id,))
+            cur.execute("DELETE FROM Pazienti WHERE id = ?", (dup_id,))
             report["deleted"].append(dup_id)
         except Exception as e:
             report["errors"].append(f"DELETE Pazienti({dup_id}): {e}")
@@ -3426,20 +4368,20 @@ def db_merge_patients(cur, master_id: int, dup_ids: list):
 
 
 def db_keep_latest_privacy_consent(cur, paziente_id: int):
-    """Mantiene SOLO l'ultimo consenso privacy del paziente (per Data_Ora/ID) ed elimina i precedenti."""
+    """Mantiene SOLO l'ultimo consenso privacy del paziente (per Data_Ora/id) ed elimina i precedenti."""
     cur.execute(
-        "SELECT ID, Data_Ora FROM Consensi_Privacy WHERE Paziente_ID=? ORDER BY COALESCE(Data_Ora,'') DESC, ID DESC",
+        "SELECT id, Data_Ora FROM Consensi_Privacy WHERE paziente_id=? ORDER BY COALESCE(Data_Ora,'') DESC, id DESC",
         (paziente_id,),
     )
     rows = cur.fetchall() or []
     if not rows:
         return {"kept": None, "deleted": 0}
 
-    keep_id = rows[0]["ID"]
+    keep_id = rows[0]["id"]
     deleted = 0
     if len(rows) > 1:
         cur.execute(
-            "DELETE FROM Consensi_Privacy WHERE Paziente_ID=? AND ID<>?",
+            "DELETE FROM Consensi_Privacy WHERE paziente_id=? AND id<>?",
             (paziente_id, keep_id),
         )
         deleted = len(rows) - 1
@@ -3448,8 +4390,8 @@ def db_keep_latest_privacy_consent(cur, paziente_id: int):
 
 def db_compact_all_privacy_consents(cur):
     """Per ogni paziente, mantiene SOLO l'ultimo consenso privacy."""
-    cur.execute("SELECT DISTINCT Paziente_ID FROM Consensi_Privacy")
-    pids = [r["Paziente_ID"] for r in (cur.fetchall() or [])]
+    cur.execute("SELECT DISTINCT paziente_id FROM Consensi_Privacy")
+    pids = [r["paziente_id"] for r in (cur.fetchall() or [])]
     total_deleted = 0
     total_patients = 0
     for pid in pids:
@@ -3497,14 +4439,14 @@ def ui_db_cleanup():
 
         st.markdown("### Record nel gruppo")
         for r in rows:
-            pid = int(r.get("ID") or r.get("id") or 0)
+            pid = int(r.get("id") or r.get("id") or 0)
             st.write(
-                f"**ID {pid}** — {r.get('Cognome','')} {r.get('Nome','')} | DN: {r.get('Data_Nascita','') or ''} | CF: {r.get('Codice_Fiscale','') or ''} | Email: {r.get('Email','') or ''}"
+                f"**id {pid}** — {r.get('Cognome','')} {r.get('Nome','')} | DN: {r.get('Data_Nascita','') or ''} | CF: {r.get('Codice_Fiscale','') or ''} | Email: {r.get('Email','') or ''}"
             )
             counts = _count_refs(cur, pid)
             st.caption("Riferimenti: " + ", ".join([f"{k}={v}" for k, v in counts.items()]))
 
-        ids = [int(r.get("ID") or r.get("id")) for r in rows]
+        ids = [int(r.get("id") or r.get("id")) for r in rows]
         master_id = st.selectbox("Scegli il record MASTER (quello da tenere)", ids, key=f"{key_prefix}_master")
         dup_ids = [i for i in ids if i != master_id]
 
@@ -3520,7 +4462,7 @@ def ui_db_cleanup():
                 try:
                     rep2 = db_keep_latest_privacy_consent(cur, paziente_id=master_id)
                     conn.commit()
-                    st.info(f"Consensi_Privacy: tenuto ID {rep2.get('kept')} — eliminati {rep2.get('deleted')} consensi precedenti.")
+                    st.info(f"Consensi_Privacy: tenuto id {rep2.get('kept')} — eliminati {rep2.get('deleted')} consensi precedenti.")
                 except Exception as e:
                     try:
                         conn.rollback()
@@ -3687,7 +4629,7 @@ def ui_pazienti():
                 "Puoi comunque salvarlo, ma verifica con attenzione."
             )
 
-        # Inserimento paziente + recupero ID
+        # Inserimento paziente + recupero id
         paz_id = None
         try:
             if _DB_BACKEND == "postgres":
@@ -3697,7 +4639,7 @@ def ui_pazienti():
                     (Cognome, Nome, Data_Nascita, Sesso, Telefono, Email,
                      Indirizzo, CAP, Citta, Provincia, Codice_Fiscale, Stato_Paziente)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                    RETURNING ID
+                    RETURNING id
                     """,
                     (
                         cognome.strip(),
@@ -3715,8 +4657,8 @@ def ui_pazienti():
                     ),
                 )
                 row = cur.fetchone()
-                # RowCI wrapper supports ["ID"] and ["id"]
-                paz_id = int(row["ID"]) if isinstance(row, dict) else int(row[0])
+                # RowCI wrapper supports ["id"] and ["id"]
+                paz_id = int(row["id"]) if isinstance(row, dict) else int(row[0])
             else:
                 cur.execute(
                     """
@@ -3750,7 +4692,7 @@ def ui_pazienti():
             cur.execute(
                 """
                 INSERT INTO Consensi_Privacy
-                (Paziente_ID, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
+                (paziente_id, Data_Ora, Tipo, Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
                  Consenso_Trattamento, Consenso_Comunicazioni, Consenso_Marketing,
                  Canale_Email, Canale_SMS, Canale_WhatsApp, Usa_Klaviyo, Note)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -3807,7 +4749,7 @@ def ui_pazienti():
         conn.close()
         return
 
-    # Etichette ricche: ID + Cognome Nome + data nascita + CF
+    # Etichette ricche: id + Cognome Nome + data nascita + CF
     options = []
     for r in rows:
         nascita_it = ""
@@ -3817,7 +4759,7 @@ def ui_pazienti():
             except Exception:
                 nascita_it = r["Data_Nascita"]
         cf = (r["Codice_Fiscale"] or "").upper()
-        label = f"{r['ID']} - {r['Cognome']} {r['Nome']}"
+        label = f"{r['id']} - {r['Cognome']} {r['Nome']}"
         extra = []
         if nascita_it:
             extra.append(f"nato il {nascita_it}")
@@ -3829,30 +4771,30 @@ def ui_pazienti():
 
     selected = st.selectbox("Seleziona un paziente per modificare / archiviare", options, key="pz_sel_mod")
     sel_id = int(selected.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == sel_id)
+    rec = next(r for r in rows if r["id"] == sel_id)
 
     st.write(f"Stato attuale: **{rec['Stato_Paziente']}**")
 
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         if st.button("Archivia paziente", key="archivia"):
-            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ARCHIVIATO' WHERE ID = ?", (sel_id,))
+            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ARCHIVIATO' WHERE id = ?", (sel_id,))
             conn.commit()
             st.success("Paziente archiviato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_b:
         if st.button("Riattiva paziente", key="riattiva"):
-            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ATTIVO' WHERE ID = ?", (sel_id,))
+            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ATTIVO' WHERE id = ?", (sel_id,))
             conn.commit()
             st.success("Paziente riattivato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_c:
         if st.button("Elimina definitivamente", key="elimina"):
-            cur.execute("DELETE FROM Anamnesi WHERE Paziente_ID = ?", (sel_id,))
-            cur.execute("DELETE FROM Valutazioni_Visive WHERE Paziente_ID = ?", (sel_id,))
-            cur.execute("DELETE FROM Sedute WHERE Paziente_ID = ?", (sel_id,))
-            cur.execute("DELETE FROM Coupons WHERE Paziente_ID = ?", (sel_id,))
-            cur.execute("DELETE FROM Pazienti WHERE ID = ?", (sel_id,))
+            cur.execute("DELETE anamnesi WHERE paziente_id = ?", (sel_id,))
+            cur.execute("DELETE FROM Valutazioni_Visive WHERE paziente_id = ?", (sel_id,))
+            cur.execute("DELETE FROM Sedute WHERE paziente_id = ?", (sel_id,))
+            cur.execute("DELETE FROM Coupons WHERE paziente_id = ?", (sel_id,))
+            cur.execute("DELETE FROM Pazienti WHERE id = ?", (sel_id,))
             conn.commit()
             st.success("Paziente e dati associati eliminati.")
             conn.close()
@@ -3934,7 +4876,7 @@ def ui_pazienti():
                 SET Cognome = ?, Nome = ?, Data_Nascita = ?, Sesso = ?,
                     Telefono = ?, Email = ?, Indirizzo = ?, CAP = ?, Citta = ?, Provincia = ?,
                     Codice_Fiscale = ?, Stato_Paziente = ?
-                WHERE ID = ?
+                WHERE id = ?
                 """,
                 (
                     cognome_m.strip(),
@@ -3964,56 +4906,132 @@ def ui_pazienti():
     # -----------------------------
 
 def ui_anamnesi():
-    st.header("Anamnesi")
+    # UI: Valutazione PNEV (ex Anamnesi) — scheda scalabile via JSON
+    st.header("Valutazione PNEV")
 
     conn = get_connection()
     cur = conn.cursor()
 
     # Seleziona paziente
-    cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
-    with st.form("nuova_anamnesi"):
-        st.subheader("Nuova anamnesi")
+    # --- Link pubblico per INPPS (genitori) ---
+    with st.expander("🔗 Link INPPS (genitori)", expanded=False):
+        if not _public_links_enabled():
+            st.info("Link pubblici disattivati. Abilita in Secrets: [public_links] ENABLED=true")
+        else:
+            if not _public_base_url():
+                st.warning("BASE_URL mancante in Secrets: [public_links] BASE_URL='https://...streamlit.app'")
+            else:
+                if st.button("Genera link INPPS", key="gen_link_inpps"):
+                    try:
+                        token = create_questionario_link(cur, paz_id, "INPPS")
+                        conn.commit()
+                        url = f"{_public_base_url()}/?q=INPPS&t={token}"
+                        st.code(url, language="text")
+                        st.success("Link creato. Invia questo link al genitore (valido per i giorni configurati).")
+                    except Exception as e:
+                        try: conn.rollback()
+                        except Exception: pass
+                        st.error(f"Errore creazione link: {e}")
+
+
+    # --- Migrazione legacy -> PNEV (sicura, non sovrascrive) ---
+    with st.expander("🧬 Migrazione legacy → PNEV", expanded=False):
+        st.caption("Popola pnev_json/pnev_summary per le vecchie schede (che avevano solo testo libero). Non sovrascrive schede già migrate.")
+        colm1, colm2 = st.columns([1, 1])
+        with colm1:
+            do_migrate_this = st.button("Migra SOLO questo paziente", key="migrate_pnev_this")
+        with colm2:
+            do_migrate_all = st.button("Migra TUTTI i pazienti (TEST)", key="migrate_pnev_all")
+
+        if do_migrate_this or do_migrate_all:
+            try:
+                pid = None if do_migrate_all else paz_id
+                stats = migrate_anamnesi_legacy_to_pnev(cur, paziente_id=pid, limit=100000)
+                conn.commit()
+                st.success(
+                    f"Scansionate: {stats['scanned']} | Aggiornate: {stats['updated']} | "
+                    f"Già migrate: {stats['skipped_has_pnev']} | Vuote: {stats['skipped_no_content']}"
+                )
+                st.rerun()
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                st.error(f"Errore migrazione: {e}")
+
+
+    # -----------------------------
+    # NUOVA VALUTAZIONE PNEV
+    # -----------------------------
+    with st.form("nuova_pnev"):
+        st.subheader("Nuova Valutazione PNEV")
 
         data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
-        motivo = st.text_area("Motivo dell'invio / richiesta principale")
+        motivo = st.text_area("Domanda clinica / motivo dell'invio")
 
-        st.markdown("**Area perinatale e sviluppo**")
-        grav = st.text_area("Gravidanza e parto")
-        svil = st.text_area("Sviluppo psicomotorio (tappe motorie, controllo del capo, seduto, gattonare, cammino)")
-        linguaggio = st.text_area("Sviluppo del linguaggio (prime parole, frasi, eventuali difficoltà)")
+        # visita_snapshot qui può essere minimale (questa sezione è trasversale, non solo visiva)
+        visita_snapshot = {"paziente_id": paz_id, "motivo": motivo}
 
-        st.markdown("**Area scolastica / apprendimenti**")
-        scuola = st.text_area("Scuola, rendimento, eventuali DSA / difficoltà specifiche")
+        pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(prefix="pnev_new", visita=visita_snapshot, existing=None)
 
-        st.markdown("**Area emotivo-relazionale / comportamento**")
-        relazioni = st.text_area("Relazioni con pari e adulti, comportamento, regolazione emotiva")
-        sensoriale = st.text_area("Profilo sensoriale (udito, vista, tatto, gusto, olfatto, vestibolare, propriocezione)")
+        # --- Questionario INPPS (Genitori) agganciato al PNEV ---
+        inpps_existing = (pnev_data_new.get("questionari", {}) or {}).get("inpps_screening_genitori") if isinstance(pnev_data_new, dict) else None
+        inpps_data_new, inpps_summary_new = inpps_collect_ui(prefix="inpps_new", existing=inpps_existing)
+        # merge nel PNEV JSON scalabile
+        try:
+            pnev_data_new.setdefault("questionari", {})
+            pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
+        except Exception:
+            pass
+        # aggiorna summary (non distruttivo)
+        if inpps_summary_new and (inpps_summary_new not in (pnev_summary_new or "")):
+            pnev_summary_new = ((pnev_summary_new or "").strip() + "\n" + inpps_summary_new).strip()
 
-        st.markdown("**Stile di vita e salute**")
-        sonno = st.text_area("Sonno (addormentamento, risvegli, qualità del sonno)")
-        alimentazione = st.text_area("Alimentazione (selettività, appetito, ritmi)")
-        familiarita = st.text_area("Familiarità per disturbi neurologici, psichiatrici, dell'apprendimento, visivi, uditivi…")
-        patologie = st.text_area("Patologie pregresse / interventi / ricoveri")
-        terapie = st.text_area("Terapie pregresse e in corso (logopedia, TNPEE, psicoterapia, optometria, ecc.)")
-        farmaci = st.text_area("Farmaci in uso")
-        allergie = st.text_area("Allergie")
-
-        storia_libera = st.text_area("Storia libera / osservazioni genitori (narrazione aperta)")
         note = st.text_area("Note cliniche aggiuntive (per uso interno)")
 
-        salva = st.form_submit_button("Salva anamnesi")
+        col_ai1, col_ai2, col_save = st.columns([1, 1, 1])
+        with col_ai1:
+            ai_hyp = st.form_submit_button("🤖 IA: bozza ipotesi", help="Genera una bozza (TEST) basata su PNEV compilata.")
+        with col_ai2:
+            ai_plan = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su PNEV.")
+        with col_save:
+            salva = st.form_submit_button("Salva Valutazione PNEV")
 
-    if salva:
+    # --- IA helper (TEST only) ---
+    if 'ai_hyp' in locals() and (ai_hyp or ai_plan):
+        if not _ai_enabled():
+            st.warning("IA disattivata. Abilitala solo in TEST nei Secrets: [ai] ENABLED=true")
+        else:
+            if not PNEV_AI_AVAILABLE or pnev_ai is None:
+                st.warning("Stub IA non disponibile (pnev_ai.py non importabile).")
+            else:
+                try:
+                    if ai_hyp:
+                        sug = pnev_ai.generate_hypothesis(visita_snapshot, pnev_data_new)
+                        pnev_ai.apply_to_session("pnev_new", sug)
+                        st.success("Bozza ipotesi applicata ai campi PNEV (modificabile).")
+                        st.rerun()
+                    if ai_plan:
+                        sug = pnev_ai.generate_plan(visita_snapshot, pnev_data_new)
+                        pnev_ai.apply_to_session("pnev_new", sug)
+                        st.success("Bozza piano applicata ai campi PNEV (modificabile).")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Errore IA (stub): {e}")
+
+    if 'salva' in locals() and salva:
         data_iso = None
         if data_str.strip():
             try:
@@ -4024,97 +5042,109 @@ def ui_anamnesi():
                 conn.close()
                 return
 
-        storia_completa = f"""
-Gravidanza e parto:
-{grav}
-
-Sviluppo psicomotorio:
-{svil}
-
-Linguaggio:
-{linguaggio}
-
-Scuola / apprendimenti:
-{scuola}
-
-Area emotivo-relazionale / comportamento:
-{relazioni}
-
-Profilo sensoriale:
-{sensoriale}
-
-Sonno:
-{sonno}
-
-Alimentazione:
-{alimentazione}
-
-Familiarità:
-{familiarita}
-
-Patologie pregresse:
-{patologie}
-
-Terapie pregresse / in corso:
-{terapie}
-
-Farmaci:
-{farmaci}
-
-Allergie:
-{allergie}
-
-Storia libera (narrazione):
-{storia_libera}
-        """.strip()
+        # Compatibilità: Motivo e Storia restano popolati, ma la fonte principale è pnev_json/pnev_summary
+        storia = (pnev_summary_new or "").strip()
+        try:
+            pnev_dumped = pnev.pnev_dump(pnev_data_new)
+        except Exception:
+            pnev_dumped = "{}"
 
         cur.execute(
             """
-            INSERT INTO Anamnesi (Paziente_ID, Data_Anamnesi, Motivo, Storia, Note)
-            VALUES (?,?,?,?,?)
+            INSERT INTO Anamnesi (paziente_id, data_anamnesi, Motivo, Storia, Note, pnev_json, pnev_summary)
+            VALUES (?,?,?,?,?,?,?)
             """,
-            (paz_id, data_iso, motivo, storia_completa, note),
+            (paz_id, data_iso, motivo, storia, note, pnev_dumped, (pnev_summary_new or "")),
         )
         conn.commit()
-        st.success("Anamnesi salvata.")
+        st.success("Valutazione PNEV salvata.")
+        st.rerun()
 
     st.markdown("---")
-    st.subheader("Anamnesi esistenti")
+    st.subheader("Valutazioni PNEV esistenti")
 
     cur.execute(
-        "SELECT * FROM Anamnesi WHERE Paziente_ID = ? ORDER BY Data_Anamnesi DESC, ID DESC",
+        "SELECT * FROM anamnesi WHERE paziente_id = %s ORDER BY data_anamnesi DESC, id DESC",
         (paz_id,),
     )
     rows = cur.fetchall()
     if not rows:
-        st.info("Nessuna anamnesi per questo paziente.")
+        st.info("Nessuna Valutazione PNEV per questo paziente.")
         conn.close()
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
+        f"{r['id']} - {r['data_anamnesi'] or ''} - { (r['Motivo'][:40] + '...') if r['Motivo'] and len(r['Motivo'])>40 else (r['Motivo'] or '') }"
         for r in rows
     ]
-    sel_an = st.selectbox("Seleziona un'anamnesi da modificare/cancellare", labels)
+    sel_an = st.selectbox("Seleziona una Valutazione PNEV da modificare/cancellare", labels)
     an_id = int(sel_an.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == an_id)
+    rec = next(r for r in rows if r["id"] == an_id)
 
-    with st.form("modifica_anamnesi"):
+    # carica json PNEV esistente (fallback: se manca usa {})
+    try:
+        existing_pnev_raw = rec.get("pnev_json") if hasattr(rec, "get") else None
+    except Exception:
+        existing_pnev_raw = None
+    pnev_existing = pnev.pnev_load(existing_pnev_raw)
+
+    with st.form("modifica_pnev"):
         data_m = st.text_input(
             "Data (gg/mm/aaaa)",
-            datetime.strptime(rec["Data_Anamnesi"], "%Y-%m-%d").strftime("%d/%m/%Y")
-            if rec["Data_Anamnesi"] else "",
+            datetime.strptime(rec["data_anamnesi"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            if rec["data_anamnesi"] else "",
         )
-        motivo_m = st.text_area("Motivo", rec["Motivo"] or "")
-        storia_m = st.text_area("Storia (testo completo)", rec["Storia"] or "")
-        note_m = st.text_area("Note", rec["Note"] or "")
-        col1, col2 = st.columns(2)
-        with col1:
-            salva_m = st.form_submit_button("Salva modifiche")
-        with col2:
-            cancella = st.form_submit_button("Elimina anamnesi")
+        motivo_m = st.text_area("Domanda clinica / motivo", rec["Motivo"] or "")
 
-    if salva_m:
+        visita_snapshot_m = {"paziente_id": paz_id, "motivo": motivo_m}
+        pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(prefix=f"pnev_edit_{an_id}", visita=visita_snapshot_m, existing=pnev_existing)
+
+        # --- Questionario INPPS (Genitori) agganciato al PNEV ---
+        inpps_existing_m = (pnev_data_m.get("questionari", {}) or {}).get("inpps_screening_genitori") if isinstance(pnev_data_m, dict) else None
+        inpps_data_m, inpps_summary_m2 = inpps_collect_ui(prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m)
+        try:
+            pnev_data_m.setdefault("questionari", {})
+            pnev_data_m["questionari"]["inpps_screening_genitori"] = inpps_data_m
+        except Exception:
+            pass
+        if inpps_summary_m2 and (inpps_summary_m2 not in (pnev_summary_m or "")):
+            pnev_summary_m = ((pnev_summary_m or "").strip() + "\n" + inpps_summary_m2).strip()
+
+        note_m = st.text_area("Note cliniche aggiuntive (per uso interno)", rec["Note"] or "")
+
+        col_ai1, col_ai2, col_save, col_del = st.columns([1, 1, 1, 1])
+        with col_ai1:
+            ai_hyp_m = st.form_submit_button("🤖 IA: bozza ipotesi", help="Genera una bozza (TEST) basata su PNEV.")
+        with col_ai2:
+            ai_plan_m = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su PNEV.")
+        with col_save:
+            salva_m = st.form_submit_button("Salva modifiche")
+        with col_del:
+            cancella = st.form_submit_button("Elimina Valutazione PNEV")
+
+    # --- IA helper (TEST only) per modifica ---
+    if 'ai_hyp_m' in locals() and (ai_hyp_m or ai_plan_m):
+        if not _ai_enabled():
+            st.warning("IA disattivata. Abilitala solo in TEST nei Secrets: [ai] ENABLED=true")
+        else:
+            if not PNEV_AI_AVAILABLE or pnev_ai is None:
+                st.warning("Stub IA non disponibile (pnev_ai.py non importabile).")
+            else:
+                try:
+                    if ai_hyp_m:
+                        sug = pnev_ai.generate_hypothesis(visita_snapshot_m, pnev_data_m)
+                        pnev_ai.apply_to_session(f"pnev_edit_{an_id}", sug)
+                        st.success("Bozza ipotesi applicata ai campi PNEV (modificabile).")
+                        st.rerun()
+                    if ai_plan_m:
+                        sug = pnev_ai.generate_plan(visita_snapshot_m, pnev_data_m)
+                        pnev_ai.apply_to_session(f"pnev_edit_{an_id}", sug)
+                        st.success("Bozza piano applicata ai campi PNEV (modificabile).")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Errore IA (stub): {e}")
+
+    if 'salva_m' in locals() and salva_m:
         data_iso_m = None
         if data_m.strip():
             try:
@@ -4124,23 +5154,32 @@ Storia libera (narrazione):
                 st.error("Data non valida.")
                 conn.close()
                 return
+
+        try:
+            pnev_dumped_m = pnev.pnev_dump(pnev_data_m)
+        except Exception:
+            pnev_dumped_m = "{}"
+
         cur.execute(
             """
             UPDATE Anamnesi
-            SET Data_Anamnesi = ?, Motivo = ?, Storia = ?, Note = ?
-            WHERE ID = ?
+            SET data_anamnesi = ?, Motivo = ?, Storia = ?, Note = ?, pnev_json = ?, pnev_summary = ?
+            WHERE id = ?
             """,
-            (data_iso_m, motivo_m, storia_m, note_m, an_id),
+            (data_iso_m, motivo_m, (pnev_summary_m or ""), note_m, pnev_dumped_m, (pnev_summary_m or ""), an_id),
         )
         conn.commit()
-        st.success("Anamnesi aggiornata.")
+        st.success("Valutazione PNEV aggiornata.")
+        st.rerun()
 
-    if cancella:
-        cur.execute("DELETE FROM Anamnesi WHERE ID = ?", (an_id,))
+    if 'cancella' in locals() and cancella:
+        cur.execute("DELETE anamnesi WHERE id = ?", (an_id,))
         conn.commit()
-        st.success("Anamnesi eliminata.")
+        st.success("Valutazione PNEV eliminata.")
+        st.rerun()
 
     conn.close()
+
 
 # -----------------------------
 # UI: Valutazioni visive / oculistiche
@@ -4153,18 +5192,18 @@ def ui_valutazioni_visive():
     cur = conn.cursor()
 
     # Seleziona paziente
-    cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
-    cur.execute("SELECT * FROM Pazienti WHERE ID = ?", (paz_id,))
+    cur.execute("SELECT * FROM Pazienti WHERE id = ?", (paz_id,))
     paziente = cur.fetchone()
 
 
@@ -4295,7 +5334,23 @@ def ui_valutazioni_visive():
 
         note_libere = st.text_area("Note cliniche libere (aggiuntive)")
 
-        salva = st.form_submit_button("Salva valutazione visiva")
+        # --- PNEV (Psico‑Neuro‑Evolutivo) – struttura scalabile ---
+        visita_snapshot = pnev.pnev_pack_visita(
+            Acuita_Nat_OD=ac_nat_od, Acuita_Nat_OS=ac_nat_os, Acuita_Nat_OO=ac_nat_oo,
+            Acuita_Corr_OD=ac_cor_od, Acuita_Corr_OS=ac_cor_os, Acuita_Corr_OO=ac_cor_oo,
+            Tonometria_OD=tono_od, Tonometria_OS=tono_os,
+            Motilita=motilita, Cover_Test=cover_test, Stereopsi=stereopsi, PPC=ppc_cm,
+            Ishihara=ishihara,
+        )
+        pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(prefix="pnev_new", visita=visita_snapshot, existing=None)
+
+        col_ai1, col_ai2, col_save = st.columns([1,1,1])
+        with col_ai1:
+            ai_hyp = st.form_submit_button("🤖 IA: bozza ipotesi", help="Genera una bozza (TEST) basata sulla visita attuale + PNEV compilata.")
+        with col_ai2:
+            ai_plan = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su visita attuale + PNEV.")
+        with col_save:
+            salva = st.form_submit_button("Salva valutazione visiva")
 
     if salva:
         data_iso = None
@@ -4357,23 +5412,27 @@ ESAMI STRUTTURALI / FUNZIONALI
 - Topografia corneale: {topo}
         """.strip()
 
-        note_finali = dettaglio + "\n\nNOTE LIBERE:\n" + (note_libere or "")
+        note_finali = dettaglio + "\n\nVALUTAZIONE PNEV:\n" + (pnev_summary_new or "") + "\n\nNOTE LIBERE:\n" + (note_libere or "")
 
         cur.execute(
             """
             INSERT INTO Valutazioni_Visive
-            (Paziente_ID, Data_Valutazione, Tipo_Visita, Professionista,
+            (paziente_id, Data_Valutazione, Tipo_Visita, Professionista,
+             Anamnesi, pnev_json, pnev_summary,
              Acuita_Nat_OD, Acuita_Nat_OS, Acuita_Nat_OO,
              Acuita_Corr_OD, Acuita_Corr_OS, Acuita_Corr_OO,
              Cornea, Camera_Anteriore, Cristallino, Congiuntiva_Sclera, Iride_Pupilla, Vitreo,
              Costo, Pagato, Note)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 paz_id,
                 data_iso,
                 tipo,
                 professionista,
+                (pnev_summary_new or ''),
+                pnev.pnev_dump(pnev_data_new),
+                (pnev_summary_new or ''),
                 ac_nat_od,
                 ac_nat_os,
                 ac_nat_oo,
@@ -4431,7 +5490,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         preview = []
         for r in cons_rows:
             preview.append({
-                "ID": r["ID"],
+                "id": r["id"],
                 "Data/Ora": r.get("Data_Ora",""),
                 "Tipo": r.get("Tipo",""),
                 "Firmato": "✅" if _is_firmato(r) else "—",
@@ -4445,9 +5504,9 @@ ESAMI STRUTTURALI / FUNZIONALI
             })
         st.dataframe(preview, use_container_width=True, hide_index=True)
 
-        ids = [str(r["ID"]) for r in cons_rows]
+        ids = [str(r["id"]) for r in cons_rows]
         sel_cons_id = st.selectbox("Seleziona un consenso per stampare il PDF", ids, key="sel_privacy_id")
-        cons_rec = next(r for r in cons_rows if str(r["ID"]) == str(sel_cons_id))
+        cons_rec = next(r for r in cons_rows if str(r["id"]) == str(sel_cons_id))
 
         # Badge firma digitale (se presente URL firma importato da Google Sheet)
         firma_val = _extract_firma_url(cons_rec)
@@ -4512,7 +5571,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 try:
                     ins_id = import_privacy_from_sheet_csv(cur, paziente, tipo="ADULTO")
                     if ins_id:
-                        st.success(f"Import riuscito (ID consenso: {ins_id}). Aggiorna la pagina per vederlo nello storico.")
+                        st.success(f"Import riuscito (id consenso: {ins_id}). Aggiorna la pagina per vederlo nello storico.")
                     else:
                         st.warning("Nessun match trovato nello Sheet (per CF o Email) oppure CSV non configurato nei Secrets.")
                 except Exception as e:
@@ -4522,7 +5581,7 @@ ESAMI STRUTTURALI / FUNZIONALI
                 try:
                     ins_id = import_privacy_from_sheet_csv(cur, paziente, tipo="MINORE")
                     if ins_id:
-                        st.success(f"Import riuscito (ID consenso: {ins_id}). Aggiorna la pagina per vederlo nello storico.")
+                        st.success(f"Import riuscito (id consenso: {ins_id}). Aggiorna la pagina per vederlo nello storico.")
                     else:
                         st.warning("Nessun match trovato nello Sheet (per CF o Email) oppure CSV non configurato nei Secrets.")
                 except Exception as e:
@@ -4634,7 +5693,7 @@ ESAMI STRUTTURALI / FUNZIONALI
     st.subheader("Valutazioni esistenti")
 
     cur.execute(
-        "SELECT * FROM Valutazioni_Visive WHERE Paziente_ID = ? ORDER BY Data_Valutazione DESC, ID DESC",
+        "SELECT * FROM Valutazioni_Visive WHERE paziente_id = ? ORDER BY Data_Valutazione DESC, id DESC",
         (paz_id,),
     )
     rows = cur.fetchall()
@@ -4644,12 +5703,12 @@ ESAMI STRUTTURALI / FUNZIONALI
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
+        f"{r['id']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
         for r in rows
     ]
     sel_v = st.selectbox("Seleziona una valutazione da modificare/cancellare", labels)
     val_id = int(sel_v.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == val_id)
+    rec = next(r for r in rows if r["id"] == val_id)
     st.markdown("#### Referto oculistico in PDF (A4)")
 
     if not REPORTLAB_AVAILABLE:
@@ -4723,10 +5782,26 @@ ESAMI STRUTTURALI / FUNZIONALI
 
         note_m = st.text_area("Note (blocco completo, inclusi dati oculistici strutturati)", rec["Note"] or "")
 
-        col9, col10 = st.columns(2)
-        with col9:
+        # --- PNEV (Psico‑Neuro‑Evolutivo) ---
+        try:
+            existing_pnev_raw = rec.get("pnev_json") if hasattr(rec, "get") else None
+        except Exception:
+            existing_pnev_raw = None
+        pnev_existing = pnev.pnev_load(existing_pnev_raw)
+        visita_snapshot_m = pnev.pnev_pack_visita(
+            Acuita_Nat_OD=ac_nat_od_m, Acuita_Nat_OS=ac_nat_os_m, Acuita_Nat_OO=ac_nat_oo_m,
+            Acuita_Corr_OD=ac_cor_od_m, Acuita_Corr_OS=ac_cor_os_m, Acuita_Corr_OO=ac_cor_oo_m,
+        )
+        pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(prefix=f"pnev_edit_{val_id}", visita=visita_snapshot_m, existing=pnev_existing)
+
+        col_ai1, col_ai2, col_save, col_del = st.columns([1,1,1,1])
+        with col_ai1:
+            ai_hyp_m = st.form_submit_button("🤖 IA: bozza ipotesi", help="Genera una bozza (TEST) basata sulla visita attuale + PNEV.")
+        with col_ai2:
+            ai_plan_m = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su visita attuale + PNEV.")
+        with col_save:
             salva_m = st.form_submit_button("Salva modifiche")
-        with col10:
+        with col_del:
             cancella = st.form_submit_button("Elimina valutazione")
 
     if salva_m:
@@ -4746,8 +5821,9 @@ ESAMI STRUTTURALI / FUNZIONALI
                 Acuita_Nat_OD = ?, Acuita_Nat_OS = ?, Acuita_Nat_OO = ?,
                 Acuita_Corr_OD = ?, Acuita_Corr_OS = ?, Acuita_Corr_OO = ?,
                 Cornea = ?, Camera_Anteriore = ?, Cristallino = ?, Congiuntiva_Sclera = ?, Iride_Pupilla = ?, Vitreo = ?,
+                Anamnesi = ?, pnev_json = ?, pnev_summary = ?,
                 Costo = ?, Pagato = ?, Note = ?
-            WHERE ID = ?
+            WHERE id = ?
             """,
             (
                 data_iso_m,
@@ -4765,6 +5841,9 @@ ESAMI STRUTTURALI / FUNZIONALI
                 congiuntiva_m,
                 iride_pupilla_m,
                 vitreo_m,
+                (pnev_summary_m or ''),
+                pnev.pnev_dump(pnev_data_m),
+                (pnev_summary_m or ''),
                 float(costo_m),
                 1 if pagato_m else 0,
                 note_m,
@@ -4775,7 +5854,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         st.success("Valutazione aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Valutazioni_Visive WHERE ID = ?", (val_id,))
+        cur.execute("DELETE FROM Valutazioni_Visive WHERE id = ?", (val_id,))
         conn.commit()
         st.success("Valutazione eliminata.")
     st.markdown("---")
@@ -4911,14 +5990,14 @@ def ui_sedute():
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -4948,7 +6027,7 @@ def ui_sedute():
         cur.execute(
             """
             INSERT INTO Sedute
-            (Paziente_ID, Data_Seduta, Terapia, Professionista, Costo, Pagato, Note)
+            (paziente_id, Data_Seduta, Terapia, Professionista, Costo, Pagato, Note)
             VALUES (?,?,?,?,?,?,?)
             """,
             (
@@ -4968,7 +6047,7 @@ def ui_sedute():
     st.subheader("Sedute esistenti")
 
     cur.execute(
-        "SELECT * FROM Sedute WHERE Paziente_ID = ? ORDER BY Data_Seduta DESC, ID DESC",
+        "SELECT * FROM Sedute WHERE paziente_id = ? ORDER BY Data_Seduta DESC, id DESC",
         (paz_id,),
     )
     rows = cur.fetchall()
@@ -4978,12 +6057,12 @@ def ui_sedute():
         return
 
     labels = [
-        f"{r['ID']} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
+        f"{r['id']} - {r['Data_Seduta'] or ''} - { (r['Terapia'][:40] + '...') if r['Terapia'] and len(r['Terapia'])>40 else (r['Terapia'] or '') }"
         for r in rows
     ]
     sel_s = st.selectbox("Seleziona una seduta da modificare/cancellare", labels)
     sed_id = int(sel_s.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["ID"] == sed_id)
+    rec = next(r for r in rows if r["id"] == sed_id)
 
     with st.form("modifica_seduta"):
         data_m = st.text_input(
@@ -5026,7 +6105,7 @@ def ui_sedute():
             """
             UPDATE Sedute
             SET Data_Seduta = ?, Terapia = ?, Professionista = ?, Costo = ?, Pagato = ?, Note = ?
-            WHERE ID = ?
+            WHERE id = ?
             """,
             (
                 data_iso_m,
@@ -5042,7 +6121,7 @@ def ui_sedute():
         st.success("Seduta aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Sedute WHERE ID = ?", (sed_id,))
+        cur.execute("DELETE FROM Sedute WHERE id = ?", (sed_id,))
         conn.commit()
         st.success("Seduta eliminata.")
 
@@ -5054,14 +6133,14 @@ def ui_coupons():
     cur = conn.cursor()
 
     # Elenco pazienti
-    cur.execute("SELECT ID, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    opt_paz = [f"{p['ID']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    opt_paz = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -5102,7 +6181,7 @@ def ui_coupons():
         cur.execute(
             """
             INSERT INTO Coupons
-            (Paziente_ID, Tipo_Coupon, Codice_Coupon, Data_Assegnazione, Note, Utilizzato)
+            (paziente_id, Tipo_Coupon, Codice_Coupon, Data_Assegnazione, Note, Utilizzato)
             VALUES (?,?,?,?,?,?)
             """,
             (
@@ -5122,7 +6201,7 @@ def ui_coupons():
     st.subheader("Coupon del paziente selezionato")
 
     cur.execute(
-        "SELECT * FROM Coupons WHERE Paziente_ID = ? ORDER BY Data_Assegnazione DESC, ID DESC",
+        "SELECT * FROM Coupons WHERE paziente_id = ? ORDER BY Data_Assegnazione DESC, id DESC",
         (paz_id,),
     )
     coupons = cur.fetchall()
@@ -5145,7 +6224,7 @@ def ui_coupons():
         col1, col2, col3, col4 = st.columns([4, 2, 2, 2])
         with col1:
             st.write(
-                f"**ID {c['ID']}** – {c['Tipo_Coupon']} – "
+                f"**id {c['id']}** – {c['Tipo_Coupon']} – "
                 f"{c['Codice_Coupon'] or '-'} – {data_it or 'data n/d'}"
             )
             if c["Note"]:
@@ -5154,24 +6233,24 @@ def ui_coupons():
             st.write(f"Stato: **{stato}**")
         with col3:
             if c["Utilizzato"]:
-                if st.button("Segna NON usato", key=f"c_notused_{c['ID']}"):
+                if st.button("Segna NON usato", key=f"c_notused_{c['id']}"):
                     cur.execute(
-                        "UPDATE Coupons SET Utilizzato = 0 WHERE ID = ?",
-                        (c["ID"],),
+                        "UPDATE Coupons SET Utilizzato = 0 WHERE id = ?",
+                        (c["id"],),
                     )
                     conn.commit()
                     st.rerun()
             else:
-                if st.button("Segna USATO", key=f"c_used_{c['ID']}"):
+                if st.button("Segna USATO", key=f"c_used_{c['id']}"):
                     cur.execute(
-                        "UPDATE Coupons SET Utilizzato = 1 WHERE ID = ?",
-                        (c["ID"],),
+                        "UPDATE Coupons SET Utilizzato = 1 WHERE id = ?",
+                        (c["id"],),
                     )
                     conn.commit()
                     st.rerun()
         with col4:
-            if st.button("Elimina", key=f"c_del_{c['ID']}"):
-                cur.execute("DELETE FROM Coupons WHERE ID = ?", (c["ID"],))
+            if st.button("Elimina", key=f"c_del_{c['id']}"):
+                cur.execute("DELETE FROM Coupons WHERE id = ?", (c["id"],))
                 conn.commit()
                 st.rerun()
 
@@ -5294,7 +6373,7 @@ def ui_osteopatia_section():
         extra = ""
         if eta: extra += f" • {eta} anni"
         if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
+        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
     sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
 
@@ -5313,10 +6392,10 @@ def ui_osteopatia_section():
             nome = ""
 
     if not paziente_id:
-        st.error("Errore: ID paziente non determinabile.")
+        st.error("Errore: id paziente non determinabile.")
         return
 
-    paziente_label = f"{cognome} {nome}".strip() or f"Paziente ID {paziente_id}"
+    paziente_label = f"{cognome} {nome}".strip() or f"Paziente id {paziente_id}"
 
     ui_osteopatia(paziente_id=int(paziente_id), get_conn=get_connection, paziente_label=paziente_label)
 
@@ -5355,7 +6434,7 @@ def ui_dashboard_evolutiva():
         extra = ""
         if eta: extra += f" • {eta} anni"
         if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
+        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
     sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
     # robust handling for dict / tuple / sqlite Row
@@ -5368,7 +6447,7 @@ def ui_dashboard_evolutiva():
             paziente_id = None
 
     if not paziente_id:
-        st.error("Errore: ID paziente non determinabile dalla selezione.")
+        st.error("Errore: id paziente non determinabile dalla selezione.")
         return
     # Carica relazioni (PostgreSQL/SQLite)
     try:
@@ -6022,7 +7101,7 @@ def ui_privacy_pdf():
         st.info("Nessun paziente presente.")
         return
 
-    options = {f"{cognome} {nome} (ID {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
+    options = {f"{cognome} {nome} (id {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
     sel = st.selectbox("Seleziona paziente", list(options.keys()))
     pid = options[sel]
 
@@ -6040,7 +7119,8 @@ def ui_privacy_pdf():
             st.success("Link generato ✅")
             st.code(url)
             # Link rapidi
-            st.markdown(f"- 📩 Email: {_mailto_link('Firma consenso privacy – Studio The Organism', 'Apri questo link per firmare online:\n' + url)}")
+            mail_body = "Apri questo link per firmare online:\n" + url
+            st.markdown(f"- 📩 Email: {_mailto_link('Firma consenso privacy – Studio The Organism', mail_body)}")
             st.markdown(f"- 💬 WhatsApp: {_whatsapp_link('Apri questo link per firmare online: ' + url)}")
         except Exception as e:
             st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
@@ -6093,7 +7173,6 @@ def ui_privacy_pdf():
 def ui_public_sign_page():
     """Pagina pubblica: compilazione + firma online (canvas) + invio PDF a clinica e paziente."""
     st.set_page_config(page_title="The Organism – Consenso online", layout="centered")
-    load_pnev_css()
     qp = st.query_params
     tok = qp.get("sign", "")
     payload = _parse_sign_token(tok) if tok else {}
@@ -6240,7 +7319,7 @@ def ui_public_sign_page():
         c.setFont("Helvetica-Bold", 14)
         c.drawString(20*_mm, 285*_mm, "Firma elettronica (grafometrica) – Allegato")
         c.setFont("Helvetica", 10)
-        c.drawString(20*_mm, 275*_mm, f"Paziente ID: {pid} – Tipo: {doc_type}")
+        c.drawString(20*_mm, 275*_mm, f"Paziente id: {pid} – Tipo: {doc_type}")
         c.drawString(20*_mm, 268*_mm, f"Data/ora (UTC): {_dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
         c.drawString(20*_mm, 261*_mm, f"Email: {email.strip()}")
         c.drawString(20*_mm, 254*_mm, "Firma acquisita tramite pagina web; copia inviata a studio e interessato.")
@@ -6355,7 +7434,2040 @@ def ui_public_sign_page():
         st.success("✅ Consenso archiviato su Neon e inviato via email. Puoi chiudere questa pagina.")
     else:
         st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
+
+# ======================================
+# AUDIOGRAMMA FUNZIONALE (TEST) – MVP
+# ======================================
+# NOTE:
+# - Su Streamlit Cloud l'audio deve essere generato nel browser: qui usiamo st.audio con WAV sintetizzato.
+# - I valori in dB SPL sono STIMATI (offset), utili per confronto interno pre/post sullo stesso setup.
+
+def _ensure_audiogram_tables(conn):
+    cur = conn.cursor()
+    try:
+        # PostgreSQL
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_calibration_profiles (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            label TEXT NOT NULL,
+            headphones_label TEXT,
+            volume_note TEXT,
+            offsets_json JSONB NOT NULL DEFAULT '{}'::jsonb
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS functional_audiograms (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            paziente_id BIGINT NOT NULL,
+            calibration_profile_id BIGINT REFERENCES audio_calibration_profiles(id),
+            notes TEXT
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS functional_audiogram_points (
+            id BIGSERIAL PRIMARY KEY,
+            audiogram_id BIGINT NOT NULL REFERENCES functional_audiograms(id) ON DELETE CASCADE,
+            ear TEXT NOT NULL CHECK (ear IN ('L','R')),
+            freq_hz INT NOT NULL,
+            threshold_dbfs REAL NOT NULL,
+            threshold_db_spl_est REAL,
+            method_json JSONB NOT NULL DEFAULT '{}'::jsonb
+        );
+        """)
+        conn.commit()
+        return
+    except Exception:
+        # SQLite fallback (se mai usato)
+        pass
+
+    try:
+        from datetime import datetime as _dt
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_calibration_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            label TEXT NOT NULL,
+            headphones_label TEXT,
+            volume_note TEXT,
+            offsets_json TEXT NOT NULL
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS functional_audiograms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            paziente_id INTEGER NOT NULL,
+            calibration_profile_id INTEGER,
+            notes TEXT
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS functional_audiogram_points (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            audiogram_id INTEGER NOT NULL,
+            ear TEXT NOT NULL,
+            freq_hz INTEGER NOT NULL,
+            threshold_dbfs REAL NOT NULL,
+            threshold_db_spl_est REAL,
+            method_json TEXT NOT NULL
+        );
+        """)
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _tone_wav_bytes(freq_hz: int, dbfs: float, seconds: float = 0.6, sr: int = 44100) -> bytes:
+    import io, wave
+    import numpy as _np
+    # dbfs -> amp lineare
+    amp = 10 ** (float(dbfs) / 20.0)
+    amp = max(0.0, min(0.9, amp))
+    t = _np.linspace(0, seconds, int(sr * seconds), endpoint=False)
+    x = amp * _np.sin(2 * _np.pi * float(freq_hz) * t)
+    fade = int(sr * 0.02)
+    if fade > 0 and len(x) > 2 * fade:
+        w = _np.ones_like(x)
+        w[:fade] = _np.linspace(0, 1, fade)
+        w[-fade:] = _np.linspace(1, 0, fade)
+        x = x * w
+    pcm = _np.int16(_np.clip(x, -1, 1) * 32767)
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(pcm.tobytes())
+    return buf.getvalue()
+
+
+# ======================================
+# WIZARD CALIBRAZIONE CUFFIE + DEVICE (TEST)
+# ======================================
+# - Device preset: PC 50% / iPad 70%
+# - Fonometro solo dB(A): ok per uso funzionale (non certificato)
+# - Streamlit st.audio non può autoplay: l'utente clicca Play ad ogni step.
+
+def _ensure_calibration_tables(conn):
+    cur = conn.cursor()
+    try:
+        # PostgreSQL
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_devices (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            label TEXT NOT NULL,
+            volume_note TEXT,
+            notes TEXT
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_headphones (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            brand TEXT NOT NULL,
+            model TEXT NOT NULL,
+            hp_type TEXT NOT NULL DEFAULT 'over-ear',
+            notes TEXT
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_calibration_profiles2 (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            device_id BIGINT NOT NULL REFERENCES audio_devices(id) ON DELETE CASCADE,
+            headphones_id BIGINT NOT NULL REFERENCES audio_headphones(id) ON DELETE CASCADE,
+            ref_dbfs REAL NOT NULL DEFAULT -20,
+            weighting TEXT NOT NULL DEFAULT 'A',
+            offsets_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            notes TEXT
+        );
+        """)
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_cal2_device_hp ON audio_calibration_profiles2(device_id, headphones_id)")
+        except Exception:
+            pass
+        conn.commit()
+        try: cur.close()
+        except Exception: pass
+        return
+    except Exception:
+        # SQLite fallback (se mai usato)
+        pass
+
+    try:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            label TEXT NOT NULL,
+            volume_note TEXT,
+            notes TEXT
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_headphones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            brand TEXT NOT NULL,
+            model TEXT NOT NULL,
+            hp_type TEXT NOT NULL,
+            notes TEXT
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audio_calibration_profiles2 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            device_id INTEGER NOT NULL,
+            headphones_id INTEGER NOT NULL,
+            ref_dbfs REAL NOT NULL,
+            weighting TEXT NOT NULL,
+            offsets_json TEXT NOT NULL,
+            is_active INTEGER NOT NULL,
+            notes TEXT
+        );
+        """)
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _seed_default_devices_if_empty(conn):
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM audio_devices")
+        n = int(cur.fetchone()[0])
+    except Exception:
+        n = 0
+
+    if n > 0:
+        try: cur.close()
+        except Exception: pass
+        return
+
+    now = datetime.now().isoformat(timespec="seconds")
+    rows = [
+        ("PC Studio (Chrome)", "50%", "Preset PNEV: PC 50% (EQ OFF)"),
+        ("iPad Studio (Safari)", "70%", "Preset PNEV: iPad 70% (suono standard)"),
+    ]
+    for label, vol, notes in rows:
+        try:
+            cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
+        except Exception:
+            cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (?,?,?,?)",
+                        (now, label, vol, notes))
+    conn.commit()
+    try: cur.close()
+    except Exception: pass
+
+
+def ui_calibrazione_cuffie_test():
+    import json
+    from datetime import datetime
+
+    st.header("🔧 Calibrazione cuffie (TEST)")
+    st.caption("Wizard per calibrare CUFFIE + DEVICE con fonometro dB(A). Uso funzionale (non certificato).")
+
+    conn = get_connection()
+    _ensure_calibration_tables(conn)
+    _seed_default_devices_if_empty(conn)
+
+    tab_wiz, tab_device, tab_hp, tab_prof = st.tabs(["🧙 Wizard", "🖥️ Devices", "🎧 Cuffie", "📚 Profili"])
+
+    # ---------- Devices ----------
+    with tab_device:
+        st.subheader("Devices")
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT id, label, volume_note, notes, created_at FROM audio_devices ORDER BY created_at DESC")
+        except Exception:
+            cur.execute("SELECT id, label, volume_note, notes, created_at FROM audio_devices ORDER BY id DESC")
+        dev_rows = cur.fetchall() or []
+        try: cur.close()
+        except Exception: pass
+        if dev_rows:
+            st.dataframe(dev_rows, use_container_width=True)
+        else:
+            st.info("Nessun device registrato.")
+
+        with st.expander("➕ Aggiungi device", expanded=False):
+            label = st.text_input("Nome device", value="PC Studio (Chrome)")
+            vol = st.text_input("Volume (nota)", value="50%")
+            notes = st.text_area("Note", value="EQ OFF, nessun enhancer")
+            if st.button("Salva device", key="save_device"):
+                cur = conn.cursor()
+                try:
+                    cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
+                except Exception:
+                    cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (?,?,?,?)",
+                                (datetime.now().isoformat(timespec="seconds"), label, vol, notes))
+                conn.commit()
+                try: cur.close()
+                except Exception: pass
+                st.success("Device salvato")
+                st.rerun()
+
+    # ---------- Headphones ----------
+    with tab_hp:
+        st.subheader("Cuffie")
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT id, brand, model, hp_type, notes, created_at FROM audio_headphones ORDER BY created_at DESC")
+        except Exception:
+            cur.execute("SELECT id, brand, model, hp_type, notes, created_at FROM audio_headphones ORDER BY id DESC")
+        hp_rows = cur.fetchall() or []
+        try: cur.close()
+        except Exception: pass
+        if hp_rows:
+            st.dataframe(hp_rows, use_container_width=True)
+        else:
+            st.info("Nessuna cuffia registrata.")
+
+        with st.expander("➕ Aggiungi cuffie", expanded=False):
+            brand = st.text_input("Marca", value="Sony")
+            model = st.text_input("Modello", value="MDR-ZX110")
+            hp_type = st.selectbox("Tipo", ["over-ear", "on-ear", "in-ear"], index=0)
+            notes = st.text_area("Note", value="Cablata")
+            if st.button("Salva cuffie", key="save_hp"):
+                cur = conn.cursor()
+                try:
+                    cur.execute("INSERT INTO audio_headphones (brand, model, hp_type, notes) VALUES (%s,%s,%s,%s)",
+                                (brand, model, hp_type, notes))
+                except Exception:
+                    cur.execute("INSERT INTO audio_headphones (created_at, brand, model, hp_type, notes) VALUES (?,?,?,?,?)",
+                                (datetime.now().isoformat(timespec="seconds"), brand, model, hp_type, notes))
+                conn.commit()
+                try: cur.close()
+                except Exception: pass
+                st.success("Cuffie salvate")
+                st.rerun()
+
+    def _load_devices():
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT id, label, volume_note FROM audio_devices ORDER BY created_at DESC")
+        except Exception:
+            cur.execute("SELECT id, label, volume_note FROM audio_devices ORDER BY id DESC")
+        rows = cur.fetchall() or []
+        try: cur.close()
+        except Exception: pass
+        out = []
+        for r in rows:
+            if isinstance(r, dict):
+                out.append((r.get("id"), r.get("label"), r.get("volume_note")))
+            else:
+                out.append((r[0], r[1], r[2]))
+        return out
+
+    def _load_headphones():
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT id, brand, model, hp_type FROM audio_headphones ORDER BY created_at DESC")
+        except Exception:
+            cur.execute("SELECT id, brand, model, hp_type FROM audio_headphones ORDER BY id DESC")
+        rows = cur.fetchall() or []
+        try: cur.close()
+        except Exception: pass
+        out = []
+        for r in rows:
+            if isinstance(r, dict):
+                out.append((r.get("id"), r.get("brand"), r.get("model"), r.get("hp_type")))
+            else:
+                out.append((r[0], r[1], r[2], r[3]))
+        return out
+
+    with tab_prof:
+        st.subheader("Profili calibrazione")
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT p.id, p.created_at, d.label, d.volume_note, h.brand, h.model, h.hp_type,
+                       p.ref_dbfs, p.weighting, p.is_active, p.offsets_json, p.notes
+                FROM audio_calibration_profiles2 p
+                JOIN audio_devices d ON d.id=p.device_id
+                JOIN audio_headphones h ON h.id=p.headphones_id
+                ORDER BY p.created_at DESC
+            """)
+            rows = cur.fetchall() or []
+        except Exception:
+            rows = []
+        try: cur.close()
+        except Exception: pass
+        if rows:
+            st.dataframe(rows, use_container_width=True)
+        else:
+            st.info("Nessun profilo calibrazione salvato.")
+
+    # ---------- Wizard ----------
+    with tab_wiz:
+        st.subheader("🧙 Wizard (automatico)")
+        st.info("Per policy browser devi cliccare ▶️ Play su ogni tono. Il wizard avanza automaticamente quando confermi la misura.")
+
+        devices = _load_devices()
+        hps = _load_headphones()
+        if not devices:
+            st.warning("Crea almeno un device nella tab 'Devices'.")
+            return
+        if not hps:
+            st.warning("Crea almeno una cuffia nella tab 'Cuffie'.")
+            return
+
+        dev = st.selectbox("Device", devices, format_func=lambda d: f"{d[1]} • vol {d[2] or 'n/d'} • id {d[0]}", key="cal_dev_sel")
+        hp = st.selectbox("Cuffie", hps, format_func=lambda h: f"{h[1]} {h[2]} ({h[3]}) • id {h[0]}", key="cal_hp_sel")
+
+        ref_dbfs = st.number_input("Livello digitale di riferimento (dBFS)", value=-20.0, step=1.0)
+        tone_seconds = st.number_input("Durata tono (secondi)", value=2.0, min_value=0.5, max_value=6.0, step=0.5)
+        include_250 = st.checkbox("Includi 250 Hz (meno affidabile con dB(A))", value=False)
+        include_125 = st.checkbox("Includi 125 Hz (molto meno affidabile con dB(A))", value=False)
+
+        freqs = [1000, 2000, 4000, 6000, 8000, 500] + ([250] if include_250 else []) + ([125] if include_125 else [])
+        st.caption("Frequenze: " + " → ".join(str(f) for f in freqs))
+
+        if "cal_wiz_running" not in st.session_state:
+            st.session_state.cal_wiz_running = False
+        if "cal_idx" not in st.session_state:
+            st.session_state.cal_idx = 0
+        if "cal_values" not in st.session_state:
+            st.session_state.cal_values = {}
+
+        cA, cB, cC = st.columns([1,1,2])
+        with cA:
+            if st.button("▶️ Avvia", type="primary"):
+                st.session_state.cal_wiz_running = True
+                st.session_state.cal_idx = 0
+                st.session_state.cal_values = {}
+                st.rerun()
+        with cB:
+            if st.button("⏹ Reset"):
+                st.session_state.cal_wiz_running = False
+                st.session_state.cal_idx = 0
+                st.session_state.cal_values = {}
+                st.rerun()
+        with cC:
+            st.caption("Inserisci SPL in dB(A) letto sul fonometro. Usa +/- per velocizzare.")
+
+        if not st.session_state.cal_wiz_running:
+            st.stop()
+
+        idx = int(st.session_state.cal_idx)
+        if idx >= len(freqs):
+            st.success("✅ Wizard completato. Salva il profilo.")
+            offsets = {str(int(f)): float(spl) - float(ref_dbfs) for f, spl in st.session_state.cal_values.items()}
+            st.json({"device_id": dev[0], "headphones_id": hp[0], "ref_dbfs": ref_dbfs, "offsets": offsets})
+
+            notes = st.text_area("Note profilo (opzionale)", value="Fonometro dB(A). Coupler foam. Volume come preset.")
+            if st.button("💾 Salva profilo calibrazione"):
+                cur = conn.cursor()
+                try:
+                    cur.execute("UPDATE audio_calibration_profiles2 SET is_active=FALSE WHERE device_id=%s AND headphones_id=%s",
+                                (int(dev[0]), int(hp[0])))
+                except Exception:
+                    cur.execute("UPDATE audio_calibration_profiles2 SET is_active=0 WHERE device_id=? AND headphones_id=?",
+                                (int(dev[0]), int(hp[0])))
+
+                payload = json.dumps(offsets)
+                try:
+                    cur.execute("""
+                        INSERT INTO audio_calibration_profiles2
+                        (device_id, headphones_id, ref_dbfs, weighting, offsets_json, is_active, notes)
+                        VALUES (%s,%s,%s,%s,%s,TRUE,%s)
+                    """, (int(dev[0]), int(hp[0]), float(ref_dbfs), "A", payload, notes))
+                except Exception:
+                    cur.execute("""
+                        INSERT INTO audio_calibration_profiles2
+                        (created_at, device_id, headphones_id, ref_dbfs, weighting, offsets_json, is_active, notes)
+                        VALUES (?,?,?,?,?,?,?,?)
+                    """, (datetime.now().isoformat(timespec="seconds"), int(dev[0]), int(hp[0]),
+                          float(ref_dbfs), "A", payload, 1, notes))
+                conn.commit()
+                try: cur.close()
+                except Exception: pass
+                st.success("Profilo salvato ✅")
+                st.session_state.cal_wiz_running = False
+                st.rerun()
+            st.stop()
+
+        f = freqs[idx]
+        st.markdown(f"### Step {idx+1}/{len(freqs)} — **{f} Hz**")
+        st.caption("1) Clicca ▶️ Play, 2) leggi dB(A) sul fonometro, 3) inserisci e conferma.")
+        st.audio(_tone_wav_bytes(int(f), float(ref_dbfs), seconds=float(tone_seconds)), format="audio/wav")
+
+        key = f"cal_spl_{f}"
+        if key not in st.session_state:
+            st.session_state[key] = 75.0
+
+        b1, b2, b3, b4, b5 = st.columns([1,1,2,1,1])
+        with b1:
+            if st.button("−5", key=f"m5_{f}"):
+                st.session_state[key] = float(st.session_state[key]) - 5.0
+        with b2:
+            if st.button("−1", key=f"m1_{f}"):
+                st.session_state[key] = float(st.session_state[key]) - 1.0
+        with b3:
+            st.session_state[key] = st.number_input("SPL (dB(A))", value=float(st.session_state[key]), step=0.5, key=f"num_{f}")
+        with b4:
+            if st.button("+1", key=f"p1_{f}"):
+                st.session_state[key] = float(st.session_state[key]) + 1.0
+        with b5:
+            if st.button("+5", key=f"p5_{f}"):
+                st.session_state[key] = float(st.session_state[key]) + 5.0
+
+        bb1, bb2, bb3 = st.columns([1,1,2])
+        with bb1:
+            if st.button("✅ Conferma e avanti", type="primary", key=f"ok_{f}"):
+                st.session_state.cal_values[int(f)] = float(st.session_state[key])
+                st.session_state.cal_idx = idx + 1
+                st.rerun()
+        with bb2:
+            if st.button("⬅️ Indietro", disabled=(idx == 0), key=f"back_{f}"):
+                st.session_state.cal_idx = max(0, idx - 1)
+                st.rerun()
+        with bb3:
+            st.caption("Suggerimento: premi leggermente la cuffia sul coupler per sigillare.")
+
+
+
+def ui_audiogramma_test():
+    import streamlit as st
+    import json as _json
+    from datetime import datetime as _dt
+
+    st.header("🎧 Audiogramma funzionale (TEST)")
+    st.caption("MVP: toni WAV (st.audio). dB SPL = stimato tramite profilo calibrazione.")
+
+    conn = get_connection()
+    _ensure_audiogram_tables(conn)
+    cur = conn.cursor()
+
+    # Selezione paziente (helper robusto già presente)
+    pazienti, table, colmap = fetch_pazienti_for_select(conn, limit=5000)
+    if not pazienti:
+        st.warning("Nessun paziente disponibile.")
+        try: cur.close()
+        except Exception: pass
+        conn.close()
+        return
+
+    def _lab(p):
+        pid, cogn, nome, dn, scuola, eta = p
+        base = f"{cogn} {nome} (id {pid})"
+        if dn: base += f" • {dn}"
+        return base
+
+    sel = st.selectbox("Seleziona paziente", pazienti, format_func=_lab)
+    paz_id = int(sel[0])
+
+    st.markdown("### Profilo calibrazione (dB SPL stimati)")
+    try:
+        cur.execute("SELECT id, label, headphones_label, volume_note, offsets_json FROM audio_calibration_profiles ORDER BY created_at DESC")
+        prof = cur.fetchall()
+    except Exception:
+        prof = []
+
+    prof_map = {}
+    for p in prof:
+        try:
+            pid = p["id"]; label = p["label"]; hp = p.get("headphones_label"); vol = p.get("volume_note"); off = p.get("offsets_json")
+        except Exception:
+            pid, label, hp, vol, off = p[0], p[1], p[2], p[3], p[4]
+        prof_map[f"#{pid} — {label} ({hp or 'cuffie n/d'}, vol: {vol or 'n/d'})"] = (pid, off)
+
+    scelta = st.selectbox("Seleziona profilo", ["(crea nuovo)"] + list(prof_map.keys()))
+
+    if scelta == "(crea nuovo)":
+        with st.expander("Crea profilo (MVP)", expanded=True):
+            label = st.text_input("Nome profilo", value=f"TEST {_dt.now().strftime('%Y-%m-%d')}")
+            headphones = st.text_input("Cuffie", value="cablata generica")
+            volume_note = st.text_input("Nota volume", value="es. PC 50% / tablet 70% (fisso)")
+            st.info("Offset 1 kHz (MVP). Esempio: se a -20 dBFS misuri ~74 dB SPL → offset ≈ 94.")
+            offset_1k = st.number_input("Offset 1 kHz (dB)", value=94.0, step=0.5)
+            if st.button("Salva profilo", key="save_prof_audio"):
+                offsets = {"1000": float(offset_1k)}
+                try:
+                    cur.execute(
+                        "INSERT INTO audio_calibration_profiles (label, headphones_label, volume_note, offsets_json) VALUES (%s,%s,%s,%s)",
+                        (label, headphones, volume_note, _json.dumps(offsets)),
+                    )
+                except Exception:
+                    cur.execute(
+                        "INSERT INTO audio_calibration_profiles (created_at, label, headphones_label, volume_note, offsets_json) VALUES (?,?,?,?,?)",
+                        (_dt.now().isoformat(timespec="seconds"), label, headphones, volume_note, _json.dumps(offsets)),
+                    )
+                conn.commit()
+                st.success("Profilo creato. Ricarico…")
+                st.rerun()
+        try: cur.close()
+        except Exception: pass
+        conn.close()
+        return
+
+    profilo_id, offsets_raw = prof_map[scelta]
+    try:
+        offsets = offsets_raw if isinstance(offsets_raw, dict) else _json.loads(offsets_raw or "{}")
+    except Exception:
+        offsets = {}
+    offset_default = float(offsets.get("1000", 94.0))
+
+    st.markdown("### Test soglia (manuale, MVP)")
+    freqs = [125, 250, 500, 1000, 2000, 4000, 6000, 8000]
+    col1, col2, col3 = st.columns([1,1,1])
+    with col1:
+        ear = st.selectbox("Orecchio", ["R", "L"], format_func=lambda x: "Dx" if x=="R" else "Sx")
+    with col2:
+        freq = st.selectbox("Frequenza (Hz)", freqs, index=2)
+    with col3:
+        dbfs = st.number_input("Livello (dBFS)", value=-40.0, step=5.0)
+
+    st.audio(_tone_wav_bytes(int(freq), float(dbfs)), format="audio/wav")
+    st.caption("Premi play, regola il livello finché trovi la soglia; inserisci il valore finale e salva.")
+
+    thr = st.number_input("Soglia finale (dBFS) da salvare", value=float(dbfs), step=5.0)
+
+    if st.button("Salva punto", key="save_audio_point"):
+        off = float(offsets.get(str(freq), offset_default))
+        thr_spl = float(thr) + off
+
+        try:
+            cur.execute(
+                "INSERT INTO functional_audiograms (paziente_id, calibration_profile_id, notes) VALUES (%s,%s,%s) RETURNING id",
+                (paz_id, int(profilo_id), "TEST MVP st.audio"),
+            )
+            audiogram_id = cur.fetchone()[0]
+        except Exception:
+            cur.execute(
+                "INSERT INTO functional_audiograms (created_at, paziente_id, calibration_profile_id, notes) VALUES (?,?,?,?)",
+                (_dt.now().isoformat(timespec="seconds"), paz_id, int(profilo_id), "TEST MVP st.audio"),
+            )
+            audiogram_id = cur.lastrowid
+
+        try:
+            cur.execute(
+                "INSERT INTO functional_audiogram_points (audiogram_id, ear, freq_hz, threshold_dbfs, threshold_db_spl_est, method_json) VALUES (%s,%s,%s,%s,%s,%s)",
+                (int(audiogram_id), ear, int(freq), float(thr), float(thr_spl), _json.dumps({"mvp":"manual_thr"})),
+            )
+        except Exception:
+            cur.execute(
+                "INSERT INTO functional_audiogram_points (audiogram_id, ear, freq_hz, threshold_dbfs, threshold_db_spl_est, method_json) VALUES (?,?,?,?,?,?)",
+                (int(audiogram_id), ear, int(freq), float(thr), float(thr_spl), _json.dumps({"mvp":"manual_thr"})),
+            )
+
+        conn.commit()
+        st.success(f"Salvato. Audiogramma id={audiogram_id} — {ear} {freq}Hz: {thr_spl:.1f} dB SPL stimati")
+
+    st.markdown("### Storico (ultimi 30 punti)")
+    try:
+        cur.execute(
+            "SELECT a.created_at, p.ear, p.freq_hz, p.threshold_db_spl_est FROM functional_audiograms a JOIN functional_audiogram_points p ON p.audiogram_id=a.id WHERE a.paziente_id=%s ORDER BY a.created_at DESC, a.id DESC LIMIT 30",
+            (paz_id,),
+        )
+    except Exception:
+        cur.execute(
+            "SELECT a.created_at, p.ear, p.freq_hz, p.threshold_db_spl_est FROM functional_audiograms a JOIN functional_audiogram_points p ON p.audiogram_id=a.id WHERE a.paziente_id=? ORDER BY a.created_at DESC, a.id DESC LIMIT 30",
+            (paz_id,),
+        )
+    rows = cur.fetchall()
+    if rows:
+        st.dataframe(rows, use_container_width=True)
+    else:
+        st.info("Nessun dato audiogramma per questo paziente.")
+
+
+# -----------------------------
+# Grafico audiogramma + overlay Tomatis-like + export + confronto Pre/Post
+# -----------------------------
+    st.markdown("### 📈 Grafico audiogramma (con riferimento Tomatis-like)")
+
+    # Preset "Tomatis-like" (configurabili)
+    FREQS = [125, 250, 500, 1000, 2000, 4000, 6000, 8000]
+    TOMATIS_PRESETS = {
+        "Tomatis-like • Apertura medio-alte": {
+            "target": [45, 38, 32, 25, 20, 18, 18, 20],
+            "band": 5.0,
+            "descr": "Target con soglie più 'basse' tra 2–6 kHz (ascolto più aperto).",
+        },
+        "Tomatis-like • Bilanciato": {
+            "target": [40, 35, 30, 25, 22, 20, 20, 22],
+            "band": 6.0,
+            "descr": "Target più uniforme su tutte le frequenze (profilo neutro).",
+        },
+    }
+    preset_name = st.selectbox("Curva di riferimento", list(TOMATIS_PRESETS.keys()), index=0)
+    preset = TOMATIS_PRESETS[preset_name]
+    st.caption(preset.get("descr", ""))
+    st.caption("Nota: 125 Hz con fonometro solo dB(A) tende a sottostimare. Usalo per confronto interno nel tempo sullo stesso setup.")
+
+    def _fetch_points_for_date_or_last(conn, paziente_id: int, day_yyyy_mm_dd: str | None = None):
+        # Ritorna: list of (created_at, ear, freq_hz, thr_spl)
+        cur2 = conn.cursor()
+        if day_yyyy_mm_dd:
+            # Postgres: created_at::date; SQLite: substr
+            try:
+                cur2.execute(
+                    """SELECT a.created_at, p.ear, p.freq_hz, p.threshold_db_spl_est
+                         FROM functional_audiograms a
+                         JOIN functional_audiogram_points p ON p.audiogram_id=a.id
+                         WHERE a.paziente_id=%s AND (a.created_at::date = %s::date)
+                         ORDER BY a.created_at DESC, a.id DESC""",
+                    (paziente_id, day_yyyy_mm_dd),
+                )
+            except Exception:
+                cur2.execute(
+                    """SELECT a.created_at, p.ear, p.freq_hz, p.threshold_db_spl_est
+                         FROM functional_audiograms a
+                         JOIN functional_audiogram_points p ON p.audiogram_id=a.id
+                         WHERE a.paziente_id=? AND substr(a.created_at,1,10)=?
+                         ORDER BY a.created_at DESC""",
+                    (paziente_id, day_yyyy_mm_dd),
+                )
+        else:
+            # Ultimi punti (robusto anche se l'MVP crea un audiogramma per punto)
+            try:
+                cur2.execute(
+                    """SELECT a.created_at, p.ear, p.freq_hz, p.threshold_db_spl_est
+                         FROM functional_audiograms a
+                         JOIN functional_audiogram_points p ON p.audiogram_id=a.id
+                         WHERE a.paziente_id=%s
+                         ORDER BY a.created_at DESC, a.id DESC
+                         LIMIT 500""",
+                    (paziente_id,),
+                )
+            except Exception:
+                cur2.execute(
+                    """SELECT a.created_at, p.ear, p.freq_hz, p.threshold_db_spl_est
+                         FROM functional_audiograms a
+                         JOIN functional_audiogram_points p ON p.audiogram_id=a.id
+                         WHERE a.paziente_id=?
+                         ORDER BY a.created_at DESC
+                         LIMIT 500""",
+                    (paziente_id,),
+                )
+        rows2 = cur2.fetchall() or []
+        try: cur2.close()
+        except Exception: pass
+
+        out = []
+        for r in rows2:
+            try:
+                created_at = r["created_at"]; ear = r["ear"]; freq = r["freq_hz"]; thr = r["threshold_db_spl_est"]
+            except Exception:
+                created_at, ear, freq, thr = r[0], r[1], r[2], r[3]
+            if thr is None:
+                continue
+            out.append((str(created_at), str(ear), int(freq), float(thr)))
+        return out
+
+    def _points_to_series(points_rows):
+        # prende l'ultimo valore per (ear,freq) nella lista ordinata per created_at desc
+        last_R = {}
+        last_L = {}
+        for created_at, ear, freq, thr in points_rows:
+            if ear == "R" and freq not in last_R:
+                last_R[freq] = thr
+            if ear == "L" and freq not in last_L:
+                last_L[freq] = thr
+
+        yR = [last_R.get(int(f), None) for f in FREQS]
+        yL = [last_L.get(int(f), None) for f in FREQS]
+        return yR, yL
+
+    def _plot_audiogram(fig_title: str, yR, yL, overlay=True):
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from io import BytesIO
+
+        x = np.array(FREQS, dtype=float)
+
+        fig, ax = plt.subplots(figsize=(9, 5))
+        ax.set_title(fig_title)
+
+        # Overlay target
+        if overlay:
+            target = np.array(preset["target"], dtype=float)
+            band = float(preset.get("band", 5.0))
+            ax.fill_between(x, target - band, target + band, alpha=0.15, label="Banda target (Tomatis-like)")
+            ax.plot(x, target, linewidth=2, linestyle="--", label="Curva target (Tomatis-like)")
+
+        # DX / SX
+        if any(v is not None for v in yR):
+            ax.plot(x, [v if v is not None else np.nan for v in yR], marker="o", linewidth=2, label="Dx (R)")
+        if any(v is not None for v in yL):
+            ax.plot(x, [v if v is not None else np.nan for v in yL], marker="x", linewidth=2, label="Sx (L)")
+
+        ax.set_xscale("log")
+        ax.set_xticks(x)
+        ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+        ax.set_xlabel("Frequenza (Hz)")
+
+        ax.set_ylabel("Soglia (dB SPL stimati) ↓ meglio")
+        ax.invert_yaxis()
+        ax.grid(True, which="both", linestyle="--", alpha=0.3)
+        ax.legend()
+
+        # Export buffers
+        png = BytesIO()
+        fig.savefig(png, format="png", dpi=200, bbox_inches="tight")
+        png.seek(0)
+
+        pdf = BytesIO()
+        fig.savefig(pdf, format="pdf", bbox_inches="tight")
+        pdf.seek(0)
+
+        return fig, png, pdf
+
+    # --- Selezione "sedute" (raggruppate per giorno) per confronto Pre/Post ---
+    st.markdown("#### Confronto Pre / Post (per giorno)")
+    try:
+        cur3 = conn.cursor()
+        try:
+            cur3.execute(
+                """SELECT DISTINCT to_char(a.created_at::date, 'YYYY-MM-DD') AS day
+                     FROM functional_audiograms a
+                     JOIN functional_audiogram_points p ON p.audiogram_id=a.id
+                     WHERE a.paziente_id=%s
+                     ORDER BY day DESC
+                     LIMIT 60""",
+                (paz_id,),
+            )
+            days = [r[0] if not isinstance(r, dict) else r.get("day") for r in (cur3.fetchall() or [])]
+        except Exception:
+            cur3.execute(
+                """SELECT DISTINCT substr(a.created_at,1,10) AS day
+                     FROM functional_audiograms a
+                     JOIN functional_audiogram_points p ON p.audiogram_id=a.id
+                     WHERE a.paziente_id=?
+                     ORDER BY day DESC
+                     LIMIT 60""",
+                (paz_id,),
+            )
+            days = [r[0] if not isinstance(r, dict) else r.get("day") for r in (cur3.fetchall() or [])]
+        try: cur3.close()
+        except Exception: pass
+    except Exception:
+        days = []
+
+    if not days:
+        st.info("Per ora non ci sono sedute sufficienti per fare il confronto Pre/Post.")
+    else:
+        cpre, cpost = st.columns(2)
+        with cpre:
+            pre_day = st.selectbox("PRE (giorno)", days, index=min(1, len(days)-1))
+        with cpost:
+            post_day = st.selectbox("POST (giorno)", days, index=0)
+
+        # Carica dati e plot
+        pre_rows = _fetch_points_for_date_or_last(conn, paz_id, pre_day)
+        post_rows = _fetch_points_for_date_or_last(conn, paz_id, post_day)
+
+        yR_pre, yL_pre = _points_to_series(pre_rows)
+        yR_post, yL_post = _points_to_series(post_rows)
+
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(9, 5))
+        ax.set_title(f"Audiogramma PRE/POST • {pre_day} → {post_day}")
+
+        import numpy as np
+        x = np.array(FREQS, dtype=float)
+
+        # Overlay target
+        target = np.array(preset["target"], dtype=float)
+        band = float(preset.get("band", 5.0))
+        ax.fill_between(x, target - band, target + band, alpha=0.12, label="Banda target (Tomatis-like)")
+        ax.plot(x, target, linewidth=2, linestyle="--", label="Curva target (Tomatis-like)")
+
+        # PRE (linea più leggera)
+        if any(v is not None for v in yR_pre):
+            ax.plot(x, [v if v is not None else np.nan for v in yR_pre], marker="o", linewidth=1.5, label=f"PRE Dx ({pre_day})")
+        if any(v is not None for v in yL_pre):
+            ax.plot(x, [v if v is not None else np.nan for v in yL_pre], marker="x", linewidth=1.5, label=f"PRE Sx ({pre_day})")
+
+        # POST (linea più marcata)
+        if any(v is not None for v in yR_post):
+            ax.plot(x, [v if v is not None else np.nan for v in yR_post], marker="o", linewidth=2.5, label=f"POST Dx ({post_day})")
+        if any(v is not None for v in yL_post):
+            ax.plot(x, [v if v is not None else np.nan for v in yL_post], marker="x", linewidth=2.5, label=f"POST Sx ({post_day})")
+
+        ax.set_xscale("log")
+        ax.set_xticks(x)
+        ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+        ax.set_xlabel("Frequenza (Hz)")
+        ax.set_ylabel("Soglia (dB SPL stimati) ↓ meglio")
+        ax.invert_yaxis()
+        ax.grid(True, which="both", linestyle="--", alpha=0.3)
+        ax.legend()
+
+        st.pyplot(fig, use_container_width=True)
+
+        # Export (PNG/PDF)
+        from io import BytesIO
+        png = BytesIO()
+        fig.savefig(png, format="png", dpi=200, bbox_inches="tight")
+        png.seek(0)
+        pdf = BytesIO()
+        fig.savefig(pdf, format="pdf", bbox_inches="tight")
+        pdf.seek(0)
+
+        colx1, colx2 = st.columns(2)
+        with colx1:
+            st.download_button(
+                "⬇️ Scarica PNG (grafico)",
+                data=png,
+                file_name=f"audiogramma_prepost_{paz_id}_{pre_day}_to_{post_day}.png",
+                mime="image/png",
+            )
+        with colx2:
+            st.download_button(
+                "⬇️ Scarica PDF (grafico)",
+                data=pdf,
+                file_name=f"audiogramma_prepost_{paz_id}_{pre_day}_to_{post_day}.pdf",
+                mime="application/pdf",
+            )
+
+
+    # -----------------------------
+    # Profilo & Ricerca (automatico + modificabile dal clinico)
+    # -----------------------------
+    st.markdown("### 🧩 Profilo & Ricerca")
+
+    def _curve_from_points(points):
+        """points: list of (created_at, ear, freq, thr_spl)"""
+        by_ear = {"R": {}, "L": {}}
+        # punti ordinati dal più recente: prendiamo il primo per freq
+        for _dtv, ear, f, y in points:
+            try:
+                f = int(f)
+                y = float(y) if y is not None else None
+            except Exception:
+                continue
+            if ear in by_ear and f not in by_ear[ear]:
+                by_ear[ear][f] = y
+        yR = [by_ear["R"].get(int(f)) for f in FREQS]
+        yL = [by_ear["L"].get(int(f)) for f in FREQS]
+        return yR, yL
+
+    def _mean(vals):
+        vv = [v for v in vals if v is not None and not (isinstance(v, float) and np.isnan(v))]
+        return float(np.mean(vv)) if vv else None
+
+    def _index_pack(yR, yL):
+        # usa media tra orecchie quando possibile
+        yM = []
+        for a, b in zip(yR, yL):
+            if a is None and b is None:
+                yM.append(None)
+            elif a is None:
+                yM.append(b)
+            elif b is None:
+                yM.append(a)
+            else:
+                yM.append((a + b) / 2.0)
+
+        def _avg(freq_list):
+            idx = [FREQS.index(f) for f in freq_list if f in FREQS]
+            return _mean([yM[i] for i in idx])
+
+        low = _avg([125, 250, 500])
+        midhigh = _avg([2000, 4000, 6000])
+        high = _avg([4000, 6000, 8000])
+        speech = _avg([1000, 2000, 4000])
+
+        apertura = (low - midhigh) if (low is not None and midhigh is not None) else None  # >0 = medio-alte migliori
+        tilt = (low - high) if (low is not None and high is not None) else None
+        notch = None
+        a46 = _avg([4000, 6000])
+        a28 = _avg([2000, 8000])
+        if a46 is not None and a28 is not None:
+            notch = a46 - a28  # >0 = notch (peggioramento 4–6k vs 2k/8k)
+
+        # Asimmetria (banda 1–4k)
+        diffs = []
+        for f in [1000, 2000, 4000]:
+            i = FREQS.index(f)
+            if yR[i] is not None and yL[i] is not None:
+                diffs.append(abs(yR[i] - yL[i]))
+        asym = float(np.mean(diffs)) if diffs else None
+
+        return {
+            "low_avg": low,
+            "midhigh_avg": midhigh,
+            "speech_avg": speech,
+            "apertura_midhigh": apertura,
+            "tilt_low_vs_high": tilt,
+            "notch_4_6k": notch,
+            "asym_1_4k": asym,
+        }
+
+    def _level_from(value, lo=5.0, hi=10.0):
+        # valore assoluto: 0..3
+        if value is None:
+            return None
+        v = abs(float(value))
+        if v < lo:
+            return 0
+        if v < hi:
+            return 1
+        if v < hi * 1.5:
+            return 2
+        return 3
+
+    def _label_level(n):
+        return {None: "n/d", 0: "Nessuna", 1: "Bassa", 2: "Media", 3: "Alta"}.get(n, "n/d")
+
+    def _auto_typologies(idx):
+        """
+        Mappa *funzionale* basata SOLO su indicatori uditivi.
+        Dove l'audiogramma non basta, ritorniamo 'n/d' e lo rendiamo modificabile.
+        """
+        out = {}
+
+        # Indicatori base
+        apertura = idx.get("apertura_midhigh")
+        asym = idx.get("asym_1_4k")
+        notch = idx.get("notch_4_6k")
+        speech = idx.get("speech_avg")
+        midhigh = idx.get("midhigh_avg")
+        low = idx.get("low_avg")
+
+        # Funzioni di scoring (0..3), con regole conservative
+        def score_lang():
+            # soglie peggiori nella banda linguaggio -> più compatibile con difficoltà su intelligibilità (da correlare)
+            if speech is None:
+                return None
+            if speech <= 20:
+                return 0
+            if speech <= 30:
+                return 1
+            if speech <= 40:
+                return 2
+            return 3
+
+        def score_attention_filtering():
+            # "chiusura medio-alte" + asimmetria può suggerire filtraggio/attenzione selettiva (funzionale)
+            s1 = None
+            if apertura is not None:
+                # apertura < -5 = chiusura medio-alte
+                s1 = 0 if apertura > 0 else (1 if apertura > -5 else (2 if apertura > -10 else 3))
+            s2 = _level_from(asym, lo=4.0, hi=8.0)
+            if s1 is None and s2 is None:
+                return None
+            return int(round(np.mean([v for v in [s1, s2] if v is not None])))
+
+        def score_asd():
+            # molto conservativo: usa asimmetria + chiusura/variabilità non disponibile
+            s = _level_from(asym, lo=5.0, hi=10.0)
+            if s is None:
+                return None
+            # se anche chiusura medio-alte è marcata, alza di 1 (max 3)
+            if apertura is not None and apertura < -8:
+                s = min(3, s + 1)
+            return s
+
+        def score_anxiety_hyperarousal():
+            # audiogramma puro non misura iperacusia; possiamo solo segnare "da valutare" se soglie molto basse + notch/instabilità
+            if midhigh is None:
+                return None
+            if midhigh <= 15:
+                return 1
+            return 0
+
+        def score_hyperacusis():
+            # richiede ULL/LDL: qui n/d (valutazione clinica)
+            return None
+
+        def score_dsa_processing():
+            # notch e/o asimmetria + chiusura possono essere marker funzionali di processing (non diagnostico)
+            sN = _level_from(notch, lo=4.0, hi=8.0)
+            sA = _level_from(asym, lo=5.0, hi=10.0)
+            sF = score_attention_filtering()
+            vals = [v for v in [sN, sA, sF] if v is not None]
+            if not vals:
+                return None
+            return int(round(np.mean(vals)))
+
+        def score_vest_posture():
+            # marker molto prudente: basse molto peggiori (o molto migliori) + asimmetria
+            if low is None:
+                return None
+            # se basse sono molto alte (peggiori) rispetto a medio-alte (apertura molto alta), segnala basso/medio
+            if apertura is None:
+                return 1
+            if apertura > 10:
+                return 2
+            return 1
+
+        out["Linguaggio"] = score_lang()
+        out["Attenzione / Filtraggio (ADHD-like)"] = score_attention_filtering()
+        out["Profilo ASD-like (funzionale)"] = score_asd()
+        out["DSA / Processing uditivo (funzionale)"] = score_dsa_processing()
+        out["Ansia / Iperallerta (marker)"] = score_anxiety_hyperarousal()
+        out["Iperacusia / Misofonia (richiede LDL)"] = score_hyperacusis()
+        out["Vestibolare / Posturale (marker)"] = score_vest_posture()
+        out["Sonno / Regolazione (da correlare)"] = None
+        out["Trauma / Stress (da correlare)"] = None
+        out["Tic / Disregolazione (da correlare)"] = None
+        out["Integrazione sensoriale (generale)"] = None
+
+        return out
+
+    def _ensure_audio_research_tables(conn):
+        c = conn.cursor()
+        try:
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS audio_research_entries (
+                    id SERIAL PRIMARY KEY,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    paziente_id INTEGER NOT NULL,
+                    reference_day TEXT,
+                    calibration_profile_id INTEGER,
+                    preset_name TEXT,
+                    indices_json JSONB,
+                    auto_typologies_json JSONB,
+                    clinician_typologies_json JSONB,
+                    clinician_notes TEXT
+                )
+            """)
+        except Exception:
+            # fallback sqlite-ish
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS audio_research_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TEXT,
+                    paziente_id INTEGER NOT NULL,
+                    reference_day TEXT,
+                    calibration_profile_id INTEGER,
+                    preset_name TEXT,
+                    indices_json TEXT,
+                    auto_typologies_json TEXT,
+                    clinician_typologies_json TEXT,
+                    clinician_notes TEXT
+                )
+            """)
+        conn.commit()
+        try:
+            c.close()
+        except Exception:
+            pass
+
+    # Scegli quale "seduta" profilare
+    options = ["Ultima seduta"]
+    if 'pre_day' in locals() and pre_day:
+        options.append(f"PRE ({pre_day})")
+    if 'post_day' in locals() and post_day:
+        options.append(f"POST ({post_day})")
+
+    which = st.selectbox("Seduta da profilare", options, index=0)
+
+    day = None
+    if which.startswith("PRE"):
+        day = pre_day
+    elif which.startswith("POST"):
+        day = post_day
+
+    pts = _fetch_points_for_date_or_last(conn, paz_id, day_yyyy_mm_dd=day)
+    yR_sel, yL_sel = _curve_from_points(pts)
+    idx = _index_pack(yR_sel, yL_sel)
+    auto = _auto_typologies(idx)
+
+    tabA, tabB, tabC = st.tabs(["Profilo oggettivo", "Mappa tipologie", "Salvataggio ricerca"])
+
+    with tabA:
+        st.subheader("Indici oggettivi")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Apertura medio-alte (LOW–MIDHIGH)", f"{idx['apertura_midhigh']:.1f} dB" if idx['apertura_midhigh'] is not None else "n/d")
+        c2.metric("Asimmetria 1–4k", f"{idx['asym_1_4k']:.1f} dB" if idx['asym_1_4k'] is not None else "n/d")
+        c3.metric("Notch 4–6k", f"{idx['notch_4_6k']:.1f} dB" if idx['notch_4_6k'] is not None else "n/d")
+        c4.metric("Banda linguaggio (1–4k)", f"{idx['speech_avg']:.1f} dB SPL" if idx['speech_avg'] is not None else "n/d")
+
+        st.caption("Interpretazione indici (funzionale): valori e pattern vanno sempre correlati a osservazione clinica e questionari.")
+
+    with tabB:
+        st.subheader("Compatibilità tipologie (automatico, modificabile in tab Salvataggio)")
+        # tabella semplice
+        rows = []
+        for k, v in auto.items():
+            rows.append({"Tipologia": k, "Auto": _label_level(v)})
+        st.dataframe(rows, use_container_width=True)
+
+        st.caption("Nota: alcune tipologie richiedono misure aggiuntive (es. LDL/ULL per iperacusia). In quei casi l'auto può essere 'n/d' e lo compili tu.")
+
+    with tabC:
+        st.subheader("Override clinico + salvataggio (ricerca)")
+        st.info("Imposta (se vuoi) il livello clinico per ciascuna tipologia e premi 'Salva profilo ricerca'. L'override non cambia gli indici oggettivi.")
+        clinician = {}
+        for k, v in auto.items():
+            default_label = _label_level(v)
+            sel = st.radio(
+                k,
+                ["Nessuna", "Bassa", "Media", "Alta"],
+                index=["Nessuna","Bassa","Media","Alta"].index(default_label) if default_label in ["Nessuna","Bassa","Media","Alta"] else 1,
+                horizontal=True,
+                key=f"typo_{k}_{paz_id}_{day or 'last'}"
+            )
+            clinician[k] = sel
+        note = st.text_area("Note cliniche (opzionale)", height=120, key=f"note_research_{paz_id}_{day or 'last'}")
+
+        if st.button("💾 Salva profilo ricerca", type="primary"):
+            _ensure_audio_research_tables(conn)
+            try:
+                cur.execute(
+                    "INSERT INTO audio_research_entries (paziente_id, reference_day, calibration_profile_id, preset_name, indices_json, auto_typologies_json, clinician_typologies_json, clinician_notes) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        int(paz_id),
+                        day,
+                        int(profilo_id) if 'profilo_id' in locals() else None,
+                        preset_name if 'preset_name' in locals() else None,
+                        _json.dumps(idx),
+                        _json.dumps(auto),
+                        _json.dumps(clinician),
+                        note,
+                    ),
+                )
+            except Exception:
+                cur.execute(
+                    "INSERT INTO audio_research_entries (created_at, paziente_id, reference_day, calibration_profile_id, preset_name, indices_json, auto_typologies_json, clinician_typologies_json, clinician_notes) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        _dt.now().isoformat(timespec="seconds"),
+                        int(paz_id),
+                        day,
+                        int(profilo_id) if 'profilo_id' in locals() else None,
+                        preset_name if 'preset_name' in locals() else None,
+                        _json.dumps(idx),
+                        _json.dumps(auto),
+                        _json.dumps(clinician),
+                        note,
+                    ),
+                )
+            conn.commit()
+            st.success("Profilo ricerca salvato ✅")
+
+
+    st.markdown("#### (Step successivo) Interpretazione profili")
+    st.caption("Possiamo aggiungere: classificazione della curva (es. 'iperselettività sulle alte', 'tilt basse', 'asimmetria Dx/Sx') e suggerire quale tipologia di persona/quadro può corrispondere. Lo faremo come preset PNEV configurabili.")
+    try: cur.close()
+    except Exception: pass
+    conn.close()
+
+
+
+
+# =========================
+# ORL tonal thresholds + EQ (Tomatis-like) — TEST module
+# =========================
+
+ORL_FREQS_HZ = [125, 250, 500, 1000, 2000, 4000, 6000, 8000]
+
+def _ensure_orl_tonal_tables(conn):
+    """Tables for external ORL tonal audiograms (manual entry)."""
+    cur = conn.cursor()
+    try:
+        # PostgreSQL
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS external_orl_audiograms (
+                id BIGSERIAL PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT NOW(),
+                exam_date DATE,
+                paziente_id BIGINT NOT NULL,
+                source_label TEXT,
+                notes TEXT
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS external_orl_audiogram_points (
+                id BIGSERIAL PRIMARY KEY,
+                audiogram_id BIGINT NOT NULL REFERENCES external_orl_audiograms(id) ON DELETE CASCADE,
+                ear TEXT NOT NULL CHECK (ear IN ('R','L')),
+                freq_hz INT NOT NULL,
+                threshold_db_hl REAL NOT NULL
+            );
+        """)
+        conn.commit()
+        return
+    except Exception:
+        # SQLite fallback
+        pass
+
+    try:
+        from datetime import datetime as _dt
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS external_orl_audiograms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT,
+                exam_date TEXT,
+                paziente_id INTEGER NOT NULL,
+                source_label TEXT,
+                notes TEXT
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS external_orl_audiogram_points (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                audiogram_id INTEGER NOT NULL,
+                ear TEXT NOT NULL,
+                freq_hz INTEGER NOT NULL,
+                threshold_db_hl REAL NOT NULL
+            );
+        """)
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _ensure_audio_eq_tables(conn):
+    """Tables for saved EQ profiles (per ear) derived from ORL + Tomatis preset."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audio_eq_profiles (
+                id BIGSERIAL PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT NOW(),
+                paziente_id BIGINT NOT NULL,
+                orl_audiogram_id BIGINT,
+                preset_name TEXT,
+                alpha REAL,
+                beta REAL,
+                hl_ref REAL,
+                boost_max REAL,
+                cut_max REAL,
+                gains_od_json JSONB,
+                gains_os_json JSONB,
+                notes TEXT
+            );
+        """)
+        conn.commit()
+        return
+    except Exception:
+        pass
+
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audio_eq_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT,
+                paziente_id INTEGER NOT NULL,
+                orl_audiogram_id INTEGER,
+                preset_name TEXT,
+                alpha REAL,
+                beta REAL,
+                hl_ref REAL,
+                boost_max REAL,
+                cut_max REAL,
+                gains_od_json TEXT,
+                gains_os_json TEXT,
+                notes TEXT
+            );
+        """)
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _tomatis_preset_targets(preset_name: str):
+    """Return relative target curve (arbitrary dB weights) aligned to ORL_FREQS_HZ."""
+    # valori relativi: >0 = spinta, <0 = alleggerimento
+    if preset_name == "Apertura medio-alte":
+        return [ -2, -1, 0, 1, 4, 5, 5, 3 ]
+    if preset_name == "Soft (tolleranza)":
+        return [ -1, -0.5, 0, 0.5, 2, 2.5, 2.5, 2 ]
+    # default: Bilanciato
+    return [ 0, 0, 0, 0, 1, 1, 1, 0 ]
+
+
+def _smooth_envelope(values):
+    """Very light smoothing for 8-point curve."""
+    v = [float(x) for x in values]
+    out = v[:]
+    for i in range(len(v)):
+        neigh = [v[i]]
+        if i-1 >= 0: neigh.append(v[i-1])
+        if i+1 < len(v): neigh.append(v[i+1])
+        out[i] = sum(neigh) / len(neigh)
+    # second pass
+    v2 = out[:]
+    for i in range(len(v2)):
+        neigh = [v2[i]]
+        if i-1 >= 0: neigh.append(v2[i-1])
+        if i+1 < len(v2): neigh.append(v2[i+1])
+        out[i] = sum(neigh) / len(neigh)
+    return out
+
+
+def _compute_eq_from_orl(thresholds_db_hl, preset_name: str, alpha: float, beta: float, hl_ref: float,
+                        boost_max: float, cut_max: float):
+    """Compute per-band EQ gains (dB) from ORL thresholds + Tomatis target shape."""
+    # deficit rispetto a HL_ref
+    D = [max(float(t) - float(hl_ref), 0.0) for t in thresholds_db_hl]
+    D = _smooth_envelope(D)
+
+    R = _tomatis_preset_targets(preset_name)
+    # combinazione
+    eq_raw = [alpha * d + beta * r for d, r in zip(D, R)]
+
+    # centra per non alzare tutto (usa banda 1k-2k come riferimento)
+    try:
+        i1 = ORL_FREQS_HZ.index(1000)
+        i2 = ORL_FREQS_HZ.index(2000)
+        ref = (eq_raw[i1] + eq_raw[i2]) / 2.0
+    except Exception:
+        ref = sum(eq_raw) / len(eq_raw)
+
+    eq = [x - ref for x in eq_raw]
+
+    # limiti
+    eq = [max(-abs(float(cut_max)), min(float(boost_max), float(x))) for x in eq]
+    return eq
+
+
+def _plot_orl_and_eq(freqs, thr_od, thr_os, eq_od, eq_os, preset_name: str):
+    import matplotlib.pyplot as plt
+
+    fig, ax1 = plt.subplots(figsize=(8, 4.8))
+    ax1.set_xscale("log")
+    ax1.set_xticks(freqs)
+    ax1.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+    ax1.set_xlim(120, 8500)
+    ax1.set_ylim(80, -10)  # dB HL audiometrico (invertito)
+    ax1.grid(True, which="both", linestyle="--", linewidth=0.5)
+    ax1.set_xlabel("Frequenza (Hz)")
+    ax1.set_ylabel("Soglia ORL (dB HL)")
+    ax1.plot(freqs, thr_od, marker="o", linewidth=2, label="ORL OD")
+    ax1.plot(freqs, thr_os, marker="x", linewidth=2, label="ORL OSN")
+    ax1.set_title(f"ORL + EQ stimolazione ({preset_name})")
+
+    # seconda asse per EQ
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("EQ Gain (dB)")
+    ax2.set_ylim(-12, 12)
+    ax2.plot(freqs, eq_od, linestyle="--", linewidth=2, label="EQ OD")
+    ax2.plot(freqs, eq_os, linestyle=":", linewidth=2, label="EQ OSN")
+
+    # legende combinate
+    h1, l1 = ax1.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax1.legend(h1 + h2, l1 + l2, loc="lower left")
+
+    return fig
+
+
+def ui_esami_orl_tonali_test():
+    import streamlit as st
+    import json as _json
+    from datetime import date as _date
+
+    st.header("🩺 Esami ORL – soglie tonali (TEST)")
+    st.caption("Inserisci manualmente le soglie tonali in dB HL (referto ORL). Frequenze incluse: 125 e 6000 Hz.")
+
+    conn = get_connection()
+    _ensure_orl_tonal_tables(conn)
+    cur = conn.cursor()
+
+    pazienti, table, colmap = fetch_pazienti_for_select(conn, limit=5000)
+    if not pazienti:
+        st.warning("Nessun paziente disponibile.")
+        try: cur.close()
+        except Exception: pass
+        conn.close()
+        return
+
+    def _lab(p):
+        pid, cogn, nome, dn, scuola, eta = p
+        base = f"{cogn} {nome} (id {pid})"
+        if dn: base += f" • {dn}"
+        return base
+
+    sel = st.selectbox("Seleziona paziente", pazienti, format_func=_lab, key="orl_paz_sel")
+    paz_id = int(sel[0])
+
+    exam_date = st.date_input("Data esame", value=_date.today(), key="orl_exam_date")
+    source_label = st.text_input("Fonte (ORL / struttura / professionista)", value="ORL", key="orl_source_label")
+    notes = st.text_area("Note", value="", height=90, key="orl_notes")
+
+    st.markdown("### Soglie tonali (dB HL)")
+    c1, c2 = st.columns(2)
+    thr_od = []
+    thr_os = []
+    for f in ORL_FREQS_HZ:
+        with c1:
+            thr_od.append(st.number_input(f"OD {f} Hz", min_value=-10.0, max_value=120.0, value=10.0, step=1.0, key=f"orl_od_{f}"))
+        with c2:
+            thr_os.append(st.number_input(f"OSN {f} Hz", min_value=-10.0, max_value=120.0, value=10.0, step=1.0, key=f"orl_os_{f}"))
+
+    if st.button("💾 Salva esame ORL", type="primary", key="save_orl_exam"):
+        try:
+            # insert header
+            try:
+                cur.execute(
+                    "INSERT INTO external_orl_audiograms (exam_date, paziente_id, source_label, notes) VALUES (%s,%s,%s,%s) RETURNING id",
+                    (exam_date, paz_id, source_label, notes),
+                )
+                aid = cur.fetchone()[0]
+            except Exception:
+                cur.execute(
+                    "INSERT INTO external_orl_audiograms (created_at, exam_date, paziente_id, source_label, notes) VALUES (?,?,?,?,?)",
+                    (_date.today().isoformat(), exam_date.isoformat(), paz_id, source_label, notes),
+                )
+                aid = cur.lastrowid
+
+            # points
+            for f, v in zip(ORL_FREQS_HZ, thr_od):
+                try:
+                    cur.execute(
+                        "INSERT INTO external_orl_audiogram_points (audiogram_id, ear, freq_hz, threshold_db_hl) VALUES (%s,%s,%s,%s)",
+                        (aid, "R", int(f), float(v)),
+                    )
+                except Exception:
+                    cur.execute(
+                        "INSERT INTO external_orl_audiogram_points (audiogram_id, ear, freq_hz, threshold_db_hl) VALUES (?,?,?,?)",
+                        (aid, "R", int(f), float(v)),
+                    )
+            for f, v in zip(ORL_FREQS_HZ, thr_os):
+                try:
+                    cur.execute(
+                        "INSERT INTO external_orl_audiogram_points (audiogram_id, ear, freq_hz, threshold_db_hl) VALUES (%s,%s,%s,%s)",
+                        (aid, "L", int(f), float(v)),
+                    )
+                except Exception:
+                    cur.execute(
+                        "INSERT INTO external_orl_audiogram_points (audiogram_id, ear, freq_hz, threshold_db_hl) VALUES (?,?,?,?)",
+                        (aid, "L", int(f), float(v)),
+                    )
+
+            conn.commit()
+            st.success("Esame ORL salvato ✅")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            st.error(f"Errore salvataggio: {e}")
+        finally:
+            try: cur.close()
+            except Exception: pass
+            conn.close()
+        st.stop()
+
+    # elenco ultimi esami
+    st.markdown("### Esami ORL salvati (ultimi 15)")
+    try:
+        cur.execute(
+            "SELECT id, created_at, exam_date, source_label FROM external_orl_audiograms WHERE paziente_id=%s ORDER BY COALESCE(exam_date::text, created_at::text) DESC LIMIT 15",
+            (paz_id,),
+        )
+        rows = cur.fetchall() or []
+    except Exception:
+        try:
+            cur.execute(
+                "SELECT id, created_at, exam_date, source_label FROM external_orl_audiograms WHERE paziente_id=? ORDER BY COALESCE(exam_date, created_at) DESC LIMIT 15",
+                (paz_id,),
+            )
+            rows = cur.fetchall() or []
+        except Exception:
+            rows = []
+
+    if rows:
+        st.write(rows)
+    try: cur.close()
+    except Exception: pass
+    conn.close()
+
+
+def ui_eq_stimolazione_uditiva_test():
+    import streamlit as st
+    import json as _json
+    from datetime import date as _date
+
+    st.header("🎚️ EQ stimolazione uditiva (Tomatis-like) — TEST")
+    st.caption("Genera una curva di equalizzazione per OD e OSN partendo dalle soglie ORL e da un preset Tomatis-like.")
+
+    conn = get_connection()
+    _ensure_orl_tonal_tables(conn)
+    _ensure_audio_eq_tables(conn)
+    cur = conn.cursor()
+
+    pazienti, table, colmap = fetch_pazienti_for_select(conn, limit=5000)
+    if not pazienti:
+        st.warning("Nessun paziente disponibile.")
+        try: cur.close()
+        except Exception: pass
+        conn.close()
+        return
+
+    def _lab(p):
+        pid, cogn, nome, dn, scuola, eta = p
+        base = f"{cogn} {nome} (id {pid})"
+        if dn: base += f" • {dn}"
+        return base
+
+    sel = st.selectbox("Seleziona paziente", pazienti, format_func=_lab, key="eq_paz_sel")
+    paz_id = int(sel[0])
+
+    # esami ORL disponibili
+    try:
+        cur.execute(
+            "SELECT id, exam_date, source_label, created_at FROM external_orl_audiograms WHERE paziente_id=%s ORDER BY COALESCE(exam_date, created_at) DESC LIMIT 30",
+            (paz_id,),
+        )
+        ex = cur.fetchall() or []
+    except Exception:
+        try:
+            cur.execute(
+                "SELECT id, exam_date, source_label, created_at FROM external_orl_audiograms WHERE paziente_id=? ORDER BY COALESCE(exam_date, created_at) DESC LIMIT 30",
+                (paz_id,),
+            )
+            ex = cur.fetchall() or []
+        except Exception:
+            ex = []
+
+    if not ex:
+        st.info("Nessun esame ORL trovato. Vai prima su “🩺 Esami ORL – soglie tonali (TEST)”.")
+        try: cur.close()
+        except Exception: pass
+        conn.close()
+        return
+
+    def _lab_ex(r):
+        try:
+            _id = r["id"]; d = r.get("exam_date"); s = r.get("source_label"); ca = r.get("created_at")
+        except Exception:
+            _id, d, s, ca = r[0], r[1], r[2], r[3]
+        d = d or ca
+        return f"#{_id} — {d} — {s or 'ORL'}"
+
+    sel_ex = st.selectbox("Seleziona esame ORL", ex, format_func=_lab_ex, key="eq_exam_sel")
+    try:
+        orl_id = int(sel_ex["id"])
+    except Exception:
+        orl_id = int(sel_ex[0])
+
+    # carica punti
+    thr_od = [10.0]*len(ORL_FREQS_HZ)
+    thr_os = [10.0]*len(ORL_FREQS_HZ)
+
+    try:
+        cur.execute(
+            "SELECT ear, freq_hz, threshold_db_hl FROM external_orl_audiogram_points WHERE audiogram_id=%s",
+            (orl_id,),
+        )
+        pts = cur.fetchall() or []
+    except Exception:
+        cur.execute(
+            "SELECT ear, freq_hz, threshold_db_hl FROM external_orl_audiogram_points WHERE audiogram_id=?",
+            (orl_id,),
+        )
+        pts = cur.fetchall() or []
+
+    for r in pts:
+        try:
+            ear = r["ear"]; f = int(r["freq_hz"]); v = float(r["threshold_db_hl"])
+        except Exception:
+            ear, f, v = r[0], int(r[1]), float(r[2])
+        if f in ORL_FREQS_HZ:
+            i = ORL_FREQS_HZ.index(f)
+            if str(ear).upper().startswith("R"):
+                thr_od[i] = v
+            else:
+                thr_os[i] = v
+
+    st.markdown("### Parametri")
+    colA, colB, colC, colD = st.columns(4)
+    with colA:
+        preset = st.selectbox("Preset Tomatis-like", ["Apertura medio-alte", "Bilanciato", "Soft (tolleranza)"], index=0, key="eq_preset")
+    with colB:
+        alpha = st.slider("α correzione deficit", 0.0, 1.0, 0.5, 0.05, key="eq_alpha")
+    with colC:
+        beta = st.slider("β forma Tomatis", 0.0, 1.0, 0.8, 0.05, key="eq_beta")
+    with colD:
+        hl_ref = st.slider("Riferimento HL (dB)", 0.0, 20.0, 10.0, 1.0, key="eq_hl_ref")
+
+    colE, colF = st.columns(2)
+    with colE:
+        boost_max = st.slider("BoostMax (+dB)", 0.0, 12.0, 9.0, 0.5, key="eq_boostmax")
+    with colF:
+        cut_max = st.slider("CutMax (−dB)", 0.0, 12.0, 6.0, 0.5, key="eq_cutmax")
+
+    # calcolo
+    eq_od = _compute_eq_from_orl(thr_od, preset, alpha, beta, hl_ref, boost_max, cut_max)
+    eq_os = _compute_eq_from_orl(thr_os, preset, alpha, beta, hl_ref, boost_max, cut_max)
+
+    st.markdown("### Grafico ORL + EQ")
+    fig = _plot_orl_and_eq(ORL_FREQS_HZ, thr_od, thr_os, eq_od, eq_os, preset)
+    st.pyplot(fig)
+
+    st.markdown("### Tabella EQ (gain per banda)")
+    import pandas as pd
+    df = pd.DataFrame({
+        "freq_hz": ORL_FREQS_HZ,
+        "orl_od_dbhl": thr_od,
+        "orl_os_dbhl": thr_os,
+        "eq_od_gain_db": [round(x,2) for x in eq_od],
+        "eq_os_gain_db": [round(x,2) for x in eq_os],
+    })
+    st.dataframe(df, use_container_width=True)
+
+    # export
+    payload = {
+        "preset": preset,
+        "params": {"alpha": float(alpha), "beta": float(beta), "hl_ref": float(hl_ref), "boost_max": float(boost_max), "cut_max": float(cut_max)},
+        "freqs_hz": ORL_FREQS_HZ,
+        "eq_od_gain_db": [float(x) for x in eq_od],
+        "eq_os_gain_db": [float(x) for x in eq_os],
+    }
+    st.download_button("⬇️ Export JSON EQ", data=_json.dumps(payload, indent=2), file_name=f"eq_{paz_id}_{orl_id}.json", mime="application/json")
+
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇️ Export CSV EQ", data=csv, file_name=f"eq_{paz_id}_{orl_id}.csv", mime="text/csv")
+
+    notes = st.text_area("Note profilo EQ", value="", height=90, key="eq_notes")
+
+    if st.button("💾 Salva profilo EQ (OD/OSN)", type="primary", key="eq_save_profile"):
+        try:
+            # Postgres
+            try:
+                cur.execute(
+                    """INSERT INTO audio_eq_profiles
+                    (paziente_id, orl_audiogram_id, preset_name, alpha, beta, hl_ref, boost_max, cut_max, gains_od_json, gains_os_json, notes)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)""",
+                    (paz_id, orl_id, preset, float(alpha), float(beta), float(hl_ref), float(boost_max), float(cut_max),
+                     _json.dumps(payload["eq_od_gain_db"]), _json.dumps(payload["eq_os_gain_db"]), notes),
+                )
+            except Exception:
+                cur.execute(
+                    """INSERT INTO audio_eq_profiles
+                    (created_at, paziente_id, orl_audiogram_id, preset_name, alpha, beta, hl_ref, boost_max, cut_max, gains_od_json, gains_os_json, notes)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (_date.today().isoformat(), paz_id, orl_id, preset, float(alpha), float(beta), float(hl_ref), float(boost_max), float(cut_max),
+                     _json.dumps(payload["eq_od_gain_db"]), _json.dumps(payload["eq_os_gain_db"]), notes),
+                )
+
+            conn.commit()
+            st.success("Profilo EQ salvato ✅")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            st.error(f"Errore salvataggio EQ: {e}")
+        finally:
+            try: cur.close()
+            except Exception: pass
+            conn.close()
+        st.stop()
+
+    try: cur.close()
+    except Exception: pass
+    conn.close()
+
+
+
+def ui_sessione_stimolazione_uditiva_test():
+    import streamlit as st
+    import base64
+    import json
+    import streamlit.components.v1 as components
+
+    st.header("🎧 Stimolazione uditiva (Precessione / Ritardo) — TEST")
+    st.caption("Ascolto processato in realtime (browser) con WebAudio: precessione/ritardo Poisson, rotazione continua, bias A/B e gating volume.")
+
+    # Session state defaults
+    if "stim_pr" not in st.session_state:
+        st.session_state["stim_pr"] = {
+            "lambda_events_per_s": 5.0,
+            "precession_ms_min": 10,
+            "precession_ms_max": 400,
+            "attack_ms_min": 5,
+            "attack_ms_max": 20,
+            "refractory_ms_min": 20,
+            "refractory_ms_max": 80,
+            "mix": 0.90,
+            "open_q": 0.9,
+            "closed_q": 2.8,
+            "closed_center_hz": 1000,
+            "volume_gate_enabled": True,
+            "vol_off_atten_db": -10.0,
+            "bands": {
+                "low": {"fmin": 400, "fmax": 700, "w": 0.20},
+                "mid": {"fmin": 1000, "fmax": 3000, "w": 0.50},
+                "high": {"fmin": 4000, "fmax": 6500, "w": 0.30},
+            },
+            "bias_mode": "fixed",  # fixed|alternating
+            "bias_side": "R",
+            "bias_ratio": 0.70,
+            "bias_switch_seconds": 180,
+            "loop": True,
+        }
+
+    man = st.session_state["stim_pr"]
+
+    with st.expander("⚙️ Parametri realtime", expanded=True):
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            man["lambda_events_per_s"] = st.slider("Intensità eventi (λ/sec)", 1.0, 12.0, float(man["lambda_events_per_s"]), 0.5)
+            man["mix"] = st.slider("Mix effetto timbrico", 0.0, 1.0, float(man["mix"]), 0.05)
+            man["volume_gate_enabled"] = st.checkbox("Gating volume ON (stimolo più forte)", value=bool(man["volume_gate_enabled"]))
+            if man["volume_gate_enabled"]:
+                man["vol_off_atten_db"] = st.slider("Attenuazione in Ritardo (dB)", -25.0, 0.0, float(man["vol_off_atten_db"]), 1.0)
+
+        with col2:
+            man["precession_ms_min"] = st.number_input("Precessione min (ms)", 1, 1000, int(man["precession_ms_min"]))
+            man["precession_ms_max"] = st.number_input("Precessione max (ms)", 1, 2000, int(man["precession_ms_max"]))
+            man["attack_ms_min"] = st.number_input("Attacco min (ms)", 1, 200, int(man["attack_ms_min"]))
+            man["attack_ms_max"] = st.number_input("Attacco max (ms)", 1, 500, int(man["attack_ms_max"]))
+            man["refractory_ms_min"] = st.number_input("Ritardo min (ms)", 0, 500, int(man["refractory_ms_min"]))
+            man["refractory_ms_max"] = st.number_input("Ritardo max (ms)", 0, 1000, int(man["refractory_ms_max"]))
+
+        with col3:
+            st.markdown("**Bande di rotazione (pesate)**")
+            man["bands"]["low"]["fmin"] = st.number_input("Bassa fmin", 50, 2000, int(man["bands"]["low"]["fmin"]))
+            man["bands"]["low"]["fmax"] = st.number_input("Bassa fmax", 50, 4000, int(man["bands"]["low"]["fmax"]))
+            man["bands"]["mid"]["fmin"] = st.number_input("Media fmin", 100, 4000, int(man["bands"]["mid"]["fmin"]))
+            man["bands"]["mid"]["fmax"] = st.number_input("Media fmax", 200, 8000, int(man["bands"]["mid"]["fmax"]))
+            man["bands"]["high"]["fmin"] = st.number_input("Alta fmin", 500, 10000, int(man["bands"]["high"]["fmin"]))
+            man["bands"]["high"]["fmax"] = st.number_input("Alta fmax", 500, 12000, int(man["bands"]["high"]["fmax"]))
+
+            st.markdown("**Bias laterale**")
+            man["bias_mode"] = st.radio("Modalità bias", ["fixed", "alternating"], index=0 if man["bias_mode"]=="fixed" else 1,
+                                        format_func=lambda x: "A) Fisso" if x=="fixed" else "B) Alternato DX↔SX")
+            if man["bias_mode"] == "fixed":
+                man["bias_side"] = st.radio("Lato", ["R","L"], index=0 if man["bias_side"]=="R" else 1,
+                                            format_func=lambda x: "DX" if x=="R" else "SX")
+            else:
+                man["bias_switch_seconds"] = st.slider("Switch bias (sec)", 60, 600, int(man["bias_switch_seconds"]), 30)
+            man["bias_ratio"] = st.slider("Quota precessione lato bias", 0.50, 0.70, float(man["bias_ratio"]), 0.01)
+            man["loop"] = st.checkbox("Loop", value=True)
+
+    up = st.file_uploader("Carica audio (MP3/WAV/OGG consigliati; FLAC viene convertito)", type=["mp3","wav","ogg","flac"])
+    if not up:
+        st.info("Carica un file per ascoltare l'effetto in realtime.")
+        return
+
+    audio_bytes = up.getvalue()
+    mime = (up.type or "").lower().strip()
+
+    if mime in ("audio/flac","audio/x-flac"):
+        try:
+            import io
+            import soundfile as sf
+            with io.BytesIO(audio_bytes) as bio:
+                data, sr = sf.read(bio, dtype="float32", always_2d=True)
+            max_samples = min(len(data), int(sr * 600))  # max 10 min
+            data = data[:max_samples]
+            out = io.BytesIO()
+            sf.write(out, data, sr, format="WAV", subtype="PCM_16")
+            audio_bytes = out.getvalue()
+            mime = "audio/wav"
+            st.caption("FLAC convertito in WAV (max 10 min) per realtime WebAudio.")
+        except Exception:
+            st.warning("Impossibile convertire FLAC in WAV qui. Usa MP3/WAV/OGG.")
+            return
+
+    b64 = base64.b64encode(audio_bytes).decode("utf-8")
+
+    params = {
+        "lambda": float(man["lambda_events_per_s"]),
+        "preMin": int(man["precession_ms_min"]),
+        "preMax": int(man["precession_ms_max"]),
+        "attMin": int(man["attack_ms_min"]),
+        "attMax": int(man["attack_ms_max"]),
+        "refMin": int(man["refractory_ms_min"]),
+        "refMax": int(man["refractory_ms_max"]),
+        "mix": float(man["mix"]),
+        "openQ": float(man["open_q"]),
+        "closedQ": float(man["closed_q"]),
+        "closedCenter": float(man["closed_center_hz"]),
+        "volGate": bool(man["volume_gate_enabled"]),
+        "volOffDb": float(man["vol_off_atten_db"]),
+        "bands": man["bands"],
+        "biasMode": man["bias_mode"],
+        "biasSide": man["bias_side"],
+        "biasRatio": float(man["bias_ratio"]),
+        "biasSwitch": int(man["bias_switch_seconds"]),
+    }
+    params_json = json.dumps(params)
+
+    html = f'''
+<div style="display:flex;flex-direction:column;gap:6px;">
+  <audio id="aud" controls {"loop" if man["loop"] else ""} src="data:{mime};base64,{b64}"></audio>
+  <div style="font-size:12px;opacity:0.85;">Ascolto processato realtime (WebAudio). Premi Play (autoplay bloccato).</div>
+</div>
+
+<script>
+(() => {{
+  const audio = document.getElementById("aud");
+  const P = {params_json};
+
+  let ctx=null, src=null;
+  let dryGain=null, wetGain=null;
+  let splitter=null, merger=null;
+  let gL=null, gR=null;
+  let bp=null;
+
+  let running=false;
+  let timerId=null;
+
+  function dbToLin(db) {{ return Math.pow(10, db/20); }}
+  function nextIntervalMs(lambdaPerSec) {{
+    const u = Math.max(Math.random(), 1e-9);
+    return (-Math.log(u) / lambdaPerSec) * 1000;
+  }}
+  function randBetween(a,b) {{
+    if (b < a) {{ const t=a; a=b; b=t; }}
+    return a + Math.random()*(b-a);
+  }}
+  function pickWeightedBand(bands) {{
+    const entries = Object.entries(bands);
+    let sum = 0;
+    for (const [k,v] of entries) sum += (v.w || 0);
+    let r = Math.random()*sum;
+    for (const [k,v] of entries) {{
+      r -= (v.w || 0);
+      if (r <= 0) return [k,v];
+    }}
+    return entries[0];
+  }}
+  function currentBiasSide() {{
+    if (P.biasMode === "fixed") return P.biasSide;
+    const t = (ctx ? ctx.currentTime : 0);
+    const block = Math.floor(t / Math.max(P.biasSwitch,1));
+    return (block % 2 === 0) ? "R" : "L";
+  }}
+  function smooth(param, value, ms) {{
+    const t = ctx.currentTime;
+    const s = Math.max(ms/1000.0, 0.001);
+    param.cancelScheduledValues(t);
+    param.setValueAtTime(param.value, t);
+    param.linearRampToValueAtTime(value, t + s);
+  }}
+
+  function ensureGraph() {{
+    if (ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    src = ctx.createMediaElementSource(audio);
+
+    splitter = ctx.createChannelSplitter(2);
+    merger = ctx.createChannelMerger(2);
+
+    gL = ctx.createGain();
+    gR = ctx.createGain();
+    gL.gain.value = 1.0;
+    gR.gain.value = 1.0;
+
+    bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = P.closedCenter;
+    bp.Q.value = P.closedQ;
+
+    dryGain = ctx.createGain();
+    wetGain = ctx.createGain();
+    dryGain.gain.value = Math.max(0, 1.0 - P.mix);
+    wetGain.gain.value = P.mix;
+
+    src.connect(dryGain).connect(ctx.destination);
+
+    src.connect(splitter);
+    splitter.connect(gL, 0);
+    splitter.connect(gR, 1);
+    gL.connect(merger, 0, 0);
+    gR.connect(merger, 0, 1);
+
+    merger.connect(bp).connect(wetGain).connect(ctx.destination);
+
+    if (P.volGate) {{
+      const offGain = dbToLin(P.volOffDb);
+      wetGain.gain.value = P.mix * offGain;
+    }}
+  }}
+
+  function doPrecession() {{
+    if (!running || !ctx) return;
+
+    const [, band] = pickWeightedBand(P.bands);
+    const center = randBetween(band.fmin, band.fmax);
+
+    const preMs = Math.round(randBetween(P.preMin, P.preMax));
+    const attMs = Math.round(randBetween(P.attMin, P.attMax));
+
+    const biasSide = currentBiasSide(); // R or L
+    const u = Math.random();
+    const hitRight = (biasSide === "R") ? (u < P.biasRatio) : (u >= P.biasRatio);
+
+    const up = 1.18;
+    const down = 0.92;
+    if (hitRight) {{
+      smooth(gR.gain, up, attMs);
+      smooth(gL.gain, down, attMs);
+    }} else {{
+      smooth(gL.gain, up, attMs);
+      smooth(gR.gain, down, attMs);
+    }}
+
+    smooth(bp.frequency, center, attMs);
+    smooth(bp.Q, P.openQ, attMs);
+
+    if (P.volGate) {{
+      smooth(wetGain.gain, P.mix, attMs);
+    }}
+
+    window.setTimeout(() => {{
+      if (!running || !ctx) return;
+
+      smooth(bp.frequency, P.closedCenter, attMs);
+      smooth(bp.Q, P.closedQ, attMs);
+
+      smooth(gL.gain, 1.0, attMs);
+      smooth(gR.gain, 1.0, attMs);
+
+      if (P.volGate) {{
+        const offGain = dbToLin(P.volOffDb);
+        smooth(wetGain.gain, P.mix * offGain, attMs);
+      }}
+    }}, preMs);
+  }}
+
+  function scheduleNext() {{
+    if (!running) return;
+    const dt = Math.max(nextIntervalMs(P.lambda), randBetween(P.refMin, P.refMax));
+    timerId = window.setTimeout(() => {{
+      doPrecession();
+      scheduleNext();
+    }}, dt);
+  }}
+
+  function start() {{
+    ensureGraph();
+    running = true;
+    if (ctx.state === "suspended") ctx.resume();
+    scheduleNext();
+  }}
+  function stop() {{
+    running = false;
+    if (timerId) window.clearTimeout(timerId);
+    timerId = null;
+  }}
+
+  audio.addEventListener("play", () => start());
+  audio.addEventListener("pause", () => stop());
+  audio.addEventListener("ended", () => stop());
+}})();
+</script>
+'''
+    st.subheader("Ascolto processato (realtime — loop)")
+    components.html(html, height=130)
+    st.info("Nota: l'audio processato si sente SOLO nel player qui sopra (WebAudio).")
+
+
 def main():
+    # Pagina pubblica questionari (senza login)
+    if maybe_handle_public_questionario(get_connection):
+        return
+
     st.set_page_config(
         page_title="The Organism – Gestionale Studio",
         layout="wide"
@@ -6372,14 +9484,14 @@ def main():
     init_db()
 
     # login obbligatorio
-    if not login():
+    if not login(get_connection):
         return
 
     # menu laterale
     st.sidebar.title("Navigazione")
     sections = [
         "Pazienti",
-        "Anamnesi",
+        "Valutazione PNEV",
         "Valutazioni visive / oculistiche",
         "Sedute / Terapie",
         "Osteopatia",
@@ -6391,14 +9503,24 @@ def main():
         "🛠️ Debug DB",
         "📥 Import Pazienti",
     ]
+    if is_admin():
+        sections.append("👥 Utenti / Ruoli")
+
     if APP_MODE == "test":
+        sections.append("🎧 Audiogramma funzionale (TEST)")
+        sections.append("🎧 ORL + EQ (MODULO)")
+        sections.append("🎧 Genera stimolazione (JOB)")
+        sections.append("🩺 Esami ORL – soglie tonali (TEST)")
+        sections.append("🎚️ EQ stimolazione uditiva (TEST)")
+        sections.append("🎧 Stimolazione uditiva (TEST)")
+        sections.append("🔧 Calibrazione cuffie (TEST)")
         sections.append("🧹 Pulizia DB (TEST)")
     sezione = st.sidebar.radio("Vai a", sections)
 
     # routing alle varie sezioni
     if sezione == "Pazienti":
         ui_pazienti()
-    elif sezione == "Anamnesi":
+    elif sezione == "Valutazione PNEV":
         ui_anamnesi()
     elif sezione == "Valutazioni visive / oculistiche":
         ui_valutazioni_visive()
@@ -6420,6 +9542,22 @@ def main():
         ui_debug_db()
     elif sezione == "📥 Import Pazienti":
         ui_import_pazienti()
+    elif sezione == "👥 Utenti / Ruoli":
+        ui_gestione_utenti(get_connection)
+    elif sezione == "🔧 Calibrazione cuffie (TEST)":
+        ui_calibrazione_cuffie_test()
+    elif sezione == "🎧 Audiogramma funzionale (TEST)":
+        ui_audiogramma_test()
+    elif sezione == "🩺 Esami ORL – soglie tonali (TEST)":
+        ui_esami_orl_tonali_test()
+    elif sezione == "🎧 ORL + EQ (MODULO)":
+        ui_orl_eq(get_connection, paziente_selector_fn=_select_paziente_minimal)
+    elif sezione == "🎧 Genera stimolazione (JOB)":
+        ui_generatore_stimolazione(get_connection, paziente_selector_fn=_select_paziente_minimal)
+    elif sezione == "🎚️ EQ stimolazione uditiva (TEST)":
+        ui_eq_stimolazione_uditiva_test()
+    elif sezione == "🎧 Stimolazione uditiva (TEST)":
+        ui_sessione_stimolazione_uditiva_test()
     elif sezione == "🧹 Pulizia DB (TEST)":
         ui_db_cleanup()
 
@@ -6517,6 +9655,28 @@ def _convert_pdf_if_possible(docx_path, out_pdf_path):
     shutil.move(gen, out_pdf_path)
     return True, out_pdf_path
 
+# ==========================
+# Bibliografia (PNEV / INPP- INPPS) — inserita automaticamente in TUTTE le relazioni cliniche
+# Nota: nei template .docx inserisci il placeholder: {{ BIBLIOGRAFIA }}
+# ==========================
+BIBLIOGRAFIA_PNEV = """
+BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI (selezione)
+
+INPP / INPPS – neuromotor readiness, riflessi primitivi e apprendimento
+• Demiy A, Kalemba A, Lorent M, Pecuch A, Wolańska E, Telenga M, Gieysztor EZ. (2020).
+  A Child’s Perception of Their Developmental Difficulties in Relation to Their Adult Assessment.
+  Analysis of the INPP Questionnaire. Journal of Personalized Medicine, 10(4), 156.
+
+• Goddard Blythe S. (2005). Reflexes, Learning and Behavior: A Window into the Child’s Mind. Fern Ridge Press.
+• Goddard Blythe S. (2009). Attention, Balance and Coordination: The A.B.C. of Learning Success. Wiley-Blackwell.
+• Goddard Blythe S. (2012). Assessing Neuromotor Readiness for Learning:
+  The INPP Developmental Screening Test and School Intervention Programme. Wiley-Blackwell.
+
+Nota clinica (screening):
+Nel protocollo PNEV/INPPS, un numero elevato di affermazioni positive ai questionari di screening
+è considerato indicativo di possibile immaturità neuromotoria e richiede conferma tramite valutazione clinica diretta.
+"""
+
 TEMPLATES = {
   # Linguaggio (ospedaliero) - unico template
   "linguaggio_invio_ospedaliero": {
@@ -6602,7 +9762,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
         extra = ""
         if eta: extra += f" • {eta} anni"
         if scuola: extra += f" • {scuola}"
-        return f"{cogn} {nome} (ID {pid}) {dn_s}{extra}".strip()
+        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
     sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
     try:
@@ -6610,7 +9770,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     except Exception:
         paziente_id = None
     if not paziente_id:
-        st.error("Errore: ID paziente non determinabile.")
+        st.error("Errore: id paziente non determinabile.")
         return
 
     # carica dati base paziente (nome/cognome/data nascita) per template
@@ -6643,6 +9803,34 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
 
     # Context placeholder comune
     nome_cognome = f"{paziente.get('cognome','')} {paziente.get('nome','')}".strip()
+    # --- Aggancio automatico screening INPPS (se presente in PNEV) ---
+    try:
+        cur2 = conn.cursor()
+        cur2.execute(
+            "SELECT pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
+            (paziente_id,),
+        )
+        r_inpps = cur2.fetchone()
+        if r_inpps:
+            pnev_obj = pnev.pnev_load(r_inpps.get("pnev_json") if hasattr(r_inpps, "get") else r_inpps[0])
+            inpps_obj = (pnev_obj.get("questionari", {}) or {}).get("inpps_screening_genitori")
+            if isinstance(inpps_obj, dict):
+                scr = inpps_obj.get("screening") or {}
+                if isinstance(scr, dict) and scr.get("totale_positivi") is not None:
+                    tot = scr.get("totale_positivi")
+                    cutoff = scr.get("cutoff", 7)
+                    flag = bool(scr.get("flag_possibile_immaturita_neuromotoria"))
+                    txt = f"Screening INPPS (genitori): totale positivi {tot} (cut-off ≥ {cutoff}). "
+                    if flag:
+                        txt += "Indicativo di possibile immaturità neuromotoria (screening) – raccomandata conferma clinica diretta."
+                    else:
+                        txt += "Nessun alert da screening."
+                    NOTE_CLINICHE = (NOTE_CLINICHE or "").strip()
+                    NOTE_CLINICHE = (NOTE_CLINICHE + "\n\n" + txt).strip() if NOTE_CLINICHE else txt
+    except Exception:
+        pass
+
+
     context = {
         "NOME_COGNOME": nome_cognome,
         "DATA_NASCITA": paziente.get("data_nascita",""),
@@ -6652,6 +9840,8 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
         "DATA_RELAZIONE": data_relazione.strftime("%d/%m/%Y"),
         "NOTE_CLINICHE": note.strip(),
         "PERIODO_FOLLOWUP": periodo_followup.strip(),
+        "BIBLIOGRAFIA": BIBLIOGRAFIA_PNEV.strip(),
+
     }
 
     template_file = rel["files"]["std"]
@@ -6700,3 +9890,5 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
 
 if __name__ == "__main__":
     main()
+
+
