@@ -18,16 +18,11 @@ from .audio_dsp import (
 from .db_orl import FREQS_STD
 
 
-# =============================================================================
-# IO helpers
-# =============================================================================
-
 def _ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
 def _read_wav16_bytes(data: bytes) -> Tuple[np.ndarray, int]:
-    """Read WAV PCM 16-bit via stdlib (stable on Streamlit)."""
     import wave
     bio = io.BytesIO(data)
     with wave.open(bio, "rb") as wf:
@@ -50,19 +45,12 @@ def _read_wav16_bytes(data: bytes) -> Tuple[np.ndarray, int]:
 
 
 def _read_audio_bytes_any(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
-    """
-    Decoder robusto:
-      1) WAV 16-bit -> ok sempre
-      2) soundfile (se disponibile) -> FLAC/WAV ecc.
-      3) pydub (se disponibile) -> MP3
-      4) ffmpeg (se disponibile) -> qualunque formato -> WAV 16-bit temporaneo
-    """
     name = (filename or "").lower().strip()
 
     if name.endswith(".wav"):
         return _read_wav16_bytes(data)
 
-    # soundfile (molto comodo per FLAC) se presente
+    # soundfile (FLAC ecc.)
     try:
         import soundfile as sf  # type: ignore
         bio = io.BytesIO(data)
@@ -75,7 +63,7 @@ def _read_audio_bytes_any(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
     except Exception:
         pass
 
-    # pydub (MP3) se presente + ffmpeg
+    # pydub (MP3) se presente
     if name.endswith(".mp3"):
         try:
             from pydub import AudioSegment  # type: ignore
@@ -91,35 +79,23 @@ def _read_audio_bytes_any(data: bytes, filename: str) -> Tuple[np.ndarray, int]:
     # ffmpeg fallback
     if _ffmpeg_available():
         with tempfile.TemporaryDirectory() as td:
-            # keep extension to help ffmpeg sniff format
             ext = os.path.splitext(name)[1] or ".bin"
             in_guess = os.path.join(td, f"in{ext}")
             out_wav = os.path.join(td, "out.wav")
             with open(in_guess, "wb") as f:
                 f.write(data)
 
-            cmd = [
-                "ffmpeg", "-y",
-                "-i", in_guess,
-                "-ac", "2",
-                "-ar", "44100",
-                "-sample_fmt", "s16",
-                out_wav
-            ]
+            cmd = ["ffmpeg", "-y", "-i", in_guess, "-ac", "2", "-ar", "44100", "-sample_fmt", "s16", out_wav]
             p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if p.returncode != 0:
-                raise ValueError(
-                    "ffmpeg non riesce a decodificare questo file. "
-                    "Consiglio: converti in WAV 16-bit e ricarica.\n"
-                    + p.stderr.decode("utf-8", errors="ignore")[:4000]
-                )
+                raise ValueError("ffmpeg non riesce a decodificare questo file.\n" +
+                                 p.stderr.decode("utf-8", errors="ignore")[:4000])
             wav_bytes = open(out_wav, "rb").read()
             return _read_wav16_bytes(wav_bytes)
 
     raise ValueError(
-        "Formato non supportato in questa installazione. "
-        "Soluzione consigliata: converti l'input in WAV PCM 16-bit e ricarica. "
-        "Per MP3/FLAC su Streamlit Cloud, spesso serve ffmpeg/libsndfile."
+        "Formato non supportato. Consiglio: converti l'input in WAV PCM 16-bit e ricarica. "
+        "Per MP3/FLAC su Streamlit Cloud spesso serve ffmpeg/libsndfile."
     )
 
 
@@ -137,11 +113,6 @@ def _write_wav16_bytes(x: np.ndarray, fs: int) -> bytes:
 
 
 def _write_flac_bytes_from_wav(wav_bytes: bytes) -> bytes:
-    """
-    FLAC export:
-      - prefer soundfile (se disponibile)
-      - fallback ffmpeg (se disponibile)
-    """
     try:
         import soundfile as sf  # type: ignore
         bio = io.BytesIO(wav_bytes)
@@ -153,10 +124,7 @@ def _write_flac_bytes_from_wav(wav_bytes: bytes) -> bytes:
         pass
 
     if not _ffmpeg_available():
-        raise ValueError(
-            "Per FLAC serve 'soundfile' (libsndfile) oppure ffmpeg. "
-            "Nel tuo Streamlit Cloud sembra mancare: per ora usa WAV."
-        )
+        raise ValueError("Per FLAC serve 'soundfile' (libsndfile) oppure ffmpeg. Per ora usa WAV.")
 
     with tempfile.TemporaryDirectory() as td:
         in_wav = os.path.join(td, "in.wav")
@@ -166,19 +134,12 @@ def _write_flac_bytes_from_wav(wav_bytes: bytes) -> bytes:
         cmd = ["ffmpeg", "-y", "-i", in_wav, "-c:a", "flac", out_flac]
         p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if p.returncode != 0:
-            raise ValueError(
-                "ffmpeg non riesce a esportare FLAC.\n"
-                + p.stderr.decode("utf-8", errors="ignore")[:4000]
-            )
+            raise ValueError("ffmpeg non riesce a esportare FLAC.\n" +
+                             p.stderr.decode("utf-8", errors="ignore")[:4000])
         return open(out_flac, "rb").read()
 
 
 def _write_mp3_bytes_from_wav(wav_bytes: bytes, bitrate: str = "192k") -> bytes:
-    """
-    MP3 export:
-      - prefer pydub (se disponibile)
-      - fallback ffmpeg (se disponibile)
-    """
     try:
         from pydub import AudioSegment  # type: ignore
         seg = AudioSegment.from_file(io.BytesIO(wav_bytes), format="wav")
@@ -189,10 +150,7 @@ def _write_mp3_bytes_from_wav(wav_bytes: bytes, bitrate: str = "192k") -> bytes:
         pass
 
     if not _ffmpeg_available():
-        raise ValueError(
-            "Per MP3 serve 'pydub'+ffmpeg oppure ffmpeg. "
-            "Nel tuo Streamlit Cloud sembra mancare: per ora usa WAV."
-        )
+        raise ValueError("Per MP3 serve 'pydub'+ffmpeg oppure ffmpeg. Per ora usa WAV.")
 
     with tempfile.TemporaryDirectory() as td:
         in_wav = os.path.join(td, "in.wav")
@@ -202,20 +160,14 @@ def _write_mp3_bytes_from_wav(wav_bytes: bytes, bitrate: str = "192k") -> bytes:
         cmd = ["ffmpeg", "-y", "-i", in_wav, "-b:a", str(bitrate), out_mp3]
         p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if p.returncode != 0:
-            raise ValueError(
-                "ffmpeg non riesce a esportare MP3.\n"
-                + p.stderr.decode("utf-8", errors="ignore")[:4000]
-            )
+            raise ValueError("ffmpeg non riesce a esportare MP3.\n" +
+                             p.stderr.decode("utf-8", errors="ignore")[:4000])
         return open(out_mp3, "rb").read()
 
 
-# =============================================================================
-# DSP engine (streaming a blocchi)
-# =============================================================================
-
 @dataclass
 class GateState:
-    mode: str = "closed_wait"   # closed_wait -> open -> closed
+    mode: str = "closed_wait"
     time_left_s: float = 0.0
     attack_left_s: float = 0.0
 
@@ -232,11 +184,7 @@ def _build_eq_filters(fs: int, gains: Dict[int, float], q: float = 1.0):
 
 def _choose_band(params: Dict[str, Any]) -> Tuple[float, float]:
     bands = params["bands"]
-    choices = [
-        ("low",  float(bands["low"]["weight"])),
-        ("mid",  float(bands["mid"]["weight"])),
-        ("high", float(bands["high"]["weight"])),
-    ]
+    choices = [("low", float(bands["low"]["weight"])), ("mid", float(bands["mid"]["weight"])), ("high", float(bands["high"]["weight"]))]
     r = random.random() * sum(w for _, w in choices)
     acc = 0.0
     pick = "mid"
@@ -273,13 +221,6 @@ def render_full(
     mp3_bitrate: str = "192k",
     max_seconds: Optional[float] = None,
 ) -> Dict[str, bytes]:
-    """
-    Render finale:
-      - decode best-effort (WAV consigliato)
-      - EQ DX/SX
-      - gating Tomatis-like
-      - export WAV sempre; FLAC/MP3 se possibile (soundfile/pydub/ffmpeg) altrimenti errore chiaro.
-    """
     x, fs = _read_audio_bytes_any(audio_bytes, filename)
     if max_seconds is not None:
         x = x[: int(max_seconds * fs), :]
@@ -288,15 +229,12 @@ def render_full(
     if n <= 0:
         raise ValueError("Audio vuoto.")
 
-    # EQ filters (stateful)
-    eqL = _build_eq_filters(fs, eq_gain_sx, q=1.0)  # 0=SX
-    eqR = _build_eq_filters(fs, eq_gain_dx, q=1.0)  # 1=DX
+    eqL = _build_eq_filters(fs, eq_gain_sx, q=1.0)
+    eqR = _build_eq_filters(fs, eq_gain_dx, q=1.0)
 
-    # closed bandpass default
     q_closed = float(preset_params["closed_state"]["q"].get("value", 2.8))
     center_closed = float(preset_params["closed_state"]["center_hz"].get("value", 1000.0))
 
-    # gating params
     lam = float(preset_params.get("lambda_events_per_sec", 5.0))
     open_min = float(preset_params["open_state"]["duration_ms"]["min"]) / 1000.0
     open_max = float(preset_params["open_state"]["duration_ms"]["max"]) / 1000.0
@@ -309,21 +247,15 @@ def render_full(
     closed_att_db = float(preset_params["mix"].get("closed_wet_attenuation_db", -10.0))
     closed_wet = db_to_lin(closed_att_db)
 
-    # bias
     lb = preset_params.get("lateral_bias", {})
     ratio = float(lb.get("ratio", 0.7))
     g_dom = 1.0
     g_oth = max(0.0, min(1.0, (1.0 - ratio) / ratio)) if ratio > 0 else 1.0
 
-    # bandpass stateful
     bpL = biquad_bandpass(fs, center_closed, q_closed)
     bpR = biquad_bandpass(fs, center_closed, q_closed)
 
-    st = GateState(
-        mode="closed_wait",
-        time_left_s=(random.expovariate(lam) if lam > 0 else 1e9),
-        attack_left_s=0.0,
-    )
+    st = GateState(mode="closed_wait", time_left_s=(random.expovariate(lam) if lam > 0 else 1e9), attack_left_s=0.0)
     t_s = 0.0
 
     out = np.zeros_like(x, dtype=np.float32)
@@ -333,7 +265,6 @@ def render_full(
         j = min(n, i + block)
         block_n = j - i
 
-        # EQ block (keep states)
         L = x[i:j, 0].astype(np.float32, copy=True)
         R = x[i:j, 1].astype(np.float32, copy=True)
         for f in eqL:
@@ -345,41 +276,29 @@ def render_full(
         env = np.empty((block_n,), dtype=np.float32)
         for k in range(block_n):
             dt = 1.0 / fs
-
             if st.time_left_s <= 0.0:
                 if st.mode == "closed_wait":
-                    # start OPEN
                     st.mode = "open"
                     st.time_left_s = random.uniform(open_min, open_max)
                     st.attack_left_s = random.uniform(att_min, att_max)
-
                     fmin, fmax = _choose_band(preset_params)
                     center = random.uniform(fmin, fmax)
-                    q = random.uniform(
-                        float(preset_params["open_state"]["q"]["min"]),
-                        float(preset_params["open_state"]["q"]["max"]),
-                    )
+                    q = random.uniform(float(preset_params["open_state"]["q"]["min"]), float(preset_params["open_state"]["q"]["max"]))
                     bpL = biquad_bandpass(fs, center, q)
                     bpR = biquad_bandpass(fs, center, q)
-
                 elif st.mode == "open":
-                    # go CLOSED refractory
                     st.mode = "closed"
                     st.time_left_s = random.uniform(ref_min, ref_max)
                     st.attack_left_s = 0.0
                     bpL = biquad_bandpass(fs, center_closed, q_closed)
                     bpR = biquad_bandpass(fs, center_closed, q_closed)
-
                 elif st.mode == "closed":
-                    # schedule next OPEN (Poisson)
                     st.mode = "closed_wait"
                     st.time_left_s = random.expovariate(lam) if lam > 0 else 1e9
                     st.attack_left_s = 0.0
 
-            # env value
             if st.mode == "open":
                 if st.attack_left_s > 0.0:
-                    # linear ramp closed_wet -> 1 (approx)
                     frac = 1.0 - max(0.0, min(1.0, st.attack_left_s / max(att_max, 1e-6)))
                     env[k] = closed_wet + (1.0 - closed_wet) * frac
                     st.attack_left_s -= dt
@@ -411,7 +330,6 @@ def render_full(
 
     out = soft_limiter(out, peak_dbfs=float(limiter_peak_dbfs))
 
-    # Always produce WAV first (guaranteed)
     wav_bytes = _write_wav16_bytes(out, fs)
 
     outputs: Dict[str, bytes] = {}
