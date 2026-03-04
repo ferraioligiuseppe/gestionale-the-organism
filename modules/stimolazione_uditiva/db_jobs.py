@@ -43,6 +43,35 @@ def ensure_jobs_schema(conn) -> None:
         try: cur.close()
         except Exception: pass
 
+# --- B2 ADDON: read_tomatis_preset --------------------------------------------
+import json
+
+def read_tomatis_preset(conn, preset_id: int):
+    """
+    Ritorna: (name, params_dict)
+    params_dict è il JSON del preset (dict), compatibile con JSONB (dict o stringa).
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT name, params_json FROM tomatis_presets WHERE id=%s",
+            (int(preset_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        name, pj = row
+        if isinstance(pj, (dict, list)):
+            params = pj
+        else:
+            params = json.loads(pj)
+        return str(name), params
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+
 def seed_tomatis_presets(conn) -> None:
     """Inserisce SOFT/STANDARD/FORTE+ se mancanti."""
     presets = [
