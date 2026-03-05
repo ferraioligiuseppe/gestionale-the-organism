@@ -4,6 +4,7 @@ import json
 from typing import Any, Dict, List
 from collections.abc import Mapping
 import streamlit as st
+import matplotlib.pyplot as plt
 
 # ---------- Apple-like (lightweight) CSS ----------
 def _load_payload_into_form(pj: dict):
@@ -32,9 +33,23 @@ def _load_payload_into_form(pj: dict):
 
     # Esame obiettivo
     eo = pj.get("esame_obiettivo") or {}
-    for field in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare","pressione_endoculare","pachimetria"):
+    for field in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare","pressione_endoculare","pressione_endoculare_od","pressione_endoculare_os","pachimetria","pachimetria_od","pachimetria_os"):
         if field in eo:
             st.session_state[field] = eo.get(field) or ""
+
+
+    # Retrocompatibilità: se mancano i nuovi campi, prova a derivarli dai campi legacy "OD/OS"
+    try:
+        if not st.session_state.get("pressione_endoculare_od") and not st.session_state.get("pressione_endoculare_os"):
+            od_iop, os_iop = _parse_pair_values(st.session_state.get("pressione_endoculare") or "")
+            if od_iop is not None: st.session_state["pressione_endoculare_od"] = str(od_iop).rstrip("0").rstrip(".")
+            if os_iop is not None: st.session_state["pressione_endoculare_os"] = str(os_iop).rstrip("0").rstrip(".")
+        if not st.session_state.get("pachimetria_od") and not st.session_state.get("pachimetria_os"):
+            od_cct, os_cct = _parse_pair_values(st.session_state.get("pachimetria") or "")
+            if od_cct is not None: st.session_state["pachimetria_od"] = str(int(od_cct)) if float(od_cct).is_integer() else str(od_cct)
+            if os_cct is not None: st.session_state["pachimetria_os"] = str(int(os_cct)) if float(os_cct).is_integer() else str(os_cct)
+    except Exception:
+        pass
 
     # Correzione finale
     cf = pj.get("correzione_finale") or {}
@@ -626,6 +641,27 @@ def ui_visita_visiva():
             st.session_state.setdefault("fondo_oculare","")
             fondo_oculare = st.text_input("Fondo oculare (OD/OS)", key="fondo_oculare")
 
+        st.markdown("### IOP e Pachimetria")
+        st.caption("Inserisci i valori separati per OD e OS. Se hai dati storici '16/15' o '520/505' verranno letti in automatico.")
+
+        # IOP (mmHg) — campi separati OD/OS
+        ci1, ci2 = st.columns(2)
+        with ci1:
+            st.session_state.setdefault("pressione_endoculare_od", "")
+            st.text_input("IOP OD (mmHg)", key="pressione_endoculare_od", placeholder="es. 16")
+        with ci2:
+            st.session_state.setdefault("pressione_endoculare_os", "")
+            st.text_input("IOP OS (mmHg)", key="pressione_endoculare_os", placeholder="es. 15")
+
+        # Pachimetria (µm) — campi separati OD/OS
+        cp1, cp2 = st.columns(2)
+        with cp1:
+            st.session_state.setdefault("pachimetria_od", "")
+            st.text_input("Pachimetria OD (µm)", key="pachimetria_od", placeholder="es. 520")
+        with cp2:
+            st.session_state.setdefault("pachimetria_os", "")
+            st.text_input("Pachimetria OS (µm)", key="pachimetria_os", placeholder="es. 505")
+
 
         # --- Screening clinico: IOP + Pachimetria (attenzione, non diagnostico) ---
         def _to_float(x):
@@ -756,6 +792,68 @@ def ui_visita_visiva():
         st.markdown("### Storico visite")
         show_deleted = st.checkbox("Mostra anche le visite eliminate", value=False)
         visite = _list_visite(conn, paziente_id, include_deleted=show_deleted)
+
+        # --- Grafico trend IOP OD/OS nel tempo (screening) ---
+        def _to_float_local(x):
+            try:
+                if x is None:
+                    return None
+                if isinstance(x, (int, float)):
+                    return float(x)
+                s = str(x).strip().replace(",", ".")
+                if s == "":
+                    return None
+                return float(s)
+            except Exception:
+                return None
+
+        trend = []
+        for v0 in visite:
+            pj0 = _parse_json(v0.get("dati_json") or "")
+            if not isinstance(pj0, dict):
+                continue
+
+            eo0 = pj0.get("esame_obiettivo") or {}
+            # Nuovi campi
+            iop_od0 = _to_float_local(eo0.get("pressione_endoculare_od"))
+            iop_os0 = _to_float_local(eo0.get("pressione_endoculare_os"))
+
+            # Fallback legacy "16/15"
+            if iop_od0 is None and iop_os0 is None:
+                od_old, os_old = _parse_pair_values(eo0.get("pressione_endoculare") or "")
+                iop_od0 = _to_float_local(od_old)
+                iop_os0 = _to_float_local(os_old)
+
+            if iop_od0 is None and iop_os0 is None:
+                continue
+
+            d_raw = v0.get("data_visita") or pj0.get("data") or pj0.get("data_visita") or ""
+            try:
+                d0 = dt.date.fromisoformat(str(d_raw)[:10])
+            except Exception:
+                continue
+
+            trend.append((d0, iop_od0, iop_os0))
+
+        if trend:
+            trend.sort(key=lambda x: x[0])
+            dates = [t[0] for t in trend]
+            od_vals = [t[1] for t in trend]
+            os_vals = [t[2] for t in trend]
+
+            st.markdown("#### 📈 Andamento IOP (OD/OS) nel tempo")
+            fig, ax = plt.subplots()
+            ax.plot(dates, od_vals, marker="o", label="IOP OD")
+            ax.plot(dates, os_vals, marker="o", label="IOP OS")
+            ax.axhline(21, linestyle="--", linewidth=1, label="Soglia 21 mmHg")
+            ax.set_ylabel("mmHg")
+            ax.set_xlabel("Data visita")
+            ax.legend()
+            ax.grid(True, alpha=0.25)
+            fig.autofmt_xdate()
+            st.pyplot(fig, clear_figure=True)
+        else:
+            st.info("Nessun dato IOP presente nello storico (compila IOP OD/OS e salva almeno una visita).")
 
         for v in visite:
             vid = int(v["id"])
