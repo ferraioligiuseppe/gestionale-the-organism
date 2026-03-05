@@ -493,6 +493,32 @@ def ui_visita_visiva():
             vitreo = st.text_input("Vitreo (OD/OS)", value="")
             fondo_oculare = st.text_input("Fondo oculare (OD/OS)", value="")
 
+
+        # --- Screening clinico: IOP + Pachimetria (attenzione, non diagnostico) ---
+        iop_od, iop_os = _parse_pair_values(st.session_state.get("pressione_endoculare", ""))
+        cct_od, cct_os = _parse_pair_values(st.session_state.get("pachimetria", ""))
+        att = _clinical_attention(iop_od, iop_os, cct_od, cct_os)
+
+        with st.expander("🔎 Rapporto IOP / Pachimetria (screening)", expanded=False):
+            st.caption("Indicatore di attenzione clinica (screening). Non sostituisce la valutazione specialistica.")
+            cA, cB = st.columns(2)
+            with cA:
+                st.write("**OD**")
+                if att["od"].get("adj") is not None:
+                    st.write(f"IOP stimata (da CCT): **{att['od']['adj']:.1f} mmHg**")
+                if att["od"]["flag"]:
+                    st.warning(att["od"]["reason"] or "Possibile attenzione clinica.")
+                else:
+                    st.success("Nessun flag (con i dati inseriti).")
+            with cB:
+                st.write("**OS**")
+                if att["os"].get("adj") is not None:
+                    st.write(f"IOP stimata (da CCT): **{att['os']['adj']:.1f} mmHg**")
+                if att["os"]["flag"]:
+                    st.warning(att["os"]["reason"] or "Possibile attenzione clinica.")
+                else:
+                    st.success("Nessun flag (con i dati inseriti).")
+
         st.markdown("### Correzione abituale (lontano)")
         rx_ab_od = _rx_input("OD abituale", "rx_ab_od")
         rx_ab_os = _rx_input("OS abituale", "rx_ab_os")
@@ -533,6 +559,8 @@ def ui_visita_visiva():
                 "cristallino": cristallino,
                 "vitreo": vitreo,
                 "fondo_oculare": fondo_oculare,
+                "pressione_endoculare": pressione_endoculare,
+                "pachimetria": pachimetria,
             },
             "correzione_abituale": {"od": rx_ab_od, "os": rx_ab_os, "add": float(add_ab)},
             "correzione_finale": {"od": rx_fin_od, "os": rx_fin_os, "add": float(add_fin)},
