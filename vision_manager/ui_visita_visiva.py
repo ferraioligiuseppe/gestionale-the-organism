@@ -605,9 +605,29 @@ def ui_visita_visiva():
 
                 st.json(pj)
 
-                if st.button("📥 Carica questa visita nel form", key=f"load_{vid}"):
+                cL1, cL2 = st.columns([1,1])
+                if cL1.button("📥 Carica questa visita nel form", key=f"load_{vid}"):
                     _load_payload_into_form(pj)
                     st.success("Visita caricata nel form. Ora puoi modificare e salvare come nuova visita.")
+                    st.rerun()
+
+                if (not is_del) and cL2.button("🧬 Duplica come nuova visita", key=f"dup_{vid}"):
+                    # Duplica subito nel DB con data di oggi (non modifica lo storico originale)
+                    pj2 = pj.copy() if isinstance(pj, dict) else {}
+                    today_s = str(dt.date.today())
+                    pj2["data"] = today_s
+                    # assicura paziente corrente
+                    try:
+                        pj2["paziente"] = {
+                            "id": paziente_id,
+                            "nome": psel.get("nome"),
+                            "cognome": psel.get("cognome"),
+                            "data_nascita": psel.get("data_nascita"),
+                        }
+                    except Exception:
+                        pass
+                    vid_new = _insert_visita(conn, paziente_id, today_s, json.dumps(pj2, ensure_ascii=False))
+                    st.success(f"Visita duplicata come nuova (ID {vid_new}) — data {today_s}.")
                     st.rerun()
 
                 c1, c2, c3 = st.columns([1,1,1])
