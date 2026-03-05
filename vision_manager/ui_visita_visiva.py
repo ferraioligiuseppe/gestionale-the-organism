@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import streamlit as st
 import matplotlib.pyplot as plt
 
+from vision_manager.ui_kit import inject_ui, topbar, card_open, card_close, badge, callout, cta_button
 # ---------- Apple-like (lightweight) CSS ----------
 def _load_payload_into_form(pj: dict):
     """Carica un payload visita nel form (session_state). Deve essere chiamata PRIMA di creare i widget."""
@@ -68,31 +69,6 @@ def _load_payload_into_form(pj: dict):
     # Lenti consigliate
     pr = pj.get("prescrizione") or {}
     st.session_state["lenti_sel"] = pr.get("lenti") or []
-
-APPLE_CSS = r"""
-<style>
-.block-container { padding-top: 1.1rem; padding-bottom: 2rem; max-width: 1200px; }
-section[data-testid="stSidebar"] { border-right: 1px solid rgba(0,0,0,.08); }
-section[data-testid="stSidebar"] > div { padding-top: 1.0rem; }
-h1, h2, h3 { letter-spacing: -0.01em; }
-div[data-baseweb="input"] input,
-div[data-baseweb="textarea"] textarea,
-div[data-baseweb="select"] > div { border-radius: 14px !important; }
-button { border-radius: 14px !important; }
-details { border-radius: 18px; border: 1px solid rgba(0,0,0,.08); padding: 6px 10px; }
-details > summary { font-weight: 600; }
-.to-topbar {
-  display:flex; justify-content: space-between; align-items:center;
-  padding: 10px 12px; border-radius: 18px;
-  border: 1px solid rgba(0,0,0,.08);
-  background: rgba(255,255,255,.85);
-  box-shadow: 0 6px 18px rgba(0,0,0,.05);
-  margin-bottom: 12px;
-}
-.to-topbar .title { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; }
-.to-topbar .sub { color: rgba(0,0,0,.55); font-size: 0.9rem; }
-</style>
-"""
 
 from vision_manager.db import get_conn, init_db
 from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
@@ -495,16 +471,9 @@ def _rx_input(label: str, key_prefix: str):
 
 
 def ui_visita_visiva():
-    st.subheader("🩺 Visita oculistica — Dr. Cirillo (Vision Manager)")
-    st.markdown(APPLE_CSS, unsafe_allow_html=True)
-    st.markdown("""
-    <div class="to-topbar">
-      <div>
-        <div class="title">Vision Manager</div>
-        <div class="sub">Visita oculistica • UI Apple-like</div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.set_page_config(page_title="Vision Manager • Visita", layout="wide")
+    inject_ui("assets/ui.css")
+    topbar("Vision Manager", "Visita oculistica • The Organism", right="Dr. Cirillo")
 
 
     try:
@@ -520,6 +489,7 @@ def ui_visita_visiva():
     tab_paz, tab_vis = st.tabs(["👤 Anagrafica (Gestionale)", "🗓️ Visita oculistica"])
 
     with tab_paz:
+        card_open("Anagrafica paziente", "Crea / aggiorna pazienti nel DB gestionale", "👤")
         st.markdown("### Aggiungi paziente (DB Gestionale)")
         c1, c2, c3 = st.columns([1, 1, 1])
         nome = c1.text_input("Nome")
@@ -527,7 +497,7 @@ def ui_visita_visiva():
         data_nascita = c3.text_input("Data nascita (YYYY-MM-DD)", value="")
         note = st.text_area("Note", height=90, key="note_anagrafica")
 
-        if st.button("💾 Salva paziente"):
+        if cta_button("💾 Salva paziente", key="save_paziente", use_container_width=False):
             if not nome.strip() or not cognome.strip():
                 st.error("Nome e cognome sono obbligatori.")
             else:
@@ -572,6 +542,8 @@ def ui_visita_visiva():
                     try: cur2.close()
                     except Exception: pass
 
+        card_close()
+
     with tab_vis:
         paz = _load_pazienti(conn)
         if not paz:
@@ -593,6 +565,7 @@ def ui_visita_visiva():
         psel = st.selectbox("Seleziona paziente", paz, format_func=_format_paz, index=default_idx)
         paziente_id = int(psel["id"])
         paziente_label = f"{psel.get('cognome','')} {psel.get('nome','')}".strip()
+        badge(f"Paziente: {paziente_label} • ID {paziente_id}")
 
         # Applica eventuale richiesta di "richiamo visita" (solo su click) prima di creare i widget
         if st.session_state.get("vm_pending_payload") is not None:
@@ -606,6 +579,7 @@ def ui_visita_visiva():
         st.session_state.setdefault("anamnesi", "")
         anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
 
+        card_open("Acuità visiva", "Naturale • Abituale • Corretta", "👁️")
         st.markdown("### Acuità visiva (decimi)")
         col = st.columns(3)
         with col[0]:
@@ -624,6 +598,9 @@ def ui_visita_visiva():
             avc_os = st.selectbox("OS (corretta)", ACUITA_VALUES, key="avc_os")
             avc_oo = st.selectbox("OO (corretta)", ACUITA_VALUES, key="avc_oo")
 
+        card_close()
+
+        card_open("Esame obiettivo", "Campi descrittivi OD/OS", "🧾")
         st.markdown("### Esame obiettivo")
         c1, c2 = st.columns(2)
         with c1:
@@ -641,6 +618,9 @@ def ui_visita_visiva():
             st.session_state.setdefault("fondo_oculare","")
             fondo_oculare = st.text_input("Fondo oculare (OD/OS)", key="fondo_oculare")
 
+        card_close()
+
+        card_open("IOP e Pachimetria", "Pressione endoculare e spessore corneale separati OD/OS", "🧿")
         st.markdown("### IOP e Pachimetria")
         st.caption("Inserisci i valori separati per OD e OS. Se hai dati storici '16/15' o '520/505' verranno letti in automatico.")
 
@@ -702,11 +682,17 @@ def ui_visita_visiva():
                 else:
                     st.success("Nessun flag (con i dati inseriti).")
 
+        card_close()
+
+        card_open("Correzione abituale", "Lontano", "🕶️")
         st.markdown("### Correzione abituale (lontano)")
         rx_ab_od = _rx_input("OD abituale", "rx_ab_od")
         rx_ab_os = _rx_input("OS abituale", "rx_ab_os")
         add_ab = st.number_input("Addizione da vicino (abituale)", step=0.25, format="%0.2f", key="add_ab")
 
+        card_close()
+
+        card_open("Correzione finale", "Lontano • Intermedio • Vicino", "✅")
         st.markdown("### Correzione finale (lontano)")
         rx_fin_od = _rx_input("OD finale", "rx_fin_od")
         rx_fin_os = _rx_input("OS finale", "rx_fin_os")
@@ -719,11 +705,15 @@ def ui_visita_visiva():
         inter_od = _near(rx_fin_od, float(add_fin)/2.0)
         inter_os = _near(rx_fin_os, float(add_fin)/2.0)
 
+        card_close()
+
+        card_open("Note e lenti consigliate", "Seleziona solo ciò che vuoi stampare", "📝")
         st.session_state.setdefault("lenti_sel", [])
         lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, key="lenti_sel")
 
         st.session_state.setdefault("note_visita", "")
         note_v = st.text_area("Note visita", height=100, key="note_visita")
+        card_close()
 
 
         payload = {
@@ -762,9 +752,10 @@ def ui_visita_visiva():
         }
         payload_str = json.dumps(payload, ensure_ascii=False)
 
+        card_open("Azioni", "Salvataggio e documenti", "⚡")
         csave, cpdf1, cpdf2 = st.columns([1,1,1])
         with csave:
-            if st.button("💾 Salva visita (DB)"):
+            if cta_button("💾 Salva visita (DB)", key="save_visita", use_container_width=True):
                 vid = _insert_visita(conn, paziente_id, str(data_visita), payload_str)
                 st.success(f"Visita salvata (ID {vid}).")
         with cpdf1:
@@ -787,8 +778,11 @@ def ui_visita_visiva():
                 )
                 st.download_button("⬇️ Scarica Prescrizione A4", data=pdf_bytes, file_name=f"prescrizione_occhiali_{paziente_id}_{data_visita}.pdf", mime="application/pdf")
 
+        card_close()
+
         st.markdown("---")
         st.markdown("---")
+        card_open("Storico visite", "Richiama, duplica e visualizza trend clinici", "🗓️")
         st.markdown("### Storico visite")
         show_deleted = st.checkbox("Mostra anche le visite eliminate", value=False)
         visite = _list_visite(conn, paziente_id, include_deleted=show_deleted)
@@ -939,5 +933,7 @@ def ui_visita_visiva():
                         st.download_button("⬇️ Prescrizione A4", data=pdf_pr, file_name=f"prescrizione_occhiali_{paziente_id}_{vid}.pdf", mime="application/pdf", key=f"p{vid}")
                 except Exception:
                     pass
+
+        card_close()
 
 # redeploy
