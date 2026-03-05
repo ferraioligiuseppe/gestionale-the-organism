@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import streamlit as st
 import matplotlib.pyplot as plt
 
+import pandas as pd
 from vision_manager.ui_kit import inject_ui, topbar, card_open, card_close, badge, callout, cta_button
 # ---------- Apple-like (lightweight) CSS ----------
 def _load_payload_into_form(pj: dict):
@@ -512,7 +513,35 @@ def ui_visita_visiva():
 
         st.markdown("### Elenco pazienti")
         paz = _load_pazienti(conn)
-        st.dataframe(paz, use_container_width=True)
+
+        df_paz = pd.DataFrame(paz)
+
+        # Tabella selezionabile (clic su una riga)
+        try:
+            evt = st.dataframe(
+                df_paz,
+                use_container_width=True,
+                hide_index=True,
+                selection_mode="single-row",
+                on_select="rerun",
+            )
+            sel_rows = evt.selection.rows
+        except Exception:
+            # Fallback per versioni Streamlit più vecchie: usa selectbox
+            sel_rows = []
+
+        if sel_rows:
+            r = df_paz.iloc[sel_rows[0]].to_dict()
+            try:
+                st.session_state["vision_last_pid"] = int(r.get("id"))
+                st.success(f"Paziente selezionato: {r.get('cognome','')} {r.get('nome','')} (ID {r.get('id')})")
+            except Exception:
+                pass
+        else:
+            st.caption("Se la tabella non è selezionabile (versione Streamlit), usa il menu qui sotto.")
+            psel_quick = st.selectbox("Selezione rapida paziente", paz, format_func=_format_paz, key="paz_quick_sel")
+            if psel_quick:
+                st.session_state["vision_last_pid"] = int(psel_quick.get("id") or 0)
 
         st.markdown("### Modifica anagrafica paziente")
         psel_edit = st.selectbox("Seleziona paziente da modificare", paz, format_func=_format_paz, key="paz_edit_sel")
