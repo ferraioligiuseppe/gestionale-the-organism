@@ -1,0 +1,95 @@
+/* =========================
+   The Organism UI Kit (Streamlit)
+   Reusable, global styles
+   ========================= */
+
+:root{
+  --to-primary: #2F855A; /* green */
+  --to-bg: #FFFFFF;
+  --to-bg2: #F6F7FB;
+  --to-text: #111827;
+  --to-muted: rgba(0,0,0,.55);
+  --to-border: rgba(0,0,0,.08);
+  --to-shadow: 0 10px 26px rgba(0,0,0,.06);
+  --to-radius: 18px;
+}
+
+/* Layout */
+.block-container { max-width: 1200px; padding-top: 1.0rem; padding-bottom: 2rem; }
+section[data-testid="stSidebar"] { border-right: 1px solid var(--to-border); }
+section[data-testid="stSidebar"] > div { padding-top: 1.0rem; }
+
+/* Typography */
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+/* Inputs */
+div[data-baseweb="input"] input,
+div[data-baseweb="textarea"] textarea,
+div[data-baseweb="select"] > div {
+  border-radius: 14px !important;
+}
+div[data-baseweb="textarea"] textarea { line-height: 1.25rem; }
+
+/* Buttons */
+button { border-radius: 14px !important; }
+
+/* Expander */
+details { border-radius: var(--to-radius); border: 1px solid var(--to-border); padding: 6px 10px; background: rgba(255,255,255,.92); }
+details > summary { font-weight: 650; }
+
+/* Topbar */
+.to-topbar{
+  display:flex; justify-content: space-between; align-items:center;
+  padding: 10px 12px; border-radius: var(--to-radius);
+  border: 1px solid var(--to-border);
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 6px 18px rgba(0,0,0,.05);
+  margin-bottom: 12px;
+}
+.to-topbar .title{ font-weight: 760; font-size: 1.05rem; letter-spacing: -0.01em; display:flex; align-items:center; gap:10px; }
+.to-topbar .sub{ color: var(--to-muted); font-size: 0.9rem; }
+
+/* Card */
+.to-card{
+  border-radius: var(--to-radius);
+  border: 1px solid var(--to-border);
+  background: rgba(255,255,255,.92);
+  box-shadow: var(--to-shadow);
+  padding: 16px 16px;
+  margin: 10px 0 14px 0;
+}
+.to-card .title{
+  font-weight: 760;
+  font-size: 1.02rem;
+  letter-spacing: -0.01em;
+  display:flex;
+  align-items:center;
+  gap: 10px;
+}
+.to-card .sub{ color: var(--to-muted); font-size: .92rem; margin-top: 4px; }
+.to-divider{ height:1px; background: var(--to-border); margin: 12px 0; }
+
+/* Badge */
+.to-badge{
+  display:inline-flex; align-items:center; gap:6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--to-border);
+  background: rgba(246, 247, 251, .9);
+  font-size: .85rem;
+  color: rgba(0,0,0,.70);
+}
+.to-badge .dot{
+  width: 8px; height: 8px; border-radius: 999px;
+  background: var(--to-primary);
+}
+
+/* Callouts */
+.to-callout{
+  border-radius: var(--to-radius);
+  border: 1px solid var(--to-border);
+  padding: 12px 14px;
+  background: rgba(246, 247, 251, .9);
+}
+.to-callout.warn{ background: rgba(255, 246, 231, .85); }
+.to-callout.ok{ background: rgba(236, 253, 245, .85); }
