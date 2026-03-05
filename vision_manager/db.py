@@ -1,19 +1,31 @@
 import os
 import sqlite3
+import streamlit as st
 
 def _env(key: str, default: str = "") -> str:
     v = os.getenv(key)
     return v if v not in (None, "") else default
 
 
+@st.cache_resource
 def get_conn():
-    """Return a DB connection (Postgres if DATABASE_URL set, else local SQLite)."""
+    """Return a DB connection (Postgres if DATABASE_URL set, else local SQLite).
+
+    Note: su Streamlit Cloud/Neon impostiamo un connect_timeout per evitare attese infinite.
+    """
     db_url = _env("DATABASE_URL", "")
     if db_url:
         import psycopg2
         from psycopg2.extras import RealDictCursor
-        # RealDictCursor -> row as dict (comodo nel Vision Manager)
-        return psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+        return psycopg2.connect(
+            db_url,
+            cursor_factory=RealDictCursor,
+            connect_timeout=8,
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5,
+        )
     return sqlite3.connect("vision_manager.db", check_same_thread=False)
 
 

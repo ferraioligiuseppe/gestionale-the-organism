@@ -532,8 +532,17 @@ st.markdown(
 )
 
 
-    conn = get_conn()
+
+# Connessione DB robusta (evita "gira a vuoto" se Neon non risponde)
+try:
+    with st.spinner("Connessione al database..."):
+        conn = get_conn()
     init_db(conn)
+except Exception as e:
+    st.error("Impossibile connettersi al database. Controlla DATABASE_URL nei Secrets di Streamlit Cloud.")
+    st.exception(e)
+    st.stop()
+
 
     tab_paz, tab_vis = st.tabs(["👤 Anagrafica (Gestionale)", "🗓️ Visita oculistica"])
 
