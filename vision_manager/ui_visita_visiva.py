@@ -4,6 +4,96 @@ import json
 from typing import Any, Dict, List
 from collections.abc import Mapping
 import streamlit as st
+
+# ---------- Apple-like UI helpers ----------
+APPLE_CSS = r"""
+<style>
+/* Base */
+html, body, [class*="css"]  { -webkit-font-smoothing: antialiased; }
+.block-container { padding-top: 1.2rem; padding-bottom: 2rem; max-width: 1200px; }
+
+/* Sidebar */
+section[data-testid="stSidebar"] > div { padding-top: 1.1rem; }
+section[data-testid="stSidebar"] { border-right: 1px solid rgba(0,0,0,.08); }
+
+/* Headings */
+h1, h2, h3 { letter-spacing: -0.01em; }
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.05rem; }
+
+/* Cards */
+.to-card {
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 6px 18px rgba(0,0,0,.05);
+  margin-bottom: 12px;
+}
+.to-card h4 { margin: 0 0 6px 0; font-size: 0.95rem; letter-spacing: -0.01em; }
+.to-muted { color: rgba(0,0,0,.55); font-size: 0.9rem; }
+.to-row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.to-pill {
+  display:inline-flex; align-items:center; gap:8px;
+  padding: 6px 10px; border-radius: 999px;
+  border: 1px solid rgba(0,0,0,.10);
+  background: rgba(250,250,250,.9);
+  font-size: 0.9rem;
+}
+.to-divider { height:1px; background: rgba(0,0,0,.08); margin: 10px 0 6px; }
+
+/* Tabs spacing */
+[data-testid="stTabs"] { margin-top: 0.25rem; }
+[data-testid="stTabs"] button { border-radius: 999px !important; padding: 6px 12px !important; }
+
+/* Inputs */
+div[data-baseweb="input"] input,
+div[data-baseweb="textarea"] textarea,
+div[data-baseweb="select"] > div {
+  border-radius: 14px !important;
+}
+button[kind="primary"] { border-radius: 14px !important; }
+button { border-radius: 14px !important; }
+
+/* Expander */
+details { border-radius: 18px; border: 1px solid rgba(0,0,0,.08); padding: 6px 10px; }
+details > summary { font-weight: 600; }
+
+/* Tiny top bar */
+.to-topbar {
+  display:flex; justify-content: space-between; align-items:center;
+  padding: 10px 12px; border-radius: 18px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: rgba(255,255,255,.85);
+  box-shadow: 0 6px 18px rgba(0,0,0,.05);
+  margin-bottom: 12px;
+}
+.to-topbar .title { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; }
+.to-topbar .sub { color: rgba(0,0,0,.55); font-size: 0.9rem; }
+
+/* Keep st.json readable */
+pre { border-radius: 14px !important; }
+</style>
+"""
+
+def _inject_apple_css():
+    st.markdown(APPLE_CSS, unsafe_allow_html=True)
+
+def _card(title: str, body_md: str = "", *, pills: list[str] | None = None):
+    pills = pills or []
+    pills_html = "".join([f'<span class="to-pill">{p}</span>' for p in pills])
+    st.markdown(
+        f'''
+        <div class="to-card">
+          <h4>{title}</h4>
+          <div class="to-muted">{body_md}</div>
+          <div class="to-divider"></div>
+          <div class="to-row">{pills_html}</div>
+        </div>
+        ''',
+        unsafe_allow_html=True
+    )
 from vision_manager.db import get_conn, init_db
 from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
@@ -424,6 +514,22 @@ def ui_visita_visiva():
         )
 
     st.subheader("🩺 Visita oculistica — Dr. Cirillo (Vision Manager)")
+
+_inject_apple_css()
+st.markdown(
+    f'''
+    <div class="to-topbar">
+      <div>
+        <div class="title">Vision Manager</div>
+        <div class="sub">Visita oculistica • UI Apple-like</div>
+      </div>
+      <div class="to-row">
+        <span class="to-pill">Neon/SQLite OK</span>
+      </div>
+    </div>
+    ''',
+    unsafe_allow_html=True
+)
 
 
     conn = get_conn()
