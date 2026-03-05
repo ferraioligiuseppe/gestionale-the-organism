@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+st.set_page_config(layout="wide", page_title="The Organism")
+import streamlit as st
 USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
 
 
