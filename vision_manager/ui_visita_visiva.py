@@ -6,6 +6,54 @@ from collections.abc import Mapping
 import streamlit as st
 
 # ---------- Apple-like (lightweight) CSS ----------
+def _load_payload_into_form(pj: dict):
+    """Carica un payload visita nel form (session_state). Deve essere chiamata PRIMA di creare i widget."""
+    if not isinstance(pj, dict):
+        return
+
+    # Data visita: per default oggi (così quando salvi crei una nuova visita)
+    st.session_state["data_visita"] = dt.date.today()
+
+    st.session_state["anamnesi"] = pj.get("anamnesi") or ""
+    st.session_state["note_visita"] = pj.get("note") or pj.get("note_visita") or ""
+
+    # Acuità
+    ac = pj.get("acuita") or {}
+    nat = ac.get("naturale") or {}
+    abi = ac.get("abituale") or {}
+    cor = ac.get("corretta") or {}
+
+    for k_src, key in [("od","avn_od"),("os","avn_os"),("oo","avn_oo")]:
+        if k_src in nat: st.session_state[key] = nat.get(k_src) or st.session_state.get(key)
+    for k_src, key in [("od","ava_od"),("os","ava_os"),("oo","ava_oo")]:
+        if k_src in abi: st.session_state[key] = abi.get(k_src) or st.session_state.get(key)
+    for k_src, key in [("od","avc_od"),("os","avc_os"),("oo","avc_oo")]:
+        if k_src in cor: st.session_state[key] = cor.get(k_src) or st.session_state.get(key)
+
+    # Esame obiettivo
+    eo = pj.get("esame_obiettivo") or {}
+    for field in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare","pressione_endoculare","pachimetria"):
+        if field in eo:
+            st.session_state[field] = eo.get(field) or ""
+
+    # Correzione finale
+    cf = pj.get("correzione_finale") or {}
+    od = cf.get("od") or {}
+    os_ = cf.get("os") or {}
+    st.session_state["rx_fin_od_sf"]  = float(od.get("sf", 0.0) or 0.0)
+    st.session_state["rx_fin_od_cyl"] = float(od.get("cyl", 0.0) or 0.0)
+    st.session_state["rx_fin_od_ax"]  = int(od.get("ax", 0) or 0)
+
+    st.session_state["rx_fin_os_sf"]  = float(os_.get("sf", 0.0) or 0.0)
+    st.session_state["rx_fin_os_cyl"] = float(os_.get("cyl", 0.0) or 0.0)
+    st.session_state["rx_fin_os_ax"]  = int(os_.get("ax", 0) or 0)
+
+    st.session_state["add_fin"] = float(cf.get("add", 0.0) or 0.0)
+
+    # Lenti consigliate
+    pr = pj.get("prescrizione") or {}
+    st.session_state["lenti_sel"] = pr.get("lenti") or []
+
 APPLE_CSS = r"""
 <style>
 .block-container { padding-top: 1.1rem; padding-bottom: 2rem; max-width: 1200px; }
@@ -619,6 +667,21 @@ def ui_visita_visiva():
                     st.warning(f"VISITA ELIMINATA (soft) — {v.get('deleted_at') or pj.get('_deleted_at','')}")
 
                 st.json(pj)
+
+                a1, a2, a3, a4 = st.columns([1.2,1.6,1,1])
+                if a1.button("📥 Carica nel form", key=f"load_{vid}"):
+                    st.session_state["vm_pending_payload"] = pj
+                    st.session_state["vm_pending_visita_id"] = vid
+                    st.rerun()
+                if a2.button("🧬 Duplica come nuova visita", key=f"dup_{vid}"):
+                    try:
+                        pj2 = dict(pj) if isinstance(pj, dict) else {"raw": pj}
+                        _insert_visita(conn, paziente_id, dt.date.today().isoformat(), json.dumps(pj2, ensure_ascii=False))
+                        st.success("Duplicata come nuova visita (data odierna).")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Errore durante duplicazione.")
+                        st.exception(e)
 
                 c1, c2, c3 = st.columns([1,1,1])
                 if c1.button("✏️ Modifica", key=f"edit_{vid}"):
