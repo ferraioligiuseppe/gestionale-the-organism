@@ -421,6 +421,16 @@ def _rx_input(label: str, key_prefix: str):
 
 def ui_visita_visiva():
     st.subheader("🩺 Visita oculistica — Dr. Cirillo (Vision Manager)")
+    st.markdown(APPLE_CSS, unsafe_allow_html=True)
+    st.markdown("""
+    <div class="to-topbar">
+      <div>
+        <div class="title">Vision Manager</div>
+        <div class="sub">Visita oculistica • UI Apple-like</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
     try:
         with st.spinner("Connessione al database..."):
@@ -509,8 +519,17 @@ def ui_visita_visiva():
         paziente_id = int(psel["id"])
         paziente_label = f"{psel.get('cognome','')} {psel.get('nome','')}".strip()
 
-        data_visita = st.date_input("Data visita", value=dt.date.today())
-        anamnesi = st.text_area("Anamnesi", height=110)
+        # Applica eventuale richiesta di "richiamo visita" (solo su click) prima di creare i widget
+        if st.session_state.get("vm_pending_payload") is not None:
+            pj_pending = st.session_state.pop("vm_pending_payload")
+            _load_payload_into_form(pj_pending)
+            st.session_state["vm_last_loaded_visita_id"] = st.session_state.pop("vm_pending_visita_id", None)
+
+
+        st.session_state.setdefault("data_visita", dt.date.today())
+        data_visita = st.date_input("Data visita", key="data_visita")
+        st.session_state.setdefault("anamnesi", "")
+        anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
 
         st.markdown("### Acuità visiva (decimi)")
         col = st.columns(3)
@@ -533,13 +552,19 @@ def ui_visita_visiva():
         st.markdown("### Esame obiettivo")
         c1, c2 = st.columns(2)
         with c1:
-            congiuntiva = st.text_input("Congiuntiva (OD/OS)", value="")
-            cornea = st.text_input("Cornea (OD/OS)", value="")
-            camera_anteriore = st.text_input("Camera anteriore (OD/OS)", value="")
+            st.session_state.setdefault("congiuntiva","")
+            congiuntiva = st.text_input("Congiuntiva (OD/OS)", key="congiuntiva")
+            st.session_state.setdefault("cornea","")
+            cornea = st.text_input("Cornea (OD/OS)", key="cornea")
+            st.session_state.setdefault("camera_anteriore","")
+            camera_anteriore = st.text_input("Camera anteriore (OD/OS)", key="camera_anteriore")
         with c2:
-            cristallino = st.text_input("Cristallino (OD/OS)", value="")
-            vitreo = st.text_input("Vitreo (OD/OS)", value="")
-            fondo_oculare = st.text_input("Fondo oculare (OD/OS)", value="")
+            st.session_state.setdefault("cristallino","")
+            cristallino = st.text_input("Cristallino (OD/OS)", key="cristallino")
+            st.session_state.setdefault("vitreo","")
+            vitreo = st.text_input("Vitreo (OD/OS)", key="vitreo")
+            st.session_state.setdefault("fondo_oculare","")
+            fondo_oculare = st.text_input("Fondo oculare (OD/OS)", key="fondo_oculare")
 
 
         # --- Screening clinico: IOP + Pachimetria (attenzione, non diagnostico) ---
@@ -576,7 +601,6 @@ def ui_visita_visiva():
         rx_fin_od = _rx_input("OD finale", "rx_fin_od")
         rx_fin_os = _rx_input("OS finale", "rx_fin_os")
         add_fin = st.number_input("Addizione da vicino (finale)", step=0.25, format="%0.2f", key="add_fin")
-
         def _near(rx, add):
             return {"sf": float(rx["sf"]) + float(add), "cyl": float(rx["cyl"]), "ax": int(rx["ax"])}
 
@@ -585,9 +609,11 @@ def ui_visita_visiva():
         inter_od = _near(rx_fin_od, float(add_fin)/2.0)
         inter_os = _near(rx_fin_os, float(add_fin)/2.0)
 
-        lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, default=[])
+        st.session_state.setdefault("lenti_sel", [])
+        lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, key="lenti_sel")
 
-        note_v = st.text_area("Note visita", height=100)
+        st.session_state.setdefault("note_visita", "")
+        note_v = st.text_area("Note visita", height=100, key="note_visita")
 
 
         payload = {
