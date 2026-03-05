@@ -1,67 +1,129 @@
-/* =========================
-   The Organism UI Kit (Streamlit)
-   Reusable, global styles
-   ========================= */
+/* =========================================
+   The Organism UI Kit v2 (Streamlit)
+   Closer to mockup: pills, sidebar, topbar
+   ========================================= */
 
 :root{
-  --to-primary: #2F855A; /* green */
+  --to-primary: #2F855A;
+  --to-primary-2: #246B49;
   --to-bg: #FFFFFF;
   --to-bg2: #F6F7FB;
+  --to-card: rgba(255,255,255,.95);
   --to-text: #111827;
-  --to-muted: rgba(0,0,0,.55);
-  --to-border: rgba(0,0,0,.08);
-  --to-shadow: 0 10px 26px rgba(0,0,0,.06);
+  --to-muted: rgba(17,24,39,.58);
+  --to-border: rgba(17,24,39,.10);
+  --to-shadow: 0 12px 34px rgba(17,24,39,.08);
   --to-radius: 18px;
+  --to-radius-sm: 14px;
 }
 
-/* Layout */
-.block-container { max-width: 1200px; padding-top: 1.0rem; padding-bottom: 2rem; }
-section[data-testid="stSidebar"] { border-right: 1px solid var(--to-border); }
-section[data-testid="stSidebar"] > div { padding-top: 1.0rem; }
+/* ---- App chrome ---- */
+header[data-testid="stHeader"]{ background: transparent; }
+div[data-testid="stToolbar"]{ visibility: hidden; height: 0px; }
+#MainMenu{ visibility: hidden; }
+footer{ visibility: hidden; }
 
-/* Typography */
-h1, h2, h3 { letter-spacing: -0.01em; }
+.block-container{ max-width: 1280px; padding-top: 0.8rem; padding-bottom: 2rem; }
 
-/* Inputs */
+/* ---- Sidebar ---- */
+section[data-testid="stSidebar"]{
+  border-right: 1px solid var(--to-border);
+  background: linear-gradient(180deg, rgba(246,247,251,.9), rgba(255,255,255,.9));
+}
+section[data-testid="stSidebar"] > div{ padding-top: 0.9rem; }
+section[data-testid="stSidebar"] h1, 
+section[data-testid="stSidebar"] h2, 
+section[data-testid="stSidebar"] h3{ color: var(--to-text); }
+
+/* Make sidebar buttons look like nav pills */
+section[data-testid="stSidebar"] div.stButton > button{
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0.65rem 0.85rem;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--to-text);
+}
+section[data-testid="stSidebar"] div.stButton > button:hover{
+  background: rgba(47,133,90,.10);
+  border-color: rgba(47,133,90,.18);
+}
+
+/* ---- Typography ---- */
+h1,h2,h3{ letter-spacing: -0.012em; }
+small, .to-muted{ color: var(--to-muted); }
+
+/* ---- Inputs ---- */
 div[data-baseweb="input"] input,
 div[data-baseweb="textarea"] textarea,
-div[data-baseweb="select"] > div {
-  border-radius: 14px !important;
+div[data-baseweb="select"] > div{
+  border-radius: var(--to-radius-sm) !important;
 }
-div[data-baseweb="textarea"] textarea { line-height: 1.25rem; }
+div[data-baseweb="textarea"] textarea{ line-height: 1.25rem; }
 
-/* Buttons */
-button { border-radius: 14px !important; }
-
-/* Expander */
-details { border-radius: var(--to-radius); border: 1px solid var(--to-border); padding: 6px 10px; background: rgba(255,255,255,.92); }
-details > summary { font-weight: 650; }
-
-/* Topbar */
-.to-topbar{
-  display:flex; justify-content: space-between; align-items:center;
-  padding: 10px 12px; border-radius: var(--to-radius);
+/* ---- Buttons ---- */
+div.stButton > button{
+  border-radius: 14px !important;
   border: 1px solid var(--to-border);
   background: rgba(255,255,255,.92);
-  box-shadow: 0 6px 18px rgba(0,0,0,.05);
+}
+div.stButton > button:hover{
+  border-color: rgba(47,133,90,.35);
+  background: rgba(47,133,90,.08);
+}
+div.stButton > button:focus{ outline: none; box-shadow: 0 0 0 3px rgba(47,133,90,.18); }
+
+/* Primary CTA helper class (used via HTML wrapper) */
+.to-cta button{
+  background: var(--to-primary) !important;
+  color: white !important;
+  border-color: rgba(0,0,0,0) !important;
+}
+.to-cta button:hover{ background: var(--to-primary-2) !important; }
+
+/* ---- Tabs -> pill look ---- */
+div[data-testid="stTabs"] button[role="tab"]{
+  border-radius: 999px !important;
+  padding: 0.38rem 0.85rem !important;
+  border: 1px solid var(--to-border) !important;
+  background: rgba(255,255,255,.90) !important;
+  margin-right: 8px !important;
+}
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"]{
+  background: rgba(47,133,90,.12) !important;
+  border-color: rgba(47,133,90,.25) !important;
+}
+div[data-testid="stTabs"] div[role="tablist"]{ gap: 6px; }
+
+/* ---- Cards ---- */
+.to-topbar{
+  display:flex; justify-content:space-between; align-items:center;
+  padding: 12px 14px;
+  border-radius: var(--to-radius);
+  border: 1px solid var(--to-border);
+  background: var(--to-card);
+  box-shadow: 0 10px 26px rgba(17,24,39,.06);
   margin-bottom: 12px;
 }
-.to-topbar .title{ font-weight: 760; font-size: 1.05rem; letter-spacing: -0.01em; display:flex; align-items:center; gap:10px; }
-.to-topbar .sub{ color: var(--to-muted); font-size: 0.9rem; }
+.to-topbar .title{
+  font-weight: 780; font-size: 1.08rem;
+  display:flex; align-items:center; gap:10px;
+}
+.to-topbar .sub{ color: var(--to-muted); font-size: .92rem; }
 
-/* Card */
 .to-card{
   border-radius: var(--to-radius);
   border: 1px solid var(--to-border);
-  background: rgba(255,255,255,.92);
+  background: var(--to-card);
   box-shadow: var(--to-shadow);
   padding: 16px 16px;
   margin: 10px 0 14px 0;
 }
 .to-card .title{
-  font-weight: 760;
+  font-weight: 780;
   font-size: 1.02rem;
-  letter-spacing: -0.01em;
   display:flex;
   align-items:center;
   gap: 10px;
@@ -69,15 +131,22 @@ details > summary { font-weight: 650; }
 .to-card .sub{ color: var(--to-muted); font-size: .92rem; margin-top: 4px; }
 .to-divider{ height:1px; background: var(--to-border); margin: 12px 0; }
 
+/* compact field groups */
+.to-grid2{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
 /* Badge */
 .to-badge{
   display:inline-flex; align-items:center; gap:6px;
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--to-border);
-  background: rgba(246, 247, 251, .9);
+  background: rgba(246,247,251,.95);
   font-size: .85rem;
-  color: rgba(0,0,0,.70);
+  color: rgba(17,24,39,.75);
 }
 .to-badge .dot{
   width: 8px; height: 8px; border-radius: 999px;
@@ -89,7 +158,10 @@ details > summary { font-weight: 650; }
   border-radius: var(--to-radius);
   border: 1px solid var(--to-border);
   padding: 12px 14px;
-  background: rgba(246, 247, 251, .9);
+  background: rgba(246, 247, 251, .95);
 }
-.to-callout.warn{ background: rgba(255, 246, 231, .85); }
-.to-callout.ok{ background: rgba(236, 253, 245, .85); }
+.to-callout.warn{ background: rgba(255, 246, 231, .92); }
+.to-callout.ok{ background: rgba(236, 253, 245, .92); }
+
+/* Dataframe rounding */
+div[data-testid="stDataFrame"]{ border-radius: var(--to-radius); overflow:hidden; border: 1px solid var(--to-border); }

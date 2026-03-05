@@ -53,3 +53,10 @@ def callout(text: str, variant: str = "default") -> None:
         f"""<div class="to-callout{variant_class}">{text}</div>""",
         unsafe_allow_html=True,
     )
+
+def cta_button(label: str, key: str | None = None, use_container_width: bool = False) -> bool:
+    """Primary button styled with CSS wrapper."""
+    st.markdown('<div class="to-cta">', unsafe_allow_html=True)
+    clicked = st.button(label, key=key, use_container_width=use_container_width)
+    st.markdown("</div>", unsafe_allow_html=True)
+    return clicked
