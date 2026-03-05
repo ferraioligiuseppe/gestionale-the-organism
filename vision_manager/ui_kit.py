@@ -40,22 +40,15 @@ def card_close() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 def badge(text: str) -> None:
-    st.markdown(
-        f"""<span class="to-badge"><span class="dot"></span>{text}</span>""",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"""<span class="to-badge"><span class="dot"></span>{text}</span>""", unsafe_allow_html=True)
 
 def callout(text: str, variant: str = "default") -> None:
     variant_class = ""
-    if variant in ("warn", "ok"):
+    if variant in ("warn","ok"):
         variant_class = f" {variant}"
-    st.markdown(
-        f"""<div class="to-callout{variant_class}">{text}</div>""",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"""<div class="to-callout{variant_class}">{text}</div>""", unsafe_allow_html=True)
 
 def cta_button(label: str, key: str | None = None, use_container_width: bool = False) -> bool:
-    """Primary button styled with CSS wrapper."""
     st.markdown('<div class="to-cta">', unsafe_allow_html=True)
     clicked = st.button(label, key=key, use_container_width=use_container_width)
     st.markdown("</div>", unsafe_allow_html=True)

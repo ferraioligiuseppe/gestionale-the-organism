@@ -1,167 +1,154 @@
-/* =========================================
-   The Organism UI Kit v2 (Streamlit)
-   Closer to mockup: pills, sidebar, topbar
-   ========================================= */
+/* The Organism UI Kit v3 — FORCE LIGHT (Streamlit) */
 
 :root{
-  --to-primary: #2F855A;
-  --to-primary-2: #246B49;
-  --to-bg: #FFFFFF;
-  --to-bg2: #F6F7FB;
-  --to-card: rgba(255,255,255,.95);
-  --to-text: #111827;
-  --to-muted: rgba(17,24,39,.58);
-  --to-border: rgba(17,24,39,.10);
-  --to-shadow: 0 12px 34px rgba(17,24,39,.08);
-  --to-radius: 18px;
-  --to-radius-sm: 14px;
+  --to-primary:#2F855A;
+  --to-primary-2:#246B49;
+  --to-bg:#FFFFFF;
+  --to-bg2:#F6F7FB;
+  --to-card:rgba(255,255,255,.96);
+  --to-text:#111827;
+  --to-muted:rgba(17,24,39,.58);
+  --to-border:rgba(17,24,39,.10);
+  --to-shadow:0 12px 34px rgba(17,24,39,.08);
+  --to-radius:18px;
+  --to-radius-sm:14px;
 }
 
-/* ---- App chrome ---- */
-header[data-testid="stHeader"]{ background: transparent; }
-div[data-testid="stToolbar"]{ visibility: hidden; height: 0px; }
-#MainMenu{ visibility: hidden; }
-footer{ visibility: hidden; }
+/* Force page background + text (override dark mode) */
+html, body, [data-testid="stAppViewContainer"]{
+  background: var(--to-bg) !important;
+  color: var(--to-text) !important;
+}
+[data-testid="stAppViewContainer"] > .main{
+  background: var(--to-bg) !important;
+}
+header[data-testid="stHeader"]{ background: transparent !important; }
+#MainMenu, footer, div[data-testid="stToolbar"]{ visibility:hidden !important; height:0 !important; }
 
-.block-container{ max-width: 1280px; padding-top: 0.8rem; padding-bottom: 2rem; }
+/* Container width */
+.block-container{ max-width:1280px; padding-top:.8rem; padding-bottom:2rem; }
 
-/* ---- Sidebar ---- */
+/* Sidebar */
 section[data-testid="stSidebar"]{
-  border-right: 1px solid var(--to-border);
-  background: linear-gradient(180deg, rgba(246,247,251,.9), rgba(255,255,255,.9));
+  background: linear-gradient(180deg, rgba(246,247,251,.98), rgba(255,255,255,.98)) !important;
+  border-right: 1px solid var(--to-border) !important;
+  color: var(--to-text) !important;
 }
-section[data-testid="stSidebar"] > div{ padding-top: 0.9rem; }
-section[data-testid="stSidebar"] h1, 
-section[data-testid="stSidebar"] h2, 
-section[data-testid="stSidebar"] h3{ color: var(--to-text); }
+section[data-testid="stSidebar"] *{ color: var(--to-text) !important; }
 
-/* Make sidebar buttons look like nav pills */
+/* Sidebar buttons as pills */
 section[data-testid="stSidebar"] div.stButton > button{
-  width: 100%;
-  justify-content: flex-start;
-  gap: 10px;
-  padding: 0.65rem 0.85rem;
-  border-radius: 16px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--to-text);
+  width:100%;
+  justify-content:flex-start;
+  gap:10px;
+  padding:.65rem .85rem;
+  border-radius:16px;
+  border:1px solid transparent;
+  background: transparent !important;
+  color: var(--to-text) !important;
 }
 section[data-testid="stSidebar"] div.stButton > button:hover{
-  background: rgba(47,133,90,.10);
-  border-color: rgba(47,133,90,.18);
+  background: rgba(47,133,90,.10) !important;
+  border-color: rgba(47,133,90,.18) !important;
 }
 
-/* ---- Typography ---- */
-h1,h2,h3{ letter-spacing: -0.012em; }
-small, .to-muted{ color: var(--to-muted); }
+/* Typography */
+h1,h2,h3{ letter-spacing:-0.012em; color: var(--to-text) !important; }
 
-/* ---- Inputs ---- */
+/* Inputs */
 div[data-baseweb="input"] input,
 div[data-baseweb="textarea"] textarea,
 div[data-baseweb="select"] > div{
   border-radius: var(--to-radius-sm) !important;
+  background: rgba(255,255,255,.98) !important;
+  color: var(--to-text) !important;
 }
-div[data-baseweb="textarea"] textarea{ line-height: 1.25rem; }
+div[data-baseweb="textarea"] textarea{ line-height:1.25rem; }
 
-/* ---- Buttons ---- */
+/* Buttons */
 div.stButton > button{
-  border-radius: 14px !important;
-  border: 1px solid var(--to-border);
-  background: rgba(255,255,255,.92);
+  border-radius:14px !important;
+  border:1px solid var(--to-border) !important;
+  background: rgba(255,255,255,.96) !important;
+  color: var(--to-text) !important;
 }
 div.stButton > button:hover{
-  border-color: rgba(47,133,90,.35);
-  background: rgba(47,133,90,.08);
+  border-color: rgba(47,133,90,.35) !important;
+  background: rgba(47,133,90,.08) !important;
 }
-div.stButton > button:focus{ outline: none; box-shadow: 0 0 0 3px rgba(47,133,90,.18); }
+div.stButton > button:focus{
+  outline:none !important;
+  box-shadow:0 0 0 3px rgba(47,133,90,.18) !important;
+}
 
-/* Primary CTA helper class (used via HTML wrapper) */
+/* CTA wrapper */
 .to-cta button{
   background: var(--to-primary) !important;
-  color: white !important;
+  color: #fff !important;
   border-color: rgba(0,0,0,0) !important;
 }
 .to-cta button:hover{ background: var(--to-primary-2) !important; }
 
-/* ---- Tabs -> pill look ---- */
+/* Tabs as pills */
 div[data-testid="stTabs"] button[role="tab"]{
-  border-radius: 999px !important;
-  padding: 0.38rem 0.85rem !important;
-  border: 1px solid var(--to-border) !important;
-  background: rgba(255,255,255,.90) !important;
-  margin-right: 8px !important;
+  border-radius:999px !important;
+  padding:.38rem .85rem !important;
+  border:1px solid var(--to-border) !important;
+  background: rgba(255,255,255,.96) !important;
+  color: var(--to-text) !important;
+  margin-right:8px !important;
 }
 div[data-testid="stTabs"] button[role="tab"][aria-selected="true"]{
   background: rgba(47,133,90,.12) !important;
   border-color: rgba(47,133,90,.25) !important;
 }
-div[data-testid="stTabs"] div[role="tablist"]{ gap: 6px; }
 
-/* ---- Cards ---- */
+/* Cards */
 .to-topbar{
   display:flex; justify-content:space-between; align-items:center;
-  padding: 12px 14px;
+  padding:12px 14px;
   border-radius: var(--to-radius);
-  border: 1px solid var(--to-border);
+  border:1px solid var(--to-border);
   background: var(--to-card);
   box-shadow: 0 10px 26px rgba(17,24,39,.06);
-  margin-bottom: 12px;
+  margin-bottom:12px;
 }
-.to-topbar .title{
-  font-weight: 780; font-size: 1.08rem;
-  display:flex; align-items:center; gap:10px;
-}
-.to-topbar .sub{ color: var(--to-muted); font-size: .92rem; }
+.to-topbar .title{ font-weight:780; font-size:1.08rem; display:flex; align-items:center; gap:10px; }
+.to-topbar .sub{ color: var(--to-muted) !important; font-size:.92rem; }
 
 .to-card{
   border-radius: var(--to-radius);
-  border: 1px solid var(--to-border);
+  border:1px solid var(--to-border);
   background: var(--to-card);
   box-shadow: var(--to-shadow);
-  padding: 16px 16px;
-  margin: 10px 0 14px 0;
+  padding:16px 16px;
+  margin:10px 0 14px 0;
 }
-.to-card .title{
-  font-weight: 780;
-  font-size: 1.02rem;
-  display:flex;
-  align-items:center;
-  gap: 10px;
-}
-.to-card .sub{ color: var(--to-muted); font-size: .92rem; margin-top: 4px; }
-.to-divider{ height:1px; background: var(--to-border); margin: 12px 0; }
+.to-card .title{ font-weight:780; font-size:1.02rem; display:flex; align-items:center; gap:10px; color: var(--to-text) !important; }
+.to-card .sub{ color: var(--to-muted) !important; font-size:.92rem; margin-top:4px; }
+.to-divider{ height:1px; background: var(--to-border); margin:12px 0; }
 
-/* compact field groups */
-.to-grid2{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-/* Badge */
+/* Badges + callouts */
 .to-badge{
   display:inline-flex; align-items:center; gap:6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--to-border);
-  background: rgba(246,247,251,.95);
-  font-size: .85rem;
-  color: rgba(17,24,39,.75);
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid var(--to-border);
+  background: rgba(246,247,251,.98);
+  font-size:.85rem;
+  color: rgba(17,24,39,.75) !important;
 }
-.to-badge .dot{
-  width: 8px; height: 8px; border-radius: 999px;
-  background: var(--to-primary);
-}
+.to-badge .dot{ width:8px; height:8px; border-radius:999px; background: var(--to-primary); }
 
-/* Callouts */
 .to-callout{
   border-radius: var(--to-radius);
-  border: 1px solid var(--to-border);
-  padding: 12px 14px;
-  background: rgba(246, 247, 251, .95);
+  border:1px solid var(--to-border);
+  padding:12px 14px;
+  background: rgba(246,247,251,.98);
+  color: var(--to-text) !important;
 }
-.to-callout.warn{ background: rgba(255, 246, 231, .92); }
-.to-callout.ok{ background: rgba(236, 253, 245, .92); }
+.to-callout.warn{ background: rgba(255,246,231,.95); }
+.to-callout.ok{ background: rgba(236,253,245,.95); }
 
-/* Dataframe rounding */
-div[data-testid="stDataFrame"]{ border-radius: var(--to-radius); overflow:hidden; border: 1px solid var(--to-border); }
+/* Dataframes */
+div[data-testid="stDataFrame"]{ border-radius: var(--to-radius); overflow:hidden; border:1px solid var(--to-border); }
