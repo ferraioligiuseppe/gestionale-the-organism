@@ -472,7 +472,6 @@ def _rx_input(label: str, key_prefix: str):
 
 
 def ui_visita_visiva():
-    st.set_page_config(page_title="Vision Manager • Visita", layout="wide")
     inject_ui("assets/ui.css")
     topbar("Vision Manager", "Visita oculistica • The Organism", right="Dr. Cirillo")
 
