@@ -398,6 +398,66 @@ def _parse_json(s: str) -> Dict[str, Any]:
     except Exception:
         return {"raw": s}
 
+def _parse_pair_values(s: str):
+    """Legge valori tipo '16/15' oppure '520/505'. Ritorna (od, os) float o (None,None)."""
+    if not s:
+        return (None, None)
+    txt = str(s).strip().replace(",", "/").replace(";", "/").replace("\\", "/")
+    parts = [p.strip() for p in txt.split("/") if p.strip()]
+    if len(parts) == 1:
+        try:
+            v = float(parts[0])
+            return (v, v)
+        except Exception:
+            return (None, None)
+    try:
+        od = float(parts[0])
+    except Exception:
+        od = None
+    try:
+        os_ = float(parts[1])
+    except Exception:
+        os_ = None
+    return (od, os_)
+
+def _iop_adjusted(iop, cct, ref_cct: float = 540.0):
+    """Correzione semplificata (screening) IOP per spessore corneale. NON diagnostica."""
+    if iop is None or cct is None:
+        return None
+    delta = (ref_cct - cct) / 10.0 * 0.7
+    return float(iop + delta)
+
+def _clinical_attention(iop_od, iop_os, cct_od, cct_os):
+    """Flag di attenzione clinica (screening) combinando IOP e pachimetria."""
+    out = {
+        "od": {"flag": False, "reason": "", "adj": None},
+        "os": {"flag": False, "reason": "", "adj": None},
+    }
+    for eye in ("od", "os"):
+        iop = iop_od if eye == "od" else iop_os
+        cct = cct_od if eye == "od" else cct_os
+        adj = _iop_adjusted(iop, cct)
+
+        reasons = []
+        flag = False
+
+        if iop is not None and iop >= 21:
+            flag = True
+            reasons.append("IOP ≥ 21 mmHg")
+
+        if cct is not None and cct < 500 and iop is not None and iop >= 18:
+            flag = True
+            reasons.append("CCT < 500 µm con IOP ≥ 18 (possibile sottostima)")
+
+        if adj is not None and adj >= 21:
+            flag = True
+            reasons.append(f"IOP stimata (da CCT) ≈ {adj:.1f} mmHg")
+
+        out[eye]["flag"] = flag
+        out[eye]["reason"] = "; ".join(reasons)
+        out[eye]["adj"] = adj
+    return out
+
 def _format_paz(p) -> str:
     dn = p.get("data_nascita") or ""
     return f"{p['cognome']} {p['nome']} (ID {p['id']}) {dn}".strip()
