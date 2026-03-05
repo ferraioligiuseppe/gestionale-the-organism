@@ -379,14 +379,52 @@ def _format_paz(p) -> str:
     return f"{p['cognome']} {p['nome']} (ID {p['id']}) {dn}".strip()
 
 def _rx_input(label: str, key_prefix: str):
+    """Input refrazione (SF/CIL/AX) ultra-stabile.
+
+    Regola Streamlit: se usi una key e vuoi poter pre-compilare via session_state,
+    NON passare `value=` ai widget. Imposta i default con `st.session_state.setdefault`.
+    """
     c1, c2, c3 = st.columns([1, 1, 1])
-    sf = c1.number_input(f"{label} SF", value=0.00, step=0.25, format="%0.2f", key=f"{key_prefix}_sf")
-    cyl = c2.number_input(f"{label} CIL", value=0.00, step=0.25, format="%0.2f", key=f"{key_prefix}_cyl")
-    ax = c3.number_input(f"{label} AX (0-180)", min_value=0, max_value=180, value=0, step=1, key=f"{key_prefix}_ax")
+
+    k_sf = f"{key_prefix}_sf"
+    k_cyl = f"{key_prefix}_cyl"
+    k_ax = f"{key_prefix}_ax"
+
+    st.session_state.setdefault(k_sf, 0.0)
+    st.session_state.setdefault(k_cyl, 0.0)
+    st.session_state.setdefault(k_ax, 0)
+
+    sf = c1.number_input(f"{label} SF", step=0.25, format="%0.2f", key=k_sf)
+    cyl = c2.number_input(f"{label} CIL", step=0.25, format="%0.2f", key=k_cyl)
+    ax = c3.number_input(
+        f"{label} AX (0-180)",
+        min_value=0,
+        max_value=180,
+        step=1,
+        key=k_ax,
+    )
     return {"sf": float(sf), "cyl": float(cyl), "ax": int(ax)}
 
 def ui_visita_visiva():
+    # --- UI "commerciale" (più pulita e coerente visivamente) ---
+    commercial_ui = st.sidebar.toggle("UI commerciale", value=True)
+    if commercial_ui:
+        st.markdown(
+            """
+            <style>
+              .block-container { padding-top: 1.2rem; padding-bottom: 2.5rem; }
+              h1, h2, h3 { letter-spacing: -0.2px; }
+              div[data-testid="stMetric"] { border: 1px solid rgba(0,0,0,.06); padding: 8px 12px; border-radius: 14px; }
+              section[data-testid="stSidebar"] { border-right: 1px solid rgba(0,0,0,.08); }
+              .vm-card { border: 1px solid rgba(0,0,0,.08); border-radius: 18px; padding: 14px 16px; }
+              .vm-muted { opacity: .75; }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
     st.subheader("🩺 Visita oculistica — Dr. Cirillo (Vision Manager)")
+
 
     conn = get_conn()
     init_db(conn)
@@ -476,47 +514,65 @@ def ui_visita_visiva():
             if notice:
                 st.success(notice)
 
-        data_visita = st.date_input("Data visita", value=dt.date.today(), key="data_visita")
+        st.session_state.setdefault("data_visita", dt.date.today())
+        data_visita = st.date_input("Data visita", key="data_visita")
         anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
+
+        # Default sicuri (compatibili con "Richiamo visita" via session_state)
+        st.session_state.setdefault("avn_od", ACUITA_VALUES[11])
+        st.session_state.setdefault("avn_os", ACUITA_VALUES[11])
+        st.session_state.setdefault("avn_oo", ACUITA_VALUES[11])
+        st.session_state.setdefault("ava_od", ACUITA_VALUES[11])
+        st.session_state.setdefault("ava_os", ACUITA_VALUES[11])
+        st.session_state.setdefault("ava_oo", ACUITA_VALUES[11])
+        st.session_state.setdefault("avc_od", ACUITA_VALUES[11])
+        st.session_state.setdefault("avc_os", ACUITA_VALUES[11])
+        st.session_state.setdefault("avc_oo", ACUITA_VALUES[11])
 
         st.markdown("### Acuità visiva (decimi)")
         col = st.columns(3)
         with col[0]:
             st.caption("Naturale")
-            avn_od = st.selectbox("OD (naturale)", ACUITA_VALUES, index=11, key="avn_od")
-            avn_os = st.selectbox("OS (naturale)", ACUITA_VALUES, index=11, key="avn_os")
-            avn_oo = st.selectbox("OO (naturale)", ACUITA_VALUES, index=11, key="avn_oo")
+            avn_od = st.selectbox("OD (naturale)", ACUITA_VALUES, key="avn_od")
+            avn_os = st.selectbox("OS (naturale)", ACUITA_VALUES, key="avn_os")
+            avn_oo = st.selectbox("OO (naturale)", ACUITA_VALUES, key="avn_oo")
         with col[1]:
             st.caption("Abituale")
-            ava_od = st.selectbox("OD (abituale)", ACUITA_VALUES, index=11, key="ava_od")
-            ava_os = st.selectbox("OS (abituale)", ACUITA_VALUES, index=11, key="ava_os")
-            ava_oo = st.selectbox("OO (abituale)", ACUITA_VALUES, index=11, key="ava_oo")
+            ava_od = st.selectbox("OD (abituale)", ACUITA_VALUES, key="ava_od")
+            ava_os = st.selectbox("OS (abituale)", ACUITA_VALUES, key="ava_os")
+            ava_oo = st.selectbox("OO (abituale)", ACUITA_VALUES, key="ava_oo")
         with col[2]:
             st.caption("Corretta")
-            avc_od = st.selectbox("OD (corretta)", ACUITA_VALUES, index=11, key="avc_od")
-            avc_os = st.selectbox("OS (corretta)", ACUITA_VALUES, index=11, key="avc_os")
-            avc_oo = st.selectbox("OO (corretta)", ACUITA_VALUES, index=11, key="avc_oo")
+            avc_od = st.selectbox("OD (corretta)", ACUITA_VALUES, key="avc_od")
+            avc_os = st.selectbox("OS (corretta)", ACUITA_VALUES, key="avc_os")
+            avc_oo = st.selectbox("OO (corretta)", ACUITA_VALUES, key="avc_oo")
 
         st.markdown("### Esame obiettivo")
+
+        # Default sicuri per i campi testo (compatibili con richiamo visita)
+        for _k in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare"):
+            st.session_state.setdefault(_k, "")
         c1, c2 = st.columns(2)
         with c1:
-            congiuntiva = st.text_input("Congiuntiva (OD/OS)", value="", key="congiuntiva")
-            cornea = st.text_input("Cornea (OD/OS)", value="", key="cornea")
-            camera_anteriore = st.text_input("Camera anteriore (OD/OS)", value="", key="camera_anteriore")
+            congiuntiva = st.text_input("Congiuntiva (OD/OS)", key="congiuntiva")
+            cornea = st.text_input("Cornea (OD/OS)", key="cornea")
+            camera_anteriore = st.text_input("Camera anteriore (OD/OS)", key="camera_anteriore")
         with c2:
-            cristallino = st.text_input("Cristallino (OD/OS)", value="", key="cristallino")
-            vitreo = st.text_input("Vitreo (OD/OS)", value="", key="vitreo")
-            fondo_oculare = st.text_input("Fondo oculare (OD/OS)", value="", key="fondo_oculare")
+            cristallino = st.text_input("Cristallino (OD/OS)", key="cristallino")
+            vitreo = st.text_input("Vitreo (OD/OS)", key="vitreo")
+            fondo_oculare = st.text_input("Fondo oculare (OD/OS)", key="fondo_oculare")
 
         st.markdown("### Correzione abituale (lontano)")
         rx_ab_od = _rx_input("OD abituale", "rx_ab_od")
         rx_ab_os = _rx_input("OS abituale", "rx_ab_os")
-        add_ab = st.number_input("Addizione da vicino (abituale)", value=0.00, step=0.25, format="%0.2f", key="add_ab")
+        st.session_state.setdefault("add_ab", 0.0)
+        add_ab = st.number_input("Addizione da vicino (abituale)", step=0.25, format="%0.2f", key="add_ab")
 
         st.markdown("### Correzione finale (lontano)")
         rx_fin_od = _rx_input("OD finale", "rx_fin_od")
         rx_fin_os = _rx_input("OS finale", "rx_fin_os")
-        add_fin = st.number_input("Addizione da vicino (finale)", value=0.00, step=0.25, format="%0.2f", key="add_fin")
+        st.session_state.setdefault("add_fin", 0.0)
+        add_fin = st.number_input("Addizione da vicino (finale)", step=0.25, format="%0.2f", key="add_fin")
 
         def _near(rx, add):
             return {"sf": float(rx["sf"]) + float(add), "cyl": float(rx["cyl"]), "ax": int(rx["ax"])}
@@ -526,7 +582,8 @@ def ui_visita_visiva():
         inter_od = _near(rx_fin_od, float(add_fin)/2.0)
         inter_os = _near(rx_fin_os, float(add_fin)/2.0)
 
-        lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, default=[], key="lenti_sel")
+        st.session_state.setdefault("lenti_sel", [])
+        lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, key="lenti_sel")
 
         note_v = st.text_area("Note visita", height=100, key="note_visita")
 
