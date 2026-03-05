@@ -32,7 +32,7 @@ def _load_payload_into_form(pj: dict):
 
     # Esame obiettivo
     eo = pj.get("esame_obiettivo") or {}
-    for field in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare","pressione_endoculare","pachimetria"):
+    for field in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare","pressione_endoculare","pachimetria","pressione_endoculare_od","pressione_endoculare_os","pachimetria_od","pachimetria_os"):
         if field in eo:
             st.session_state[field] = eo.get(field) or ""
 
@@ -106,6 +106,16 @@ LENTI_OPTIONS = [
     "Trattamento antiriflesso",
     "Filtro luce blu",
 ]
+
+# vm_split_iop_cct_from_combined
+if not st.session_state.get("pressione_endoculare_od") and not st.session_state.get("pressione_endoculare_os"):
+    od, os_ = _parse_pair_values(st.session_state.get("pressione_endoculare",""))
+    if od is not None: st.session_state["pressione_endoculare_od"] = str(od)
+    if os_ is not None: st.session_state["pressione_endoculare_os"] = str(os_)
+if not st.session_state.get("pachimetria_od") and not st.session_state.get("pachimetria_os"):
+    od, os_ = _parse_pair_values(st.session_state.get("pachimetria",""))
+    if od is not None: st.session_state["pachimetria_od"] = str(od)
+    if os_ is not None: st.session_state["pachimetria_os"] = str(os_)
 
 def _is_pg(conn) -> bool:
     return conn.__class__.__module__.startswith("psycopg2")
@@ -625,23 +635,50 @@ def ui_visita_visiva():
             vitreo = st.text_input("Vitreo (OD/OS)", key="vitreo")
             st.session_state.setdefault("fondo_oculare","")
             fondo_oculare = st.text_input("Fondo oculare (OD/OS)", key="fondo_oculare")
-            st.session_state.setdefault("pressione_endoculare","")
-            st.text_input(
-            "Pressione endoculare (OD/OS) mmHg",
-            key="pressione_endoculare"
-            )
-
-            st.session_state.setdefault("pachimetria","")
-            st.text_input(
-            "Pachimetria corneale (OD/OS) µm",
-            key="pachimetria"
-            )
 
 
 
+            st.markdown("**Pressione endoculare (mmHg)**")
+
+            c_i1, c_i2 = st.columns(2)
+
+            with c_i1:
+
+                st.text_input("OD (mmHg)", key="pressione_endoculare_od")
+
+            with c_i2:
+
+                st.text_input("OS (mmHg)", key="pressione_endoculare_os")
+
+
+            st.markdown("**Pachimetria corneale (µm)**")
+
+            c_p1, c_p2 = st.columns(2)
+
+            with c_p1:
+
+                st.text_input("OD (µm)", key="pachimetria_od")
+
+            with c_p2:
+
+                st.text_input("OS (µm)", key="pachimetria_os")
         # --- Screening clinico: IOP + Pachimetria (attenzione, non diagnostico) ---
-        iop_od, iop_os = _parse_pair_values(st.session_state.get("pressione_endoculare", ""))
-        cct_od, cct_os = _parse_pair_values(st.session_state.get("pachimetria", ""))
+        def _to_float(x):
+            try:
+                return float(str(x).replace(",", ".").strip())
+            except Exception:
+                return None
+
+        iop_od = _to_float(st.session_state.get("pressione_endoculare_od", ""))
+        iop_os = _to_float(st.session_state.get("pressione_endoculare_os", ""))
+        if iop_od is None and iop_os is None:
+            iop_od, iop_os = _parse_pair_values(st.session_state.get("pressione_endoculare", ""))
+
+        cct_od = _to_float(st.session_state.get("pachimetria_od", ""))
+        cct_os = _to_float(st.session_state.get("pachimetria_os", ""))
+        if cct_od is None and cct_os is None:
+            cct_od, cct_os = _parse_pair_values(st.session_state.get("pachimetria", ""))
+
         att = _clinical_attention(iop_od, iop_os, cct_od, cct_os)
 
         with st.expander("🔎 Rapporto IOP / Pachimetria (screening)", expanded=False):
@@ -685,6 +722,10 @@ def ui_visita_visiva():
         lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, key="lenti_sel")
 
         st.session_state.setdefault("note_visita", "")
+        st.session_state.setdefault("pressione_endoculare_od", "")
+        st.session_state.setdefault("pressione_endoculare_os", "")
+        st.session_state.setdefault("pachimetria_od", "")
+        st.session_state.setdefault("pachimetria_os", "")
         note_v = st.text_area("Note visita", height=100, key="note_visita")
 
 
@@ -705,8 +746,12 @@ def ui_visita_visiva():
                 "cristallino": cristallino,
                 "vitreo": vitreo,
                 "fondo_oculare": fondo_oculare,
-                "pressione_endoculare": st.session_state.get("pressione_endoculare",""),
-                "pachimetria": st.session_state.get("pachimetria",""),
+                "pressione_endoculare": f"{st.session_state.get('pressione_endoculare_od','')}/{st.session_state.get('pressione_endoculare_os','')}".strip("/"),
+                "pressione_endoculare_od": st.session_state.get("pressione_endoculare_od",""),
+                "pressione_endoculare_os": st.session_state.get("pressione_endoculare_os",""),
+                "pachimetria": f"{st.session_state.get('pachimetria_od','')}/{st.session_state.get('pachimetria_os','')}".strip("/"),
+                "pachimetria_od": st.session_state.get("pachimetria_od",""),
+                "pachimetria_os": st.session_state.get("pachimetria_os",""),
             },
             "correzione_abituale": {"od": rx_ab_od, "os": rx_ab_os, "add": float(add_ab)},
             "correzione_finale": {"od": rx_fin_od, "os": rx_fin_os, "add": float(add_fin)},
