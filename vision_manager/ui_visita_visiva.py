@@ -5,62 +5,19 @@ from typing import Any, Dict, List
 from collections.abc import Mapping
 import streamlit as st
 
-# ---------- Apple-like UI helpers ----------
+# ---------- Apple-like (lightweight) CSS ----------
 APPLE_CSS = r"""
 <style>
-/* Base */
-html, body, [class*="css"]  { -webkit-font-smoothing: antialiased; }
-.block-container { padding-top: 1.2rem; padding-bottom: 2rem; max-width: 1200px; }
-
-/* Sidebar */
-section[data-testid="stSidebar"] > div { padding-top: 1.1rem; }
+.block-container { padding-top: 1.1rem; padding-bottom: 2rem; max-width: 1200px; }
 section[data-testid="stSidebar"] { border-right: 1px solid rgba(0,0,0,.08); }
-
-/* Headings */
+section[data-testid="stSidebar"] > div { padding-top: 1.0rem; }
 h1, h2, h3 { letter-spacing: -0.01em; }
-h1 { font-size: 1.6rem; }
-h2 { font-size: 1.25rem; }
-h3 { font-size: 1.05rem; }
-
-/* Cards */
-.to-card {
-  border: 1px solid rgba(0,0,0,.08);
-  border-radius: 18px;
-  padding: 14px 16px;
-  background: rgba(255,255,255,.9);
-  box-shadow: 0 6px 18px rgba(0,0,0,.05);
-  margin-bottom: 12px;
-}
-.to-card h4 { margin: 0 0 6px 0; font-size: 0.95rem; letter-spacing: -0.01em; }
-.to-muted { color: rgba(0,0,0,.55); font-size: 0.9rem; }
-.to-row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.to-pill {
-  display:inline-flex; align-items:center; gap:8px;
-  padding: 6px 10px; border-radius: 999px;
-  border: 1px solid rgba(0,0,0,.10);
-  background: rgba(250,250,250,.9);
-  font-size: 0.9rem;
-}
-.to-divider { height:1px; background: rgba(0,0,0,.08); margin: 10px 0 6px; }
-
-/* Tabs spacing */
-[data-testid="stTabs"] { margin-top: 0.25rem; }
-[data-testid="stTabs"] button { border-radius: 999px !important; padding: 6px 12px !important; }
-
-/* Inputs */
 div[data-baseweb="input"] input,
 div[data-baseweb="textarea"] textarea,
-div[data-baseweb="select"] > div {
-  border-radius: 14px !important;
-}
-button[kind="primary"] { border-radius: 14px !important; }
+div[data-baseweb="select"] > div { border-radius: 14px !important; }
 button { border-radius: 14px !important; }
-
-/* Expander */
 details { border-radius: 18px; border: 1px solid rgba(0,0,0,.08); padding: 6px 10px; }
 details > summary { font-weight: 600; }
-
-/* Tiny top bar */
 .to-topbar {
   display:flex; justify-content: space-between; align-items:center;
   padding: 10px 12px; border-radius: 18px;
@@ -71,29 +28,9 @@ details > summary { font-weight: 600; }
 }
 .to-topbar .title { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; }
 .to-topbar .sub { color: rgba(0,0,0,.55); font-size: 0.9rem; }
-
-/* Keep st.json readable */
-pre { border-radius: 14px !important; }
 </style>
 """
 
-def _inject_apple_css():
-    st.markdown(APPLE_CSS, unsafe_allow_html=True)
-
-def _card(title: str, body_md: str = "", *, pills: list[str] | None = None):
-    pills = pills or []
-    pills_html = "".join([f'<span class="to-pill">{p}</span>' for p in pills])
-    st.markdown(
-        f'''
-        <div class="to-card">
-          <h4>{title}</h4>
-          <div class="to-muted">{body_md}</div>
-          <div class="to-divider"></div>
-          <div class="to-row">{pills_html}</div>
-        </div>
-        ''',
-        unsafe_allow_html=True
-    )
 from vision_manager.db import get_conn, init_db
 from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
@@ -413,67 +350,11 @@ def _parse_json(s: str) -> Dict[str, Any]:
     except Exception:
         return {"raw": s}
 
-
-def _load_payload_into_form(pj: Dict[str, Any]):
-    """Carica una visita salvata (dict) nel form corrente. Non salva nulla finché non premi 'Salva visita'."""
-    if not isinstance(pj, dict):
-        return
-
-    # data visita (date_input vuole un dt.date)
-    d = pj.get("data") or pj.get("data_visita")
-    try:
-        if isinstance(d, str) and len(d) >= 10:
-            st.session_state["data_visita"] = dt.date.fromisoformat(d[:10])
-    except Exception:
-        pass
-
-    st.session_state["anamnesi"] = pj.get("anamnesi") or ""
-    st.session_state["note_visita"] = pj.get("note") or ""
-
-    ac = pj.get("acuita") or {}
-    nat = ac.get("naturale") or {}
-    abi = ac.get("abituale") or {}
-    cor = ac.get("corretta") or {}
-
-    # acuità (key già presenti nei selectbox)
-    for k in ("od","os","oo"):
-        if k in nat: st.session_state[f"avn_{k}"] = nat.get(k)
-        if k in abi: st.session_state[f"ava_{k}"] = abi.get(k)
-        if k in cor: st.session_state[f"avc_{k}"] = cor.get(k)
-
-    eo = pj.get("esame_obiettivo") or {}
-    for field in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare"):
-        if field in eo:
-            st.session_state[field] = eo.get(field) or ""
-
-    cf = pj.get("correzione_finale") or {}
-    od = cf.get("od") or {}
-    os_ = cf.get("os") or {}
-
-    # key generate da _rx_input(label, "rx_fin_od") ecc.
-    st.session_state["rx_fin_od_sf"] = float(od.get("sf", 0.0) or 0.0)
-    st.session_state["rx_fin_od_cyl"] = float(od.get("cyl", 0.0) or 0.0)
-    st.session_state["rx_fin_od_ax"] = int(od.get("ax", 0) or 0)
-
-    st.session_state["rx_fin_os_sf"] = float(os_.get("sf", 0.0) or 0.0)
-    st.session_state["rx_fin_os_cyl"] = float(os_.get("cyl", 0.0) or 0.0)
-    st.session_state["rx_fin_os_ax"] = int(os_.get("ax", 0) or 0)
-
-    st.session_state["add_fin"] = float(cf.get("add", 0.0) or 0.0)
-
-    pr = pj.get("prescrizione") or {}
-    st.session_state["lenti_sel"] = pr.get("lenti") or []
-
 def _format_paz(p) -> str:
     dn = p.get("data_nascita") or ""
     return f"{p['cognome']} {p['nome']} (ID {p['id']}) {dn}".strip()
 
 def _rx_input(label: str, key_prefix: str):
-    """Input refrazione (SF/CIL/AX) ultra-stabile.
-
-    Regola Streamlit: se usi una key e vuoi poter pre-compilare via session_state,
-    NON passare `value=` ai widget. Imposta i default con `st.session_state.setdefault`.
-    """
     c1, c2, c3 = st.columns([1, 1, 1])
 
     k_sf = f"{key_prefix}_sf"
@@ -486,62 +367,21 @@ def _rx_input(label: str, key_prefix: str):
 
     sf = c1.number_input(f"{label} SF", step=0.25, format="%0.2f", key=k_sf)
     cyl = c2.number_input(f"{label} CIL", step=0.25, format="%0.2f", key=k_cyl)
-    ax = c3.number_input(
-        f"{label} AX (0-180)",
-        min_value=0,
-        max_value=180,
-        step=1,
-        key=k_ax,
-    )
+    ax = c3.number_input(f"{label} AX (0-180)", min_value=0, max_value=180, step=1, key=k_ax)
     return {"sf": float(sf), "cyl": float(cyl), "ax": int(ax)}
 
-def ui_visita_visiva():
-    # --- UI "commerciale" (più pulita e coerente visivamente) ---
-    commercial_ui = st.sidebar.toggle("UI commerciale", value=True)
-    if commercial_ui:
-        st.markdown(
-            """
-            <style>
-              .block-container { padding-top: 1.2rem; padding-bottom: 2.5rem; }
-              h1, h2, h3 { letter-spacing: -0.2px; }
-              div[data-testid="stMetric"] { border: 1px solid rgba(0,0,0,.06); padding: 8px 12px; border-radius: 14px; }
-              section[data-testid="stSidebar"] { border-right: 1px solid rgba(0,0,0,.08); }
-              .vm-card { border: 1px solid rgba(0,0,0,.08); border-radius: 18px; padding: 14px 16px; }
-              .vm-muted { opacity: .75; }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
 
+def ui_visita_visiva():
     st.subheader("🩺 Visita oculistica — Dr. Cirillo (Vision Manager)")
 
-_inject_apple_css()
-st.markdown(
-    f'''
-    <div class="to-topbar">
-      <div>
-        <div class="title">Vision Manager</div>
-        <div class="sub">Visita oculistica • UI Apple-like</div>
-      </div>
-      <div class="to-row">
-        <span class="to-pill">Neon/SQLite OK</span>
-      </div>
-    </div>
-    ''',
-    unsafe_allow_html=True
-)
-
-
-
-# Connessione DB robusta (evita "gira a vuoto" se Neon non risponde)
-try:
-    with st.spinner("Connessione al database..."):
-        conn = get_conn()
-    init_db(conn)
-except Exception as e:
-    st.error("Impossibile connettersi al database. Controlla DATABASE_URL nei Secrets di Streamlit Cloud.")
-    st.exception(e)
-    st.stop()
+    try:
+        with st.spinner("Connessione al database..."):
+            conn = get_conn()
+        init_db(conn)
+    except Exception as e:
+        st.error("Impossibile connettersi al database. Controlla DATABASE_URL nei Secrets di Streamlit Cloud.")
+        st.exception(e)
+        st.stop()
 
 
     tab_paz, tab_vis = st.tabs(["👤 Anagrafica (Gestionale)", "🗓️ Visita oculistica"])
@@ -621,28 +461,8 @@ except Exception as e:
         paziente_id = int(psel["id"])
         paziente_label = f"{psel.get('cognome','')} {psel.get('nome','')}".strip()
 
-        # Applica eventuale richiamo visita (solo su click) PRIMA dei widget del form
-        pending = st.session_state.pop("vm_pending_load", None)
-        notice = st.session_state.pop("vm_pending_load_notice", None)
-        if isinstance(pending, dict):
-            _load_payload_into_form(pending)
-            if notice:
-                st.success(notice)
-
-        st.session_state.setdefault("data_visita", dt.date.today())
-        data_visita = st.date_input("Data visita", key="data_visita")
-        anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
-
-        # Default sicuri (compatibili con "Richiamo visita" via session_state)
-        st.session_state.setdefault("avn_od", ACUITA_VALUES[11])
-        st.session_state.setdefault("avn_os", ACUITA_VALUES[11])
-        st.session_state.setdefault("avn_oo", ACUITA_VALUES[11])
-        st.session_state.setdefault("ava_od", ACUITA_VALUES[11])
-        st.session_state.setdefault("ava_os", ACUITA_VALUES[11])
-        st.session_state.setdefault("ava_oo", ACUITA_VALUES[11])
-        st.session_state.setdefault("avc_od", ACUITA_VALUES[11])
-        st.session_state.setdefault("avc_os", ACUITA_VALUES[11])
-        st.session_state.setdefault("avc_oo", ACUITA_VALUES[11])
+        data_visita = st.date_input("Data visita", value=dt.date.today())
+        anamnesi = st.text_area("Anamnesi", height=110)
 
         st.markdown("### Acuità visiva (decimi)")
         col = st.columns(3)
@@ -663,30 +483,24 @@ except Exception as e:
             avc_oo = st.selectbox("OO (corretta)", ACUITA_VALUES, key="avc_oo")
 
         st.markdown("### Esame obiettivo")
-
-        # Default sicuri per i campi testo (compatibili con richiamo visita)
-        for _k in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare"):
-            st.session_state.setdefault(_k, "")
         c1, c2 = st.columns(2)
         with c1:
-            congiuntiva = st.text_input("Congiuntiva (OD/OS)", key="congiuntiva")
-            cornea = st.text_input("Cornea (OD/OS)", key="cornea")
-            camera_anteriore = st.text_input("Camera anteriore (OD/OS)", key="camera_anteriore")
+            congiuntiva = st.text_input("Congiuntiva (OD/OS)", value="")
+            cornea = st.text_input("Cornea (OD/OS)", value="")
+            camera_anteriore = st.text_input("Camera anteriore (OD/OS)", value="")
         with c2:
-            cristallino = st.text_input("Cristallino (OD/OS)", key="cristallino")
-            vitreo = st.text_input("Vitreo (OD/OS)", key="vitreo")
-            fondo_oculare = st.text_input("Fondo oculare (OD/OS)", key="fondo_oculare")
+            cristallino = st.text_input("Cristallino (OD/OS)", value="")
+            vitreo = st.text_input("Vitreo (OD/OS)", value="")
+            fondo_oculare = st.text_input("Fondo oculare (OD/OS)", value="")
 
         st.markdown("### Correzione abituale (lontano)")
         rx_ab_od = _rx_input("OD abituale", "rx_ab_od")
         rx_ab_os = _rx_input("OS abituale", "rx_ab_os")
-        st.session_state.setdefault("add_ab", 0.0)
         add_ab = st.number_input("Addizione da vicino (abituale)", step=0.25, format="%0.2f", key="add_ab")
 
         st.markdown("### Correzione finale (lontano)")
         rx_fin_od = _rx_input("OD finale", "rx_fin_od")
         rx_fin_os = _rx_input("OS finale", "rx_fin_os")
-        st.session_state.setdefault("add_fin", 0.0)
         add_fin = st.number_input("Addizione da vicino (finale)", step=0.25, format="%0.2f", key="add_fin")
 
         def _near(rx, add):
@@ -697,10 +511,9 @@ except Exception as e:
         inter_od = _near(rx_fin_od, float(add_fin)/2.0)
         inter_os = _near(rx_fin_os, float(add_fin)/2.0)
 
-        st.session_state.setdefault("lenti_sel", [])
-        lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, key="lenti_sel")
+        lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, default=[])
 
-        note_v = st.text_area("Note visita", height=100, key="note_visita")
+        note_v = st.text_area("Note visita", height=100)
 
 
         payload = {
@@ -733,8 +546,6 @@ except Exception as e:
         }
         payload_str = json.dumps(payload, ensure_ascii=False)
 
-        only_corrected_pdf = st.checkbox("PDF: stampa solo acuità corretta", value=True, key="pdf_only_corrected")
-
         csave, cpdf1, cpdf2 = st.columns([1,1,1])
         with csave:
             if st.button("💾 Salva visita (DB)"):
@@ -742,11 +553,7 @@ except Exception as e:
                 st.success(f"Visita salvata (ID {vid}).")
         with cpdf1:
             if st.button("🧾 Genera PDF Referto A4"):
-                payload_pdf = {**payload, "data": str(data_visita), "paziente": paziente_label}
-                if only_corrected_pdf and isinstance(payload_pdf.get("acuita"), dict):
-                    ac = payload_pdf.get("acuita") or {}
-                    payload_pdf["acuita"] = {"corretta": ac.get("corretta", {})}
-                pdf_bytes = build_referto_oculistico_a4(payload_pdf, LETTERHEAD)
+                pdf_bytes = build_referto_oculistico_a4({**payload, "data": str(data_visita), "paziente": paziente_label}, LETTERHEAD)
                 st.download_button("⬇️ Scarica Referto A4", data=pdf_bytes, file_name=f"referto_oculistico_{paziente_id}_{data_visita}.pdf", mime="application/pdf")
         with cpdf2:
             if st.button("👓 Genera PDF Prescrizione A4"):
@@ -785,31 +592,6 @@ except Exception as e:
 
                 st.json(pj)
 
-                cL1, cL2 = st.columns([1,1])
-                if cL1.button("📥 Carica questa visita nel form", key=f"load_{vid}"):
-                    st.session_state["vm_pending_load"] = pj
-                    st.session_state["vm_pending_load_notice"] = "Visita caricata nel form. Ora puoi modificare e salvare come nuova visita."
-                    st.rerun()
-
-                if (not is_del) and cL2.button("🧬 Duplica come nuova visita", key=f"dup_{vid}"):
-                    # Duplica subito nel DB con data di oggi (non modifica lo storico originale)
-                    pj2 = pj.copy() if isinstance(pj, dict) else {}
-                    today_s = str(dt.date.today())
-                    pj2["data"] = today_s
-                    # assicura paziente corrente
-                    try:
-                        pj2["paziente"] = {
-                            "id": paziente_id,
-                            "nome": psel.get("nome"),
-                            "cognome": psel.get("cognome"),
-                            "data_nascita": psel.get("data_nascita"),
-                        }
-                    except Exception:
-                        pass
-                    vid_new = _insert_visita(conn, paziente_id, today_s, json.dumps(pj2, ensure_ascii=False))
-                    st.success(f"Visita duplicata come nuova (ID {vid_new}) — data {today_s}.")
-                    st.rerun()
-
                 c1, c2, c3 = st.columns([1,1,1])
                 if c1.button("✏️ Modifica", key=f"edit_{vid}"):
                     st.session_state[f"edit_mode_{vid}"] = True
@@ -842,11 +624,7 @@ except Exception as e:
                 st.divider()
 
                 try:
-                    pj_pdf = {**pj, "data": v.get("data_visita",""), "paziente": paziente_label}
-                    if st.session_state.get("pdf_only_corrected", True) and isinstance(pj_pdf.get("acuita"), dict):
-                        ac = pj_pdf.get("acuita") or {}
-                        pj_pdf["acuita"] = {"corretta": ac.get("corretta", {})}
-                    pdf_ref = build_referto_oculistico_a4(pj_pdf, LETTERHEAD)
+                    pdf_ref = build_referto_oculistico_a4({**pj, "data": v.get("data_visita",""), "paziente": paziente_label}, LETTERHEAD)
                     st.download_button("⬇️ Referto A4", data=pdf_ref, file_name=f"referto_oculistico_{paziente_id}_{vid}.pdf", mime="application/pdf", key=f"r{vid}")
                 except Exception:
                     st.warning("Referto non generabile da storico (payload non compatibile).")
