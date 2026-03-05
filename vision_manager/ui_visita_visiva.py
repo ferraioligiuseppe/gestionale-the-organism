@@ -323,6 +323,57 @@ def _parse_json(s: str) -> Dict[str, Any]:
     except Exception:
         return {"raw": s}
 
+
+def _load_payload_into_form(pj: Dict[str, Any]):
+    """Carica una visita salvata (dict) nel form corrente. Non salva nulla finché non premi 'Salva visita'."""
+    if not isinstance(pj, dict):
+        return
+
+    # data visita (date_input vuole un dt.date)
+    d = pj.get("data") or pj.get("data_visita")
+    try:
+        if isinstance(d, str) and len(d) >= 10:
+            st.session_state["data_visita"] = dt.date.fromisoformat(d[:10])
+    except Exception:
+        pass
+
+    st.session_state["anamnesi"] = pj.get("anamnesi") or ""
+    st.session_state["note_visita"] = pj.get("note") or ""
+
+    ac = pj.get("acuita") or {}
+    nat = ac.get("naturale") or {}
+    abi = ac.get("abituale") or {}
+    cor = ac.get("corretta") or {}
+
+    # acuità (key già presenti nei selectbox)
+    for k in ("od","os","oo"):
+        if k in nat: st.session_state[f"avn_{k}"] = nat.get(k)
+        if k in abi: st.session_state[f"ava_{k}"] = abi.get(k)
+        if k in cor: st.session_state[f"avc_{k}"] = cor.get(k)
+
+    eo = pj.get("esame_obiettivo") or {}
+    for field in ("congiuntiva","cornea","camera_anteriore","cristallino","vitreo","fondo_oculare"):
+        if field in eo:
+            st.session_state[field] = eo.get(field) or ""
+
+    cf = pj.get("correzione_finale") or {}
+    od = cf.get("od") or {}
+    os_ = cf.get("os") or {}
+
+    # key generate da _rx_input(label, "rx_fin_od") ecc.
+    st.session_state["rx_fin_od_sf"] = float(od.get("sf", 0.0) or 0.0)
+    st.session_state["rx_fin_od_cyl"] = float(od.get("cyl", 0.0) or 0.0)
+    st.session_state["rx_fin_od_ax"] = int(od.get("ax", 0) or 0)
+
+    st.session_state["rx_fin_os_sf"] = float(os_.get("sf", 0.0) or 0.0)
+    st.session_state["rx_fin_os_cyl"] = float(os_.get("cyl", 0.0) or 0.0)
+    st.session_state["rx_fin_os_ax"] = int(os_.get("ax", 0) or 0)
+
+    st.session_state["add_fin"] = float(cf.get("add", 0.0) or 0.0)
+
+    pr = pj.get("prescrizione") or {}
+    st.session_state["lenti_sel"] = pr.get("lenti") or []
+
 def _format_paz(p) -> str:
     dn = p.get("data_nascita") or ""
     return f"{p['cognome']} {p['nome']} (ID {p['id']}) {dn}".strip()
@@ -417,8 +468,8 @@ def ui_visita_visiva():
         paziente_id = int(psel["id"])
         paziente_label = f"{psel.get('cognome','')} {psel.get('nome','')}".strip()
 
-        data_visita = st.date_input("Data visita", value=dt.date.today())
-        anamnesi = st.text_area("Anamnesi", height=110)
+        data_visita = st.date_input("Data visita", value=dt.date.today(), key="data_visita")
+        anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
 
         st.markdown("### Acuità visiva (decimi)")
         col = st.columns(3)
@@ -441,13 +492,13 @@ def ui_visita_visiva():
         st.markdown("### Esame obiettivo")
         c1, c2 = st.columns(2)
         with c1:
-            congiuntiva = st.text_input("Congiuntiva (OD/OS)", value="")
-            cornea = st.text_input("Cornea (OD/OS)", value="")
-            camera_anteriore = st.text_input("Camera anteriore (OD/OS)", value="")
+            congiuntiva = st.text_input("Congiuntiva (OD/OS)", value="", key="congiuntiva")
+            cornea = st.text_input("Cornea (OD/OS)", value="", key="cornea")
+            camera_anteriore = st.text_input("Camera anteriore (OD/OS)", value="", key="camera_anteriore")
         with c2:
-            cristallino = st.text_input("Cristallino (OD/OS)", value="")
-            vitreo = st.text_input("Vitreo (OD/OS)", value="")
-            fondo_oculare = st.text_input("Fondo oculare (OD/OS)", value="")
+            cristallino = st.text_input("Cristallino (OD/OS)", value="", key="cristallino")
+            vitreo = st.text_input("Vitreo (OD/OS)", value="", key="vitreo")
+            fondo_oculare = st.text_input("Fondo oculare (OD/OS)", value="", key="fondo_oculare")
 
         st.markdown("### Correzione abituale (lontano)")
         rx_ab_od = _rx_input("OD abituale", "rx_ab_od")
@@ -467,9 +518,9 @@ def ui_visita_visiva():
         inter_od = _near(rx_fin_od, float(add_fin)/2.0)
         inter_os = _near(rx_fin_os, float(add_fin)/2.0)
 
-        lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, default=[])
+        lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, default=[], key="lenti_sel")
 
-        note_v = st.text_area("Note visita", height=100)
+        note_v = st.text_area("Note visita", height=100, key="note_visita")
 
 
         payload = {
@@ -502,6 +553,8 @@ def ui_visita_visiva():
         }
         payload_str = json.dumps(payload, ensure_ascii=False)
 
+        only_corrected_pdf = st.checkbox("PDF: stampa solo acuità corretta", value=True, key="pdf_only_corrected")
+
         csave, cpdf1, cpdf2 = st.columns([1,1,1])
         with csave:
             if st.button("💾 Salva visita (DB)"):
@@ -509,7 +562,11 @@ def ui_visita_visiva():
                 st.success(f"Visita salvata (ID {vid}).")
         with cpdf1:
             if st.button("🧾 Genera PDF Referto A4"):
-                pdf_bytes = build_referto_oculistico_a4({**payload, "data": str(data_visita), "paziente": paziente_label}, LETTERHEAD)
+                payload_pdf = {**payload, "data": str(data_visita), "paziente": paziente_label}
+                if only_corrected_pdf and isinstance(payload_pdf.get("acuita"), dict):
+                    ac = payload_pdf.get("acuita") or {}
+                    payload_pdf["acuita"] = {"corretta": ac.get("corretta", {})}
+                pdf_bytes = build_referto_oculistico_a4(payload_pdf, LETTERHEAD)
                 st.download_button("⬇️ Scarica Referto A4", data=pdf_bytes, file_name=f"referto_oculistico_{paziente_id}_{data_visita}.pdf", mime="application/pdf")
         with cpdf2:
             if st.button("👓 Genera PDF Prescrizione A4"):
@@ -548,6 +605,11 @@ def ui_visita_visiva():
 
                 st.json(pj)
 
+                if st.button("📥 Carica questa visita nel form", key=f"load_{vid}"):
+                    _load_payload_into_form(pj)
+                    st.success("Visita caricata nel form. Ora puoi modificare e salvare come nuova visita.")
+                    st.rerun()
+
                 c1, c2, c3 = st.columns([1,1,1])
                 if c1.button("✏️ Modifica", key=f"edit_{vid}"):
                     st.session_state[f"edit_mode_{vid}"] = True
@@ -580,7 +642,11 @@ def ui_visita_visiva():
                 st.divider()
 
                 try:
-                    pdf_ref = build_referto_oculistico_a4({**pj, "data": v.get("data_visita",""), "paziente": paziente_label}, LETTERHEAD)
+                    pj_pdf = {**pj, "data": v.get("data_visita",""), "paziente": paziente_label}
+                    if st.session_state.get("pdf_only_corrected", True) and isinstance(pj_pdf.get("acuita"), dict):
+                        ac = pj_pdf.get("acuita") or {}
+                        pj_pdf["acuita"] = {"corretta": ac.get("corretta", {})}
+                    pdf_ref = build_referto_oculistico_a4(pj_pdf, LETTERHEAD)
                     st.download_button("⬇️ Referto A4", data=pdf_ref, file_name=f"referto_oculistico_{paziente_id}_{vid}.pdf", mime="application/pdf", key=f"r{vid}")
                 except Exception:
                     st.warning("Referto non generabile da storico (payload non compatibile).")
