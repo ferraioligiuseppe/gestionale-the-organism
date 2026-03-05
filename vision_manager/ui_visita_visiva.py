@@ -468,6 +468,14 @@ def ui_visita_visiva():
         paziente_id = int(psel["id"])
         paziente_label = f"{psel.get('cognome','')} {psel.get('nome','')}".strip()
 
+        # Applica eventuale richiamo visita (solo su click) PRIMA dei widget del form
+        pending = st.session_state.pop("vm_pending_load", None)
+        notice = st.session_state.pop("vm_pending_load_notice", None)
+        if isinstance(pending, dict):
+            _load_payload_into_form(pending)
+            if notice:
+                st.success(notice)
+
         data_visita = st.date_input("Data visita", value=dt.date.today(), key="data_visita")
         anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
 
@@ -607,8 +615,8 @@ def ui_visita_visiva():
 
                 cL1, cL2 = st.columns([1,1])
                 if cL1.button("📥 Carica questa visita nel form", key=f"load_{vid}"):
-                    _load_payload_into_form(pj)
-                    st.success("Visita caricata nel form. Ora puoi modificare e salvare come nuova visita.")
+                    st.session_state["vm_pending_load"] = pj
+                    st.session_state["vm_pending_load_notice"] = "Visita caricata nel form. Ora puoi modificare e salvare come nuova visita."
                     st.rerun()
 
                 if (not is_del) and cL2.button("🧬 Duplica come nuova visita", key=f"dup_{vid}"):
