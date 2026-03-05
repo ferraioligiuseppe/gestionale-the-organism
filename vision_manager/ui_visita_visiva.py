@@ -577,58 +577,6 @@ def ui_visita_visiva():
         rx_fin_os = _rx_input("OS finale", "rx_fin_os")
         add_fin = st.number_input("Addizione da vicino (finale)", step=0.25, format="%0.2f", key="add_fin")
 
-        def _parse_pair_values(s: str):
-    """Parse 'OD/OS' numeric pair from a string like '16/15' or '16, 15'."""
-    if not s:
-        return (None, None)
-    txt = str(s).strip().replace(",", "/").replace(";", "/").replace("\\", "/")
-    parts = [p.strip() for p in txt.split("/") if p.strip()]
-    if len(parts) == 1:
-        try:
-            v = float(parts[0])
-            return (v, v)
-        except Exception:
-            return (None, None)
-    try:
-        od = float(parts[0])
-    except Exception:
-        od = None
-    try:
-        os_ = float(parts[1])
-    except Exception:
-        os_ = None
-    return (od, os_)
-
-def _iop_adjusted(iop, cct, ref_cct: float = 540.0):
-    """Screening only: ~0.7 mmHg per 10 µm vs 540."""
-    if iop is None or cct is None:
-        return None
-    delta = (ref_cct - cct) / 10.0 * 0.7
-    return float(iop + delta)
-
-def _clinical_attention(iop_od, iop_os, cct_od, cct_os):
-    """Screening flags for OD/OS."""
-    out = {"od": {"flag": False, "reason": "", "adj": None},
-           "os": {"flag": False, "reason": "", "adj": None}}
-    for eye in ("od", "os"):
-        iop = iop_od if eye == "od" else iop_os
-        cct = cct_od if eye == "od" else cct_os
-        adj = _iop_adjusted(iop, cct)
-        reasons = []
-        flag = False
-        if iop is not None and iop >= 21:
-            flag = True
-            reasons.append("IOP ≥ 21 mmHg")
-        if cct is not None and cct < 500 and iop is not None and iop >= 18:
-            flag = True
-            reasons.append("CCT < 500 µm con IOP ≥ 18 (possibile sottostima)")
-        if adj is not None and adj >= 21:
-            flag = True
-            reasons.append(f"IOP stimata (pachimetria) ≈ {adj:.1f} mmHg")
-        out[eye]["flag"] = flag
-        out[eye]["reason"] = "; ".join(reasons)
-        out[eye]["adj"] = adj
-    return out
         def _near(rx, add):
             return {"sf": float(rx["sf"]) + float(add), "cyl": float(rx["cyl"]), "ax": int(rx["ax"])}
 
