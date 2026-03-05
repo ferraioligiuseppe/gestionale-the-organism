@@ -625,6 +625,17 @@ def ui_visita_visiva():
             vitreo = st.text_input("Vitreo (OD/OS)", key="vitreo")
             st.session_state.setdefault("fondo_oculare","")
             fondo_oculare = st.text_input("Fondo oculare (OD/OS)", key="fondo_oculare")
+            st.session_state.setdefault("pressione_endoculare","")
+st.text_input(
+    "Pressione endoculare (OD/OS) mmHg",
+    key="pressione_endoculare"
+)
+
+st.session_state.setdefault("pachimetria","")
+st.text_input(
+    "Pachimetria corneale (OD/OS) µm",
+    key="pachimetria"
+)
 
 
         # --- Screening clinico: IOP + Pachimetria (attenzione, non diagnostico) ---
