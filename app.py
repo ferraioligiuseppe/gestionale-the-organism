@@ -9468,11 +9468,6 @@ def main():
     if maybe_handle_public_questionario(get_connection):
         return
 
-    st.set_page_config(
-        page_title="The Organism – Gestionale Studio",
-        layout="wide"
-    )
-
     # --- PUBLIC SIGN PAGE (no login) ---
     if st.query_params.get('sign'):
         ui_public_sign_page()
