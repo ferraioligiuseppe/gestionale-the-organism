@@ -2,13 +2,23 @@ from __future__ import annotations
 from pathlib import Path
 import streamlit as st
 
-def inject_ui(css_path: str = "assets/ui.css") -> None:
+def inject_ui(css_path: str = "assets/ui.css", extra_css_paths: list[str] | None = None) -> None:
     """Inject global CSS once per session."""
     if st.session_state.get("_to_ui_injected"):
         return
-    p = Path(css_path)
-    if p.exists():
-        st.markdown(f"<style>{p.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+
+    base_dir = Path(__file__).resolve().parent.parent
+    css_candidates = [css_path] + (extra_css_paths or [])
+    chunks: list[str] = []
+    for candidate in css_candidates:
+        p = Path(candidate)
+        if not p.is_absolute():
+            p = base_dir / candidate
+        if p.exists():
+            chunks.append(p.read_text(encoding="utf-8"))
+
+    if chunks:
+        st.markdown(f"<style>{chr(10).join(chunks)}</style>", unsafe_allow_html=True)
     st.session_state["_to_ui_injected"] = True
 
 def topbar(title: str, subtitle: str = "", right: str = "") -> None:
