@@ -9506,19 +9506,6 @@ def main():
     if dispatch_main_section(
         sezione=sezione,
         get_connection=get_connection,
-        ui_pazienti=ui_pazienti,
-        ui_anamnesi=ui_anamnesi,
-        ui_valutazioni_visive=ui_valutazioni_visive,
-        ui_sedute=ui_sedute,
-        ui_osteopatia_section=ui_osteopatia_section,
-        ui_coupons=ui_coupons,
-        ui_dashboard=ui_dashboard,
-        ui_relazioni_cliniche=ui_relazioni_cliniche,
-        ui_dashboard_evolutiva=ui_dashboard_evolutiva,
-        ui_privacy_pdf=ui_privacy_pdf,
-        ui_debug_db=ui_debug_db,
-        ui_import_pazienti=ui_import_pazienti,
-        ui_gestione_utenti=ui_gestione_utenti,
     ):
         return
 
