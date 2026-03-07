@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 """Entry point modulare della sezione Pazienti.
 
-Step 3 safe: non sposta ancora la logica clinica interna da app_core,
-ma centralizza il punto di ingresso in un modulo dedicato per evitare che
-il routing principale dipenda direttamente dalle funzioni storiche.
+Step 6 safe: il router non passa più callback dal file centrale.
+Il modulo importa in modo lazy la funzione storica da app_core,
+così il comportamento resta invariato ma le dipendenze sono più pulite.
 """
 
-from typing import Callable, Any
-
-
-def render_pazienti_section(ui_pazienti: Callable[..., Any]) -> Any:
-    return ui_pazienti()
+def render_pazienti_section(*args, **kwargs):
+    from app_core import ui_pazienti
+    return ui_pazienti(*args, **kwargs)
