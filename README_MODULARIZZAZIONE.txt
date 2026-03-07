@@ -1,22 +1,23 @@
-MODULARIZZAZIONE SICURA — STEP 2
+MODULARIZZAZIONE SAFE — STEP 3
 
-Questa versione prosegue la modularizzazione senza toccare la logica clinica.
+Base: step 2 funzionante.
 
-Cosa è stato estratto:
-- app.py -> bootstrap minimale
-- modules/app_menu.py -> definizione menu/sidebar
-- modules/app_udito_router.py -> routing moduli uditivi
-- modules/app_sections.py -> costanti condivise delle sezioni
-- modules/app_main_router.py -> routing sezioni principali (Pazienti, PNEV, Vision, ecc.)
-
-Cosa NON è stato toccato:
-- vision_manager
-- logica database
-- login
-- privacy/firma online
-- implementazioni profonde di ui_pazienti / ui_anamnesi / Vision
+Novità di questo step:
+- aggiunta cartella modules/pazienti/
+- aggiunta cartella modules/anamnesi/
+- routing principale aggiornato per passare da entry point modulari dedicati
+- comportamento clinico invariato: la logica interna resta in app_core, per non rompere il gestionale
 
 Obiettivo di questo step:
-- ridurre il rischio quando si modifica il menu
-- evitare refusi tra etichette menu e routing
-- preparare lo step successivo: estrazione vera di Pazienti / Anamnesi in moduli dedicati
+- separare i punti di ingresso di Pazienti e Anamnesi
+- preparare lo step successivo, in cui si potranno spostare porzioni interne di codice in modo graduale
+
+File nuovi:
+- modules/pazienti/ui_pazienti_section.py
+- modules/anamnesi/ui_anamnesi_section.py
+
+File modificato:
+- modules/app_main_router.py
+
+Nota:
+Questo step è volutamente prudente: non tocca vision_manager, database, login, privacy o firma online.

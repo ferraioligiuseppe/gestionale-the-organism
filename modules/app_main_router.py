@@ -22,7 +22,8 @@ from .app_sections import (
     SECTION_IMPORT,
     SECTION_UTENTI,
 )
-
+from .pazienti import render_pazienti_section
+from .anamnesi import render_anamnesi_section
 
 def dispatch_main_section(
     *,
@@ -43,10 +44,10 @@ def dispatch_main_section(
     ui_gestione_utenti: Callable[..., Any],
 ) -> bool:
     if sezione == SECTION_PAZIENTI:
-        ui_pazienti()
+        render_pazienti_section(ui_pazienti)
         return True
     if sezione == SECTION_PNEV:
-        ui_anamnesi()
+        render_anamnesi_section(ui_anamnesi)
         return True
     if sezione == SECTION_VISION:
         ui_valutazioni_visive()
