@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from .ui_sections import (
+from .ui_cliniche import (
     render_vision_section,
     render_sedute_section,
     render_osteopatia_section,
@@ -11,7 +11,6 @@ from .ui_sections import (
     render_import_section,
     render_utenti_section,
 )
-
 __all__ = [
     "render_vision_section",
     "render_sedute_section",

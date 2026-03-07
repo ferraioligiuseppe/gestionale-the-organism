@@ -1,6 +1,3 @@
 # -*- coding: utf-8 -*-
-"""Entry point modulare per referti / relazioni cliniche."""
-
-def render_referti_section(*args, **kwargs):
-    from app_core import ui_relazioni_cliniche
-    return ui_relazioni_cliniche(*args, **kwargs)
+"""Shim compatibile: usa il nuovo entry point canonico."""
+from .ui_referti_section import render_referti_section

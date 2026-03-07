@@ -1,6 +1,3 @@
 # -*- coding: utf-8 -*-
-"""Entry point modulare per la sezione Privacy."""
-
-def render_privacy_section(*args, **kwargs):
-    from app_core import ui_privacy_pdf
-    return ui_privacy_pdf(*args, **kwargs)
+"""Shim compatibile: usa il nuovo entry point canonico."""
+from .ui_privacy_section import render_privacy_section

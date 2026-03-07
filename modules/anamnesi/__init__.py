@@ -1,2 +1,2 @@
 # -*- coding: utf-8 -*-
-from .ui_anamnesi_section import render_anamnesi_section
+from .ui_anamnesi import render_anamnesi_section

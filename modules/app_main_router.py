@@ -24,9 +24,9 @@ from .app_sections import (
 )
 from .pazienti import render_pazienti_section
 from .anamnesi import render_anamnesi_section
-from .privacy import render_privacy_section
-from .pnev import render_pnev_section
-from .sections import (
+from .privacy.ui_privacy_section import render_privacy_section
+from .pnev.ui_pnev import render_pnev_section
+from .sections.ui_cliniche import (
     render_vision_section,
     render_sedute_section,
     render_osteopatia_section,

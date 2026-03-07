@@ -1,55 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Wrapper lazy per le sezioni storiche rimaste in app_core.
-
-Step 6 safe: alleggerisce il router principale senza spostare ancora
-la logica clinica interna, così la compatibilità resta massima.
-"""
-
-def render_vision_section(*args, **kwargs):
-    from app_core import ui_valutazioni_visive
-    return ui_valutazioni_visive(*args, **kwargs)
-
-
-def render_sedute_section(*args, **kwargs):
-    from app_core import ui_sedute
-    return ui_sedute(*args, **kwargs)
-
-
-def render_osteopatia_section(*args, **kwargs):
-    from app_core import ui_osteopatia_section
-    return ui_osteopatia_section(*args, **kwargs)
-
-
-def render_coupon_section(*args, **kwargs):
-    from app_core import ui_coupons
-    return ui_coupons(*args, **kwargs)
-
-
-def render_dashboard_section(*args, **kwargs):
-    from app_core import ui_dashboard
-    return ui_dashboard(*args, **kwargs)
-
-
-def render_relazioni_section(*args, **kwargs):
-    from modules.referti.ui_referti import render_referti_section
-    return render_referti_section(*args, **kwargs)
-
-
-def render_evolutiva_section(*args, **kwargs):
-    from app_core import ui_dashboard_evolutiva
-    return ui_dashboard_evolutiva(*args, **kwargs)
-
-
-def render_debug_section(*args, **kwargs):
-    from app_core import ui_debug_db
-    return ui_debug_db(*args, **kwargs)
-
-
-def render_import_section(*args, **kwargs):
-    from app_core import ui_import_pazienti
-    return ui_import_pazienti(*args, **kwargs)
-
-
-def render_utenti_section(get_connection, *args, **kwargs):
-    from app_core import ui_gestione_utenti
-    return ui_gestione_utenti(get_connection, *args, **kwargs)
+"""Shim compatibile: usa il nuovo wrapper centralizzato."""
+from .ui_cliniche import (
+    render_vision_section,
+    render_sedute_section,
+    render_osteopatia_section,
+    render_coupon_section,
+    render_dashboard_section,
+    render_relazioni_section,
+    render_evolutiva_section,
+    render_debug_section,
+    render_import_section,
+    render_utenti_section,
+)
