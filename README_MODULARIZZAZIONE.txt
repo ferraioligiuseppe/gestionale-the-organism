@@ -1,21 +1,22 @@
-VERSIONE MODULARIZZATA (STEP 1)
+MODULARIZZAZIONE SICURA — STEP 2
 
-Questa versione NON stravolge il gestionale: riduce il rischio di rottura.
+Questa versione prosegue la modularizzazione senza toccare la logica clinica.
 
 Cosa è stato estratto:
-- app.py -> bootstrap minimo + set_page_config + main()
-- app_core.py -> logica storica del gestionale
-- modules/app_menu.py -> definizione menu sidebar
+- app.py -> bootstrap minimale
+- modules/app_menu.py -> definizione menu/sidebar
 - modules/app_udito_router.py -> routing moduli uditivi
+- modules/app_sections.py -> costanti condivise delle sezioni
+- modules/app_main_router.py -> routing sezioni principali (Pazienti, PNEV, Vision, ecc.)
 
-Perché è più sicura:
-- app.py diventa piccolo e stabile
-- le voci di menu non sono più mischiate alla logica clinica
-- la parte uditiva è isolata in un router dedicato
-- vision_manager non è stato toccato
+Cosa NON è stato toccato:
+- vision_manager
+- logica database
+- login
+- privacy/firma online
+- implementazioni profonde di ui_pazienti / ui_anamnesi / Vision
 
-Prossimo step consigliato:
-1) estrarre Pazienti / Anamnesi
-2) estrarre Privacy
-3) estrarre Relazioni Cliniche
-4) mantenere vision_manager separato
+Obiettivo di questo step:
+- ridurre il rischio quando si modifica il menu
+- evitare refusi tra etichette menu e routing
+- preparare lo step successivo: estrazione vera di Pazienti / Anamnesi in moduli dedicati

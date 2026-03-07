@@ -2,6 +2,7 @@
 import streamlit as st
 from modules.app_menu import build_sections
 from modules.app_udito_router import dispatch_udito_section
+from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
@@ -9501,33 +9502,25 @@ def main():
     ):
         return
 
-    # routing alle varie sezioni
-    if sezione == "Pazienti":
-        ui_pazienti()
-    elif sezione == "Valutazione PNEV":
-        ui_anamnesi()
-    elif sezione == "Valutazioni visive / oculistiche":
-        ui_valutazioni_visive()
-    elif sezione == "Sedute / Terapie":
-        ui_sedute()
-    elif sezione == "Osteopatia":
-        ui_osteopatia_section()
-    elif sezione == "Coupon OF / SDS":
-        ui_coupons()
-    elif sezione == "Dashboard incassi":
-        ui_dashboard()
-    elif sezione == "🗂️ Relazioni cliniche":
-        ui_relazioni_cliniche()
-    elif sezione == "📊 Dashboard evolutiva":
-        ui_dashboard_evolutiva()
-    elif sezione == "📄 Privacy & Consensi (PDF)":
-        ui_privacy_pdf()
-    elif sezione == "🛠️ Debug DB":
-        ui_debug_db()
-    elif sezione == "📥 Import Pazienti":
-        ui_import_pazienti()
-    elif sezione == "👥 Utenti / Ruoli":
-        ui_gestione_utenti(get_connection)
+    # routing principale (estratto)
+    if dispatch_main_section(
+        sezione=sezione,
+        get_connection=get_connection,
+        ui_pazienti=ui_pazienti,
+        ui_anamnesi=ui_anamnesi,
+        ui_valutazioni_visive=ui_valutazioni_visive,
+        ui_sedute=ui_sedute,
+        ui_osteopatia_section=ui_osteopatia_section,
+        ui_coupons=ui_coupons,
+        ui_dashboard=ui_dashboard,
+        ui_relazioni_cliniche=ui_relazioni_cliniche,
+        ui_dashboard_evolutiva=ui_dashboard_evolutiva,
+        ui_privacy_pdf=ui_privacy_pdf,
+        ui_debug_db=ui_debug_db,
+        ui_import_pazienti=ui_import_pazienti,
+        ui_gestione_utenti=ui_gestione_utenti,
+    ):
+        return
 
 
 # ================================

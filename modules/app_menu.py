@@ -1,27 +1,43 @@
 # -*- coding: utf-8 -*-
 """Menu principale del gestionale.
 
-Primo step di modularizzazione: qui vive solo la definizione delle voci sidebar.
-Questo riduce il rischio di rompere app.py quando si aggiungono/rimuovono sezioni.
+Step 1-2 della modularizzazione: qui vivono le definizioni delle voci sidebar,
+riusando costanti condivise con il routing.
 """
 
+from .app_sections import (
+    SECTION_PAZIENTI,
+    SECTION_PNEV,
+    SECTION_VISION,
+    SECTION_SEDUTE,
+    SECTION_OSTEOPATIA,
+    SECTION_COUPON,
+    SECTION_DASHBOARD,
+    SECTION_RELAZIONI,
+    SECTION_EVOLUTIVA,
+    SECTION_PRIVACY,
+    SECTION_DEBUG,
+    SECTION_IMPORT,
+    SECTION_UTENTI,
+)
+
 BASE_SECTIONS = [
-    "Pazienti",
-    "Valutazione PNEV",
-    "Valutazioni visive / oculistiche",
-    "Sedute / Terapie",
-    "Osteopatia",
-    "Coupon OF / SDS",
-    "Dashboard incassi",
-    "🗂️ Relazioni cliniche",
-    "📊 Dashboard evolutiva",
-    "📄 Privacy & Consensi (PDF)",
-    "🛠️ Debug DB",
-    "📥 Import Pazienti",
+    SECTION_PAZIENTI,
+    SECTION_PNEV,
+    SECTION_VISION,
+    SECTION_SEDUTE,
+    SECTION_OSTEOPATIA,
+    SECTION_COUPON,
+    SECTION_DASHBOARD,
+    SECTION_RELAZIONI,
+    SECTION_EVOLUTIVA,
+    SECTION_PRIVACY,
+    SECTION_DEBUG,
+    SECTION_IMPORT,
 ]
 
 ADMIN_SECTIONS = [
-    "👥 Utenti / Ruoli",
+    SECTION_UTENTI,
 ]
 
 UDITO_PROD_SECTIONS = [
