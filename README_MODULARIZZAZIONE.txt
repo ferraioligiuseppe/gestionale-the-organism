@@ -21,3 +21,6 @@ File modificato:
 
 Nota:
 Questo step è volutamente prudente: non tocca vision_manager, database, login, privacy o firma online.
+
+
+STEP 5 SAFE aggiunto: modules/privacy, modules/referti, modules/pnev e shim compatibile per ui_generatore_stimolazione.
