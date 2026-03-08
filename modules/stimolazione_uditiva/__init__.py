@@ -1,1 +1,0 @@
-# stimolazione_uditiva package
