@@ -43,20 +43,22 @@ def dispatch_udito_section(
         ui_sessione_stimolazione_uditiva_test()
         return True
 
-    if sezione == SECTION_AUDIOGRAMMA:
-        ui_audiogramma_test()
-        return True
-    if sezione == SECTION_ESAMI_ORL:
-        ui_esami_orl_tonali_test()
-        return True
-    if sezione == SECTION_EQ_TEST:
-        ui_eq_stimolazione_uditiva_test()
-        return True
-    if sezione == SECTION_CALIB:
-        ui_calibrazione_cuffie_test()
-        return True
-    if sezione == SECTION_CLEANUP:
-        ui_db_cleanup()
-        return True
+   if sezione == SECTION_AUDIOGRAMMA:
+    ui_audiogramma_test()
+    return True
 
-    return False
+if sezione == SECTION_ESAMI_ORL:
+    ui_esami_orl_tonali_test()
+    return True
+
+if sezione == SECTION_EQ_TEST:
+    ui_eq_stimolazione_uditiva_test()
+    return True
+
+if sezione == SECTION_CALIB:
+    ui_calibrazione_cuffie_test()
+    return True
+
+if sezione == SECTION_CLEANUP:
+    ui_db_cleanup()
+    return True
