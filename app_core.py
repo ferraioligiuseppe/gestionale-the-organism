@@ -6262,22 +6262,62 @@ def ui_coupons():
 # -----------------------------
 
 def ui_dashboard():
-    st.title("The Organism")
-    st.caption("Dashboard economica e operativa")
+
+    # =========================
+    # HEADER
+    # =========================
+
+    st.markdown(
+        """
+        <div style="
+            background: linear-gradient(135deg,#2E7D32,#4CAF50);
+            padding:22px;
+            border-radius:18px;
+            color:white;
+            margin-bottom:20px;
+            box-shadow:0 10px 24px rgba(0,0,0,0.15);
+        ">
+            <div style="font-size:28px;font-weight:800;">
+                The Organism
+            </div>
+            <div style="font-size:16px;opacity:0.9">
+                Dashboard economica dello studio
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     conn = get_connection()
     cur = conn.cursor()
 
     oggi = date.today()
 
-    st.markdown("### Filtri")
+    # =========================
+    # FILTRI
+    # =========================
+
+    st.markdown("### 🔎 Filtri")
+
     col1, col2, col3 = st.columns(3)
+
     with col1:
-        data_da_str = st.text_input("Dal (gg/mm/aaaa)", oggi.strftime("%d/%m/%Y"))
+        data_da_str = st.text_input(
+            "Dal (gg/mm/aaaa)",
+            oggi.strftime("%d/%m/%Y")
+        )
+
     with col2:
-        data_a_str = st.text_input("Al (gg/mm/aaaa)", oggi.strftime("%d/%m/%Y"))
+        data_a_str = st.text_input(
+            "Al (gg/mm/aaaa)",
+            oggi.strftime("%d/%m/%Y")
+        )
+
     with col3:
-        professionista_f = st.text_input("Filtra per professionista (facoltativo)", "")
+        professionista_f = st.text_input(
+            "Professionista (facoltativo)",
+            ""
+        )
 
     try:
         data_da = datetime.strptime(data_da_str.strip(), "%d/%m/%Y").date()
@@ -6298,12 +6338,15 @@ def ui_dashboard():
     # =========================
     # VALUTAZIONI VISIVE
     # =========================
+
     query_v = """
         SELECT Data_Valutazione AS Data, Professionista, Costo, Pagato
         FROM Valutazioni_Visive
         WHERE Data_Valutazione BETWEEN ? AND ?
     """
+
     params_v = [data_da_iso, data_a_iso]
+
     if professionista_f.strip():
         query_v += " AND Professionista LIKE ?"
         params_v.append(f"%{professionista_f.strip()}%")
@@ -6313,18 +6356,19 @@ def ui_dashboard():
 
     incasso_vis = sum((r["Costo"] or 0.0) for r in vis if r["Pagato"])
     n_visite = len(vis)
-    n_visite_pagate = sum(1 for r in vis if r["Pagato"])
-    n_visite_non_pagate = n_visite - n_visite_pagate
 
     # =========================
     # SEDUTE
     # =========================
+
     query_s = """
         SELECT Data_Seduta AS Data, Professionista, Terapia, Costo, Pagato
         FROM Sedute
         WHERE Data_Seduta BETWEEN ? AND ?
     """
+
     params_s = [data_da_iso, data_a_iso]
+
     if professionista_f.strip():
         query_s += " AND Professionista LIKE ?"
         params_s.append(f"%{professionista_f.strip()}%")
@@ -6334,58 +6378,73 @@ def ui_dashboard():
 
     incasso_sed = sum((r["Costo"] or 0.0) for r in sed if r["Pagato"])
     n_sedute = len(sed)
-    n_sedute_pagate = sum(1 for r in sed if r["Pagato"])
-    n_sedute_non_pagate = n_sedute - n_sedute_pagate
 
     totale_generale = incasso_vis + incasso_sed
-    totale_prestazioni = n_visite + n_sedute
 
     # =========================
-    # CARD KPI
+    # KPI CARD
     # =========================
-    st.markdown("### Panoramica")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Totale incassato", f"€ {totale_generale:.2f}")
-    c2.metric("Valutazioni visive", n_visite)
-    c3.metric("Sedute", n_sedute)
-    c4.metric("Prestazioni totali", totale_prestazioni)
+
+    st.markdown("### 📊 Panoramica")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        label="Totale incassato",
+        value=f"€ {totale_generale:.2f}"
+    )
+
+    c2.metric(
+        label="Valutazioni visive",
+        value=n_visite
+    )
+
+    c3.metric(
+        label="Sedute / terapie",
+        value=n_sedute
+    )
 
     st.markdown("---")
 
     # =========================
-    # DETTAGLIO AREE
+    # DETTAGLIO INCASSI
     # =========================
+
     col_vis, col_sed = st.columns(2)
 
     with col_vis:
-        st.markdown("### 👁️ Valutazioni visive / oculistiche")
-        st.success(f"Incasso periodo: € {incasso_vis:.2f}")
-        a1, a2, a3 = st.columns(3)
-        a1.metric("Totali", n_visite)
-        a2.metric("Pagate", n_visite_pagate)
-        a3.metric("Non pagate", n_visite_non_pagate)
+
+        st.markdown("#### 👁️ Valutazioni visive")
+
+        st.success(
+            f"Incasso nel periodo: € {incasso_vis:.2f}"
+        )
+
+        st.caption(f"Numero visite: {n_visite}")
 
     with col_sed:
-        st.markdown("### 🧠 Sedute / terapie")
-        st.success(f"Incasso periodo: € {incasso_sed:.2f}")
-        b1, b2, b3 = st.columns(3)
-        b1.metric("Totali", n_sedute)
-        b2.metric("Pagate", n_sedute_pagate)
-        b3.metric("Non pagate", n_sedute_non_pagate)
+
+        st.markdown("#### 🧠 Sedute / terapie")
+
+        st.success(
+            f"Incasso nel periodo: € {incasso_sed:.2f}"
+        )
+
+        st.caption(f"Numero sedute: {n_sedute}")
 
     st.markdown("---")
-    st.markdown("### Totale studio")
-    st.success(f"Totale generale incassato nel periodo: € {totale_generale:.2f}")
 
-    with st.expander("Dettaglio filtri attivi", expanded=False):
-        st.write({
-            "dal": data_da_str,
-            "al": data_a_str,
-            "professionista": professionista_f.strip() or "Tutti",
-        })
+    # =========================
+    # TOTALE
+    # =========================
+
+    st.markdown("### 💰 Totale studio")
+
+    st.success(
+        f"Totale generale incassato nel periodo: € {totale_generale:.2f}"
+    )
 
     conn.close()
-
 
 # ==========================
 # Osteopatia (AUTO) - sezione menu
