@@ -6262,14 +6262,15 @@ def ui_coupons():
 # -----------------------------
 
 def ui_dashboard():
-    st.header("Dashboard incassi")
+    st.title("The Organism")
+    st.caption("Dashboard economica e operativa")
 
     conn = get_connection()
     cur = conn.cursor()
 
-    st.subheader("Filtri")
-
     oggi = date.today()
+
+    st.markdown("### Filtri")
     col1, col2, col3 = st.columns(3)
     with col1:
         data_da_str = st.text_input("Dal (gg/mm/aaaa)", oggi.strftime("%d/%m/%Y"))
@@ -6294,9 +6295,9 @@ def ui_dashboard():
     data_da_iso = data_da.isoformat()
     data_a_iso = data_a.isoformat()
 
-    # --- Incassi da Valutazioni Visive ---
-    st.markdown("### Incassi da valutazioni visive / oculistiche")
-
+    # =========================
+    # VALUTAZIONI VISIVE
+    # =========================
     query_v = """
         SELECT Data_Valutazione AS Data, Professionista, Costo, Pagato
         FROM Valutazioni_Visive
@@ -6311,11 +6312,13 @@ def ui_dashboard():
     vis = cur.fetchall()
 
     incasso_vis = sum((r["Costo"] or 0.0) for r in vis if r["Pagato"])
-    st.write(f"**Totale incassi visite (periodo): € {incasso_vis:.2f}**")
+    n_visite = len(vis)
+    n_visite_pagate = sum(1 for r in vis if r["Pagato"])
+    n_visite_non_pagate = n_visite - n_visite_pagate
 
-    # --- Incassi da Sedute ---
-    st.markdown("### Incassi da sedute / terapie")
-
+    # =========================
+    # SEDUTE
+    # =========================
     query_s = """
         SELECT Data_Seduta AS Data, Professionista, Terapia, Costo, Pagato
         FROM Sedute
@@ -6330,10 +6333,56 @@ def ui_dashboard():
     sed = cur.fetchall()
 
     incasso_sed = sum((r["Costo"] or 0.0) for r in sed if r["Pagato"])
-    st.write(f"**Totale incassi sedute (periodo): € {incasso_sed:.2f}**")
+    n_sedute = len(sed)
+    n_sedute_pagate = sum(1 for r in sed if r["Pagato"])
+    n_sedute_non_pagate = n_sedute - n_sedute_pagate
 
+    totale_generale = incasso_vis + incasso_sed
+    totale_prestazioni = n_visite + n_sedute
+
+    # =========================
+    # CARD KPI
+    # =========================
+    st.markdown("### Panoramica")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Totale incassato", f"€ {totale_generale:.2f}")
+    c2.metric("Valutazioni visive", n_visite)
+    c3.metric("Sedute", n_sedute)
+    c4.metric("Prestazioni totali", totale_prestazioni)
+
+    st.markdown("---")
+
+    # =========================
+    # DETTAGLIO AREE
+    # =========================
+    col_vis, col_sed = st.columns(2)
+
+    with col_vis:
+        st.markdown("### 👁️ Valutazioni visive / oculistiche")
+        st.success(f"Incasso periodo: € {incasso_vis:.2f}")
+        a1, a2, a3 = st.columns(3)
+        a1.metric("Totali", n_visite)
+        a2.metric("Pagate", n_visite_pagate)
+        a3.metric("Non pagate", n_visite_non_pagate)
+
+    with col_sed:
+        st.markdown("### 🧠 Sedute / terapie")
+        st.success(f"Incasso periodo: € {incasso_sed:.2f}")
+        b1, b2, b3 = st.columns(3)
+        b1.metric("Totali", n_sedute)
+        b2.metric("Pagate", n_sedute_pagate)
+        b3.metric("Non pagate", n_sedute_non_pagate)
+
+    st.markdown("---")
     st.markdown("### Totale studio")
-    st.success(f"**Totale generale incassato: € {incasso_vis + incasso_sed:.2f}**")
+    st.success(f"Totale generale incassato nel periodo: € {totale_generale:.2f}")
+
+    with st.expander("Dettaglio filtri attivi", expanded=False):
+        st.write({
+            "dal": data_da_str,
+            "al": data_a_str,
+            "professionista": professionista_f.strip() or "Tutti",
+        })
 
     conn.close()
 
