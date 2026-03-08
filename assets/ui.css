@@ -237,3 +237,53 @@ label {
   color: #111111 !important;
   -webkit-text-fill-color: #111111 !important;
 }
+/* =========================
+   FIX DEFINITIVO STREAMLIT INPUT
+   ========================= */
+
+/* tutto il testo nei campi */
+input, textarea, select {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  background: #ffffff !important;
+}
+
+/* BaseWeb input container */
+[data-baseweb="input"] * {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* BaseWeb textarea */
+[data-baseweb="textarea"] * {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* Selectbox */
+[data-baseweb="select"] * {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* placeholder */
+input::placeholder,
+textarea::placeholder {
+  color: #777777 !important;
+  opacity: 1 !important;
+}
+
+/* fix streamlit specifico */
+.stTextInput input,
+.stDateInput input,
+.stNumberInput input,
+.stTextArea textarea {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* label */
+label {
+  color: #1f2f24 !important;
+  font-weight: 600 !important;
+}
