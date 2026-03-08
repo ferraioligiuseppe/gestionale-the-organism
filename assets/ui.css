@@ -134,3 +134,45 @@ div[data-testid="stDataFrame"] {
   border: 1px solid var(--org-border) !important;
   box-shadow: var(--org-shadow-soft) !important;
 }
+/* =========================
+   FIX LEGGIBILITÀ CAMPI
+   ========================= */
+
+/* input testo */
+.stTextInput input,
+.stNumberInput input,
+.stDateInput input,
+.stTextArea textarea {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111 !important;
+  background: #ffffff !important;
+}
+
+/* placeholder */
+.stTextInput input::placeholder,
+.stNumberInput input::placeholder,
+.stDateInput input::placeholder,
+.stTextArea textarea::placeholder {
+  color: #666666 !important;
+  opacity: 1 !important;
+}
+
+/* selectbox */
+div[data-baseweb="select"] *,
+div[data-baseweb="select"] input {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* testo interno dei widget */
+input, textarea, select {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* label dei campi */
+label, .stTextInput label, .stDateInput label, .stSelectbox label, .stTextArea label {
+  color: #1f2f24 !important;
+  font-weight: 600 !important;
+}
