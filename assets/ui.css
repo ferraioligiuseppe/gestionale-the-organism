@@ -287,3 +287,62 @@ label {
   color: #1f2f24 !important;
   font-weight: 600 !important;
 }
+/* =========================
+   FIX TESTO GENERALE APP
+   ========================= */
+
+/* testo base di tutta l'app */
+html, body, .stApp, .main {
+  color: #1f1f1f !important;
+}
+
+/* tutti i testi comuni Streamlit */
+.stMarkdown,
+.stMarkdown p,
+.stMarkdown div,
+.stText,
+.stCaption,
+p, span, div, li, label {
+  color: #1f1f1f !important;
+}
+
+/* intestazioni */
+h1, h2, h3, h4, h5, h6 {
+  color: #2E7D32 !important;
+}
+
+/* testo dentro widget baseweb */
+[data-baseweb] *,
+[data-testid="stMarkdownContainer"] *,
+[data-testid="stText"] *,
+[data-testid="stCaptionContainer"] * {
+  color: #1f1f1f !important;
+}
+
+/* radio e checkbox label */
+.stRadio label,
+.stCheckbox label,
+[role="radiogroup"] label,
+[data-baseweb="radio"] label,
+[data-baseweb="checkbox"] label {
+  color: #1f1f1f !important;
+  font-weight: 500 !important;
+}
+
+/* testo secondario un po' più scuro */
+small, .stCaption {
+  color: #4a4a4a !important;
+}
+/* =========================
+   FIX RADIO / CHECKBOX
+   ========================= */
+
+[data-baseweb="radio"],
+[data-baseweb="checkbox"] {
+  color: #1f1f1f !important;
+}
+
+[data-baseweb="radio"] *,
+[data-baseweb="checkbox"] * {
+  color: #1f1f1f !important;
+}
