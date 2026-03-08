@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Compat shim legacy: reindirizza al modulo canonico uditivo."""
+"""Entry point modulare canonico per referti / relazioni cliniche."""
 
-from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
-
-__all__ = ["ui_generatore_stimolazione"]
+def render_referti_section(*args, **kwargs):
+    from app_core import ui_relazioni_cliniche
+    return ui_relazioni_cliniche(*args, **kwargs)
