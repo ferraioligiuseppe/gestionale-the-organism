@@ -176,3 +176,64 @@ label, .stTextInput label, .stDateInput label, .stSelectbox label, .stTextArea l
   color: #1f2f24 !important;
   font-weight: 600 !important;
 }
+/* =========================
+   FIX DEFINITIVO TESTO CAMPI
+   ========================= */
+
+/* input Streamlit */
+input, textarea, select {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  background: #ffffff !important;
+}
+
+/* BaseWeb input */
+[data-baseweb="input"] input {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  background: #ffffff !important;
+}
+
+/* BaseWeb textarea */
+[data-baseweb="textarea"] textarea {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  background: #ffffff !important;
+}
+
+/* Selectbox */
+[data-baseweb="select"] div {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* placeholder */
+input::placeholder,
+textarea::placeholder {
+  color: #777777 !important;
+  opacity: 1 !important;
+}
+
+/* label */
+label {
+  color: #1f2f24 !important;
+  font-weight: 600 !important;
+}
+
+/* fix text input specifico */
+.stTextInput input {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* fix date input */
+.stDateInput input {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+/* fix textarea */
+.stTextArea textarea {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
