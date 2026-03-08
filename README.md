@@ -1,1 +1,0 @@
-# gestionale-the-organism-staging
