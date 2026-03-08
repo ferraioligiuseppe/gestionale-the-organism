@@ -1,91 +1,136 @@
+/* =========================
+   THE ORGANISM – UI THEME
+   VERSIONE FORTE E VISIBILE
+   ========================= */
+
 :root {
   --org-green: #2E7D32;
   --org-green-2: #4CAF50;
-  --org-green-soft: #EAF6EC;
-  --org-bg: #F5F8F4;
+  --org-green-3: #81C784;
+  --org-bg: #EEF7EF;
+  --org-panel: #F6FBF6;
   --org-card: #FFFFFF;
-  --org-text: #203024;
-  --org-border: #DCE7DD;
-  --org-shadow: 0 8px 24px rgba(46, 125, 50, 0.10);
-  --org-shadow-soft: 0 4px 12px rgba(46, 125, 50, 0.08);
+  --org-text: #1F2F24;
+  --org-border: #CFE3D1;
+  --org-shadow: 0 8px 22px rgba(46, 125, 50, 0.14);
+  --org-shadow-soft: 0 4px 12px rgba(46, 125, 50, 0.10);
   --org-radius: 18px;
 }
 
+/* SFONDO APP */
 .stApp {
-  background: linear-gradient(180deg, #f7faf7 0%, #f2f8f3 100%);
-  color: var(--org-text);
-}
-
-.block-container {
-  padding-top: 1.5rem;
-  padding-bottom: 2rem;
-}
-
-div[data-testid="stMetric"] {
-  background: #ffffff;
-  border: 1px solid var(--org-border);
-  border-radius: 16px;
-  box-shadow: var(--org-shadow-soft);
-  padding: 14px 16px;
-}
-
-div[data-testid="stMetricLabel"] {
-  color: #5b6f60;
-  font-weight: 600;
-}
-
-div[data-testid="stMetricValue"] {
-  color: var(--org-green);
-  font-weight: 800;
-}
-
-.stButton > button {
-  border-radius: 14px !important;
-  border: 1px solid #cfe3d1 !important;
-  background: linear-gradient(180deg, #ffffff 0%, #eef8ef 100%) !important;
+  background: linear-gradient(180deg, #f3fbf4 0%, #e8f5e9 100%) !important;
   color: var(--org-text) !important;
-  font-weight: 700 !important;
-  box-shadow: 0 6px 16px rgba(46, 125, 50, 0.12) !important;
-  transition: all 0.18s ease-in-out !important;
-  padding: 0.65rem 1rem !important;
 }
 
-.stButton > button:hover {
-  transform: translateY(-1px);
-  border-color: var(--org-green-2) !important;
-  box-shadow: 0 10px 20px rgba(46, 125, 50, 0.18) !important;
+/* AREA CENTRALE */
+.block-container {
+  padding-top: 1.2rem !important;
+  padding-bottom: 2rem !important;
 }
 
-.stButton > button:active {
-  transform: translateY(1px);
-  box-shadow: 0 4px 8px rgba(46, 125, 50, 0.15) !important;
+/* SIDEBAR */
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #edf7ee 0%, #dff0e1 100%) !important;
+  border-right: 1px solid #cfe3d1 !important;
 }
 
-.stTextInput > div > div,
-.stDateInput > div > div,
-.stSelectbox > div > div {
+section[data-testid="stSidebar"] * {
+  color: #1f2f24 !important;
+}
+
+/* TITOLI */
+h1, h2, h3 {
+  color: var(--org-green) !important;
+}
+
+/* INPUT */
+.stTextInput input,
+.stNumberInput input,
+.stDateInput input,
+textarea {
+  border-radius: 14px !important;
+  border: 1px solid var(--org-border) !important;
+  background: #ffffff !important;
+  color: var(--org-text) !important;
+  box-shadow: var(--org-shadow-soft) !important;
+}
+
+/* SELECTBOX */
+div[data-baseweb="select"] > div {
   border-radius: 14px !important;
   border: 1px solid var(--org-border) !important;
   background: #ffffff !important;
   box-shadow: var(--org-shadow-soft) !important;
 }
 
-section[data-testid="stSidebar"] {
-  background: linear-gradient(180deg, #f3f8f3 0%, #edf6ee 100%);
-  border-right: 1px solid #dce7dd;
+/* PULSANTI */
+.stButton > button {
+  border-radius: 16px !important;
+  border: 1px solid #b9d8bc !important;
+  background: linear-gradient(180deg, #ffffff 0%, #e8f5e9 100%) !important;
+  color: #1f2f24 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 8px 18px rgba(46, 125, 50, 0.18) !important;
+  padding: 0.70rem 1rem !important;
+  transition: all 0.15s ease-in-out !important;
 }
 
-section[data-testid="stSidebar"] * {
-  color: var(--org-text);
+.stButton > button:hover {
+  transform: translateY(-2px) !important;
+  border-color: var(--org-green) !important;
+  box-shadow: 0 12px 24px rgba(46, 125, 50, 0.22) !important;
 }
 
+.stButton > button:active {
+  transform: translateY(1px) !important;
+  box-shadow: 0 4px 10px rgba(46, 125, 50, 0.18) !important;
+}
+
+/* METRICHE */
+div[data-testid="stMetric"] {
+  background: #ffffff !important;
+  border: 1px solid var(--org-border) !important;
+  border-radius: 18px !important;
+  padding: 16px 18px !important;
+  box-shadow: var(--org-shadow) !important;
+}
+
+div[data-testid="stMetricLabel"] {
+  color: #5a6d5f !important;
+  font-weight: 700 !important;
+}
+
+div[data-testid="stMetricValue"] {
+  color: var(--org-green) !important;
+  font-weight: 800 !important;
+  font-size: 2rem !important;
+}
+
+/* EXPANDER */
 details {
-  background: #ffffff;
-  border: 1px solid var(--org-border);
-  border-radius: 16px;
-  box-shadow: var(--org-shadow-soft);
-  padding: 0.3rem 0.6rem;
+  background: #ffffff !important;
+  border: 1px solid var(--org-border) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--org-shadow-soft) !important;
+  padding: 0.35rem 0.7rem !important;
 }
-.stApp {
-  background: red !important;
+
+/* ALERT */
+div[data-baseweb="notification"] {
+  border-radius: 16px !important;
+  box-shadow: var(--org-shadow-soft) !important;
+}
+
+/* CONTAINER GENERICI STREAMLIT */
+div[data-testid="stVerticalBlock"] > div:has(div[data-testid="stMetric"]) {
+  background: transparent !important;
+}
+
+/* TABELLE / DATAFRAME */
+div[data-testid="stDataFrame"] {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--org-border) !important;
+  box-shadow: var(--org-shadow-soft) !important;
 }
