@@ -86,3 +86,6 @@ details {
   box-shadow: var(--org-shadow-soft);
   padding: 0.3rem 0.6rem;
 }
+.stApp {
+  background: red !important;
+}
