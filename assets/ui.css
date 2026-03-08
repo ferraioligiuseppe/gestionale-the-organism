@@ -346,3 +346,31 @@ small, .stCaption {
 [data-baseweb="checkbox"] * {
   color: #1f1f1f !important;
 }
+/* =========================
+   FIX LAYOUT RADIO/CHECKBOX
+   ========================= */
+
+.stCheckbox, .stRadio {
+  margin-bottom: 0.35rem !important;
+}
+
+.stCheckbox label, .stRadio label {
+  line-height: 1.35 !important;
+  font-size: 0.98rem !important;
+}
+
+/* riduce spazi interni troppo larghi */
+[data-baseweb="radio"],
+[data-baseweb="checkbox"] {
+  margin-bottom: 0.2rem !important;
+}
+
+/* contenitori più compatti */
+div[data-testid="stHorizontalBlock"] {
+  gap: 0.75rem !important;
+}
+
+/* blocchi widget */
+div[data-testid="stVerticalBlock"] > div {
+  margin-bottom: 0.2rem;
+}
