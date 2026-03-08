@@ -43,14 +43,14 @@ ADMIN_SECTIONS = [
 UDITO_PROD_SECTIONS = [
     "🎧 ORL + EQ (MODULO)",
     "🎧 Genera stimolazione (JOB)",
-    "🎧 Stimolazione uditiva (TEST)",
+    "🎧 Stimolazione uditiva",
+    "🎧 Audiogramma funzionale",
+    "🩺 Esami ORL – soglie tonali",
+    "🎚️ EQ stimolazione uditiva",
+    "🔧 Calibrazione cuffie",
 ]
 
 UDITO_TEST_ONLY_SECTIONS = [
-    "🎧 Audiogramma funzionale (TEST)",
-    "🩺 Esami ORL – soglie tonali (TEST)",
-    "🎚️ EQ stimolazione uditiva (TEST)",
-    "🔧 Calibrazione cuffie (TEST)",
     "🧹 Pulizia DB (TEST)",
 ]
 
