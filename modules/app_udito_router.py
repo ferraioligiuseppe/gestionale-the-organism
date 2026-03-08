@@ -43,9 +43,6 @@ def dispatch_udito_section(
         ui_sessione_stimolazione_uditiva_test()
         return True
 
-    if str(app_mode).lower().strip() != "test":
-        return False
-
     if sezione == SECTION_AUDIOGRAMMA:
         ui_audiogramma_test()
         return True
