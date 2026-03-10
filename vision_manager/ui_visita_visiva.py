@@ -23,15 +23,14 @@ def _load_payload_into_form(pj: dict):
     # Acuità
     ac = pj.get("acuita") or {}
     nat = ac.get("naturale") or {}
-    abi = ac.get("abituale") or {}
     cor = ac.get("corretta") or {}
 
     for k_src, key in [("od","avn_od"),("os","avn_os"),("oo","avn_oo")]:
-        if k_src in nat: st.session_state[key] = nat.get(k_src) or st.session_state.get(key)
-    for k_src, key in [("od","ava_od"),("os","ava_os"),("oo","ava_oo")]:
-        if k_src in abi: st.session_state[key] = abi.get(k_src) or st.session_state.get(key)
+        if k_src in nat:
+            st.session_state[key] = nat.get(k_src) or st.session_state.get(key)
     for k_src, key in [("od","avc_od"),("os","avc_os"),("oo","avc_oo")]:
-        if k_src in cor: st.session_state[key] = cor.get(k_src) or st.session_state.get(key)
+        if k_src in cor:
+            st.session_state[key] = cor.get(k_src) or st.session_state.get(key)
 
     # Esame obiettivo
     eo = pj.get("esame_obiettivo") or {}
@@ -39,17 +38,20 @@ def _load_payload_into_form(pj: dict):
         if field in eo:
             st.session_state[field] = eo.get(field) or ""
 
-
     # Retrocompatibilità: se mancano i nuovi campi, prova a derivarli dai campi legacy "OD/OS"
     try:
         if not st.session_state.get("pressione_endoculare_od") and not st.session_state.get("pressione_endoculare_os"):
             od_iop, os_iop = _parse_pair_values(st.session_state.get("pressione_endoculare") or "")
-            if od_iop is not None: st.session_state["pressione_endoculare_od"] = str(od_iop).rstrip("0").rstrip(".")
-            if os_iop is not None: st.session_state["pressione_endoculare_os"] = str(os_iop).rstrip("0").rstrip(".")
+            if od_iop is not None:
+                st.session_state["pressione_endoculare_od"] = str(od_iop).rstrip("0").rstrip(".")
+            if os_iop is not None:
+                st.session_state["pressione_endoculare_os"] = str(os_iop).rstrip("0").rstrip(".")
         if not st.session_state.get("pachimetria_od") and not st.session_state.get("pachimetria_os"):
             od_cct, os_cct = _parse_pair_values(st.session_state.get("pachimetria") or "")
-            if od_cct is not None: st.session_state["pachimetria_od"] = str(int(od_cct)) if float(od_cct).is_integer() else str(od_cct)
-            if os_cct is not None: st.session_state["pachimetria_os"] = str(int(os_cct)) if float(os_cct).is_integer() else str(os_cct)
+            if od_cct is not None:
+                st.session_state["pachimetria_od"] = str(int(od_cct)) if float(od_cct).is_integer() else str(od_cct)
+            if os_cct is not None:
+                st.session_state["pachimetria_os"] = str(int(os_cct)) if float(os_cct).is_integer() else str(os_cct)
     except Exception:
         pass
 
@@ -57,13 +59,13 @@ def _load_payload_into_form(pj: dict):
     cf = pj.get("correzione_finale") or {}
     od = cf.get("od") or {}
     os_ = cf.get("os") or {}
-    st.session_state["rx_fin_od_sf"]  = float(od.get("sf", 0.0) or 0.0)
+    st.session_state["rx_fin_od_sf"] = float(od.get("sf", 0.0) or 0.0)
     st.session_state["rx_fin_od_cyl"] = float(od.get("cyl", 0.0) or 0.0)
-    st.session_state["rx_fin_od_ax"]  = int(od.get("ax", 0) or 0)
+    st.session_state["rx_fin_od_ax"] = int(od.get("ax", 0) or 0)
 
-    st.session_state["rx_fin_os_sf"]  = float(os_.get("sf", 0.0) or 0.0)
+    st.session_state["rx_fin_os_sf"] = float(os_.get("sf", 0.0) or 0.0)
     st.session_state["rx_fin_os_cyl"] = float(os_.get("cyl", 0.0) or 0.0)
-    st.session_state["rx_fin_os_ax"]  = int(os_.get("ax", 0) or 0)
+    st.session_state["rx_fin_os_ax"] = int(os_.get("ax", 0) or 0)
 
     st.session_state["add_fin"] = float(cf.get("add", 0.0) or 0.0)
 
@@ -76,15 +78,6 @@ from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
 
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
-
-ACUITA_VALUES = [
-    "N.V. (Occhio non vedente)",
-    "P.L. (Percezione luce)",
-    "M.M. (Movimento mano)",
-    "C.F. (Conta dita)",
-    "1/50","1/20","1/10","2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10",
-    "12/10","14/10","16/10"
-]
 
 LENTI_OPTIONS = [
     "Progressive",
@@ -99,11 +92,35 @@ LENTI_OPTIONS = [
     "Filtro luce blu",
 ]
 
+
+def _reset_visita_form_state():
+    """Azzera il form visita quando si cambia paziente."""
+    prefixes = (
+        "avn_", "ava_", "avc_",
+        "rx_ab_", "add_ab",
+        "rx_fin_", "add_fin",
+        "anamnesi", "note_visita",
+        "congiuntiva", "cornea", "camera_anteriore",
+        "cristallino", "vitreo", "fondo_oculare",
+        "pressione_endoculare", "pressione_endoculare_od", "pressione_endoculare_os",
+        "pachimetria", "pachimetria_od", "pachimetria_os",
+        "lenti_sel",
+        "data_visita",
+        "vm_last_loaded_visita_id",
+        "vm_pending_payload",
+        "vm_pending_visita_id",
+    )
+    to_del = [k for k in list(st.session_state.keys()) if k.startswith(prefixes)]
+    for k in to_del:
+        del st.session_state[k]
+
+
 def _is_pg(conn) -> bool:
     return conn.__class__.__module__.startswith("psycopg2")
 
 
 _pazienti_note_cache = None
+
 
 def _pazienti_has_note(conn) -> bool:
     """Rileva una volta se la tabella pubblica 'pazienti' ha la colonna 'note' (PostgreSQL)."""
@@ -121,11 +138,12 @@ def _pazienti_has_note(conn) -> bool:
         _pazienti_note_cache = False
         return False
 
+
 def _ph(conn) -> str:
     return "%s" if _is_pg(conn) else "?"
 
+
 def _dict_row(cur, row):
-    # Compatibilità: su Postgres (psycopg2 extras) row può essere già un dict-like
     if isinstance(row, Mapping):
         return dict(row)
     cols = [d[0] for d in cur.description]
@@ -133,28 +151,23 @@ def _dict_row(cur, row):
 
 
 def _normalize_row(d: Dict[str, Any]) -> Dict[str, Any]:
-    # Normalizza chiavi a lowercase per gestire DB diversi (Postgres/SQLite) e naming misto
     return {str(k).lower(): v for k, v in (d or {}).items()}
 
+
 def _load_pazienti_vision(conn) -> List[Dict[str, Any]]:
-    """Legacy: pazienti salvati nel DB Vision separato (pazienti_visivi)."""
     cur = conn.cursor()
     try:
         cur.execute("SELECT id, cognome, nome, data_nascita, note FROM pazienti_visivi ORDER BY cognome, nome")
         rows = cur.fetchall()
         return [_normalize_row(_dict_row(cur, r)) for r in rows]
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 
 def _load_pazienti(conn) -> List[Dict[str, Any]]:
-    """
-    Carica i pazienti dal DB principale del gestionale.
-    - Postgres (Neon): tabella public.pazienti con colonne snake_case: id, cognome, nome, data_nascita, note
-    - SQLite locale: tabella Pazienti legacy: ID, Cognome, Nome, Data_Nascita, Note
-    Fallback: usa pazienti_visivi se la tabella principale non esiste.
-    """
     cur = conn.cursor()
     try:
         try:
@@ -188,16 +201,8 @@ def _load_pazienti(conn) -> List[Dict[str, Any]]:
         except Exception:
             pass
 
-def _insert_paziente(conn, nome, cognome, data_nascita, note=""):
-    """
-    Inserisce paziente nel DB centrale Neon (tabella pazienti)
-    Gestisce:
-    - colonne obbligatorie
-    - stato_paziente NOT NULL
-    - cursor dict / tuple
-    - presenza o meno della colonna note
-    """
 
+def _insert_paziente(conn, nome, cognome, data_nascita, note=""):
     cognome = (cognome or "").strip()
     nome = (nome or "").strip()
     data_nascita = (data_nascita or "").strip()
@@ -211,18 +216,17 @@ def _insert_paziente(conn, nome, cognome, data_nascita, note=""):
         raise ValueError("Data nascita obbligatoria")
 
     cur = conn.cursor()
-
-    # placeholder corretto
     ph = "%s"
 
-    # controlla se esiste colonna note
-    cur.execute("""
+    cur.execute(
+        """
         SELECT 1
         FROM information_schema.columns
         WHERE table_name='pazienti'
         AND column_name='note'
         LIMIT 1
-    """)
+        """
+    )
     has_note = cur.fetchone() is not None
 
     if has_note:
@@ -247,15 +251,10 @@ def _insert_paziente(conn, nome, cognome, data_nascita, note=""):
         )
 
     row = cur.fetchone()
-
-    # compatibilità dict / tuple
-    if isinstance(row, dict):
-        pid = row["id"]
-    else:
-        pid = row[0]
-
+    pid = row["id"] if isinstance(row, dict) else row[0]
     conn.commit()
     return pid
+
 
 def _insert_visita(conn, paziente_id: int, data_visita: str, dati_json: str) -> int:
     cur = conn.cursor()
@@ -277,8 +276,10 @@ def _insert_visita(conn, paziente_id: int, data_visita: str, dati_json: str) -> 
         conn.commit()
         return int(vid)
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 
 def _update_visita(conn, visita_id: int, dati_json: str):
@@ -288,16 +289,18 @@ def _update_visita(conn, visita_id: int, dati_json: str):
         cur.execute(f"UPDATE visite_visive SET dati_json={ph} WHERE id={ph}", (dati_json, visita_id))
         conn.commit()
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
+
 
 def _soft_delete_visita(conn, visita_id: int):
     cur = conn.cursor()
     ph = _ph(conn)
     try:
         try:
-            cur.execute(f"UPDATE visite_visive SET is_deleted={ph}, deleted_at={ph} WHERE id={ph}",
-                        (1, dt.datetime.now().isoformat(timespec="seconds"), visita_id))
+            cur.execute(f"UPDATE visite_visive SET is_deleted={ph}, deleted_at={ph} WHERE id={ph}", (1, dt.datetime.now().isoformat(timespec="seconds"), visita_id))
         except Exception:
             cur.execute(f"SELECT dati_json FROM visite_visive WHERE id={ph}", (visita_id,))
             row = cur.fetchone()
@@ -308,20 +311,21 @@ def _soft_delete_visita(conn, visita_id: int):
                 obj = {"raw": dj}
             obj["_deleted"] = True
             obj["_deleted_at"] = dt.datetime.now().isoformat(timespec="seconds")
-            cur.execute(f"UPDATE visite_visive SET dati_json={ph} WHERE id={ph}",
-                        (json.dumps(obj, ensure_ascii=False), visita_id))
+            cur.execute(f"UPDATE visite_visive SET dati_json={ph} WHERE id={ph}", (json.dumps(obj, ensure_ascii=False), visita_id))
         conn.commit()
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
+
 
 def _restore_visita(conn, visita_id: int):
     cur = conn.cursor()
     ph = _ph(conn)
     try:
         try:
-            cur.execute(f"UPDATE visite_visive SET is_deleted={ph}, deleted_at={ph} WHERE id={ph}",
-                        (0, None, visita_id))
+            cur.execute(f"UPDATE visite_visive SET is_deleted={ph}, deleted_at={ph} WHERE id={ph}", (0, None, visita_id))
         except Exception:
             cur.execute(f"SELECT dati_json FROM visite_visive WHERE id={ph}", (visita_id,))
             row = cur.fetchone()
@@ -332,12 +336,13 @@ def _restore_visita(conn, visita_id: int):
                 obj = {"raw": dj}
             obj["_deleted"] = False
             obj["_deleted_at"] = None
-            cur.execute(f"UPDATE visite_visive SET dati_json={ph} WHERE id={ph}",
-                        (json.dumps(obj, ensure_ascii=False), visita_id))
+            cur.execute(f"UPDATE visite_visive SET dati_json={ph} WHERE id={ph}", (json.dumps(obj, ensure_ascii=False), visita_id))
         conn.commit()
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 
 def _list_visite(conn, paziente_id: int, include_deleted: bool = False) -> List[Dict[str, Any]]:
@@ -345,35 +350,24 @@ def _list_visite(conn, paziente_id: int, include_deleted: bool = False) -> List[
     ph = _ph(conn)
     try:
         try:
-            # Proviamo prima con colonne soft-delete (se esistono)
             if include_deleted:
                 cur.execute(
-                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at "
-                    f"FROM visite_visive WHERE paziente_id={ph} "
-                    f"ORDER BY data_visita DESC, id DESC LIMIT 200",
+                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at FROM visite_visive WHERE paziente_id={ph} ORDER BY data_visita DESC, id DESC LIMIT 200",
                     (paziente_id,),
                 )
             else:
                 cur.execute(
-                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at "
-                    f"FROM visite_visive WHERE paziente_id={ph} AND COALESCE(is_deleted,0)<>1 "
-                    f"ORDER BY data_visita DESC, id DESC LIMIT 200",
+                    f"SELECT id, data_visita, dati_json, is_deleted, deleted_at FROM visite_visive WHERE paziente_id={ph} AND COALESCE(is_deleted,0)<>1 ORDER BY data_visita DESC, id DESC LIMIT 200",
                     (paziente_id,),
                 )
         except Exception:
-            # IMPORTANTISSIMO: su Postgres, se una query fallisce la transazione entra in aborted.
-            # Prima di fare una nuova query bisogna fare rollback.
             if _is_pg(conn):
                 try:
                     conn.rollback()
                 except Exception:
                     pass
-
-            # fallback se la tabella non ha ancora le colonne
             cur.execute(
-                f"SELECT id, data_visita, dati_json "
-                f"FROM visite_visive WHERE paziente_id={ph} "
-                f"ORDER BY data_visita DESC, id DESC LIMIT 200",
+                f"SELECT id, data_visita, dati_json FROM visite_visive WHERE paziente_id={ph} ORDER BY data_visita DESC, id DESC LIMIT 200",
                 (paziente_id,),
             )
 
@@ -384,14 +378,16 @@ def _list_visite(conn, paziente_id: int, include_deleted: bool = False) -> List[
             cur.close()
         except Exception:
             pass
+
+
 def _parse_json(s: str) -> Dict[str, Any]:
     try:
         return json.loads(s) if s else {}
     except Exception:
         return {"raw": s}
 
+
 def _parse_pair_values(s: str):
-    """Legge valori tipo '16/15' oppure '520/505'. Ritorna (od, os) float o (None,None)."""
     if not s:
         return (None, None)
     txt = str(s).strip().replace(",", "/").replace(";", "/").replace("\\", "/")
@@ -412,15 +408,15 @@ def _parse_pair_values(s: str):
         os_ = None
     return (od, os_)
 
+
 def _iop_adjusted(iop, cct, ref_cct: float = 540.0):
-    """Correzione semplificata (screening) IOP per spessore corneale. NON diagnostica."""
     if iop is None or cct is None:
         return None
     delta = (ref_cct - cct) / 10.0 * 0.7
     return float(iop + delta)
 
+
 def _clinical_attention(iop_od, iop_os, cct_od, cct_os):
-    """Flag di attenzione clinica (screening) combinando IOP e pachimetria."""
     out = {
         "od": {"flag": False, "reason": "", "adj": None},
         "os": {"flag": False, "reason": "", "adj": None},
@@ -450,9 +446,11 @@ def _clinical_attention(iop_od, iop_os, cct_od, cct_os):
         out[eye]["adj"] = adj
     return out
 
+
 def _format_paz(p) -> str:
     dn = p.get("data_nascita") or ""
     return f"{p['cognome']} {p['nome']} (ID {p['id']}) {dn}".strip()
+
 
 def _rx_input(label: str, key_prefix: str):
     c1, c2, c3 = st.columns([1, 1, 1])
@@ -475,7 +473,6 @@ def ui_visita_visiva():
     inject_ui("assets/ui.css")
     topbar("Vision Manager", "Visita oculistica • The Organism", right="Dr. Cirillo")
 
-
     try:
         with st.spinner("Connessione al database..."):
             conn = get_conn()
@@ -484,7 +481,6 @@ def ui_visita_visiva():
         st.error("Impossibile connettersi al database. Controlla DATABASE_URL nei Secrets di Streamlit Cloud.")
         st.exception(e)
         st.stop()
-
 
     tab_paz, tab_vis = st.tabs(["👤 Anagrafica (Gestionale)", "🗓️ Visita oculistica"])
 
@@ -512,10 +508,8 @@ def ui_visita_visiva():
 
         st.markdown("### Elenco pazienti")
         paz = _load_pazienti(conn)
-
         df_paz = pd.DataFrame(paz)
 
-        # Tabella selezionabile (clic su una riga)
         try:
             evt = st.dataframe(
                 df_paz,
@@ -526,7 +520,6 @@ def ui_visita_visiva():
             )
             sel_rows = evt.selection.rows
         except Exception:
-            # Fallback per versioni Streamlit più vecchie: usa selectbox
             sel_rows = []
 
         if sel_rows:
@@ -563,12 +556,16 @@ def ui_visita_visiva():
                         st.rerun()
                     except Exception as e:
                         if _is_pg(conn):
-                            try: conn.rollback()
-                            except Exception: pass
+                            try:
+                                conn.rollback()
+                            except Exception:
+                                pass
                         st.error(f"Impossibile aggiornare anagrafica su tabella Pazienti: {e}")
                 finally:
-                    try: cur2.close()
-                    except Exception: pass
+                    try:
+                        cur2.close()
+                    except Exception:
+                        pass
 
         card_close()
 
@@ -578,7 +575,6 @@ def ui_visita_visiva():
             st.info("Prima crea almeno un paziente nella tab 'Anagrafica (Gestionale)'.")
             return
 
-        # Preseleziona l’ultimo paziente creato (se presente)
         default_idx = 0
         last_pid = st.session_state.get("vision_last_pid")
         if last_pid is not None:
@@ -590,42 +586,63 @@ def ui_visita_visiva():
                 except Exception:
                     pass
 
-        psel = st.selectbox("Seleziona paziente", paz, format_func=_format_paz, index=default_idx)
+        def _on_change_paziente():
+            sel = st.session_state.get("vm_paz_sel")
+            new_pid = None
+            try:
+                if isinstance(sel, dict):
+                    new_pid = int(sel.get("id") or 0)
+            except Exception:
+                new_pid = None
+
+            old_pid = st.session_state.get("vm_paz_sel_prev")
+            if old_pid != new_pid:
+                _reset_visita_form_state()
+                st.session_state["vm_paz_sel_prev"] = new_pid
+                if new_pid is not None:
+                    st.session_state["vision_last_pid"] = new_pid
+
+        psel = st.selectbox(
+            "Seleziona paziente",
+            paz,
+            format_func=_format_paz,
+            index=default_idx,
+            key="vm_paz_sel",
+            on_change=_on_change_paziente,
+        )
         paziente_id = int(psel["id"])
         paziente_label = f"{psel.get('cognome','')} {psel.get('nome','')}".strip()
         badge(f"Paziente: {paziente_label} • ID {paziente_id}")
 
-        # Applica eventuale richiesta di "richiamo visita" (solo su click) prima di creare i widget
         if st.session_state.get("vm_pending_payload") is not None:
             pj_pending = st.session_state.pop("vm_pending_payload")
             _load_payload_into_form(pj_pending)
             st.session_state["vm_last_loaded_visita_id"] = st.session_state.pop("vm_pending_visita_id", None)
-
 
         st.session_state.setdefault("data_visita", dt.date.today())
         data_visita = st.date_input("Data visita", key="data_visita")
         st.session_state.setdefault("anamnesi", "")
         anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
 
-        card_open("Acuità visiva", "Naturale • Abituale • Corretta", "👁️")
-        st.markdown("### Acuità visiva (decimi)")
-        col = st.columns(3)
+        card_open("Acuità visiva", "Naturale • Corretta", "👁️")
+        st.markdown("### Acuità visiva")
+        col = st.columns(2)
         with col[0]:
             st.caption("Naturale")
-            avn_od = st.selectbox("OD (naturale)", ACUITA_VALUES, key="avn_od")
-            avn_os = st.selectbox("OS (naturale)", ACUITA_VALUES, key="avn_os")
-            avn_oo = st.selectbox("OO (naturale)", ACUITA_VALUES, key="avn_oo")
+            st.session_state.setdefault("avn_od", "")
+            st.session_state.setdefault("avn_os", "")
+            st.session_state.setdefault("avn_oo", "")
+            avn_od = st.text_input("OD (naturale)", key="avn_od")
+            avn_os = st.text_input("OS (naturale)", key="avn_os")
+            avn_oo = st.text_input("OO (naturale)", key="avn_oo")
         with col[1]:
-            st.caption("Abituale")
-            ava_od = st.selectbox("OD (abituale)", ACUITA_VALUES, key="ava_od")
-            ava_os = st.selectbox("OS (abituale)", ACUITA_VALUES, key="ava_os")
-            ava_oo = st.selectbox("OO (abituale)", ACUITA_VALUES, key="ava_oo")
-        with col[2]:
             st.caption("Corretta")
-            avc_od = st.selectbox("OD (corretta)", ACUITA_VALUES, key="avc_od")
-            avc_os = st.selectbox("OS (corretta)", ACUITA_VALUES, key="avc_os")
-            avc_oo = st.selectbox("OO (corretta)", ACUITA_VALUES, key="avc_oo")
-
+            st.session_state.setdefault("avc_od", "")
+            st.session_state.setdefault("avc_os", "")
+            st.session_state.setdefault("avc_oo", "")
+            avc_od = st.text_input("OD (corretta)", key="avc_od")
+            avc_os = st.text_input("OS (corretta)", key="avc_os")
+            avc_oo = st.text_input("OO (corretta)", key="avc_oo")
         card_close()
 
         card_open("Esame obiettivo", "Campi descrittivi OD/OS", "🧾")
@@ -645,14 +662,12 @@ def ui_visita_visiva():
             vitreo = st.text_input("Vitreo (OD/OS)", key="vitreo")
             st.session_state.setdefault("fondo_oculare","")
             fondo_oculare = st.text_input("Fondo oculare (OD/OS)", key="fondo_oculare")
-
         card_close()
 
         card_open("IOP e Pachimetria", "Pressione endoculare e spessore corneale separati OD/OS", "🧿")
         st.markdown("### IOP e Pachimetria")
         st.caption("Inserisci i valori separati per OD e OS. Se hai dati storici '16/15' o '520/505' verranno letti in automatico.")
 
-        # IOP (mmHg) — campi separati OD/OS
         ci1, ci2 = st.columns(2)
         with ci1:
             st.session_state.setdefault("pressione_endoculare_od", "")
@@ -661,7 +676,6 @@ def ui_visita_visiva():
             st.session_state.setdefault("pressione_endoculare_os", "")
             st.text_input("IOP OS (mmHg)", key="pressione_endoculare_os", placeholder="es. 15")
 
-        # Pachimetria (µm) — campi separati OD/OS
         cp1, cp2 = st.columns(2)
         with cp1:
             st.session_state.setdefault("pachimetria_od", "")
@@ -670,8 +684,6 @@ def ui_visita_visiva():
             st.session_state.setdefault("pachimetria_os", "")
             st.text_input("Pachimetria OS (µm)", key="pachimetria_os", placeholder="es. 505")
 
-
-        # --- Screening clinico: IOP + Pachimetria (attenzione, non diagnostico) ---
         def _to_float(x):
             try:
                 return float(str(x).replace(",", ".").strip())
@@ -709,7 +721,6 @@ def ui_visita_visiva():
                     st.warning(att["os"]["reason"] or "Possibile attenzione clinica.")
                 else:
                     st.success("Nessun flag (con i dati inseriti).")
-
         card_close()
 
         card_open("Correzione abituale", "Lontano", "🕶️")
@@ -717,7 +728,6 @@ def ui_visita_visiva():
         rx_ab_od = _rx_input("OD abituale", "rx_ab_od")
         rx_ab_os = _rx_input("OS abituale", "rx_ab_os")
         add_ab = st.number_input("Addizione da vicino (abituale)", step=0.25, format="%0.2f", key="add_ab")
-
         card_close()
 
         card_open("Correzione finale", "Lontano • Intermedio • Vicino", "✅")
@@ -725,24 +735,22 @@ def ui_visita_visiva():
         rx_fin_od = _rx_input("OD finale", "rx_fin_od")
         rx_fin_os = _rx_input("OS finale", "rx_fin_os")
         add_fin = st.number_input("Addizione da vicino (finale)", step=0.25, format="%0.2f", key="add_fin")
+
         def _near(rx, add):
             return {"sf": float(rx["sf"]) + float(add), "cyl": float(rx["cyl"]), "ax": int(rx["ax"])}
 
         vicino_od = _near(rx_fin_od, add_fin)
         vicino_os = _near(rx_fin_os, add_fin)
-        inter_od = _near(rx_fin_od, float(add_fin)/2.0)
-        inter_os = _near(rx_fin_os, float(add_fin)/2.0)
-
+        inter_od = _near(rx_fin_od, float(add_fin) / 2.0)
+        inter_os = _near(rx_fin_os, float(add_fin) / 2.0)
         card_close()
 
         card_open("Note e lenti consigliate", "Seleziona solo ciò che vuoi stampare", "📝")
         st.session_state.setdefault("lenti_sel", [])
         lenti_sel = st.multiselect("Lenti consigliate (mostra solo selezionate)", LENTI_OPTIONS, key="lenti_sel")
-
         st.session_state.setdefault("note_visita", "")
         note_v = st.text_area("Note visita", height=100, key="note_visita")
         card_close()
-
 
         payload = {
             "tipo_visita": "oculistica",
@@ -751,7 +759,6 @@ def ui_visita_visiva():
             "anamnesi": anamnesi,
             "acuita": {
                 "naturale": {"od": avn_od, "os": avn_os, "oo": avn_oo},
-                "abituale": {"od": ava_od, "os": ava_os, "oo": ava_oo},
                 "corretta": {"od": avc_od, "os": avc_os, "oo": avc_oo},
             },
             "esame_obiettivo": {
@@ -762,11 +769,11 @@ def ui_visita_visiva():
                 "vitreo": vitreo,
                 "fondo_oculare": fondo_oculare,
                 "pressione_endoculare": f"{st.session_state.get('pressione_endoculare_od','')}/{st.session_state.get('pressione_endoculare_os','')}".strip("/"),
-                "pressione_endoculare_od": st.session_state.get("pressione_endoculare_od",""),
-                "pressione_endoculare_os": st.session_state.get("pressione_endoculare_os",""),
+                "pressione_endoculare_od": st.session_state.get("pressione_endoculare_od", ""),
+                "pressione_endoculare_os": st.session_state.get("pressione_endoculare_os", ""),
                 "pachimetria": f"{st.session_state.get('pachimetria_od','')}/{st.session_state.get('pachimetria_os','')}".strip("/"),
-                "pachimetria_od": st.session_state.get("pachimetria_od",""),
-                "pachimetria_os": st.session_state.get("pachimetria_os",""),
+                "pachimetria_od": st.session_state.get("pachimetria_od", ""),
+                "pachimetria_os": st.session_state.get("pachimetria_os", ""),
             },
             "correzione_abituale": {"od": rx_ab_od, "os": rx_ab_os, "add": float(add_ab)},
             "correzione_finale": {"od": rx_fin_od, "os": rx_fin_os, "add": float(add_fin)},
@@ -802,10 +809,9 @@ def ui_visita_visiva():
                         "vicino": pr["vicino"],
                         "lenti": pr["lenti"],
                     },
-                    LETTERHEAD
+                    LETTERHEAD,
                 )
                 st.download_button("⬇️ Scarica Prescrizione A4", data=pdf_bytes, file_name=f"prescrizione_occhiali_{paziente_id}_{data_visita}.pdf", mime="application/pdf")
-
         card_close()
 
         st.markdown("---")
@@ -815,7 +821,6 @@ def ui_visita_visiva():
         show_deleted = st.checkbox("Mostra anche le visite eliminate", value=False)
         visite = _list_visite(conn, paziente_id, include_deleted=show_deleted)
 
-        # --- Grafico trend IOP OD/OS nel tempo (screening) ---
         def _to_float_local(x):
             try:
                 if x is None:
@@ -836,11 +841,9 @@ def ui_visita_visiva():
                 continue
 
             eo0 = pj0.get("esame_obiettivo") or {}
-            # Nuovi campi
             iop_od0 = _to_float_local(eo0.get("pressione_endoculare_od"))
             iop_os0 = _to_float_local(eo0.get("pressione_endoculare_os"))
 
-            # Fallback legacy "16/15"
             if iop_od0 is None and iop_os0 is None:
                 od_old, os_old = _parse_pair_values(eo0.get("pressione_endoculare") or "")
                 iop_od0 = _to_float_local(od_old)
@@ -956,12 +959,10 @@ def ui_visita_visiva():
                                 "vicino": pr.get("vicino"),
                                 "lenti": pr.get("lenti") or [],
                             },
-                            LETTERHEAD
+                            LETTERHEAD,
                         )
                         st.download_button("⬇️ Prescrizione A4", data=pdf_pr, file_name=f"prescrizione_occhiali_{paziente_id}_{vid}.pdf", mime="application/pdf", key=f"p{vid}")
                 except Exception:
                     pass
 
         card_close()
-
-# redeploy
