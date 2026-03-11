@@ -272,7 +272,7 @@ def ui_visita_visiva():
     ]:
         st.session_state.setdefault(k, "")
 
-    card_open("Sezione")
+    card_open("")
     st.markdown('<div class="vm-section">Dati principali</div>', unsafe_allow_html=True)
     c1, c2 = st.columns([1, 2])
     with c1:
