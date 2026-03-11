@@ -622,7 +622,12 @@ def ui_visita_visiva():
         st.session_state.setdefault("data_visita", dt.date.today())
         data_visita = st.date_input("Data visita", key="data_visita")
         st.session_state.setdefault("anamnesi", "")
-        anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
+        anamnesi = st.text_area(
+    "Anamnesi",
+    height=110,
+    key="anamnesi",
+    value=st.session_state.get("anamnesi", "")
+)
 
         card_open("Acuità visiva", "Naturale • Corretta", "👁️")
         st.markdown("### Acuità visiva")
