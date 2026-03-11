@@ -272,7 +272,7 @@ def ui_visita_visiva():
     ]:
         st.session_state.setdefault(k, "")
 
-    card_open()
+    card_open("Sezione")
     st.markdown('<div class="vm-section">Dati principali</div>', unsafe_allow_html=True)
     c1, c2 = st.columns([1, 2])
     with c1:
@@ -281,7 +281,7 @@ def ui_visita_visiva():
         anamnesi = st.text_area("Anamnesi", height=110, key="anamnesi")
     card_close()
 
-    card_open()
+    card_open("Sezione")
     st.markdown('<div class="vm-section">Acuità visiva</div>', unsafe_allow_html=True)
     cols = st.columns(4)
     fields = [
@@ -295,7 +295,7 @@ def ui_visita_visiva():
             st.number_input(lab, key=k, step=0.1, format="%.1f")
     card_close()
 
-    card_open()
+    card_open("Sezione")
     st.markdown('<div class="vm-section">Esame obiettivo</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -313,7 +313,7 @@ def ui_visita_visiva():
         st.number_input("Pachimetria OS", key="pachimetria_os", step=1.0, format="%.1f")
     card_close()
 
-    card_open()
+    card_open("Sezione")
     st.markdown('<div class="vm-section">Correzione abituale</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -328,7 +328,7 @@ def ui_visita_visiva():
         st.number_input("ADD", key="add_ab", step=0.25, format="%.2f")
     card_close()
 
-    card_open()
+    card_open("Sezione")
     st.markdown('<div class="vm-section">Correzione finale</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -343,7 +343,7 @@ def ui_visita_visiva():
         st.number_input("ADD fin", key="add_fin", step=0.25, format="%.2f")
     card_close()
 
-    card_open()
+    card_open("Sezione")
     st.markdown('<div class="vm-section">Prescrizione</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -354,7 +354,7 @@ def ui_visita_visiva():
         st.text_input("Uso consigliato", key="uso_consigliato")
     card_close()
 
-    card_open()
+    card_open("Sezione")
     st.markdown('<div class="vm-section">Note visita</div>', unsafe_allow_html=True)
     st.text_area("Note", height=120, key="note_visita")
     card_close()
