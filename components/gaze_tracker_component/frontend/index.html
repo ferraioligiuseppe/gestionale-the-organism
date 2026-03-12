@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gaze Tracker</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://unpkg.com/streamlit-component-lib@2.0.0/dist/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.0/dist/webgazer.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div class="toolbar">
+      <div class="title">👁 Gaze Tracking Prototype</div>
+      <div class="actions">
+        <button id="start-btn">Avvia</button>
+        <button id="stop-btn">Stop</button>
+        <button id="clear-btn">Azzera</button>
+      </div>
+    </div>
+
+    <div id="status" class="status">In attesa…</div>
+
+    <div id="surface-wrap">
+      <video id="preview" autoplay playsinline muted></video>
+      <div id="surface"></div>
+      <div id="gaze-dot"></div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
