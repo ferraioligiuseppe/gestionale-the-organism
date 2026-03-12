@@ -482,6 +482,15 @@ def _rx_input(label: str, key_prefix: str):
 
 
 def ui_visita_visiva():
+    # --- recupero payload visita caricata ---
+    pj_pending = None
+    if st.session_state.get("vm_pending_payload") is not None:
+        pj_pending = st.session_state.pop("vm_pending_payload")
+        st.session_state["vm_last_loaded_visita_id"] = st.session_state.pop("vm_pending_visita_id", None)
+
+        if isinstance(pj_pending, dict):
+        st.session_state["anamnesi"] = pj_pending.get("anamnesi") or ""
+        st.session_state["note_visita"] = pj_pending.get("note") or pj_pending.get("note_visita") or ""
     # Carica l'eventuale visita richiesta dallo storico PRIMA di creare i widget
     if st.session_state.get("vm_pending_payload") is not None:
         pj_pending = st.session_state.pop("vm_pending_payload")
