@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Compat shim legacy: reindirizza al modulo canonico uditivo."""
+"""Compat shim: usa sempre il modulo unico in modules/stimolazione_uditiva/."""
 
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
