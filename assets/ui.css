@@ -1,0 +1,248 @@
+/* =========================
+   THE ORGANISM — GLOBAL UI
+   Versione master pulita
+   ========================= */
+
+:root {
+  --org-green: #2E7D32;
+  --org-green-2: #4CAF50;
+  --org-green-3: #81C784;
+  --org-green-soft: #EAF6EC;
+  --org-bg: #F3FBF4;
+  --org-panel: #F6FBF6;
+  --org-card: #FFFFFF;
+  --org-text: #1F2F24;
+  --org-text-soft: #4E5F53;
+  --org-border: #CFE3D1;
+  --org-shadow: 0 8px 22px rgba(46, 125, 50, 0.14);
+  --org-shadow-soft: 0 4px 12px rgba(46, 125, 50, 0.10);
+  --org-radius: 18px;
+}
+
+/* ===== APP ===== */
+
+html, body, .stApp, .main {
+  background: linear-gradient(180deg, #f4fbf5 0%, #eaf6ec 100%) !important;
+  color: var(--org-text) !important;
+}
+
+.block-container {
+  padding-top: 1.2rem !important;
+  padding-bottom: 2rem !important;
+  max-width: 1500px;
+}
+
+/* ===== SIDEBAR ===== */
+
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #edf7ee 0%, #dff0e1 100%) !important;
+  border-right: 1px solid var(--org-border) !important;
+}
+
+section[data-testid="stSidebar"] * {
+  color: var(--org-text) !important;
+}
+
+/* ===== TYPOGRAPHY ===== */
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--org-green) !important;
+  letter-spacing: 0.1px;
+}
+
+p, span, div, li, label, small {
+  color: var(--org-text) !important;
+}
+
+.stCaption,
+small {
+  color: var(--org-text-soft) !important;
+}
+
+[data-testid="stMarkdownContainer"] *,
+[data-testid="stText"] *,
+[data-testid="stCaptionContainer"] * {
+  color: var(--org-text) !important;
+}
+
+/* ===== INPUTS ===== */
+
+input, textarea, select {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111 !important;
+  background: #ffffff !important;
+}
+
+.stTextInput input,
+.stNumberInput input,
+.stDateInput input,
+.stTextArea textarea,
+[data-baseweb="input"] input,
+[data-baseweb="textarea"] textarea {
+  border-radius: 14px !important;
+  border: 1px solid var(--org-border) !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  box-shadow: var(--org-shadow-soft) !important;
+}
+
+div[data-baseweb="select"] > div {
+  border-radius: 14px !important;
+  border: 1px solid var(--org-border) !important;
+  background: #ffffff !important;
+  box-shadow: var(--org-shadow-soft) !important;
+}
+
+[data-baseweb="select"] * {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #777777 !important;
+  opacity: 1 !important;
+}
+
+label {
+  color: var(--org-text) !important;
+  font-weight: 600 !important;
+}
+
+/* ===== BUTTONS ===== */
+
+.stButton > button {
+  border-radius: 16px !important;
+  border: 1px solid #b9d8bc !important;
+  background: linear-gradient(180deg, #ffffff 0%, #e8f5e9 100%) !important;
+  color: var(--org-text) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 8px 18px rgba(46, 125, 50, 0.18) !important;
+  padding: 0.72rem 1rem !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+.stButton > button:hover {
+  transform: translateY(-2px) !important;
+  border-color: var(--org-green) !important;
+  box-shadow: 0 12px 24px rgba(46, 125, 50, 0.22) !important;
+}
+
+.stButton > button:active {
+  transform: translateY(1px) !important;
+  box-shadow: 0 4px 10px rgba(46, 125, 50, 0.18) !important;
+}
+
+/* ===== METRICS ===== */
+
+div[data-testid="stMetric"] {
+  background: #ffffff !important;
+  border: 1px solid var(--org-border) !important;
+  border-radius: var(--org-radius) !important;
+  padding: 16px 18px !important;
+  box-shadow: var(--org-shadow) !important;
+}
+
+div[data-testid="stMetricLabel"] {
+  color: #5a6d5f !important;
+  font-weight: 700 !important;
+}
+
+div[data-testid="stMetricValue"] {
+  color: var(--org-green) !important;
+  font-weight: 800 !important;
+  font-size: 2rem !important;
+}
+
+/* ===== EXPANDERS / ALERTS / DATAFRAMES ===== */
+
+details {
+  background: #ffffff !important;
+  border: 1px solid var(--org-border) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--org-shadow-soft) !important;
+  padding: 0.35rem 0.7rem !important;
+}
+
+div[data-baseweb="notification"] {
+  border-radius: 16px !important;
+  box-shadow: var(--org-shadow-soft) !important;
+}
+
+div[data-testid="stDataFrame"] {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--org-border) !important;
+  box-shadow: var(--org-shadow-soft) !important;
+}
+
+/* ===== CHECKBOX / RADIO ===== */
+
+.stCheckbox,
+.stRadio {
+  margin-bottom: 0.35rem !important;
+  padding: 6px 8px;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+
+.stCheckbox:hover,
+.stRadio:hover {
+  background: #f2f8f3;
+}
+
+.stCheckbox label,
+.stRadio label,
+[data-baseweb="radio"] label,
+[data-baseweb="checkbox"] label {
+  color: var(--org-text) !important;
+  line-height: 1.35 !important;
+  font-size: 0.98rem !important;
+  font-weight: 500 !important;
+}
+
+[data-baseweb="radio"],
+[data-baseweb="checkbox"] {
+  margin-bottom: 0.2rem !important;
+}
+
+[data-baseweb="radio"] *,
+[data-baseweb="checkbox"] * {
+  color: var(--org-text) !important;
+}
+
+/* ===== LAYOUT HELPERS ===== */
+
+div[data-testid="stHorizontalBlock"] {
+  gap: 0.9rem !important;
+}
+
+div[data-testid="stVerticalBlock"] > div {
+  margin-bottom: 0.2rem;
+}
+
+/* ===== OPTIONAL PREMIUM BLOCKS ===== */
+
+.org-section-box {
+  background: #ffffff;
+  border: 1px solid var(--org-border);
+  border-radius: var(--org-radius);
+  box-shadow: var(--org-shadow-soft);
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.org-hero {
+  background: linear-gradient(135deg, #2E7D32, #4CAF50);
+  color: white !important;
+  padding: 22px;
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+  margin-bottom: 20px;
+}
+
+.org-hero * {
+  color: white !important;
+}
