@@ -487,14 +487,6 @@ def ui_visita_visiva():
     # Gestione stabile del richiamo visita dallo storico: applica il payload
     # prima di creare qualsiasi widget e blocca i reset durante questo passaggio.
         # --- applica payload visita caricata ---
-    if "vm_pending_payload" in st.session_state:
-        pj = st.session_state.pop("vm_pending_payload")
-        st.session_state["vm_last_loaded_visita_id"] = st.session_state.pop("vm_pending_visita_id", None)
-
-        if isinstance(pj, dict):
-            for k, v in pj.items():
-                if k in st.session_state:
-                    st.session_state[k] = v
     if st.session_state.get("vm_loading_from_history"):
         pj = st.session_state.pop("vm_pending_payload", None)
         st.session_state["vm_last_loaded_visita_id"] = st.session_state.pop("vm_pending_visita_id", None)
