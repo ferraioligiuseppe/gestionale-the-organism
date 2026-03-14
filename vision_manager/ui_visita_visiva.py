@@ -15,7 +15,7 @@ def _load_payload_into_form(pj: dict):
         return
 
     # Data visita: per default oggi (così quando salvi crei una nuova visita)
-    st.session_state["data_visita"] = dt.date.today()
+    st.session_state.setdefault("data_visita", dt.date.today())
 
     st.session_state["anamnesi"] = pj.get("anamnesi") or ""
     st.session_state["note_visita"] = pj.get("note") or pj.get("note_visita") or ""
