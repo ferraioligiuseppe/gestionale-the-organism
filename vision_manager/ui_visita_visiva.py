@@ -580,6 +580,7 @@ def _rx_input(label: str, key_prefix: str):
 
 
 def ui_visita_visiva():
+    st.warning("PATCH AUTO LAST VISIT V2")
     _apply_pending_history_payload()
 
     inject_ui("assets/ui.css")
