@@ -59,7 +59,7 @@ def list_visite(conn, paziente_id):
         SELECT id, data_visita, dati_json
         FROM visite_visive
         WHERE paziente_id=%s
-        AND (is_deleted IS NULL OR is_deleted=FALSE)
+        AND COALESCE(is_deleted, 0) <> 1
         ORDER BY data_visita DESC, id DESC
     """, (paziente_id,))
 
@@ -68,14 +68,13 @@ def list_visite(conn, paziente_id):
     visite = []
 
     for r in rows:
-
         try:
             visite.append({
                 "id": r["id"],
                 "data_visita": r["data_visita"],
                 "dati_json": r["dati_json"]
             })
-        except:
+        except Exception:
             visite.append({
                 "id": r[0],
                 "data_visita": r[1],
