@@ -29,16 +29,27 @@ def list_pazienti(conn):
     rows = cur.fetchall()
 
     pazienti = []
+
     for r in rows:
-        pazienti.append({
-            "id": r[0],
-            "cognome": r[1],
-            "nome": r[2],
-            "data_nascita": r[3]
-        })
+
+        try:
+            pazienti.append({
+                "id": r["id"],
+                "cognome": r["cognome"],
+                "nome": r["nome"],
+                "data_nascita": r.get("data_nascita")
+            })
+
+        except Exception:
+
+            pazienti.append({
+                "id": r[0],
+                "cognome": r[1],
+                "nome": r[2],
+                "data_nascita": r[3] if len(r) > 3 else None
+            })
 
     return pazienti
-
 
 def list_visite(conn, paziente_id):
 
@@ -55,15 +66,25 @@ def list_visite(conn, paziente_id):
     rows = cur.fetchall()
 
     visite = []
+
     for r in rows:
-        visite.append({
-            "id": r[0],
-            "data_visita": r[1],
-            "dati_json": r[2]
-        })
+
+        try:
+            visite.append({
+                "id": r["id"],
+                "data_visita": r["data_visita"],
+                "dati_json": r["dati_json"]
+            })
+
+        except Exception:
+
+            visite.append({
+                "id": r[0],
+                "data_visita": r[1],
+                "dati_json": r[2]
+            })
 
     return visite
-
 
 # ------------------------------
 # FORM STATE
