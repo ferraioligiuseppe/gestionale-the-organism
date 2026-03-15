@@ -53,3 +53,8 @@ def render_import_section(*args, **kwargs):
 def render_utenti_section(get_connection, *args, **kwargs):
     from app_core import ui_gestione_utenti
     return ui_gestione_utenti(get_connection, *args, **kwargs)
+
+
+def render_gaze_section(*args, **kwargs):
+    from app_core import ui_gaze_tracking_section
+    return ui_gaze_tracking_section(*args, **kwargs)

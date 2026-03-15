@@ -17,3 +17,5 @@ SECTION_PRIVACY = "📄 Privacy & Consensi (PDF)"
 SECTION_DEBUG = "🛠️ Debug DB"
 SECTION_IMPORT = "📥 Import Pazienti"
 SECTION_UTENTI = "👥 Utenti / Ruoli"
+
+SECTION_GAZE = "👁 Eye Tracking"

@@ -20,6 +20,7 @@ from .app_sections import (
     SECTION_PRIVACY,
     SECTION_DEBUG,
     SECTION_IMPORT,
+    SECTION_GAZE,
     SECTION_UTENTI,
 )
 from .pazienti import render_pazienti_section
@@ -36,6 +37,7 @@ from .sections.ui_cliniche import (
     render_evolutiva_section,
     render_debug_section,
     render_import_section,
+    render_gaze_section,
     render_utenti_section,
 )
 
@@ -76,6 +78,9 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
         return True
     if sezione == SECTION_IMPORT:
         render_import_section()
+        return True
+    if sezione == SECTION_GAZE:
+        render_gaze_section()
         return True
     if sezione == SECTION_UTENTI:
         render_utenti_section(get_connection)
