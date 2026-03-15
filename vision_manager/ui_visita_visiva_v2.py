@@ -4,19 +4,78 @@ import json
 import streamlit as st
 
 from vision_manager.db import get_conn
-from vision_manager.ui_kit import topbar, badge
-from vision_manager.ui_visita_visiva import (
-    _reset_visita_form_state,
-    _load_payload_into_form,
-    _parse_json,
-    _list_visite,
-    _load_pazienti,
-)
+import datetime as dt
+import json
+import streamlit as st
 
 # ------------------------------
 # STATE
 # ------------------------------
+def _parse_json(s):
+    try:
+        return json.loads(s) if s else {}
+    except Exception:
+        return {}
 
+def _list_visite(conn, paziente_id):
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, data_visita, dati_json
+        FROM visite_visive
+        WHERE paziente_id=%s
+        ORDER BY data_visita DESC, id DESC
+        LIMIT 200
+        """,
+        (paziente_id,),
+    )
+    rows = cur.fetchall()
+    cols = [d[0] for d in cur.description]
+
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def _load_pazienti(conn):
+
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT id, cognome, nome, data_nascita
+        FROM pazienti
+        ORDER BY cognome, nome
+        """
+    )
+
+    rows = cur.fetchall()
+    cols = [d[0] for d in cur.description]
+
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def _reset_visita_form_state():
+
+    keys = [
+        "data_visita",
+        "anamnesi",
+    ]
+
+    for k in keys:
+        if k in st.session_state:
+            del st.session_state[k]
+
+
+def _load_payload_into_form(pj):
+
+    st.session_state["anamnesi"] = pj.get("anamnesi", "")
+
+    d = pj.get("data")
+
+    if d:
+        try:
+            st.session_state["data_visita"] = dt.date.fromisoformat(str(d)[:10])
+        except Exception:
+            st.session_state["data_visita"] = dt.date.today()
 def _init_state():
     st.session_state.setdefault("vm_mode", "new")
     st.session_state.setdefault("vm_current_visit_id", None)
