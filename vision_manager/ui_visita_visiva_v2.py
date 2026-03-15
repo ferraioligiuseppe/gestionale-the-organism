@@ -20,21 +20,6 @@ def parse_json(s):
 # DB
 # ------------------------------
 
-def apply_pending_visit_load():
-    pending = st.session_state.pop("vm_pending_load", None)
-
-    if not pending:
-        return
-
-    payload = pending.get("payload", {})
-    visit_id = pending.get("visit_id")
-    data_visita = pending.get("data_visita")
-
-    load_visit_payload(
-        payload=payload,
-        visit_id=visit_id,
-        data_visita=data_visita,
-    )
 def list_pazienti(conn):
     cur = conn.cursor()
     try:
@@ -216,6 +201,23 @@ def load_visit_payload(payload, visit_id=None, data_visita=None):
     st.session_state["vm_mode"] = "edit"
 
 
+def apply_pending_visit_load():
+    pending = st.session_state.pop("vm_pending_load", None)
+
+    if not pending:
+        return
+
+    payload = pending.get("payload", {})
+    visit_id = pending.get("visit_id")
+    data_visita = pending.get("data_visita")
+
+    load_visit_payload(
+        payload=payload,
+        visit_id=visit_id,
+        data_visita=data_visita,
+    )
+
+
 def load_last_visit(conn, paziente_id):
     visite = list_visite(conn, paziente_id)
 
@@ -233,33 +235,6 @@ def load_last_visit(conn, paziente_id):
     )
 
     st.success(f"Caricata visita {last['id']}")
-
-
-def load_selected_visit(conn, paziente_id, visita_id):
-    visite = list_visite(conn, paziente_id)
-
-    target = None
-    for v in visite:
-        try:
-            if int(v["id"]) == int(visita_id):
-                target = v
-                break
-        except Exception:
-            pass
-
-    if not target:
-        st.error("Visita non trovata")
-        return
-
-    payload = parse_json(target["dati_json"])
-
-    load_visit_payload(
-        payload=payload,
-        visit_id=target["id"],
-        data_visita=target["data_visita"],
-    )
-
-    st.success(f"Caricata visita selezionata {target['id']}")
 
 
 # ------------------------------
@@ -369,6 +344,8 @@ def save_visit(conn, paziente_id):
 def ui_visita_visiva():
     st.title("Vision Manager")
     st.caption("Visita oculistica V2")
+
+    apply_pending_visit_load()
 
     conn = get_conn()
     try:
@@ -522,10 +499,9 @@ def ui_visita_visiva():
             vid = visita["id"]
             data_v = visita["data_visita"]
             data_label = _normalize_date_for_widget(data_v).strftime("%d/%m/%Y")
+            payload = parse_json(visita["dati_json"])
 
             with st.expander(f"Visita ID {vid} — {data_label}"):
-                payload = parse_json(visita["dati_json"])
-
                 st.write(f"**Data visita:** {data_label}")
                 st.write(f"**Anamnesi:** {payload.get('anamnesi', '')}")
 
@@ -533,7 +509,12 @@ def ui_visita_visiva():
 
                 with col_a:
                     if st.button(f"📥 Carica {vid}", key=f"load_visit_{vid}"):
-                        load_selected_visit(conn, paziente_id, vid)
+                        st.session_state["vm_pending_load"] = {
+                            "payload": payload,
+                            "visit_id": vid,
+                            "data_visita": visita["data_visita"],
+                        }
+                        st.rerun()
 
                 with col_b:
                     st.caption(f"Modalità corrente: {st.session_state.get('vm_mode', 'new')}")
