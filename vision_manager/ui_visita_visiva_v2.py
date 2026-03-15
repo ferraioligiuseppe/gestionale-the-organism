@@ -23,66 +23,79 @@ def list_pazienti(conn):
 
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT id, cognome, nome
-        FROM pazienti
-        ORDER BY cognome, nome
-    """)
+    try:
+        cur.execute("""
+            SELECT id, cognome, nome
+            FROM pazienti
+            ORDER BY cognome, nome
+        """)
 
-    rows = cur.fetchall()
+        rows = cur.fetchall()
 
-    pazienti = []
+        pazienti = []
 
-    for r in rows:
+        for r in rows:
+            try:
+                pazienti.append({
+                    "id": r["id"],
+                    "cognome": r["cognome"],
+                    "nome": r["nome"]
+                })
+            except Exception:
+                pazienti.append({
+                    "id": r[0],
+                    "cognome": r[1],
+                    "nome": r[2]
+                })
 
+        return pazienti
+
+    except Exception:
         try:
-            pazienti.append({
-                "id": r["id"],
-                "cognome": r["cognome"],
-                "nome": r["nome"]
-            })
-        except:
-            pazienti.append({
-                "id": r[0],
-                "cognome": r[1],
-                "nome": r[2]
-            })
-
-    return pazienti
-
+            conn.rollback()
+        except Exception:
+            pass
+        raise
 
 def list_visite(conn, paziente_id):
 
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT id, data_visita, dati_json
-        FROM visite_visive
-        WHERE paziente_id=%s
-        AND COALESCE(is_deleted, 0) <> 1
-        ORDER BY data_visita DESC, id DESC
-    """, (paziente_id,))
+    try:
+        cur.execute("""
+            SELECT id, data_visita, dati_json
+            FROM visite_visive
+            WHERE paziente_id=%s
+            AND COALESCE(is_deleted, 0) <> 1
+            ORDER BY data_visita DESC, id DESC
+        """, (paziente_id,))
 
-    rows = cur.fetchall()
+        rows = cur.fetchall()
 
-    visite = []
+        visite = []
 
-    for r in rows:
+        for r in rows:
+            try:
+                visite.append({
+                    "id": r["id"],
+                    "data_visita": r["data_visita"],
+                    "dati_json": r["dati_json"]
+                })
+            except Exception:
+                visite.append({
+                    "id": r[0],
+                    "data_visita": r[1],
+                    "dati_json": r[2]
+                })
+
+        return visite
+
+    except Exception:
         try:
-            visite.append({
-                "id": r["id"],
-                "data_visita": r["data_visita"],
-                "dati_json": r["dati_json"]
-            })
+            conn.rollback()
         except Exception:
-            visite.append({
-                "id": r[0],
-                "data_visita": r[1],
-                "dati_json": r[2]
-            })
-
-    return visite
-
+            pass
+        raise
 
 # ------------------------------
 # FORM
