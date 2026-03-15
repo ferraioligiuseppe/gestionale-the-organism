@@ -128,30 +128,23 @@ def start_new_visit():
 # LOAD VISIT
 # ------------------------------
 
-def load_last_visit(conn, paziente_id):
-    visite = list_visite(conn, paziente_id)
+def _normalize_date_for_widget(dv):
+    if isinstance(dv, dt.datetime):
+        return dv.date()
+    if isinstance(dv, dt.date):
+        return dv
+    if isinstance(dv, str):
+        try:
+            return dt.date.fromisoformat(dv[:10])
+        except Exception:
+            return dt.date.today()
+    return dt.date.today()
 
-    if not visite:
-        st.warning("Nessuna visita trovata")
-        return
 
-    last = visite[0]
-    payload = parse_json(last["dati_json"])
-
+def load_visit_payload(payload, visit_id=None, data_visita=None):
     reset_form()
 
-    dv = last["data_visita"]
-    if isinstance(dv, dt.datetime):
-        dv = dv.date()
-    elif isinstance(dv, str):
-        try:
-            dv = dt.date.fromisoformat(dv[:10])
-        except Exception:
-            dv = dt.date.today()
-    elif not isinstance(dv, dt.date):
-        dv = dt.date.today()
-
-    st.session_state["data_visita"] = dv
+    st.session_state["data_visita"] = _normalize_date_for_widget(data_visita)
     st.session_state["anamnesi"] = payload.get("anamnesi", "")
 
     av = payload.get("acuita", {})
@@ -204,10 +197,54 @@ def load_last_visit(conn, paziente_id):
     st.session_state["fondo_oculare"] = eo.get("fondo_oculare", "")
 
     st.session_state["note"] = payload.get("note", "")
-    st.session_state["vm_visit_id"] = last["id"]
+    st.session_state["vm_visit_id"] = visit_id
     st.session_state["vm_mode"] = "edit"
 
+
+def load_last_visit(conn, paziente_id):
+    visite = list_visite(conn, paziente_id)
+
+    if not visite:
+        st.warning("Nessuna visita trovata")
+        return
+
+    last = visite[0]
+    payload = parse_json(last["dati_json"])
+
+    load_visit_payload(
+        payload=payload,
+        visit_id=last["id"],
+        data_visita=last["data_visita"],
+    )
+
     st.success(f"Caricata visita {last['id']}")
+
+
+def load_selected_visit(conn, paziente_id, visita_id):
+    visite = list_visite(conn, paziente_id)
+
+    target = None
+    for v in visite:
+        try:
+            if int(v["id"]) == int(visita_id):
+                target = v
+                break
+        except Exception:
+            pass
+
+    if not target:
+        st.error("Visita non trovata")
+        return
+
+    payload = parse_json(target["dati_json"])
+
+    load_visit_payload(
+        payload=payload,
+        visit_id=target["id"],
+        data_visita=target["data_visita"],
+    )
+
+    st.success(f"Caricata visita selezionata {target['id']}")
 
 
 # ------------------------------
@@ -457,3 +494,31 @@ def ui_visita_visiva():
         f"MODE: {st.session_state.get('vm_mode', 'new')} | "
         f"VISIT_ID: {st.session_state.get('vm_visit_id')}"
     )
+
+    st.divider()
+    st.subheader("📚 Storico visite")
+
+    visite = list_visite(conn, paziente_id)
+
+    if not visite:
+        st.info("Nessuna visita disponibile per questo paziente.")
+    else:
+        for visita in visite:
+            vid = visita["id"]
+            data_v = visita["data_visita"]
+            data_label = _normalize_date_for_widget(data_v).strftime("%d/%m/%Y")
+
+            with st.expander(f"Visita ID {vid} — {data_label}"):
+                payload = parse_json(visita["dati_json"])
+
+                st.write(f"**Data visita:** {data_label}")
+                st.write(f"**Anamnesi:** {payload.get('anamnesi', '')}")
+
+                col_a, col_b = st.columns([1, 3])
+
+                with col_a:
+                    if st.button(f"📥 Carica {vid}", key=f"load_visit_{vid}"):
+                        load_selected_visit(conn, paziente_id, vid)
+
+                with col_b:
+                    st.caption(f"Modalità corrente: {st.session_state.get('vm_mode', 'new')}")
