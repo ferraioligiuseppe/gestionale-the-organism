@@ -1,7 +1,6 @@
+
 from __future__ import annotations
 import json
-
-DB_GAZE_VERSION = "FIX_NO_CONTEXT_MANAGER_V1"
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS gaze_sessions (
@@ -59,54 +58,22 @@ CREATE TABLE IF NOT EXISTS gaze_reports (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_gaze_samples_session_ts
-    ON gaze_samples(session_id, ts_ms);
+CREATE INDEX IF NOT EXISTS idx_gaze_samples_session_ts ON gaze_samples(session_id, ts_ms);
 """
 
-
-def _close_cursor_safely(cur) -> None:
-    try:
-        close = getattr(cur, "close", None)
-        if callable(close):
-            close()
-    except Exception:
-        pass
-
-
-def ensure_schema(conn) -> None:
-    if conn is None:
-        raise RuntimeError("Connessione DB assente")
-    if not hasattr(conn, "cursor"):
-        raise TypeError(f"Connessione DB non valida: {type(conn)}")
-
-    cur = conn.cursor()
-    try:
+def ensure_schema(conn):
+    with conn.cursor() as cur:
         cur.execute(SCHEMA_SQL)
-        conn.commit()
-    finally:
-        _close_cursor_safely(cur)
-
+    conn.commit()
 
 def create_gaze_session(conn, payload: dict) -> int:
-    cur = conn.cursor()
-    try:
+    with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO gaze_sessions (
-                paziente_id,
-                operatore,
-                protocollo,
-                camera_type,
-                screen_width,
-                screen_height,
-                distance_cm,
-                distance_mode,
-                distance_target_min_cm,
-                distance_target_max_cm,
-                calibration_points,
-                calibration_score,
-                status,
-                note
+                paziente_id, operatore, protocollo, camera_type, screen_width, screen_height,
+                distance_cm, distance_mode, distance_target_min_cm, distance_target_max_cm,
+                calibration_points, calibration_score, status, note
             )
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             RETURNING id
@@ -128,34 +95,19 @@ def create_gaze_session(conn, payload: dict) -> int:
                 payload.get("note"),
             ),
         )
-        row = cur.fetchone()
-        conn.commit()
-        if not row:
-            raise RuntimeError("Creazione sessione fallita: nessun ID restituito")
-        return int(row[0])
-    finally:
-        _close_cursor_safely(cur)
-
+        session_id = cur.fetchone()[0]
+    conn.commit()
+    return session_id
 
 def insert_gaze_samples(conn, session_id: int, samples: list[dict]) -> int:
     inserted = 0
-    cur = conn.cursor()
-    try:
+    with conn.cursor() as cur:
         for s in samples:
             cur.execute(
                 """
                 INSERT INTO gaze_samples (
-                    session_id,
-                    ts_ms,
-                    gaze_x,
-                    gaze_y,
-                    confidence,
-                    tracking_ok,
-                    distance_cm_est,
-                    distance_zone,
-                    target_x,
-                    target_y,
-                    target_label
+                    session_id, ts_ms, gaze_x, gaze_y, confidence, tracking_ok,
+                    distance_cm_est, distance_zone, target_x, target_y, target_label
                 )
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """,
@@ -174,34 +126,18 @@ def insert_gaze_samples(conn, session_id: int, samples: list[dict]) -> int:
                 ),
             )
             inserted += 1
-        conn.commit()
-        return inserted
-    finally:
-        _close_cursor_safely(cur)
-
+    conn.commit()
+    return inserted
 
 def save_gaze_report(conn, session_id: int, report: dict) -> None:
-    cur = conn.cursor()
-    try:
+    with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO gaze_reports (
-                session_id,
-                fixation_total_ms,
-                mean_fixation_ms,
-                saccade_count,
-                target_hit_rate,
-                tracking_loss_pct,
-                center_bias_pct,
-                calibration_score,
-                distance_mean_cm,
-                distance_min_cm,
-                distance_max_cm,
-                distance_std_cm,
-                time_near_pct,
-                time_mid_pct,
-                time_far_pct,
-                summary_json
+                session_id, fixation_total_ms, mean_fixation_ms, saccade_count,
+                target_hit_rate, tracking_loss_pct, center_bias_pct, calibration_score,
+                distance_mean_cm, distance_min_cm, distance_max_cm, distance_std_cm,
+                time_near_pct, time_mid_pct, time_far_pct, summary_json
             )
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (session_id) DO UPDATE SET
@@ -240,23 +176,13 @@ def save_gaze_report(conn, session_id: int, report: dict) -> None:
                 json.dumps(report, ensure_ascii=False),
             ),
         )
-        conn.commit()
-    finally:
-        _close_cursor_safely(cur)
-
+    conn.commit()
 
 def list_sessions(conn, paziente_id: int):
-    cur = conn.cursor()
-    try:
+    with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT
-                id,
-                created_at,
-                protocollo,
-                distance_mode,
-                calibration_score,
-                status
+            SELECT id, created_at, protocollo, distance_mode, calibration_score, status
             FROM gaze_sessions
             WHERE paziente_id = %s
             ORDER BY created_at DESC
@@ -264,6 +190,5 @@ def list_sessions(conn, paziente_id: int):
             """,
             (paziente_id,),
         )
-        return cur.fetchall()
-    finally:
-        _close_cursor_safely(cur)
+        rows = cur.fetchall()
+    return rows
