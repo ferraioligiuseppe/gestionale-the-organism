@@ -7,25 +7,28 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from vision_manager.ui_visita_visiva_v2 import ui_visita_visiva
-from vision_manager.ui_dashboard_paziente import ui_dashboard_paziente
+
+try:
+    from vision_manager.ui_dashboard_paziente import ui_dashboard_paziente
+    DASHBOARD_AVAILABLE = True
+except Exception:
+    DASHBOARD_AVAILABLE = False
 
 
 st.set_page_config(page_title="Vision Manager — Dr. Cirillo", layout="wide")
 
 st.sidebar.title("Vision Manager")
 
-pagina = st.sidebar.radio(
-    "Navigazione",
-    [
-        "Visita visiva",
-        "Dashboard paziente",
-    ],
-)
+pages = ["Visita visiva"]
+if DASHBOARD_AVAILABLE:
+    pages.append("Dashboard paziente")
+
+pagina = st.sidebar.radio("Navigazione", pages)
 
 st.title("👁️ Vision Manager — Dr. Cirillo")
 
 if pagina == "Visita visiva":
     ui_visita_visiva()
 
-elif pagina == "Dashboard paziente":
+elif pagina == "Dashboard paziente" and DASHBOARD_AVAILABLE:
     ui_dashboard_paziente()
