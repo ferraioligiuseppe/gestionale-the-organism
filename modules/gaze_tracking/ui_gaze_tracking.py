@@ -17,17 +17,8 @@ except Exception as e:
     WEBRTC_AVAILABLE = False
     WEBRTC_ERROR = e
 
-
-def _safe_get_conn(get_conn):
-    conn = get_conn()
-    if conn is None:
-        raise RuntimeError("Connessione DB non disponibile")
-    if not hasattr(conn, "cursor"):
-        raise TypeError(f"Oggetto conn non valido: {type(conn)}")
-    return conn
-
-
 def _build_demo_samples(targets: list[dict], distance_mode: str, target_min: float | None, target_max: float | None) -> list[dict]:
+    # Campioni dimostrativi coerenti con la UI corrente.
     samples = []
     ts = 0
     distances = [32, 36, 42, 48, 57, 63] if distance_mode == "multi" else [45, 47, 46, 44, 43]
@@ -50,7 +41,6 @@ def _build_demo_samples(targets: list[dict], distance_mode: str, target_min: flo
         ts += 120
     return samples
 
-
 def ui_gaze_tracking(paziente_id: int, get_conn, paziente_label: str = ""):
     st.subheader("👁 Eye Tracking V3.0")
     st.caption("Versione V3: webcam live + distanza dinamica + modalità libera/guidata/multi-distanza.")
@@ -58,6 +48,13 @@ def ui_gaze_tracking(paziente_id: int, get_conn, paziente_label: str = ""):
     st.session_state.setdefault("gaze_session_id", None)
     st.session_state.setdefault("gaze_component_payload", {})
     st.session_state.setdefault("gaze_v3_samples", [])
+
+    conn = get_conn()
+    ensure_schema(conn)
+    try:
+        conn.close()
+    except Exception:
+        pass
 
     if paziente_label:
         st.markdown(f"**Paziente:** {paziente_label}")
@@ -95,32 +92,28 @@ def ui_gaze_tracking(paziente_id: int, get_conn, paziente_label: str = ""):
     with right:
         st.markdown("### Sessione")
         if st.button("🆕 Crea sessione", use_container_width=True):
+            conn = get_conn()
+            ensure_schema(conn)
+            session_id = create_gaze_session(conn, {
+                "paziente_id": paziente_id,
+                "operatore": operatore,
+                "protocollo": protocollo,
+                "camera_type": camera_type,
+                "screen_width": screen_w,
+                "screen_height": screen_h,
+                "distance_cm": distance_cm,
+                "distance_mode": distance_mode,
+                "distance_target_min_cm": target_min if distance_mode != "free" else None,
+                "distance_target_max_cm": target_max if distance_mode != "free" else None,
+                "calibration_points": 9 if protocollo == "calibration" else None,
+                "status": "draft",
+            })
             try:
-                conn = _safe_get_conn(get_conn)
-                ensure_schema(conn)
-                session_id = create_gaze_session(conn, {
-                    "paziente_id": paziente_id,
-                    "operatore": operatore,
-                    "protocollo": protocollo,
-                    "camera_type": camera_type,
-                    "screen_width": screen_w,
-                    "screen_height": screen_h,
-                    "distance_cm": distance_cm,
-                    "distance_mode": distance_mode,
-                    "distance_target_min_cm": target_min if distance_mode != "free" else None,
-                    "distance_target_max_cm": target_max if distance_mode != "free" else None,
-                    "calibration_points": 9 if protocollo == "calibration" else None,
-                    "status": "draft",
-                })
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                st.session_state["gaze_session_id"] = session_id
-                st.success(f"Sessione creata: {session_id}")
-            except Exception as e:
-                st.error("Errore nella creazione sessione Eye Tracking.")
-                st.exception(e)
+                conn.close()
+            except Exception:
+                pass
+            st.session_state["gaze_session_id"] = session_id
+            st.success(f"Sessione creata: {session_id}")
 
         st.write("Session ID:", st.session_state.get("gaze_session_id") or "—")
         st.write("Target protocollo:", len(targets))
@@ -176,48 +169,36 @@ def ui_gaze_tracking(paziente_id: int, get_conn, paziente_label: str = ""):
     b1, b2 = st.columns(2)
     with b1:
         if st.button("💾 Salva campioni nel DB", use_container_width=True, disabled=not (st.session_state.get("gaze_session_id") and samples)):
+            conn = get_conn()
+            ensure_schema(conn)
+            inserted = insert_gaze_samples(conn, int(st.session_state["gaze_session_id"]), samples)
             try:
-                conn = _safe_get_conn(get_conn)
-                ensure_schema(conn)
-                inserted = insert_gaze_samples(conn, int(st.session_state["gaze_session_id"]), samples)
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                st.success(f"Campioni salvati: {inserted}")
-            except Exception as e:
-                st.error("Errore nel salvataggio campioni.")
-                st.exception(e)
+                conn.close()
+            except Exception:
+                pass
+            st.success(f"Campioni salvati: {inserted}")
     with b2:
         if st.button("📊 Calcola report V3", use_container_width=True, disabled=not (st.session_state.get("gaze_session_id") and samples)):
+            report = compute_basic_metrics(samples, screen_w, screen_h, current_targets=targets)
+            conn = get_conn()
+            ensure_schema(conn)
+            save_gaze_report(conn, int(st.session_state["gaze_session_id"]), report)
             try:
-                report = compute_basic_metrics(samples, screen_w, screen_h, current_targets=targets)
-                conn = _safe_get_conn(get_conn)
-                ensure_schema(conn)
-                save_gaze_report(conn, int(st.session_state["gaze_session_id"]), report)
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                st.success("Report V3 salvato.")
-                st.json(report)
-            except Exception as e:
-                st.error("Errore nel calcolo/salvataggio report.")
-                st.exception(e)
+                conn.close()
+            except Exception:
+                pass
+            st.success("Report V3 salvato.")
+            st.json(report)
 
     st.markdown("### Storico sessioni")
+    conn = get_conn()
+    ensure_schema(conn)
+    rows = list_sessions(conn, paziente_id)
     try:
-        conn = _safe_get_conn(get_conn)
-        ensure_schema(conn)
-        rows = list_sessions(conn, paziente_id)
-        try:
-            conn.close()
-        except Exception:
-            pass
-        if rows:
-            st.dataframe(rows, use_container_width=True)
-        else:
-            st.caption("Nessuna sessione ancora salvata per questo paziente.")
-    except Exception as e:
-        st.warning("Storico sessioni non disponibile.")
-        st.exception(e)
+        conn.close()
+    except Exception:
+        pass
+    if rows:
+        st.dataframe(rows, use_container_width=True)
+    else:
+        st.caption("Nessuna sessione ancora salvata per questo paziente.")
