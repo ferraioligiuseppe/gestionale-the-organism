@@ -392,3 +392,5 @@ def ui_visita_visiva_v2(conn):
                 }
 
                 st.rerun()
+def ui_visita_visiva(conn):
+    return ui_visita_visiva_v2(conn)
