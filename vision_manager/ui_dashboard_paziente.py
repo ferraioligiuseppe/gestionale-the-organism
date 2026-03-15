@@ -42,7 +42,7 @@ def _inject_dashboard_css():
     }
 
     p, div, label, span {
-        color: #111827;
+        color: #111827 !important;
     }
 
     .dashboard-card {
@@ -55,15 +55,61 @@ def _inject_dashboard_css():
     }
 
     .dashboard-muted {
-        color: #6b7280;
+        color: #6b7280 !important;
         font-size: 0.95rem;
     }
 
     .dashboard-patient {
         font-size: 1.35rem;
         font-weight: 700;
-        color: #0f172a;
+        color: #0f172a !important;
         margin-bottom: 4px;
+    }
+
+    /* Selectbox chiaro */
+    div[data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+        border: 1px solid #dbe3ee !important;
+        border-radius: 12px !important;
+    }
+
+    div[data-baseweb="select"] span {
+        color: #111827 !important;
+    }
+
+    div[data-baseweb="popover"] {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+    }
+
+    div[role="listbox"] {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+        border: 1px solid #dbe3ee !important;
+    }
+
+    div[role="option"] {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+    }
+
+    div[role="option"]:hover {
+        background-color: #eef4fb !important;
+        color: #111827 !important;
+    }
+
+    /* Input chiari */
+    input, textarea {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+    }
+
+    .stTextInput > div > div > input,
+    .stDateInput input,
+    .stNumberInput input {
+        background-color: #ffffff !important;
+        color: #111827 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -217,7 +263,9 @@ def ui_dashboard_paziente():
     pazienti_df["nome"] = pazienti_df["nome"].fillna("").astype(str)
     pazienti_df["label"] = (pazienti_df["cognome"] + " " + pazienti_df["nome"]).str.strip()
 
+    st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
     paziente_label = st.selectbox("Seleziona paziente", pazienti_df["label"].tolist())
+    st.markdown('</div>', unsafe_allow_html=True)
 
     paziente = pazienti_df[pazienti_df["label"] == paziente_label].iloc[0]
     eta = calcola_eta(paziente["data_nascita"])
