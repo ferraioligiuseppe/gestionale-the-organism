@@ -1,171 +1,117 @@
-const state = {
-  args: { mode: "calibration", task: {} },
+let stream = null;
+let sampleTimer = null;
+let samples = [];
+let componentValue = {
+  component_status: "idle",
+  sample_count: 0,
+  calibration_score: null,
   samples: [],
-  tracking: false,
-  stream: null,
-  targetIndex: 0,
-  intervalId: null,
-  startedAt: 0,
-  currentPrediction: null,
 };
 
+const videoEl = document.getElementById("video");
 const statusEl = document.getElementById("status");
-const surfaceEl = document.getElementById("surface");
-const dotEl = document.getElementById("gaze-dot");
-const videoEl = document.getElementById("preview");
-const startBtn = document.getElementById("start-btn");
-const stopBtn = document.getElementById("stop-btn");
-const clearBtn = document.getElementById("clear-btn");
+const infoEl = document.getElementById("info");
+const overlayEl = document.getElementById("overlay");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
 
-function updateStatus(msg) {
-  statusEl.textContent = msg;
+function setStatus(text) {
+  statusEl.textContent = text;
+  componentValue.component_status = text;
+  sendValue();
 }
 
-function setFrameHeight(h) {
-  const nextH = Math.max(500, Number(h || 760) - 110);
-  document.getElementById("surface-wrap").style.height = `${nextH}px`;
-  Streamlit.setFrameHeight(nextH + 130);
+function sendValue() {
+  componentValue.sample_count = samples.length;
+  componentValue.samples = samples.slice(-500);
+  Streamlit.setComponentValue(componentValue);
 }
 
-function getTargets() {
-  return (state.args.task && state.args.task.targets) || [];
+function setFrameHeight() {
+  Streamlit.setFrameHeight(document.body.scrollHeight + 20);
 }
 
-function clearTargets() {
-  surfaceEl.innerHTML = "";
-}
-
-function drawTargets() {
-  clearTargets();
-  const targets = getTargets();
-  targets.forEach((t, idx) => {
-    const el = document.createElement("div");
-    el.className = "target" + (idx === state.targetIndex ? " active" : "");
-    el.style.left = `${t.x}px`;
-    el.style.top = `${t.y}px`;
-    el.title = t.label || `${idx + 1}`;
-    surfaceEl.appendChild(el);
-  });
-}
-
-function pushSample(data) {
-  const ts = Math.round(performance.now() - state.startedAt);
-  const target = getTargets()[state.targetIndex] || null;
-  state.samples.push({
-    ts_ms: ts,
-    gaze_x: data ? Math.round(data.x) : null,
-    gaze_y: data ? Math.round(data.y) : null,
-    confidence: data ? 0.8 : 0.0,
-    target_label: target ? (target.label || null) : null,
-    tracking_ok: !!data,
-  });
-}
-
-function publishPayload(final = false) {
-  const payload = {
-    mode: state.args.mode,
-    final,
-    sample_count: state.samples.length,
-    samples: state.samples.slice(-6000),
-    calibration_score: state.samples.length ? 0.75 : null,
-    component_status: state.tracking ? "running" : "stopped",
-    note: "Prototype WebGazer via CDN."
-  };
-  Streamlit.setComponentValue(payload);
-}
-
-function advanceTarget() {
-  const targets = getTargets();
-  if (!targets.length) return;
-  state.targetIndex = (state.targetIndex + 1) % targets.length;
-  drawTargets();
-}
-
-async function ensureCamera() {
-  if (state.stream) return state.stream;
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-  state.stream = stream;
-  videoEl.srcObject = stream;
-  return stream;
-}
-
-async function startTracking() {
+async function startCamera() {
   try {
-    await ensureCamera();
-    if (!window.webgazer) {
-      updateStatus("WebGazer non disponibile.");
-      return;
+    overlayEl.textContent = "Richiesta accesso webcam...";
+    setStatus("requesting_camera");
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false,
+    });
+
+    videoEl.srcObject = stream;
+    overlayEl.textContent = "";
+    infoEl.textContent = "Webcam attiva";
+    setStatus("camera_on");
+
+    samples = [];
+    const t0 = performance.now();
+
+    if (sampleTimer) {
+      clearInterval(sampleTimer);
     }
 
-    state.samples = [];
-    state.targetIndex = 0;
-    drawTargets();
-    state.startedAt = performance.now();
-    state.tracking = true;
-    dotEl.style.display = "block";
+    sampleTimer = setInterval(() => {
+      const ts = Math.round(performance.now() - t0);
 
-    window.webgazer
-      .showVideoPreview(false)
-      .showFaceOverlay(false)
-      .showPredictionPoints(false)
-      .setGazeListener((data) => {
-        state.currentPrediction = data;
-        if (data && Number.isFinite(data.x) && Number.isFinite(data.y)) {
-          dotEl.style.left = `${data.x}px`;
-          dotEl.style.top = `${data.y}px`;
-        }
+      samples.push({
+        ts_ms: ts,
+        gaze_x: null,
+        gaze_y: null,
+        confidence: 0.0,
+        tracking_ok: true,
       });
 
-    await window.webgazer.begin();
+      sendValue();
+    }, 100);
 
-    if (state.intervalId) clearInterval(state.intervalId);
-    state.intervalId = setInterval(() => {
-      pushSample(state.currentPrediction);
-      if (state.args.mode === "calibration" || state.args.mode === "saccadi_orizzontali") {
-        if (state.samples.length % 45 === 0) advanceTarget();
-      }
-      if (state.samples.length % 30 === 0) publishPayload(false);
-    }, 33);
-
-    updateStatus("Tracking attivo.");
+    setFrameHeight();
   } catch (err) {
     console.error(err);
-    updateStatus("Impossibile accedere alla webcam o inizializzare WebGazer.");
+    overlayEl.textContent = "Errore accesso webcam";
+    infoEl.textContent = String(err);
+    setStatus("camera_error");
   }
 }
 
-function stopTracking() {
-  state.tracking = false;
-  if (state.intervalId) clearInterval(state.intervalId);
-  state.intervalId = null;
-  if (window.webgazer) {
-    try { window.webgazer.pause(); } catch (e) {}
+function stopCamera() {
+  try {
+    if (sampleTimer) {
+      clearInterval(sampleTimer);
+      sampleTimer = null;
+    }
+
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = null;
+    }
+
+    videoEl.srcObject = null;
+    overlayEl.textContent = "Camera fermata";
+    infoEl.textContent = "Sessione fermata";
+    setStatus("stopped");
+    sendValue();
+    setFrameHeight();
+  } catch (err) {
+    console.error(err);
+    infoEl.textContent = String(err);
+    setStatus("stop_error");
   }
-  dotEl.style.display = "none";
-  publishPayload(true);
-  updateStatus(`Tracking fermato. Campioni: ${state.samples.length}`);
 }
 
-function clearTracking() {
-  state.samples = [];
-  state.targetIndex = 0;
-  drawTargets();
-  publishPayload(false);
-  updateStatus("Campioni azzerati.");
-}
-
-startBtn.addEventListener("click", startTracking);
-stopBtn.addEventListener("click", stopTracking);
-clearBtn.addEventListener("click", clearTracking);
+startBtn.addEventListener("click", startCamera);
+stopBtn.addEventListener("click", stopCamera);
 
 function onRender(event) {
-  const { args, disabled, theme } = event.detail;
-  state.args = args || { mode: "calibration", task: {} };
-  setFrameHeight(args.height || 760);
-  drawTargets();
-  updateStatus(`Modalità: ${state.args.mode || "-"}`);
+  const data = event.detail;
+  const args = data.args || {};
+
+  infoEl.textContent = `Mode: ${args.mode || "n/a"}`;
+  setFrameHeight();
+  Streamlit.setComponentReady();
 }
 
 Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
-Streamlit.setComponentReady();
-Streamlit.setFrameHeight(820);
+setFrameHeight();
