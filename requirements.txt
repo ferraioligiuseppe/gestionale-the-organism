@@ -20,3 +20,7 @@ matplotlib
 openai
 soundfile==0.12.1
 pydub==0.25.1
+streamlit-webrtc
+aiortc
+av
+opencv-python-headless
