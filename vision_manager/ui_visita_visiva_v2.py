@@ -679,7 +679,7 @@ def list_visite(conn, paziente_id):
             SELECT id, data_visita, dati_json
             FROM visite_visive
             WHERE paziente_id = %s
-              AND COALESCE(is_deleted, 0) <> 1
+              AND COALESCE(is_deleted, FALSE) = FALSE
             ORDER BY data_visita DESC, id DESC
             """,
             (paziente_id,),
