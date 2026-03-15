@@ -1,27 +1,30 @@
 import streamlit as st
 import datetime as dt
 import json
-
 from vision_manager.db import get_conn
 
 
 # ------------------------------
-# UTILS
+# JSON
 # ------------------------------
 
 def parse_json(s):
     try:
         return json.loads(s) if s else {}
-    except Exception:
+    except:
         return {}
 
+
+# ------------------------------
+# DB
+# ------------------------------
 
 def list_pazienti(conn):
 
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT id, cognome, nome, data_nascita
+        SELECT id, cognome, nome
         FROM pazienti
         ORDER BY cognome, nome
     """)
@@ -36,20 +39,17 @@ def list_pazienti(conn):
             pazienti.append({
                 "id": r["id"],
                 "cognome": r["cognome"],
-                "nome": r["nome"],
-                "data_nascita": r.get("data_nascita")
+                "nome": r["nome"]
             })
-
-        except Exception:
-
+        except:
             pazienti.append({
                 "id": r[0],
                 "cognome": r[1],
-                "nome": r[2],
-                "data_nascita": r[3] if len(r) > 3 else None
+                "nome": r[2]
             })
 
     return pazienti
+
 
 def list_visite(conn, paziente_id):
 
@@ -58,8 +58,8 @@ def list_visite(conn, paziente_id):
     cur.execute("""
         SELECT id, data_visita, dati_json
         FROM visite_visive
-        WHERE paziente_id = %s
-        AND (is_deleted IS NULL OR is_deleted = FALSE)
+        WHERE paziente_id=%s
+        AND (is_deleted IS NULL OR is_deleted=FALSE)
         ORDER BY data_visita DESC, id DESC
     """, (paziente_id,))
 
@@ -75,9 +75,7 @@ def list_visite(conn, paziente_id):
                 "data_visita": r["data_visita"],
                 "dati_json": r["dati_json"]
             })
-
-        except Exception:
-
+        except:
             visite.append({
                 "id": r[0],
                 "data_visita": r[1],
@@ -86,20 +84,24 @@ def list_visite(conn, paziente_id):
 
     return visite
 
+
 # ------------------------------
-# FORM STATE
+# FORM
 # ------------------------------
 
 def reset_form():
 
-    keys = [
-        "data_visita",
-        "anamnesi",
-    ]
+    keys = list(st.session_state.keys())
 
     for k in keys:
-        if k in st.session_state:
-            del st.session_state[k]
+
+        if k.startswith("vm_"):
+            continue
+
+        if k in ["data_visita"]:
+            continue
+
+        del st.session_state[k]
 
 
 def start_new_visit():
@@ -107,11 +109,13 @@ def start_new_visit():
     reset_form()
 
     st.session_state["data_visita"] = dt.date.today()
-    st.session_state["anamnesi"] = ""
-
     st.session_state["vm_mode"] = "new"
     st.session_state["vm_visit_id"] = None
 
+
+# ------------------------------
+# LOAD VISIT
+# ------------------------------
 
 def load_last_visit(conn, paziente_id):
 
@@ -129,34 +133,97 @@ def load_last_visit(conn, paziente_id):
 
     st.session_state["data_visita"] = last["data_visita"]
 
-    st.session_state["anamnesi"] = payload.get("anamnesi", "")
+    st.session_state["anamnesi"] = payload.get("anamnesi","")
+
+    av = payload.get("acuita",{})
+
+    st.session_state["avn_od"] = av.get("naturale",{}).get("od","")
+    st.session_state["avn_os"] = av.get("naturale",{}).get("os","")
+
+    st.session_state["avc_od"] = av.get("corretta",{}).get("od","")
+    st.session_state["avc_os"] = av.get("corretta",{}).get("os","")
+
+    eo = payload.get("esame_obiettivo",{})
+
+    st.session_state["iop_od"] = eo.get("pressione_endoculare_od","")
+    st.session_state["iop_os"] = eo.get("pressione_endoculare_os","")
+
+    st.session_state["pach_od"] = eo.get("pachimetria_od","")
+    st.session_state["pach_os"] = eo.get("pachimetria_os","")
+
+    corr = payload.get("correzione_finale",{})
+
+    st.session_state["sf_od"] = corr.get("od",{}).get("sf","")
+    st.session_state["cil_od"] = corr.get("od",{}).get("cyl","")
+    st.session_state["ax_od"] = corr.get("od",{}).get("ax","")
+
+    st.session_state["sf_os"] = corr.get("os",{}).get("sf","")
+    st.session_state["cil_os"] = corr.get("os",{}).get("cyl","")
+    st.session_state["ax_os"] = corr.get("os",{}).get("ax","")
+
+    st.session_state["note"] = payload.get("note","")
 
     st.session_state["vm_visit_id"] = last["id"]
     st.session_state["vm_mode"] = "edit"
 
-    st.success(f"Caricata visita ID {last['id']}")
+    st.success(f"Caricata visita {last['id']}")
 
+
+# ------------------------------
+# SAVE
+# ------------------------------
 
 def save_visit(conn, paziente_id):
 
     payload = {
-        "anamnesi": st.session_state.get("anamnesi", ""),
-        "data": str(st.session_state.get("data_visita"))
+
+        "data": str(st.session_state.get("data_visita")),
+
+        "anamnesi": st.session_state.get("anamnesi",""),
+
+        "acuita": {
+            "naturale":{
+                "od": st.session_state.get("avn_od",""),
+                "os": st.session_state.get("avn_os","")
+            },
+            "corretta":{
+                "od": st.session_state.get("avc_od",""),
+                "os": st.session_state.get("avc_os","")
+            }
+        },
+
+        "esame_obiettivo":{
+            "pressione_endoculare_od": st.session_state.get("iop_od",""),
+            "pressione_endoculare_os": st.session_state.get("iop_os",""),
+            "pachimetria_od": st.session_state.get("pach_od",""),
+            "pachimetria_os": st.session_state.get("pach_os","")
+        },
+
+        "correzione_finale":{
+            "od":{
+                "sf": st.session_state.get("sf_od",""),
+                "cyl": st.session_state.get("cil_od",""),
+                "ax": st.session_state.get("ax_od","")
+            },
+            "os":{
+                "sf": st.session_state.get("sf_os",""),
+                "cyl": st.session_state.get("cil_os",""),
+                "ax": st.session_state.get("ax_os","")
+            }
+        },
+
+        "note": st.session_state.get("note","")
     }
 
-    payload_json = json.dumps(payload, ensure_ascii=False)
+    payload_json = json.dumps(payload,ensure_ascii=False)
 
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT INTO visite_visive (paziente_id, data_visita, dati_json)
-        VALUES (%s, %s, %s)
+        INSERT INTO visite_visive (paziente_id,data_visita,dati_json)
+        VALUES (%s,%s,%s)
         RETURNING id
-    """, (
-        paziente_id,
-        payload["data"],
-        payload_json
-    ))
+    """,(paziente_id,payload["data"],payload_json))
 
     vid = cur.fetchone()[0]
 
@@ -165,7 +232,7 @@ def save_visit(conn, paziente_id):
     st.session_state["vm_visit_id"] = vid
     st.session_state["vm_mode"] = "edit"
 
-    st.success(f"Visita salvata (ID {vid})")
+    st.success(f"Visita salvata ID {vid}")
 
 
 # ------------------------------
@@ -175,39 +242,26 @@ def save_visit(conn, paziente_id):
 def ui_visita_visiva():
 
     st.title("Vision Manager")
-    st.caption("Visita visiva")
 
     conn = get_conn()
 
     pazienti = list_pazienti(conn)
 
-    if not pazienti:
-        st.warning("Nessun paziente nel database")
-        return
-
     psel = st.selectbox(
-        "Seleziona paziente",
+        "Paziente",
         pazienti,
         format_func=lambda p: f"{p['cognome']} {p['nome']} (ID {p['id']})"
     )
 
-    if not psel:
-        st.stop()
-
     paziente_id = int(psel["id"])
 
-    # reset se cambio paziente
     prev_pid = st.session_state.get("vm_prev_pid")
 
     if prev_pid != paziente_id:
         reset_form()
         st.session_state["vm_prev_pid"] = paziente_id
 
-    # ------------------------------
-    # BUTTONS
-    # ------------------------------
-
-    col1, col2 = st.columns(2)
+    col1,col2 = st.columns(2)
 
     with col1:
         if st.button("➕ Nuova visita"):
@@ -215,35 +269,55 @@ def ui_visita_visiva():
 
     with col2:
         if st.button("📂 Carica ultima visita"):
-            load_last_visit(conn, paziente_id)
+            load_last_visit(conn,paziente_id)
 
     st.divider()
 
-    # ------------------------------
-    # FORM
-    # ------------------------------
+    st.date_input("Data visita",key="data_visita")
 
-    st.session_state.setdefault("data_visita", dt.date.today())
+    st.text_area("Anamnesi",height=150,key="anamnesi")
 
-    st.date_input(
-        "Data visita",
-        key="data_visita"
-    )
+    st.subheader("Acuità visiva")
 
-    st.session_state.setdefault("anamnesi", "")
+    c1,c2 = st.columns(2)
 
-    st.text_area(
-        "Anamnesi",
-        height=200,
-        key="anamnesi"
-    )
+    with c1:
+        st.text_input("AVN OD",key="avn_od")
+        st.text_input("AVC OD",key="avc_od")
+
+    with c2:
+        st.text_input("AVN OS",key="avn_os")
+        st.text_input("AVC OS",key="avc_os")
+
+    st.subheader("Pressione")
+
+    c1,c2 = st.columns(2)
+
+    with c1:
+        st.text_input("IOP OD",key="iop_od")
+        st.text_input("Pachimetria OD",key="pach_od")
+
+    with c2:
+        st.text_input("IOP OS",key="iop_os")
+        st.text_input("Pachimetria OS",key="pach_os")
+
+    st.subheader("Correzione finale")
+
+    c1,c2 = st.columns(2)
+
+    with c1:
+        st.number_input("SF OD",key="sf_od")
+        st.number_input("CIL OD",key="cil_od")
+        st.number_input("AX OD",key="ax_od")
+
+    with c2:
+        st.number_input("SF OS",key="sf_os")
+        st.number_input("CIL OS",key="cil_os")
+        st.number_input("AX OS",key="ax_os")
+
+    st.text_area("Note",key="note")
 
     st.divider()
 
     if st.button("💾 Salva visita"):
-        save_visit(conn, paziente_id)
-
-    st.caption(
-        f"MODE: {st.session_state.get('vm_mode')} | "
-        f"VISIT_ID: {st.session_state.get('vm_visit_id')}"
-    )
+        save_visit(conn,paziente_id)
