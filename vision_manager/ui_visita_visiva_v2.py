@@ -3,13 +3,13 @@ from datetime import date, datetime
 
 import streamlit as st
 
-# Se nel tuo progetto l'import corretto è relativo, sostituisci con:
+# Se necessario, cambia questo import in:
 # from .db import get_conn
 from vision_manager.db import get_conn
 
 
 # =========================================================
-# HELPERS
+# HELPERS GENERICI
 # =========================================================
 
 def _parse_date_safe(value):
@@ -36,9 +36,23 @@ def _safe_int(value, default=0):
     try:
         if value in (None, ""):
             return default
-        return int(float(value))
+        return default if value is None else int(float(value))
     except Exception:
         return default
+
+
+def _row_get(row, key, index=None, default=None):
+    """
+    Supporta sia righe tuple/list sia dict/RealDictRow.
+    """
+    try:
+        if isinstance(row, dict):
+            return row.get(key, default)
+        if index is not None:
+            return row[index]
+    except Exception:
+        pass
+    return default
 
 
 # =========================================================
@@ -258,13 +272,8 @@ def apply_pending_visit_load():
         return
 
     try:
-        if isinstance(raw, str):
-            payload = json.loads(raw)
-        else:
-            payload = raw
-
+        payload = json.loads(raw) if isinstance(raw, str) else raw
         load_visit_payload(payload, visit_id=visit_id)
-
     except Exception as e:
         st.error(f"Errore nel caricamento della visita: {e}")
 
@@ -285,25 +294,6 @@ def list_pazienti(conn):
         return cur.fetchall()
 
 
-def save_visit(conn, paziente_id):
-    payload = build_visit_payload()
-    data_visita = st.session_state.get("vm_data_visita", date.today())
-
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO visite_visive (paziente_id, data_visita, dati_json)
-            VALUES (%s, %s, %s)
-            RETURNING id
-            """,
-            (paziente_id, data_visita, json.dumps(payload)),
-        )
-        new_id = cur.fetchone()[0]
-
-    conn.commit()
-    return new_id
-
-
 def list_visite(conn, paziente_id):
     with conn.cursor() as cur:
         cur.execute(
@@ -317,6 +307,46 @@ def list_visite(conn, paziente_id):
             (paziente_id,),
         )
         return cur.fetchall()
+
+
+def save_new_visit(conn, paziente_id):
+    payload = build_visit_payload()
+    data_visita = st.session_state.get("vm_data_visita", date.today())
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO visite_visive (paziente_id, data_visita, dati_json)
+            VALUES (%s, %s, %s)
+            RETURNING id
+            """,
+            (paziente_id, data_visita, json.dumps(payload)),
+        )
+        row = cur.fetchone()
+        new_id = _row_get(row, "id", 0, None) if row is not None else None
+
+    conn.commit()
+    return new_id
+
+
+def update_existing_visit(conn, visit_id, paziente_id):
+    payload = build_visit_payload()
+    data_visita = st.session_state.get("vm_data_visita", date.today())
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE visite_visive
+            SET paziente_id = %s,
+                data_visita = %s,
+                dati_json = %s
+            WHERE id = %s
+            """,
+            (paziente_id, data_visita, json.dumps(payload), visit_id),
+        )
+
+    conn.commit()
+    return visit_id
 
 
 # =========================================================
@@ -335,32 +365,43 @@ def ui_visita_visiva_v2(conn):
         st.warning("Nessun paziente presente.")
         return
 
-    pazienti_options = [f"{row[1]} {row[2]}" for row in pazienti]
-    pazienti_map = {f"{row[1]} {row[2]}": row[0] for row in pazienti}
+    pazienti_options = []
+    pazienti_map = {}
+
+    for row in pazienti:
+        pid = _row_get(row, "id", 0)
+        cognome = _row_get(row, "cognome", 1, "")
+        nome = _row_get(row, "nome", 2, "")
+        label = f"{cognome} {nome}".strip()
+        pazienti_options.append(label)
+        pazienti_map[label] = pid
 
     selected_paziente = st.selectbox("Seleziona paziente", pazienti_options)
     paziente_id = pazienti_map[selected_paziente]
 
-    col_top_1, col_top_2 = st.columns([1, 1])
+    top1, top2, top3 = st.columns([1, 1, 2])
 
-    with col_top_1:
+    with top1:
         if st.button("Nuova visita"):
             clear_visit_form()
             st.rerun()
 
-    with col_top_2:
-        if st.session_state.get("vm_loaded_visit_id"):
-            st.info(f"Visita caricata: ID {st.session_state['vm_loaded_visit_id']}")
+    with top2:
+        if st.session_state.get("vm_mode") == "edit":
+            st.caption("Modalità: modifica")
+        else:
+            st.caption("Modalità: nuova")
+
+    with top3:
+        loaded_id = st.session_state.get("vm_loaded_visit_id")
+        if loaded_id:
+            st.info(f"Visita caricata ID {loaded_id}")
 
     st.subheader("Dati visita")
 
     c1, c2 = st.columns(2)
     with c1:
-        st.selectbox(
-            "Tipo visita",
-            ["oculistica"],
-            key="vm_tipo_visita",
-        )
+        st.selectbox("Tipo visita", ["oculistica"], key="vm_tipo_visita")
     with c2:
         st.date_input("Data visita", key="vm_data_visita")
 
@@ -418,11 +459,21 @@ def ui_visita_visiva_v2(conn):
 
     st.text_area("Note", key="vm_note", height=120)
 
-    col_save_1, col_save_2 = st.columns([1, 2])
-    with col_save_1:
-        if st.button("Salva visita"):
-            new_id = save_visit(conn, paziente_id)
-            st.success(f"Visita salvata correttamente. ID: {new_id}")
+    save1, save2 = st.columns([1, 2])
+
+    with save1:
+        if st.session_state.get("vm_mode") == "edit" and st.session_state.get("vm_loaded_visit_id"):
+            if st.button("Aggiorna visita"):
+                updated_id = update_existing_visit(
+                    conn,
+                    st.session_state["vm_loaded_visit_id"],
+                    paziente_id,
+                )
+                st.success(f"Visita aggiornata correttamente. ID: {updated_id}")
+        else:
+            if st.button("Salva visita"):
+                new_id = save_new_visit(conn, paziente_id)
+                st.success(f"Visita salvata correttamente. ID: {new_id}")
 
     st.subheader("Storico visite")
 
@@ -432,7 +483,11 @@ def ui_visita_visiva_v2(conn):
         st.info("Nessuna visita salvata per questo paziente.")
         return
 
-    for visit_id, data_visita, dati_json in visite:
+    for row in visite:
+        visit_id = _row_get(row, "id", 0)
+        data_visita = _row_get(row, "data_visita", 1)
+        dati_json = _row_get(row, "dati_json", 2)
+
         with st.expander(f"Visita #{visit_id} - {data_visita}"):
             try:
                 preview = json.loads(dati_json) if isinstance(dati_json, str) else dati_json
