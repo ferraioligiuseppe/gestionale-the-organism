@@ -20,6 +20,21 @@ def parse_json(s):
 # DB
 # ------------------------------
 
+def apply_pending_visit_load():
+    pending = st.session_state.pop("vm_pending_load", None)
+
+    if not pending:
+        return
+
+    payload = pending.get("payload", {})
+    visit_id = pending.get("visit_id")
+    data_visita = pending.get("data_visita")
+
+    load_visit_payload(
+        payload=payload,
+        visit_id=visit_id,
+        data_visita=data_visita,
+    )
 def list_pazienti(conn):
     cur = conn.cursor()
     try:
