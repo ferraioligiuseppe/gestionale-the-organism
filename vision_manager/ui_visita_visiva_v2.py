@@ -227,6 +227,7 @@ def ensure_visit_state():
         "vm_note": "",
         "vm_pending_load": None,
         "vm_loaded_visit_id": None,
+        "vm_delete_confirm": None,
         "vm_mode": "new",
     }
 
@@ -672,11 +673,6 @@ def list_pazienti(conn):
 
 
 def list_visite(conn, paziente_id):
-    try:
-        conn.rollback()
-    except Exception:
-        pass
-
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -725,6 +721,26 @@ def update_existing_visit(conn, visit_id, paziente_id):
             WHERE id = %s
             """,
             (paziente_id, data_visita, json.dumps(payload), visit_id),
+        )
+
+    conn.commit()
+    return visit_id
+
+
+def delete_visit(conn, visit_id):
+    """
+    Soft delete della visita: la visita non viene eliminata dal database,
+    ma viene nascosta dallo storico impostando is_deleted e deleted_at.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE visite_visive
+            SET is_deleted = 1,
+                deleted_at = NOW()
+            WHERE id = %s
+            """,
+            (visit_id,),
         )
 
     conn.commit()
@@ -1133,7 +1149,7 @@ def ui_visita_visiva_v2(conn):
                 preview = None
                 st.write("Anteprima non disponibile")
 
-            hist1, hist2, hist3 = st.columns([1, 1, 1])
+            hist1, hist2, hist3, hist4 = st.columns([1, 1, 1, 1])
             with hist1:
                 if st.button("Carica", key=f"vm_load_{visit_id}"):
                     st.session_state["vm_pending_load"] = {
@@ -1169,6 +1185,30 @@ def ui_visita_visiva_v2(conn):
                         mime="application/pdf",
                         key=f"vm_pr_{visit_id}",
                     )
+
+            with hist4:
+                if st.button("Cancella", key=f"vm_delete_{visit_id}"):
+                    st.session_state["vm_delete_confirm"] = visit_id
+                    st.rerun()
+
+    delete_id = st.session_state.get("vm_delete_confirm")
+    if delete_id:
+        st.warning(f"Stai per cancellare la visita ID {delete_id}. Confermi?")
+        c1, c2 = st.columns(2)
+
+        with c1:
+            if st.button("Conferma cancellazione", key="vm_delete_yes", type="primary"):
+                delete_visit(conn, delete_id)
+                if st.session_state.get("vm_loaded_visit_id") == delete_id:
+                    clear_visit_form()
+                st.session_state["vm_delete_confirm"] = None
+                st.success("Visita cancellata correttamente.")
+                st.rerun()
+
+        with c2:
+            if st.button("Annulla", key="vm_delete_no"):
+                st.session_state["vm_delete_confirm"] = None
+                st.rerun()
 
 
 def ui_visita_visiva():
