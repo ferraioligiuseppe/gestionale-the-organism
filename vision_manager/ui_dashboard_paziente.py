@@ -1,228 +1,553 @@
 import json
-from datetime import date
-from collections.abc import Mapping
+import datetime as dt
+from datetime import date, datetime
+import calendar
+from io import BytesIO
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import streamlit as st
 
+# Se necessario, cambia questo import in:
+# from .db import get_conn
 from vision_manager.db import get_conn
+from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
+from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
+
+LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
 
-def _inject_dashboard_css():
-    st.markdown("""
-    <style>
-    [data-testid="stAppViewContainer"] {
-        background: #f6f8fb;
-    }
+# =========================================================
+# HELPERS GENERICI
+# =========================================================
 
-    [data-testid="stHeader"] {
-        background: rgba(0, 0, 0, 0);
-    }
-
-    [data-testid="stSidebar"] {
-        background: #ffffff;
-    }
-
-    .block-container {
-        padding-top: 1.2rem;
-        padding-bottom: 2rem;
-    }
-
-    div[data-testid="stMetric"] {
-        background: white;
-        border: 1px solid #e6ebf2;
-        border-radius: 16px;
-        padding: 14px 16px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
-    }
-
-    h1, h2, h3 {
-        color: #1f2937 !important;
-    }
-
-    p, div, label, span {
-        color: #111827 !important;
-    }
-
-    .dashboard-card {
-        background: white;
-        border: 1px solid #e6ebf2;
-        border-radius: 18px;
-        padding: 18px 20px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-        margin-bottom: 14px;
-    }
-
-    .dashboard-muted {
-        color: #6b7280 !important;
-        font-size: 0.95rem;
-    }
-
-    .dashboard-patient {
-        font-size: 1.35rem;
-        font-weight: 700;
-        color: #0f172a !important;
-        margin-bottom: 4px;
-    }
-
-    /* Selectbox chiaro */
-    div[data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-        border: 1px solid #dbe3ee !important;
-        border-radius: 12px !important;
-    }
-
-    div[data-baseweb="select"] span {
-        color: #111827 !important;
-    }
-
-    div[data-baseweb="popover"] {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-    }
-
-    div[role="listbox"] {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-        border: 1px solid #dbe3ee !important;
-    }
-
-    div[role="option"] {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-    }
-
-    div[role="option"]:hover {
-        background-color: #eef4fb !important;
-        color: #111827 !important;
-    }
-
-    /* Input chiari */
-    input, textarea {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-    }
-
-    .stTextInput > div > div > input,
-    .stDateInput input,
-    .stNumberInput input {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-
-def calcola_eta(data_nascita):
-    if pd.isna(data_nascita) or not data_nascita:
-        return None
-
-    if isinstance(data_nascita, str):
+def _parse_date_safe(value):
+    if not value:
+        return date.today()
+    if isinstance(value, date):
+        return value
+    s = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
         try:
-            data_nascita = pd.to_datetime(data_nascita).date()
-        except Exception:
-            return None
-    elif hasattr(data_nascita, "date"):
-        try:
-            data_nascita = data_nascita.date()
+            return datetime.strptime(s[:10], fmt).date()
         except Exception:
             pass
+    return date.today()
 
-    if not isinstance(data_nascita, date):
-        return None
 
-    oggi = date.today()
-    return oggi.year - data_nascita.year - (
-        (oggi.month, oggi.day) < (data_nascita.month, data_nascita.day)
+def _render_dmy_input(label, key_prefix, default_date=None):
+    dflt = _parse_date_safe(default_date) if default_date else date.today()
+
+    day_key = f"{key_prefix}_day"
+    month_key = f"{key_prefix}_month"
+    year_key = f"{key_prefix}_year"
+
+    st.session_state.setdefault(day_key, dflt.day)
+    st.session_state.setdefault(month_key, dflt.month)
+    st.session_state.setdefault(year_key, dflt.year)
+
+    st.markdown(label)
+    c1, c2, c3 = st.columns([1, 1, 1.2])
+    month_names = [
+        "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+        "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"
+    ]
+
+    year_selected = c3.selectbox(
+        "Anno",
+        list(range(date.today().year, 1899, -1)),
+        index=max(0, min(date.today().year - st.session_state[year_key], date.today().year - 1900)),
+        key=year_key,
+    )
+    month_selected = c2.selectbox(
+        "Mese",
+        list(range(1, 13)),
+        format_func=lambda m: month_names[m - 1],
+        index=max(0, min(11, st.session_state[month_key] - 1)),
+        key=month_key,
+    )
+    max_day = calendar.monthrange(int(year_selected), int(month_selected))[1]
+    current_day = int(st.session_state.get(day_key, dflt.day) or dflt.day)
+    if current_day > max_day:
+        current_day = max_day
+        st.session_state[day_key] = max_day
+    day_selected = c1.selectbox(
+        "Giorno",
+        list(range(1, max_day + 1)),
+        index=max(0, min(max_day - 1, current_day - 1)),
+        key=day_key,
     )
 
+    return date(int(year_selected), int(month_selected), int(day_selected))
 
-def _to_float(v):
+
+def _calculate_age(birth_date, reference_date=None):
+    if not birth_date:
+        return None
     try:
-        if v in (None, ""):
-            return None
-        return float(str(v).replace(",", "."))
+        b = _parse_date_safe(birth_date) if not isinstance(birth_date, date) else birth_date
+        ref = reference_date or date.today()
+        years = ref.year - b.year - ((ref.month, ref.day) < (b.month, b.day))
+        return years if years >= 0 else None
     except Exception:
         return None
 
 
-def _is_pg(conn) -> bool:
+def _age_label(birth_date, prefix="Età"):
+    years = _calculate_age(birth_date)
+    if years is None:
+        return ""
+    return f"{prefix}: {years} anni"
+
+
+def _safe_float(value, default=0.0):
+    try:
+        if value in (None, ""):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_int(value, default=0):
+    try:
+        if value in (None, ""):
+            return default
+        return default if value is None else int(float(value))
+    except Exception:
+        return default
+
+
+def _row_get(row, key, index=None, default=None):
+    """
+    Supporta sia righe tuple/list sia dict/RealDictRow.
+    """
+    try:
+        if isinstance(row, dict):
+            return row.get(key, default)
+        if index is not None:
+            return row[index]
+    except Exception:
+        pass
+    return default
+
+
+def _fmt_value(value, fallback="-"):
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        value = value.strip()
+        return value if value else fallback
+    return str(value)
+
+
+def _fmt_rx_block(rx_dict):
+    if not isinstance(rx_dict, dict):
+        return "-"
+    sf = _fmt_value(rx_dict.get("sf"))
+    cyl = _fmt_value(rx_dict.get("cyl"))
+    ax = _fmt_value(rx_dict.get("ax"))
+    return f"SF {sf}   CIL {cyl}   AX {ax}"
+
+
+def _calc_iop_adjusted(iop, cct, ref_cct=540.0):
+    if iop is None or cct is None:
+        return None
+    delta = (ref_cct - cct) / 10.0 * 0.7
+    return float(iop + delta)
+
+
+def _clinical_attention(iop_od, iop_os, cct_od, cct_os):
+    out = {
+        "od": {"flag": False, "reason": "", "adj": None},
+        "os": {"flag": False, "reason": "", "adj": None},
+    }
+
+    for eye in ("od", "os"):
+        iop = iop_od if eye == "od" else iop_os
+        cct = cct_od if eye == "od" else cct_os
+        adj = _calc_iop_adjusted(iop, cct)
+
+        reasons = []
+        flag = False
+
+        if iop is not None and iop >= 21:
+            flag = True
+            reasons.append("IOP ≥ 21 mmHg")
+
+        if cct is not None and cct < 500 and iop is not None and iop >= 18:
+            flag = True
+            reasons.append("CCT < 500 µm con IOP ≥ 18 (possibile sottostima)")
+
+        if adj is not None and adj >= 21:
+            flag = True
+            reasons.append(f"IOP stimata da CCT ≈ {adj:.1f} mmHg")
+
+        out[eye]["flag"] = flag
+        out[eye]["reason"] = "; ".join(reasons)
+        out[eye]["adj"] = adj
+
+    return out
+
+
+# =========================================================
+# SESSION STATE
+# =========================================================
+
+def ensure_visit_state():
+    defaults = {
+        "vm_tipo_visita": "oculistica",
+        "vm_data_visita": date.today(),
+        "vm_anamnesi": "",
+        "vm_acuita_naturale_od": "",
+        "vm_acuita_naturale_os": "",
+        "vm_acuita_corretta_od": "",
+        "vm_acuita_corretta_os": "",
+        "vm_congiuntiva": "",
+        "vm_cornea": "",
+        "vm_camera_anteriore": "",
+        "vm_cristallino": "",
+        "vm_vitreo": "",
+        "vm_fondo_oculare": "",
+        "vm_iop_od": "",
+        "vm_iop_os": "",
+        "vm_pachimetria_od": "",
+        "vm_pachimetria_os": "",
+        "vm_ca_od_sf": 0.0,
+        "vm_ca_od_cyl": 0.0,
+        "vm_ca_od_ax": 0,
+        "vm_ca_os_sf": 0.0,
+        "vm_ca_os_cyl": 0.0,
+        "vm_ca_os_ax": 0,
+        "vm_cf_od_sf": 0.0,
+        "vm_cf_od_cyl": 0.0,
+        "vm_cf_od_ax": 0,
+        "vm_cf_os_sf": 0.0,
+        "vm_cf_os_cyl": 0.0,
+        "vm_cf_os_ax": 0,
+        "vm_note": "",
+        "vm_pending_load": None,
+        "vm_loaded_visit_id": None,
+        "vm_mode": "new",
+    }
+
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def clear_visit_form():
+    st.session_state["vm_tipo_visita"] = "oculistica"
+    st.session_state["vm_data_visita"] = date.today()
+    st.session_state["vm_anamnesi"] = ""
+    st.session_state["vm_acuita_naturale_od"] = ""
+    st.session_state["vm_acuita_naturale_os"] = ""
+    st.session_state["vm_acuita_corretta_od"] = ""
+    st.session_state["vm_acuita_corretta_os"] = ""
+    st.session_state["vm_congiuntiva"] = ""
+    st.session_state["vm_cornea"] = ""
+    st.session_state["vm_camera_anteriore"] = ""
+    st.session_state["vm_cristallino"] = ""
+    st.session_state["vm_vitreo"] = ""
+    st.session_state["vm_fondo_oculare"] = ""
+    st.session_state["vm_iop_od"] = ""
+    st.session_state["vm_iop_os"] = ""
+    st.session_state["vm_pachimetria_od"] = ""
+    st.session_state["vm_pachimetria_os"] = ""
+    st.session_state["vm_ca_od_sf"] = 0.0
+    st.session_state["vm_ca_od_cyl"] = 0.0
+    st.session_state["vm_ca_od_ax"] = 0
+    st.session_state["vm_ca_os_sf"] = 0.0
+    st.session_state["vm_ca_os_cyl"] = 0.0
+    st.session_state["vm_ca_os_ax"] = 0
+    st.session_state["vm_cf_od_sf"] = 0.0
+    st.session_state["vm_cf_od_cyl"] = 0.0
+    st.session_state["vm_cf_od_ax"] = 0
+    st.session_state["vm_cf_os_sf"] = 0.0
+    st.session_state["vm_cf_os_cyl"] = 0.0
+    st.session_state["vm_cf_os_ax"] = 0
+    st.session_state["vm_note"] = ""
+    st.session_state["vm_loaded_visit_id"] = None
+    st.session_state["vm_mode"] = "new"
+
+
+# =========================================================
+# PAYLOAD
+# =========================================================
+
+def build_visit_payload():
+    return {
+        "tipo_visita": st.session_state.get("vm_tipo_visita", "oculistica"),
+        "data": str(st.session_state.get("vm_data_visita", date.today())),
+        "anamnesi": st.session_state.get("vm_anamnesi", ""),
+        "acuita": {
+            "naturale": {
+                "od": st.session_state.get("vm_acuita_naturale_od", ""),
+                "os": st.session_state.get("vm_acuita_naturale_os", ""),
+            },
+            "corretta": {
+                "od": st.session_state.get("vm_acuita_corretta_od", ""),
+                "os": st.session_state.get("vm_acuita_corretta_os", ""),
+            },
+        },
+        "esame_obiettivo": {
+            "congiuntiva": st.session_state.get("vm_congiuntiva", ""),
+            "cornea": st.session_state.get("vm_cornea", ""),
+            "camera_anteriore": st.session_state.get("vm_camera_anteriore", ""),
+            "cristallino": st.session_state.get("vm_cristallino", ""),
+            "vitreo": st.session_state.get("vm_vitreo", ""),
+            "fondo_oculare": st.session_state.get("vm_fondo_oculare", ""),
+            "pressione_endoculare_od": st.session_state.get("vm_iop_od", ""),
+            "pressione_endoculare_os": st.session_state.get("vm_iop_os", ""),
+            "pachimetria_od": st.session_state.get("vm_pachimetria_od", ""),
+            "pachimetria_os": st.session_state.get("vm_pachimetria_os", ""),
+        },
+        "correzione_abituale": {
+            "od": {
+                "sf": st.session_state.get("vm_ca_od_sf", 0.0),
+                "cyl": st.session_state.get("vm_ca_od_cyl", 0.0),
+                "ax": st.session_state.get("vm_ca_od_ax", 0),
+            },
+            "os": {
+                "sf": st.session_state.get("vm_ca_os_sf", 0.0),
+                "cyl": st.session_state.get("vm_ca_os_cyl", 0.0),
+                "ax": st.session_state.get("vm_ca_os_ax", 0),
+            },
+        },
+        "correzione_finale": {
+            "od": {
+                "sf": st.session_state.get("vm_cf_od_sf", 0.0),
+                "cyl": st.session_state.get("vm_cf_od_cyl", 0.0),
+                "ax": st.session_state.get("vm_cf_od_ax", 0),
+            },
+            "os": {
+                "sf": st.session_state.get("vm_cf_os_sf", 0.0),
+                "cyl": st.session_state.get("vm_cf_os_cyl", 0.0),
+                "ax": st.session_state.get("vm_cf_os_ax", 0),
+            },
+        },
+        "note": st.session_state.get("vm_note", ""),
+    }
+
+
+def load_visit_payload(payload, visit_id=None):
+    acuita = payload.get("acuita", {}) or {}
+    naturale = acuita.get("naturale", {}) or {}
+    corretta = acuita.get("corretta", {}) or {}
+
+    esame = payload.get("esame_obiettivo", {}) or {}
+
+    corr_ab = payload.get("correzione_abituale", {}) or {}
+    corr_ab_od = corr_ab.get("od", {}) or {}
+    corr_ab_os = corr_ab.get("os", {}) or {}
+
+    corr_fin = payload.get("correzione_finale", {}) or {}
+    corr_fin_od = corr_fin.get("od", {}) or {}
+    corr_fin_os = corr_fin.get("os", {}) or {}
+
+    st.session_state["vm_tipo_visita"] = payload.get("tipo_visita", "oculistica")
+    st.session_state["vm_data_visita"] = _parse_date_safe(payload.get("data"))
+    st.session_state["vm_anamnesi"] = payload.get("anamnesi", "")
+    st.session_state["vm_acuita_naturale_od"] = naturale.get("od", "")
+    st.session_state["vm_acuita_naturale_os"] = naturale.get("os", "")
+    st.session_state["vm_acuita_corretta_od"] = corretta.get("od", "")
+    st.session_state["vm_acuita_corretta_os"] = corretta.get("os", "")
+    st.session_state["vm_congiuntiva"] = esame.get("congiuntiva", "")
+    st.session_state["vm_cornea"] = esame.get("cornea", "")
+    st.session_state["vm_camera_anteriore"] = esame.get("camera_anteriore", "")
+    st.session_state["vm_cristallino"] = esame.get("cristallino", "")
+    st.session_state["vm_vitreo"] = esame.get("vitreo", "")
+    st.session_state["vm_fondo_oculare"] = esame.get("fondo_oculare", "")
+    st.session_state["vm_iop_od"] = esame.get("pressione_endoculare_od", "")
+    st.session_state["vm_iop_os"] = esame.get("pressione_endoculare_os", "")
+    st.session_state["vm_pachimetria_od"] = esame.get("pachimetria_od", "")
+    st.session_state["vm_pachimetria_os"] = esame.get("pachimetria_os", "")
+    st.session_state["vm_ca_od_sf"] = _safe_float(corr_ab_od.get("sf", 0.0))
+    st.session_state["vm_ca_od_cyl"] = _safe_float(corr_ab_od.get("cyl", 0.0))
+    st.session_state["vm_ca_od_ax"] = _safe_int(corr_ab_od.get("ax", 0))
+    st.session_state["vm_ca_os_sf"] = _safe_float(corr_ab_os.get("sf", 0.0))
+    st.session_state["vm_ca_os_cyl"] = _safe_float(corr_ab_os.get("cyl", 0.0))
+    st.session_state["vm_ca_os_ax"] = _safe_int(corr_ab_os.get("ax", 0))
+    st.session_state["vm_cf_od_sf"] = _safe_float(corr_fin_od.get("sf", 0.0))
+    st.session_state["vm_cf_od_cyl"] = _safe_float(corr_fin_od.get("cyl", 0.0))
+    st.session_state["vm_cf_od_ax"] = _safe_int(corr_fin_od.get("ax", 0))
+    st.session_state["vm_cf_os_sf"] = _safe_float(corr_fin_os.get("sf", 0.0))
+    st.session_state["vm_cf_os_cyl"] = _safe_float(corr_fin_os.get("cyl", 0.0))
+    st.session_state["vm_cf_os_ax"] = _safe_int(corr_fin_os.get("ax", 0))
+    st.session_state["vm_note"] = payload.get("note", "")
+    st.session_state["vm_loaded_visit_id"] = visit_id
+    st.session_state["vm_mode"] = "edit" if visit_id else "new"
+
+
+def apply_pending_visit_load():
+    pending = st.session_state.pop("vm_pending_load", None)
+    if not pending:
+        return
+
+    raw = pending.get("dati_json")
+    visit_id = pending.get("visit_id")
+
+    if not raw:
+        return
+
+    try:
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        load_visit_payload(payload, visit_id=visit_id)
+    except Exception as e:
+        st.error(f"Errore nel caricamento della visita: {e}")
+
+
+# =========================================================
+# PDF / EXPORT
+# =========================================================
+
+def _build_referto_letterhead_pdf(payload, patient_label="Paziente", visit_id=None):
+    data_pdf = {
+        "data": str(payload.get("data", "")),
+        "paziente": patient_label,
+        "anamnesi": payload.get("anamnesi", ""),
+        "acuita": payload.get("acuita", {}) or {},
+        "esame_obiettivo": payload.get("esame_obiettivo", {}) or {},
+        "note": payload.get("note", ""),
+    }
+    return build_referto_oculistico_a4(data_pdf, LETTERHEAD)
+
+
+def _rx_add(rx, add_value):
+    rx = rx or {}
+    try:
+        add_num = float(add_value or 0.0)
+    except Exception:
+        add_num = 0.0
+    return {
+        "sf": _safe_float(rx.get("sf", 0.0)) + add_num,
+        "cyl": _safe_float(rx.get("cyl", 0.0)),
+        "ax": _safe_int(rx.get("ax", 0)),
+    }
+
+
+def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente"):
+    corr_fin = payload.get("correzione_finale", {}) or {}
+    od = corr_fin.get("od", {}) or {}
+    os_ = corr_fin.get("os", {}) or {}
+    add_value = _safe_float(corr_fin.get("add", 0.0), 0.0)
+
+    data_pdf = {
+        "data": str(payload.get("data", "")),
+        "paziente": patient_label,
+        "lontano": {
+            "od": {
+                "sf": _safe_float(od.get("sf", 0.0)),
+                "cyl": _safe_float(od.get("cyl", 0.0)),
+                "ax": _safe_int(od.get("ax", 0)),
+            },
+            "os": {
+                "sf": _safe_float(os_.get("sf", 0.0)),
+                "cyl": _safe_float(os_.get("cyl", 0.0)),
+                "ax": _safe_int(os_.get("ax", 0)),
+            },
+        },
+        "intermedio": {
+            "od": _rx_add(od, add_value / 2.0),
+            "os": _rx_add(os_, add_value / 2.0),
+        },
+        "vicino": {
+            "od": _rx_add(od, add_value),
+            "os": _rx_add(os_, add_value),
+        },
+        "lenti": [],
+    }
+    return build_prescrizione_occhiali_a4(data_pdf, LETTERHEAD)
+
+
+# =========================================================
+# DB
+# =========================================================
+
+def _is_pg(conn):
     return conn.__class__.__module__.startswith("psycopg2")
 
 
-def _ph(conn) -> str:
+def _ph(conn):
     return "%s" if _is_pg(conn) else "?"
 
 
-def _dict_row(cur, row):
-    if isinstance(row, Mapping):
-        return dict(row)
-    cols = [d[0] for d in cur.description]
-    return {cols[i]: row[i] for i in range(len(cols))}
+def insert_paziente(conn, nome, cognome, data_nascita, note=""):
+    nome = (nome or "").strip()
+    cognome = (cognome or "").strip()
+    note = (note or "").strip()
+    data_nascita = (data_nascita or "").strip()
 
+    if not cognome:
+        raise ValueError("Cognome obbligatorio")
+    if not nome:
+        raise ValueError("Nome obbligatorio")
+    if not data_nascita:
+        raise ValueError("Data nascita obbligatoria")
 
-def _list_pazienti_dashboard(conn):
-    # Se una query precedente ha mandato la transazione in errore,
-    # su PostgreSQL bisogna fare rollback prima di eseguire nuove query.
-    if _is_pg(conn):
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """
-            SELECT id, cognome, nome, data_nascita
-            FROM pazienti
-            ORDER BY cognome, nome
-            """
-        )
-        rows = cur.fetchall()
-        return [_dict_row(cur, r) for r in rows]
-    finally:
-        try:
-            cur.close()
-        except Exception:
-            pass
-
-
-def _list_visite_dashboard(conn, paziente_id: int):
-    cur = conn.cursor()
     ph = _ph(conn)
+    cur = conn.cursor()
     try:
-        try:
-            cur.execute(
-                f"""
-                SELECT id, data_visita, dati_json, is_deleted, deleted_at
-                FROM visite_visive
-                WHERE paziente_id={ph} AND COALESCE(is_deleted, FALSE) = FALSE
-                ORDER BY data_visita ASC, id ASC
-                """,
-                (paziente_id,),
-            )
-        except Exception:
-            if _is_pg(conn):
+        if _is_pg(conn):
+            has_note = False
+            try:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='pazienti' AND column_name='note'
+                    LIMIT 1
+                    """
+                )
+                has_note = cur.fetchone() is not None
+            except Exception:
                 try:
                     conn.rollback()
                 except Exception:
                     pass
+                has_note = False
 
+            if has_note:
+                cur.execute(
+                    f"""
+                    INSERT INTO pazienti
+                    (cognome, nome, data_nascita, note, stato_paziente)
+                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
+                    RETURNING id
+                    """,
+                    (cognome, nome, data_nascita, note, "ATTIVO"),
+                )
+            else:
+                cur.execute(
+                    f"""
+                    INSERT INTO pazienti
+                    (cognome, nome, data_nascita, stato_paziente)
+                    VALUES ({ph}, {ph}, {ph}, {ph})
+                    RETURNING id
+                    """,
+                    (cognome, nome, data_nascita, "ATTIVO"),
+                )
+
+            row = cur.fetchone()
+            new_id = _row_get(row, "id", 0, None)
+        else:
             cur.execute(
                 f"""
-                SELECT id, data_visita, dati_json
-                FROM visite_visive
-                WHERE paziente_id={ph}
-                ORDER BY data_visita ASC, id ASC
+                INSERT INTO Pazienti
+                (Cognome, Nome, Data_Nascita, Note)
+                VALUES ({ph}, {ph}, {ph}, {ph})
                 """,
-                (paziente_id,),
+                (cognome, nome, data_nascita, note),
             )
+            new_id = getattr(cur, "lastrowid", None)
 
-        rows = cur.fetchall()
-        return [_dict_row(cur, r) for r in rows]
+        conn.commit()
+        return new_id
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         try:
             cur.close()
@@ -230,173 +555,622 @@ def _list_visite_dashboard(conn, paziente_id: int):
             pass
 
 
-def _safe_json(raw):
+def update_paziente(conn, paziente_id, nome, cognome, data_nascita, note=""):
+    nome = (nome or "").strip()
+    cognome = (cognome or "").strip()
+    note = (note or "").strip()
+    data_nascita = (data_nascita or "").strip()
+
+    if not paziente_id:
+        raise ValueError("Paziente non valido")
+    if not cognome:
+        raise ValueError("Cognome obbligatorio")
+    if not nome:
+        raise ValueError("Nome obbligatorio")
+    if not data_nascita:
+        raise ValueError("Data nascita obbligatoria")
+
+    ph = _ph(conn)
+    cur = conn.cursor()
     try:
-        return json.loads(raw) if isinstance(raw, str) else raw
+        if _is_pg(conn):
+            has_note = False
+            try:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='pazienti' AND column_name='note'
+                    LIMIT 1
+                    """
+                )
+                has_note = cur.fetchone() is not None
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                has_note = False
+
+            if has_note:
+                cur.execute(
+                    f"""
+                    UPDATE pazienti
+                    SET cognome = {ph},
+                        nome = {ph},
+                        data_nascita = {ph},
+                        note = {ph}
+                    WHERE id = {ph}
+                    """,
+                    (cognome, nome, data_nascita, note, paziente_id),
+                )
+            else:
+                cur.execute(
+                    f"""
+                    UPDATE pazienti
+                    SET cognome = {ph},
+                        nome = {ph},
+                        data_nascita = {ph}
+                    WHERE id = {ph}
+                    """,
+                    (cognome, nome, data_nascita, paziente_id),
+                )
+        else:
+            cur.execute(
+                f"""
+                UPDATE Pazienti
+                SET Cognome = {ph},
+                    Nome = {ph},
+                    Data_Nascita = {ph},
+                    Note = {ph}
+                WHERE ID = {ph}
+                """,
+                (cognome, nome, data_nascita, note, paziente_id),
+            )
+
+        conn.commit()
+        return paziente_id
     except Exception:
-        return None
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 
-def _make_line_chart(df, xcol, ycols, title, ylabel, threshold=None):
-    fig, ax = plt.subplots(figsize=(8, 3.8))
-    for col in ycols:
-        if col in df.columns:
-            ax.plot(df[xcol], df[col], marker="o", label=col.replace("_", " ").upper())
-    if threshold is not None:
-        ax.axhline(threshold, linestyle="--", linewidth=1)
-    ax.set_title(title)
-    ax.set_xlabel("Data visita")
-    ax.set_ylabel(ylabel)
-    ax.legend()
-    ax.grid(True, alpha=0.25)
-    fig.autofmt_xdate()
-    return fig
+def list_pazienti(conn):
+    ph = _ph(conn)
+    cur = conn.cursor()
+    try:
+        if _is_pg(conn):
+            cur.execute(
+                """
+                SELECT id, cognome, nome, data_nascita
+                FROM pazienti
+                ORDER BY cognome, nome
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT ID AS id, Cognome AS cognome, Nome AS nome, Data_Nascita AS data_nascita
+                FROM Pazienti
+                ORDER BY Cognome, Nome
+                """
+            )
+        return cur.fetchall()
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 
-def ui_dashboard_paziente():
-    _inject_dashboard_css()
+def list_visite(conn, paziente_id):
+    try:
+        conn.rollback()
+    except Exception:
+        pass
 
-    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, data_visita, dati_json
+            FROM visite_visive
+            WHERE paziente_id = %s
+              AND COALESCE(is_deleted, 0) = 0
+            ORDER BY data_visita DESC, id DESC
+            """,
+            (paziente_id,),
+        )
+        return cur.fetchall()
 
-    st.header("📊 Dashboard Paziente")
 
-    pazienti = _list_pazienti_dashboard(conn)
+def save_new_visit(conn, paziente_id):
+    payload = build_visit_payload()
+    data_visita = st.session_state.get("vm_data_visita", date.today())
 
-    if not pazienti:
-        st.warning("Nessun paziente nel database.")
-        return
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO visite_visive (paziente_id, data_visita, dati_json)
+            VALUES (%s, %s, %s)
+            RETURNING id
+            """,
+            (paziente_id, data_visita, json.dumps(payload)),
+        )
+        row = cur.fetchone()
+        new_id = _row_get(row, "id", 0, None) if row is not None else None
 
-    pazienti_df = pd.DataFrame(pazienti)
-    pazienti_df["cognome"] = pazienti_df["cognome"].fillna("").astype(str)
-    pazienti_df["nome"] = pazienti_df["nome"].fillna("").astype(str)
-    pazienti_df["label"] = (pazienti_df["cognome"] + " " + pazienti_df["nome"]).str.strip()
+    conn.commit()
+    return new_id
 
-    st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-    paziente_label = st.selectbox("Seleziona paziente", pazienti_df["label"].tolist())
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    paziente = pazienti_df[pazienti_df["label"] == paziente_label].iloc[0]
-    eta = calcola_eta(paziente["data_nascita"])
+def update_existing_visit(conn, visit_id, paziente_id):
+    payload = build_visit_payload()
+    data_visita = st.session_state.get("vm_data_visita", date.today())
 
-    st.markdown(
-        f"""
-        <div class="dashboard-card">
-            <div class="dashboard-patient">👤 {paziente['label']}</div>
-            <div class="dashboard-muted">
-                Data nascita: {paziente['data_nascita']} &nbsp;&nbsp;|&nbsp;&nbsp; Età: {eta if eta is not None else "-"}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    visite = _list_visite_dashboard(conn, int(paziente["id"]))
-
-    if not visite:
-        st.info("Nessuna visita disponibile.")
-        return
-
-    records = []
-    latest_payload = None
-
-    for r in visite:
-        data_json = _safe_json(r.get("dati_json"))
-        if not isinstance(data_json, dict):
-            continue
-
-        latest_payload = data_json
-        eo = data_json.get("esame_obiettivo", {}) or {}
-        corr = data_json.get("correzione_finale", {}) or {}
-        corr_od = corr.get("od", {}) or {}
-        corr_os = corr.get("os", {}) or {}
-
-        records.append(
-            {
-                "data": pd.to_datetime(r.get("data_visita"), errors="coerce"),
-                "iop_od": _to_float(eo.get("pressione_endoculare_od")),
-                "iop_os": _to_float(eo.get("pressione_endoculare_os")),
-                "pach_od": _to_float(eo.get("pachimetria_od")),
-                "pach_os": _to_float(eo.get("pachimetria_os")),
-                "sf_od": _to_float(corr_od.get("sf")),
-                "sf_os": _to_float(corr_os.get("sf")),
-            }
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE visite_visive
+            SET paziente_id = %s,
+                data_visita = %s,
+                dati_json = %s
+            WHERE id = %s
+            """,
+            (paziente_id, data_visita, json.dumps(payload), visit_id),
         )
 
-    df = pd.DataFrame(records)
+    conn.commit()
+    return visit_id
 
-    if df.empty:
-        st.info("Nessun dato clinico leggibile nelle visite.")
+
+# =========================================================
+# UI
+# =========================================================
+
+def ui_visita_visiva_v2(conn):
+    ensure_visit_state()
+    apply_pending_visit_load()
+
+    st.title("Vision Manager")
+
+    with st.expander("➕ Nuovo paziente", expanded=False):
+        np1, np2, np3 = st.columns(3)
+        nome_nuovo = np1.text_input("Nome nuovo paziente", key="vm_new_nome")
+        cognome_nuovo = np2.text_input("Cognome nuovo paziente", key="vm_new_cognome")
+        with np3:
+            data_nascita_new = _render_dmy_input(
+                "Data nascita nuovo paziente",
+                "vm_new_data_nascita",
+                st.session_state.get("vm_new_data_nascita_default", date(2010, 1, 1)),
+            )
+        eta_nuovo = _calculate_age(data_nascita_new)
+        if eta_nuovo is not None:
+            st.caption(f"Età automatica: {eta_nuovo} anni")
+        note_nuovo = st.text_area("Note anagrafiche", key="vm_new_note", height=80)
+
+        if st.button("Salva nuovo paziente", key="vm_save_new_patient"):
+            try:
+                pid = insert_paziente(
+                    conn,
+                    nome_nuovo,
+                    cognome_nuovo,
+                    data_nascita_new.isoformat() if data_nascita_new else "",
+                    note_nuovo,
+                )
+                st.session_state["vision_last_pid"] = int(pid) if pid is not None else None
+                st.success(f"Paziente salvato correttamente. ID: {pid}")
+                st.rerun()
+            except ValueError as ve:
+                st.error(str(ve))
+            except Exception as e:
+                st.error(f"Errore salvataggio nuovo paziente: {e}")
+
+    pazienti = list_pazienti(conn)
+    if not pazienti:
+        st.warning("Nessun paziente presente. Inserisci prima un nuovo paziente.")
         return
 
-    df = df.sort_values("data").reset_index(drop=True)
-    ultima = df.iloc[-1]
+    pazienti_options = []
+    pazienti_map = {}
 
-    st.subheader("📌 Ultimi valori")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("IOP OD", "-" if pd.isna(ultima["iop_od"]) else f'{ultima["iop_od"]:.1f} mmHg')
-    c2.metric("IOP OS", "-" if pd.isna(ultima["iop_os"]) else f'{ultima["iop_os"]:.1f} mmHg')
-    c3.metric("Pachimetria OD", "-" if pd.isna(ultima["pach_od"]) else f'{ultima["pach_od"]:.0f} µm')
-    c4.metric("Pachimetria OS", "-" if pd.isna(ultima["pach_os"]) else f'{ultima["pach_os"]:.0f} µm')
+    for row in pazienti:
+        pid = _row_get(row, "id", 0)
+        cognome = _row_get(row, "cognome", 1, "")
+        nome = _row_get(row, "nome", 2, "")
+        data_nascita = _row_get(row, "data_nascita", 3, "")
+        label = f"{cognome} {nome}".strip()
+        if data_nascita:
+            label = f"{label} ({str(data_nascita)[:10]})"
+        pazienti_options.append(label)
+        pazienti_map[label] = pid
 
-    st.divider()
+    default_idx = 0
+    last_pid = st.session_state.get("vision_last_pid")
+    if last_pid is not None:
+        for i, row in enumerate(pazienti):
+            pid = _row_get(row, "id", 0)
+            try:
+                if int(pid) == int(last_pid):
+                    default_idx = i
+                    break
+            except Exception:
+                pass
 
-    st.subheader("📈 Andamento IOP")
-    fig_iop = _make_line_chart(df, "data", ["iop_od", "iop_os"], "Andamento IOP", "mmHg", threshold=21)
-    st.pyplot(fig_iop, clear_figure=True)
+    selected_paziente = st.selectbox("Seleziona paziente", pazienti_options, index=default_idx)
+    paziente_id = pazienti_map[selected_paziente]
+    st.session_state["vision_last_pid"] = paziente_id
 
-    st.subheader("📈 Andamento pachimetria")
-    fig_pach = _make_line_chart(df, "data", ["pach_od", "pach_os"], "Andamento pachimetria", "µm")
-    st.pyplot(fig_pach, clear_figure=True)
+    selected_row = None
+    for row in pazienti:
+        pid = _row_get(row, "id", 0)
+        try:
+            if int(pid) == int(paziente_id):
+                selected_row = row
+                break
+        except Exception:
+            if pid == paziente_id:
+                selected_row = row
+                break
 
-    st.subheader("📈 Refrazione finale")
-    fig_ref = _make_line_chart(df, "data", ["sf_od", "sf_os"], "Refrazione finale", "Diottrie")
-    st.pyplot(fig_ref, clear_figure=True)
+    edit_nome_default = _row_get(selected_row, "nome", 2, "") if selected_row is not None else ""
+    edit_cognome_default = _row_get(selected_row, "cognome", 1, "") if selected_row is not None else ""
+    edit_dn_default = _parse_date_safe(_row_get(selected_row, "data_nascita", 3, None)) if selected_row is not None else date.today()
 
-    if isinstance(latest_payload, dict):
-        st.divider()
-        c_left, c_right = st.columns(2)
+    selected_age = _calculate_age(edit_dn_default)
+    if selected_age is not None:
+        st.caption(f"Paziente selezionato: **{edit_cognome_default} {edit_nome_default}** • Età: **{selected_age} anni**")
+    else:
+        st.caption(f"Paziente selezionato: **{edit_cognome_default} {edit_nome_default}**")
 
-        with c_left:
-            st.subheader("🩺 Ultima visita")
-            st.write("**Anamnesi:**", latest_payload.get("anamnesi", "") or "-")
-            eo = latest_payload.get("esame_obiettivo", {}) or {}
-            fields = {
-                "Congiuntiva": eo.get("congiuntiva"),
-                "Cornea": eo.get("cornea"),
-                "Camera anteriore": eo.get("camera_anteriore"),
-                "Cristallino": eo.get("cristallino"),
-                "Vitreo": eo.get("vitreo"),
-                "Fondo oculare": eo.get("fondo_oculare"),
-            }
-            shown = False
-            for k, v in fields.items():
-                if v not in (None, ""):
-                    shown = True
-                    st.write(f"**{k}:** {v}")
-            if not shown:
-                st.write("-")
+    with st.expander("✏️ Modifica anagrafica paziente", expanded=False):
+        ep1, ep2, ep3 = st.columns(3)
+        nome_edit = ep1.text_input("Nome", value=edit_nome_default, key=f"vm_edit_nome_{paziente_id}")
+        cognome_edit = ep2.text_input("Cognome", value=edit_cognome_default, key=f"vm_edit_cognome_{paziente_id}")
+        with ep3:
+            data_nascita_edit = _render_dmy_input(
+                "Data nascita",
+                f"vm_edit_data_nascita_{paziente_id}",
+                edit_dn_default,
+            )
+        eta_edit = _calculate_age(data_nascita_edit)
+        if eta_edit is not None:
+            st.caption(f"Età automatica: {eta_edit} anni")
+        note_edit = st.text_area(
+            "Note anagrafiche",
+            value="",
+            key=f"vm_edit_note_{paziente_id}",
+            height=80,
+            help="La nota viene aggiornata se il database ha la colonna note.",
+        )
 
-        with c_right:
-            st.subheader("👓 Ultima prescrizione")
-            prescr = latest_payload.get("prescrizione", {}) or {}
-            if prescr:
-                for dist in ["lontano", "intermedio", "vicino"]:
-                    blocco = prescr.get(dist, {}) or {}
-                    if blocco:
-                        st.write(f"**{dist.capitalize()}**")
-                        st.write(
-                            f"OD: {blocco.get('od', {})}  |  OS: {blocco.get('os', {})}"
-                        )
-                lenti = prescr.get("lenti", []) or []
-                if lenti:
-                    st.write("**Lenti:**", ", ".join(map(str, lenti)))
+        if st.button("Salva modifiche anagrafiche", key=f"vm_save_edit_patient_{paziente_id}"):
+            try:
+                update_paziente(
+                    conn,
+                    paziente_id,
+                    nome_edit,
+                    cognome_edit,
+                    data_nascita_edit.isoformat() if data_nascita_edit else "",
+                    note_edit,
+                )
+                st.session_state["vision_last_pid"] = int(paziente_id)
+                st.success("Anagrafica paziente aggiornata correttamente.")
+                st.rerun()
+            except ValueError as ve:
+                st.error(str(ve))
+            except Exception as e:
+                st.error(f"Errore aggiornamento anagrafica: {e}")
+
+    top1, top2, top3 = st.columns([1, 1, 2])
+
+    with top1:
+        if st.button("Nuova visita"):
+            clear_visit_form()
+            st.rerun()
+
+    with top2:
+        if st.session_state.get("vm_mode") == "edit":
+            st.caption("Modalita: modifica")
+        else:
+            st.caption("Modalita: nuova")
+
+    with top3:
+        loaded_id = st.session_state.get("vm_loaded_visit_id")
+        if loaded_id:
+            st.info(f"Visita caricata ID {loaded_id}")
+
+    if selected_age is not None:
+        st.info(f"Età paziente: {selected_age} anni")
+
+    st.subheader("Dati visita")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.selectbox("Tipo visita", ["oculistica"], key="vm_tipo_visita")
+    with c2:
+        st.date_input("Data visita", key="vm_data_visita")
+
+    st.text_area("Anamnesi", key="vm_anamnesi", height=120)
+
+    st.subheader("Acuita visiva")
+    a1, a2, a3, a4 = st.columns(4)
+    with a1:
+        st.text_input("AVN OD", key="vm_acuita_naturale_od")
+    with a2:
+        st.text_input("AVN OS", key="vm_acuita_naturale_os")
+    with a3:
+        st.text_input("AVC OD", key="vm_acuita_corretta_od")
+    with a4:
+        st.text_input("AVC OS", key="vm_acuita_corretta_os")
+
+    st.subheader("Esame obiettivo")
+    e1, e2 = st.columns(2)
+    with e1:
+        st.text_input("Congiuntiva", key="vm_congiuntiva")
+        st.text_input("Cornea", key="vm_cornea")
+        st.text_input("Camera anteriore", key="vm_camera_anteriore")
+        st.text_input("Cristallino", key="vm_cristallino")
+        st.text_input("Vitreo", key="vm_vitreo")
+    with e2:
+        st.text_input("Fondo oculare", key="vm_fondo_oculare")
+        st.text_input("IOP OD", key="vm_iop_od")
+        st.text_input("IOP OS", key="vm_iop_os")
+        st.text_input("Pachimetria OD", key="vm_pachimetria_od")
+        st.text_input("Pachimetria OS", key="vm_pachimetria_os")
+
+    iop_od_now = _safe_float(st.session_state.get("vm_iop_od"), None)
+    iop_os_now = _safe_float(st.session_state.get("vm_iop_os"), None)
+    cct_od_now = _safe_float(st.session_state.get("vm_pachimetria_od"), None)
+    cct_os_now = _safe_float(st.session_state.get("vm_pachimetria_os"), None)
+    att = _clinical_attention(iop_od_now, iop_os_now, cct_od_now, cct_os_now)
+
+    with st.expander("🔎 Rapporto IOP / Pachimetria", expanded=False):
+        st.caption("Indicatore di attenzione clinica orientativo. Non sostituisce la valutazione specialistica.")
+        r1, r2 = st.columns(2)
+
+        with r1:
+            st.write("**OD**")
+            st.write(f"IOP inserita: **{_fmt_value(st.session_state.get('vm_iop_od'), '-') } mmHg**")
+            st.write(f"Pachimetria: **{_fmt_value(st.session_state.get('vm_pachimetria_od'), '-') } µm**")
+            if att["od"].get("adj") is not None:
+                st.write(f"IOP stimata da CCT: **{att['od']['adj']:.1f} mmHg**")
+            if att["od"]["flag"]:
+                st.warning(att["od"]["reason"] or "Possibile attenzione clinica.")
             else:
-                st.write("-")
+                st.success("Nessun flag con i dati inseriti.")
 
-    st.divider()
+        with r2:
+            st.write("**OS**")
+            st.write(f"IOP inserita: **{_fmt_value(st.session_state.get('vm_iop_os'), '-') } mmHg**")
+            st.write(f"Pachimetria: **{_fmt_value(st.session_state.get('vm_pachimetria_os'), '-') } µm**")
+            if att["os"].get("adj") is not None:
+                st.write(f"IOP stimata da CCT: **{att['os']['adj']:.1f} mmHg**")
+            if att["os"]["flag"]:
+                st.warning(att["os"]["reason"] or "Possibile attenzione clinica.")
+            else:
+                st.success("Nessun flag con i dati inseriti.")
 
-    with st.expander("📚 Storico visite"):
-        show_df = df.copy()
-        if "data" in show_df.columns:
-            show_df["data"] = show_df["data"].dt.strftime("%Y-%m-%d")
-        st.dataframe(show_df, use_container_width=True)
+    st.subheader("Correzione abituale")
+    ca1, ca2, ca3 = st.columns(3)
+    with ca1:
+        st.number_input("OD SF", key="vm_ca_od_sf", step=0.25, format="%.2f")
+        st.number_input("OS SF", key="vm_ca_os_sf", step=0.25, format="%.2f")
+    with ca2:
+        st.number_input("OD CIL", key="vm_ca_od_cyl", step=0.25, format="%.2f")
+        st.number_input("OS CIL", key="vm_ca_os_cyl", step=0.25, format="%.2f")
+    with ca3:
+        st.number_input("OD AX", key="vm_ca_od_ax", step=1, min_value=0, max_value=180)
+        st.number_input("OS AX", key="vm_ca_os_ax", step=1, min_value=0, max_value=180)
+
+    st.subheader("Correzione finale")
+    cf1, cf2, cf3 = st.columns(3)
+    with cf1:
+        st.number_input("OD SF finale", key="vm_cf_od_sf", step=0.25, format="%.2f")
+        st.number_input("OS SF finale", key="vm_cf_os_sf", step=0.25, format="%.2f")
+    with cf2:
+        st.number_input("OD CIL finale", key="vm_cf_od_cyl", step=0.25, format="%.2f")
+        st.number_input("OS CIL finale", key="vm_cf_os_cyl", step=0.25, format="%.2f")
+    with cf3:
+        st.number_input("OD AX finale", key="vm_cf_od_ax", step=1, min_value=0, max_value=180)
+        st.number_input("OS AX finale", key="vm_cf_os_ax", step=1, min_value=0, max_value=180)
+
+    st.text_area("Note", key="vm_note", height=120)
+
+    save1, save2, save3 = st.columns([1, 1, 1])
+
+    with save1:
+        if st.session_state.get("vm_mode") == "edit" and st.session_state.get("vm_loaded_visit_id"):
+            if st.button("Aggiorna visita"):
+                updated_id = update_existing_visit(conn, st.session_state["vm_loaded_visit_id"], paziente_id)
+                st.success(f"Visita aggiornata correttamente. ID: {updated_id}")
+        else:
+            if st.button("Salva visita"):
+                new_id = save_new_visit(conn, paziente_id)
+                st.success(f"Visita salvata correttamente. ID: {new_id}")
+
+    payload_corrente = build_visit_payload()
+
+    with save2:
+        current_pdf = _build_referto_letterhead_pdf(
+            payload_corrente,
+            patient_label=selected_paziente,
+            visit_id=st.session_state.get("vm_loaded_visit_id"),
+        )
+        st.download_button(
+            "PDF referto",
+            data=current_pdf,
+            file_name=f"referto_visita_{selected_paziente.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            key="vm_download_current_pdf",
+        )
+
+    with save3:
+        current_prescrizione = _build_prescrizione_letterhead_pdf(
+            payload_corrente,
+            patient_label=selected_paziente,
+        )
+        st.download_button(
+            "PDF prescrizione",
+            data=current_prescrizione,
+            file_name=f"prescrizione_occhiali_{selected_paziente.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            key="vm_download_current_prescrizione",
+        )
+
+    st.subheader("Storico visite")
+    visite = list_visite(conn, paziente_id)
+
+    if not visite:
+        st.info("Nessuna visita salvata per questo paziente.")
+        return
+
+    def _to_float_local(x):
+        try:
+            if x is None:
+                return None
+            if isinstance(x, (int, float)):
+                return float(x)
+            s = str(x).strip().replace(",", ".")
+            if s == "":
+                return None
+            return float(s)
+        except Exception:
+            return None
+
+    def _parse_pair_values_local(s):
+        if not s:
+            return (None, None)
+        txt = str(s).strip().replace(",", "/").replace(";", "/").replace("\\", "/")
+        parts = [p.strip() for p in txt.split("/") if p.strip()]
+        if len(parts) == 1:
+            try:
+                v = float(parts[0])
+                return (v, v)
+            except Exception:
+                return (None, None)
+        try:
+            od = float(parts[0])
+        except Exception:
+            od = None
+        try:
+            os_ = float(parts[1])
+        except Exception:
+            os_ = None
+        return (od, os_)
+
+    trend = []
+    for row0 in visite:
+        dati_json0 = _row_get(row0, "dati_json", 2)
+
+        try:
+            pj0 = json.loads(dati_json0) if isinstance(dati_json0, str) else dati_json0
+        except Exception:
+            continue
+
+        if not isinstance(pj0, dict):
+            continue
+
+        eo0 = pj0.get("esame_obiettivo") or {}
+
+        iop_od0 = _to_float_local(eo0.get("pressione_endoculare_od"))
+        iop_os0 = _to_float_local(eo0.get("pressione_endoculare_os"))
+
+        if iop_od0 is None and iop_os0 is None:
+            od_old, os_old = _parse_pair_values_local(eo0.get("pressione_endoculare") or "")
+            iop_od0 = _to_float_local(od_old)
+            iop_os0 = _to_float_local(os_old)
+
+        if iop_od0 is None and iop_os0 is None:
+            continue
+
+        d_raw = _row_get(row0, "data_visita", 1) or pj0.get("data") or pj0.get("data_visita") or ""
+        try:
+            d0 = dt.date.fromisoformat(str(d_raw)[:10])
+        except Exception:
+            continue
+
+        trend.append((d0, iop_od0, iop_os0))
+
+    if trend:
+        trend.sort(key=lambda x: x[0])
+        dates = [t[0] for t in trend]
+        od_vals = [t[1] for t in trend]
+        os_vals = [t[2] for t in trend]
+
+        st.markdown("#### 📈 Andamento IOP (OD/OS) nel tempo")
+        fig, ax = plt.subplots()
+        ax.plot(dates, od_vals, marker="o", label="IOP OD")
+        ax.plot(dates, os_vals, marker="o", label="IOP OS")
+        ax.axhline(21, linestyle="--", linewidth=1, label="Soglia 21 mmHg")
+        ax.set_ylabel("mmHg")
+        ax.set_xlabel("Data visita")
+        ax.legend()
+        ax.grid(True, alpha=0.25)
+        fig.autofmt_xdate()
+        st.pyplot(fig, clear_figure=True)
+    else:
+        st.info("Nessun dato IOP presente nello storico (compila IOP OD/OS e salva almeno una visita).")
+
+    for row in visite:
+        visit_id = _row_get(row, "id", 0)
+        data_visita = _row_get(row, "data_visita", 1)
+        dati_json = _row_get(row, "dati_json", 2)
+
+        with st.expander(f"Visita #{visit_id} - {data_visita}"):
+            try:
+                preview = json.loads(dati_json) if isinstance(dati_json, str) else dati_json
+                st.write("Tipo visita:", preview.get("tipo_visita", ""))
+                st.write("Anamnesi:", preview.get("anamnesi", ""))
+            except Exception:
+                preview = None
+                st.write("Anteprima non disponibile")
+
+            hist1, hist2, hist3 = st.columns([1, 1, 1])
+            with hist1:
+                if st.button("Carica", key=f"vm_load_{visit_id}"):
+                    st.session_state["vm_pending_load"] = {
+                        "visit_id": visit_id,
+                        "dati_json": dati_json,
+                    }
+                    st.rerun()
+            with hist2:
+                if preview is not None:
+                    pdf_hist = _build_referto_letterhead_pdf(
+                        preview,
+                        patient_label=selected_paziente,
+                        visit_id=visit_id,
+                    )
+                    st.download_button(
+                        "Scarica PDF referto",
+                        data=pdf_hist,
+                        file_name=f"referto_visita_{visit_id}_{selected_paziente.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        key=f"vm_pdf_{visit_id}",
+                    )
+
+            with hist3:
+                if preview is not None:
+                    pdf_pr_hist = _build_prescrizione_letterhead_pdf(
+                        preview,
+                        patient_label=selected_paziente,
+                    )
+                    st.download_button(
+                        "Scarica PDF prescrizione",
+                        data=pdf_pr_hist,
+                        file_name=f"prescrizione_occhiali_{visit_id}_{selected_paziente.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        key=f"vm_pr_{visit_id}",
+                    )
+
+
+def ui_visita_visiva():
+    conn = get_conn()
+    return ui_visita_visiva_v2(conn)
