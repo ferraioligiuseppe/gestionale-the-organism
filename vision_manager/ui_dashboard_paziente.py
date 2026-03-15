@@ -3,7 +3,38 @@ import pandas as pd
 import plotly.express as px
 from datetime import date
 from vision_manager.db import get_conn
+import streamlit as st
 
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] {
+    background: #f6f8fb;
+}
+[data-testid="stHeader"] {
+    background: rgba(0,0,0,0);
+}
+[data-testid="stSidebar"] {
+    background: #ffffff;
+}
+.block-container {
+    padding-top: 1.2rem;
+    padding-bottom: 2rem;
+}
+div[data-testid="stMetric"] {
+    background: white;
+    border: 1px solid #e6ebf2;
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+}
+h1, h2, h3 {
+    color: #1f2937;
+}
+p, div, label, span {
+    color: #111827;
+}
+</style>
+""", unsafe_allow_html=True)
 
 def calcola_eta(data_nascita):
     if not data_nascita:
