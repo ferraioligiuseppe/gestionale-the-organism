@@ -256,6 +256,10 @@ def ui_visita_visiva():
     st.title("Vision Manager")
 
     conn = get_conn()
+    try:
+    conn.rollback()
+except Exception:
+    pass
 
     pazienti = list_pazienti(conn)
 
