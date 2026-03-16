@@ -11,11 +11,60 @@ from .importer_gaze import import_eye_tracking_file
 from .protocols_gaze import list_protocols
 
 
+def apply_gaze_ui_style() -> None:
+    st.markdown(
+        """
+        <style>
+        /* Text inputs */
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stTextArea"] textarea,
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stDateInput"] input,
+        div[data-testid="stTimeInput"] input {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            caret-color: #000000 !important;
+        }
+
+        /* Selectbox / multiselect */
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="select"] input {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+        }
+
+        /* Uploaded file box */
+        section[data-testid="stFileUploader"] {
+            background-color: rgba(255,255,255,0.04);
+            padding: 0.5rem;
+            border-radius: 0.75rem;
+        }
+
+        /* JSON / code blocks */
+        div[data-testid="stCodeBlock"] * {
+            color: inherit !important;
+        }
+
+        /* Dataframe readability */
+        div[data-testid="stDataFrame"] {
+            background-color: #ffffff !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+
 def ui_gaze_tracking(
     paziente_id: int,
     get_conn,
     paziente_label: str | None = None,
 ) -> None:
+    apply_gaze_ui_style()
+
     st.subheader("Eye Tracking")
     st.caption("Import multi-vendor, analisi clinica e salvataggio sessione.")
 
