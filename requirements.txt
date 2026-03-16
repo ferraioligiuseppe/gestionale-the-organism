@@ -24,3 +24,7 @@ streamlit-webrtc
 aiortc
 av
 opencv-python-headless
+mediapipe
+opencv-python-headless
+numpy
+Pillow
