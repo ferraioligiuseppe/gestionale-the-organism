@@ -1,340 +1,146 @@
 from __future__ import annotations
 
+import json
+
+import pandas as pd
 import streamlit as st
 
-from modules.gaze_tracking.analytics_gaze import run_reading_analysis
-from modules.gaze_tracking.config_gaze import GAZE_PRESETS, SUPPORTED_IMPORT_TYPES
-from modules.gaze_tracking.db_gaze_tracking import (
-    init_db_gaze_tracking,
-    insert_gaze_session,
-    insert_gaze_samples_bulk,
-    list_gaze_sessions_by_patient,
-    upsert_gaze_report,
-)
-from modules.gaze_tracking.distance_gaze import add_distance_zone_column, compute_distance_metrics
-from modules.gaze_tracking.importer_gaze import (
-    dataframe_to_sample_rows,
-    import_eye_tracker_dataframe,
-    validate_imported_dataframe,
-)
-from modules.gaze_tracking.plots_gaze import (
-    build_fixation_histogram_figure,
-    build_heatmap_figure,
-    build_saccade_histogram_figure,
-    build_scanpath_figure,
-    build_timeline_figure,
-)
-from modules.gaze_tracking.protocols_gaze import get_protocol_labels, protocol_label_to_code
+from .analytics_gaze import run_gaze_analytics
+from .db_gaze_tracking import init_gaze_tracking_db, insert_gaze_samples_bulk, insert_gaze_session, upsert_gaze_report
+from .importer_gaze import import_eye_tracking_file
+from .protocols_gaze import list_protocols
 
 
-def ui_gaze_tracking(conn=None, paziente_id=None, get_conn=None, paziente_label=None, **kwargs):
-    st.subheader("Eye Tracking Clinico")
+def ui_gaze_tracking(
+    paziente_id: int,
+    get_conn,
+    paziente_label: str | None = None,
+) -> None:
+    st.subheader("Eye Tracking")
+    st.caption("Import multi-vendor, analisi clinica e salvataggio sessione.")
 
-    # Compatibilità con il gestionale principale
-    if conn is None and callable(get_conn):
-        try:
-            conn = get_conn()
-        except Exception as e:
-            st.error(f"Errore apertura connessione DB: {e}")
-            conn = None
-
-    if paziente_label:
-        st.caption(f"Paziente: {paziente_label}")
-
-    if conn is not None:
-        try:
-            init_db_gaze_tracking(conn)
-        except Exception as e:
-            st.error(f"Errore init DB gaze_tracking: {e}")
-            return
-
-    initial_paziente_id = int(paziente_id) if paziente_id not in (None, "") else 0
-
-    with st.expander("Nuova sessione", expanded=True):
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            paziente_id_ui = st.number_input(
-                "Paziente ID",
-                min_value=0,
-                value=initial_paziente_id,
-                step=1,
-                disabled=initial_paziente_id > 0,
-            )
-            operatore = st.text_input("Operatore", value="")
-            protocol_label = st.selectbox("Protocollo", options=get_protocol_labels())
-
-        with col2:
-            camera_type = st.selectbox("Camera type", options=["webcam", "eye_tracker"])
-            distance_mode = st.selectbox("Modalità distanza", options=["manual", "estimated", "none"])
-            distance_cm = st.number_input("Distanza (cm)", min_value=0.0, value=0.0, step=1.0)
-
-        with col3:
-            distance_target_min_cm = st.number_input("Target distanza min (cm)", min_value=0.0, value=0.0, step=1.0)
-            distance_target_max_cm = st.number_input("Target distanza max (cm)", min_value=0.0, value=0.0, step=1.0)
-            calibration_score = st.number_input("Calibration score", min_value=0.0, value=0.0, step=0.1)
-
-        note = st.text_area("Note sessione", value="", height=80)
-
-    st.markdown("---")
-
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        preset_name = st.selectbox("Preset analisi", options=list(GAZE_PRESETS.keys()), index=0)
-    with col_b:
-        words_count = st.number_input("Numero parole testo", min_value=0, value=0, step=1)
-    with col_c:
-        show_debug = st.checkbox("Mostra debug", value=False)
-
-    config = GAZE_PRESETS[preset_name].copy()
-
-    with st.expander("Parametri display / import", expanded=False):
-        screen_w_px = st.number_input("Larghezza schermo px", min_value=0, value=1920, step=1)
-        screen_h_px = st.number_input("Altezza schermo px", min_value=0, value=1080, step=1)
-
-    uploaded = st.file_uploader(
-        "Carica file eye tracker",
-        type=SUPPORTED_IMPORT_TYPES,
-        key="gaze_file_upload",
-    )
-
-    if uploaded is None:
-        st.info("Carica un file CSV/XLS/XLSX per iniziare.")
-        _render_patient_sessions(conn, paziente_id_ui)
+    if not paziente_id:
+        st.warning("Seleziona prima un paziente.")
         return
 
-    force_vendor = st.selectbox(
-        "Formato sorgente",
-        options=["auto", "tobii", "thomson", "generic"],
-        index=0,
-    )
+    with st.expander("Contesto paziente", expanded=True):
+        st.write(f"**Paziente ID:** {paziente_id}")
+        st.write(f"**Paziente:** {paziente_label or '-'}")
 
-    force_vendor_value = None if force_vendor == "auto" else force_vendor
+    protocol_options = list_protocols()
+    protocol_map = {p["label"]: p["key"] for p in protocol_options}
 
-    try:
-        df_imported, import_meta = import_eye_tracker_dataframe(
-            file_obj=uploaded,
-            screen_w_px=screen_w_px if screen_w_px > 0 else None,
-            screen_h_px=screen_h_px if screen_h_px > 0 else None,
-            force_vendor=force_vendor_value,
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_protocol_label = st.selectbox(
+            "Protocollo clinico",
+            options=list(protocol_map.keys()),
+            index=0,
         )
-    except Exception as e:
-        st.error(f"Errore import file: {e}")
+    with col2:
+        vendor = st.selectbox(
+            "Vendor import",
+            options=["auto", "tobii", "thomson", "generic"],
+            index=0,
+        )
+
+    uploaded_file = st.file_uploader(
+        "Carica file eye tracker",
+        type=["csv", "xls", "xlsx"],
+        accept_multiple_files=False,
+    )
+
+    session_notes = st.text_area("Note sessione", height=100)
+
+    if uploaded_file is None:
+        st.info("Carica un file per iniziare.")
         return
 
-    st.write("Meta import")
-    st.json(import_meta)
-
-    st.write("Anteprima file importato")
-    st.dataframe(df_imported.head(20), use_container_width=True)
-
-    validation = validate_imported_dataframe(df_imported)
-    st.write("Validazione import")
-    st.json(validation)
-
-    if not validation["ok"]:
-        st.error("File non valido per l'analisi.")
-        return
-
-    with st.expander("Preview dataframe normalizzato", expanded=False):
-        st.dataframe(df_imported.head(50), use_container_width=True)
-
-    if st.button("Analizza", type="primary"):
+    if st.button("Analizza file", type="primary", use_container_width=True):
         try:
-            df_imported = add_distance_zone_column(
-                df_imported,
-                target_min=distance_target_min_cm if distance_target_min_cm > 0 else None,
-                target_max=distance_target_max_cm if distance_target_max_cm > 0 else None,
-            )
-
-            result = run_reading_analysis(
-                df_samples=df_imported,
-                config=config,
-                words_count=words_count if words_count > 0 else None,
-                screen_w_px=screen_w_px if screen_w_px > 0 else None,
-                screen_h_px=screen_h_px if screen_h_px > 0 else None,
-            )
-
-            samples_df = result["samples"]
-            fix_df = result["fixations"]
-            sac_df = result["saccades"]
-            lines_df = result["lines"]
-            trans_df = result["transitions"]
-            metrics = result["metrics"]
-            indexes = result["indexes"]
-            summary_json = result["summary"]
-
-            distance_metrics = compute_distance_metrics(samples_df)
-            metrics.update(distance_metrics)
-
-            summary_json["distance"] = distance_metrics
-            st.session_state["gaze_result"] = {
-                "samples_df": samples_df,
-                "fix_df": fix_df,
-                "sac_df": sac_df,
-                "lines_df": lines_df,
-                "trans_df": trans_df,
-                "metrics": metrics,
-                "indexes": indexes,
-                "summary_json": summary_json,
-                "session_payload": {
-                    "paziente_id": int(paziente_id_ui) if paziente_id_ui > 0 else None,
-                    "operatore": operatore,
-                    "protocollo": protocol_label_to_code(protocol_label),
-                    "camera_type": camera_type,
-                    "distance_cm": distance_cm if distance_cm > 0 else None,
-                    "distance_mode": distance_mode,
-                    "distance_target_min_cm": distance_target_min_cm if distance_target_min_cm > 0 else None,
-                    "distance_target_max_cm": distance_target_max_cm if distance_target_max_cm > 0 else None,
-                    "calibration_score": calibration_score if calibration_score > 0 else None,
-                    "status": "analyzed",
-                    "note": note,
-                },
-            }
-
-            st.success("Analisi completata.")
-        except Exception as e:
-            st.error(f"Errore durante l'analisi: {e}")
+            import_result = import_eye_tracking_file(uploaded_file, forced_vendor=vendor)
+        except Exception as exc:
+            st.error(f"Errore durante importazione: {exc}")
             return
 
-    gaze_result = st.session_state.get("gaze_result")
-    if not gaze_result:
-        _render_patient_sessions(conn, paziente_id_ui)
-        return
+        validation = import_result.validation
+        metadata = import_result.metadata
+        df = import_result.df
 
-    samples_df = gaze_result["samples_df"]
-    fix_df = gaze_result["fix_df"]
-    sac_df = gaze_result["sac_df"]
-    lines_df = gaze_result["lines_df"]
-    trans_df = gaze_result["trans_df"]
-    metrics = gaze_result["metrics"]
-    indexes = gaze_result["indexes"]
-    summary_json = gaze_result["summary_json"]
+        st.success("Import completato.")
 
-    st.markdown("---")
-    st.subheader("Risultati")
+        with st.expander("Validazione import", expanded=True):
+            st.json(validation)
+            st.json(metadata)
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Fixations", metrics.get("fixation_count", 0))
-    c2.metric("Mean fixation (ms)", metrics.get("mean_fixation_ms", 0))
-    c3.metric("Regressions", metrics.get("regression_total", 0))
-    c4.metric("WPM", metrics.get("words_per_min") if metrics.get("words_per_min") is not None else "-")
+        if not validation.get("valid", False):
+            st.error("Il file non ha superato la validazione.")
+            return
 
-    d1, d2, d3, d4 = st.columns(4)
-    d1.metric("Tracking loss %", metrics.get("tracking_loss_pct", 0))
-    d2.metric("Line losses", metrics.get("line_losses", 0))
-    d3.metric("Risk", indexes.get("risk_class", "-"))
-    d4.metric("Dyslexia oculomotor risk", indexes.get("dyslexia_oculomotor_risk", 0))
+        st.markdown("### Anteprima dati normalizzati")
+        st.dataframe(df.head(50), use_container_width=True)
 
-    with st.expander("Metriche complete", expanded=False):
-        st.json(metrics)
+        protocol_name = protocol_map[selected_protocol_label]
 
-    with st.expander("Indici clinici sintetici", expanded=False):
-        st.json(indexes)
-
-    with st.expander("Summary JSON", expanded=False):
-        st.json(summary_json)
-
-    tabs = st.tabs([
-        "Fixations",
-        "Saccades",
-        "Transitions",
-        "Lines",
-        "Heatmap",
-        "Scanpath",
-        "Histograms",
-        "Timeline",
-    ])
-
-    with tabs[0]:
-        st.dataframe(fix_df, use_container_width=True)
-
-    with tabs[1]:
-        st.dataframe(sac_df, use_container_width=True)
-
-    with tabs[2]:
-        st.dataframe(trans_df, use_container_width=True)
-
-    with tabs[3]:
-        st.dataframe(lines_df, use_container_width=True)
-
-    with tabs[4]:
-        st.pyplot(build_heatmap_figure(fix_df))
-
-    with tabs[5]:
-        st.pyplot(build_scanpath_figure(fix_df, trans_df))
-
-    with tabs[6]:
-        col_h1, col_h2 = st.columns(2)
-        with col_h1:
-            st.pyplot(build_fixation_histogram_figure(fix_df))
-        with col_h2:
-            st.pyplot(build_saccade_histogram_figure(sac_df))
-
-    with tabs[7]:
-        st.pyplot(build_timeline_figure(samples_df, fix_df, trans_df))
-
-    if show_debug:
-        with st.expander("Debug dataframes", expanded=False):
-            st.write("Samples")
-            st.dataframe(samples_df.head(100), use_container_width=True)
-            st.write("Fixations")
-            st.dataframe(fix_df.head(100), use_container_width=True)
-            st.write("Transitions")
-            st.dataframe(trans_df.head(100), use_container_width=True)
-
-    st.markdown("---")
-    st.subheader("Salvataggio su database")
-
-    if conn is None:
-        st.warning("Connessione DB non disponibile. Analisi eseguita solo in memoria.")
-        return
-
-    if st.button("Salva sessione + campioni + report"):
         try:
-            session_payload = gaze_result["session_payload"]
-            session_id = insert_gaze_session(conn, session_payload)
+            analysis = run_gaze_analytics(df=df, protocol_name=protocol_name, metadata=metadata)
+        except Exception as exc:
+            st.error(f"Errore durante analisi: {exc}")
+            return
 
-            sample_rows = dataframe_to_sample_rows(samples_df)
-            inserted_count = insert_gaze_samples_bulk(conn, session_id, sample_rows)
+        metrics = analysis["metrics"]
+        clinical_indexes = analysis["clinical_indexes"]
+        distance_metrics = analysis["distance_metrics"]
+        summary_json = analysis["summary_json"]
+        df_enriched: pd.DataFrame = analysis["samples_enriched"]
 
-            report_payload = {
-                "fixation_total_ms": metrics.get("fixation_total_ms"),
-                "mean_fixation_ms": metrics.get("mean_fixation_ms"),
-                "saccade_count": metrics.get("saccade_count"),
-                "target_hit_rate": None,
-                "tracking_loss_pct": metrics.get("tracking_loss_pct"),
-                "center_bias_pct": None,
-                "distance_mean_cm": metrics.get("distance_mean_cm"),
-                "distance_min_cm": metrics.get("distance_min_cm"),
-                "distance_max_cm": metrics.get("distance_max_cm"),
-                "distance_std_cm": metrics.get("distance_std_cm"),
-                "time_near_pct": metrics.get("time_near_pct"),
-                "time_mid_pct": metrics.get("time_mid_pct"),
-                "time_far_pct": metrics.get("time_far_pct"),
-                "summary_json": summary_json,
-            }
-            upsert_gaze_report(conn, session_id, report_payload)
+        st.markdown("### Metriche cliniche")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Fixation count", metrics.get("fixation_count"))
+        m2.metric("Mean fixation ms", metrics.get("mean_fixation_ms"))
+        m3.metric("Regressions", metrics.get("regressions"))
+        m4.metric("Saccade count", metrics.get("saccade_count"))
 
-            st.success(f"Sessione salvata. session_id={session_id} | campioni inseriti={inserted_count}")
-        except Exception as e:
-            st.error(f"Errore salvataggio DB: {e}")
+        st.markdown("### Indici sintetici")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Attention instability", clinical_indexes.get("attention_instability_index"))
+        c2.metric("Fatigue index", clinical_indexes.get("fatigue_index"))
+        c3.metric("Dyslexia oculomotor risk", clinical_indexes.get("dyslexia_oculomotor_risk"))
 
-    _render_patient_sessions(conn, paziente_id_ui)
+        st.markdown("### Distanza visiva")
+        st.json(distance_metrics)
 
+        st.markdown("### Summary JSON")
+        st.code(json.dumps(summary_json, ensure_ascii=False, indent=2), language="json")
 
-def _render_patient_sessions(conn, paziente_id: int):
-    if conn is None:
-        return
-    if paziente_id <= 0:
-        return
+        st.markdown("### Dati arricchiti")
+        st.dataframe(df_enriched.head(100), use_container_width=True)
 
-    with st.expander("Sessioni precedenti del paziente", expanded=False):
-        try:
-            sessions = list_gaze_sessions_by_patient(conn, int(paziente_id))
-            if not sessions:
-                st.info("Nessuna sessione trovata.")
-                return
-            st.dataframe(sessions, use_container_width=True)
-        except Exception as e:
-            st.error(f"Errore lettura sessioni: {e}")
+        if st.button("Salva sessione nel database", use_container_width=True):
+            try:
+                conn = get_conn()
+                init_gaze_tracking_db(conn)
+
+                session_id = insert_gaze_session(
+                    conn,
+                    {
+                        "paziente_id": paziente_id,
+                        "paziente_label": paziente_label,
+                        "protocol_name": protocol_name,
+                        "source_vendor": metadata.get("source_vendor"),
+                        "source_format": metadata.get("source_format"),
+                        "source_filename": metadata.get("source_filename"),
+                        "operator_name": None,
+                        "session_notes": session_notes,
+                    },
+                )
+
+                inserted_count = insert_gaze_samples_bulk(conn, session_id, df)
+                upsert_gaze_report(conn, session_id, analysis)
+
+                st.success(
+                    f"Sessione salvata correttamente. "
+                    f"Session ID: {session_id} · Campioni inseriti: {inserted_count}"
+                )
+            except Exception as exc:
+                st.error(f"Errore nel salvataggio DB: {exc}")

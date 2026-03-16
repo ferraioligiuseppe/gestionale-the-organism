@@ -1,37 +1,78 @@
 from __future__ import annotations
 
+from copy import deepcopy
 
-def get_gaze_protocols() -> list[dict]:
-    return [
-        {
-            "code": "READING_STANDARD",
-            "label": "Lettura standard",
-            "description": "Analisi lettura clinica base con metriche di regressione, fissazione e saccadi.",
+
+DEFAULT_PROTOCOLS = {
+    "reading_standard": {
+        "label": "Reading standard",
+        "description": "Protocollo base per lettura e stabilità oculomotoria.",
+        "sampling_rate_hint_hz": None,
+        "fixation_min_ms": 80,
+        "saccade_velocity_threshold": 30.0,
+        "blink_confidence_threshold": 0.2,
+        "line_cluster_tolerance_px": 40,
+        "distance_zones_cm": {
+            "near_max": 45.0,
+            "mid_max": 75.0,
         },
-        {
-            "code": "VISUAL_ATTENTION",
-            "label": "Attenzione visiva",
-            "description": "Task di attenzione visiva e tenuta del target.",
+    },
+    "visual_attention": {
+        "label": "Visual attention",
+        "description": "Protocollo orientato ad attenzione visiva e instabilità.",
+        "sampling_rate_hint_hz": None,
+        "fixation_min_ms": 60,
+        "saccade_velocity_threshold": 35.0,
+        "blink_confidence_threshold": 0.2,
+        "line_cluster_tolerance_px": 50,
+        "distance_zones_cm": {
+            "near_max": 45.0,
+            "mid_max": 75.0,
         },
-        {
-            "code": "OCULOMOTOR_SCREENING",
-            "label": "Screening oculomotorio",
-            "description": "Screening generale di inseguimenti, saccadi e stabilità.",
+    },
+    "oculomotor_screening": {
+        "label": "Oculomotor screening",
+        "description": "Screening rapido di fissazioni, saccadi e regressioni.",
+        "sampling_rate_hint_hz": None,
+        "fixation_min_ms": 70,
+        "saccade_velocity_threshold": 28.0,
+        "blink_confidence_threshold": 0.2,
+        "line_cluster_tolerance_px": 45,
+        "distance_zones_cm": {
+            "near_max": 45.0,
+            "mid_max": 75.0,
         },
-        {
-            "code": "BINOCULARITY_BASIC",
-            "label": "Binocularità base",
-            "description": "Analisi di base se disponibili dati OD/OS.",
+    },
+    "binocularity_basic": {
+        "label": "Binocularity basic",
+        "description": "Protocollo base per allineamento binocularità.",
+        "sampling_rate_hint_hz": None,
+        "fixation_min_ms": 80,
+        "saccade_velocity_threshold": 30.0,
+        "blink_confidence_threshold": 0.2,
+        "line_cluster_tolerance_px": 40,
+        "distance_zones_cm": {
+            "near_max": 45.0,
+            "mid_max": 75.0,
         },
-    ]
+    },
+}
 
 
-def get_protocol_labels() -> list[str]:
-    return [p["label"] for p in get_gaze_protocols()]
+def list_protocols() -> list[dict]:
+    items = []
+    for key, cfg in DEFAULT_PROTOCOLS.items():
+        items.append(
+            {
+                "key": key,
+                "label": cfg["label"],
+                "description": cfg.get("description", ""),
+            }
+        )
+    return items
 
 
-def protocol_label_to_code(label: str) -> str:
-    for p in get_gaze_protocols():
-        if p["label"] == label:
-            return p["code"]
-    return "READING_STANDARD"
+def get_protocol_config(protocol_name: str | None) -> dict:
+    key = protocol_name or "reading_standard"
+    cfg = DEFAULT_PROTOCOLS.get(key, DEFAULT_PROTOCOLS["reading_standard"])
+    return deepcopy(cfg)

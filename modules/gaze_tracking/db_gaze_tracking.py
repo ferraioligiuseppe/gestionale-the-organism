@@ -1,259 +1,236 @@
 from __future__ import annotations
 
 import json
+from typing import Any
+
+import pandas as pd
 
 
-def init_db_gaze_tracking(conn) -> None:
-    cur = conn.cursor()
-    try:
-        cur.execute("""
+def init_gaze_tracking_db(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS gaze_sessions (
-                id SERIAL PRIMARY KEY,
-                paziente_id INTEGER,
-                operatore TEXT,
-                protocollo TEXT,
-                camera_type TEXT,
-                distance_cm NUMERIC,
-                distance_mode TEXT,
-                distance_target_min_cm NUMERIC,
-                distance_target_max_cm NUMERIC,
-                calibration_score NUMERIC,
-                status TEXT,
-                note TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+                id BIGSERIAL PRIMARY KEY,
+                paziente_id BIGINT NOT NULL,
+                paziente_label TEXT,
+                protocol_name TEXT NOT NULL,
+                source_vendor TEXT,
+                source_format TEXT,
+                source_filename TEXT,
+                operator_name TEXT,
+                session_notes TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
 
-        cur.execute("""
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS gaze_samples (
-                id SERIAL PRIMARY KEY,
-                session_id INTEGER NOT NULL REFERENCES gaze_sessions(id) ON DELETE CASCADE,
-                ts_ms NUMERIC,
-                gaze_x NUMERIC,
-                gaze_y NUMERIC,
-                confidence NUMERIC,
-                tracking_ok BOOLEAN,
-                distance_cm_est NUMERIC,
-                distance_zone TEXT,
-                target_x NUMERIC,
-                target_y NUMERIC,
-                target_label TEXT
-            )
-        """)
+                id BIGSERIAL PRIMARY KEY,
+                session_id BIGINT NOT NULL REFERENCES gaze_sessions(id) ON DELETE CASCADE,
+                sample_index BIGINT NOT NULL,
+                ts_ms DOUBLE PRECISION,
+                gaze_x DOUBLE PRECISION,
+                gaze_y DOUBLE PRECISION,
+                confidence DOUBLE PRECISION,
+                fixation_flag BOOLEAN,
+                saccade_flag BOOLEAN,
+                blink_flag BOOLEAN,
+                eye_left_x DOUBLE PRECISION,
+                eye_left_y DOUBLE PRECISION,
+                eye_right_x DOUBLE PRECISION,
+                eye_right_y DOUBLE PRECISION,
+                pupil_size DOUBLE PRECISION,
+                distance_cm_est DOUBLE PRECISION,
+                target_x DOUBLE PRECISION,
+                target_y DOUBLE PRECISION,
+                target_label TEXT,
+                source_vendor TEXT,
+                source_format TEXT,
+                source_filename TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
 
-        cur.execute("""
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS gaze_reports (
-                session_id INTEGER PRIMARY KEY REFERENCES gaze_sessions(id) ON DELETE CASCADE,
-                fixation_total_ms NUMERIC,
-                mean_fixation_ms NUMERIC,
-                saccade_count INTEGER,
-                target_hit_rate NUMERIC,
-                tracking_loss_pct NUMERIC,
-                center_bias_pct NUMERIC,
-                distance_mean_cm NUMERIC,
-                distance_min_cm NUMERIC,
-                distance_max_cm NUMERIC,
-                distance_std_cm NUMERIC,
-                time_near_pct NUMERIC,
-                time_mid_pct NUMERIC,
-                time_far_pct NUMERIC,
-                summary_json JSONB
-            )
-        """)
+                id BIGSERIAL PRIMARY KEY,
+                session_id BIGINT NOT NULL UNIQUE REFERENCES gaze_sessions(id) ON DELETE CASCADE,
+                report_version TEXT,
+                analytics_version TEXT,
+                metrics_json JSONB,
+                clinical_indexes_json JSONB,
+                distance_metrics_json JSONB,
+                summary_json JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
 
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cur.close()
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_sessions_paziente_id ON gaze_sessions(paziente_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_samples_session_id ON gaze_samples(session_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_reports_session_id ON gaze_reports(session_id);")
+    conn.commit()
 
 
-def insert_gaze_session(conn, payload: dict) -> int:
-    cur = conn.cursor()
-    try:
-        cur.execute("""
+def insert_gaze_session(conn, session_data: dict[str, Any]) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
             INSERT INTO gaze_sessions (
                 paziente_id,
-                operatore,
-                protocollo,
-                camera_type,
-                distance_cm,
-                distance_mode,
-                distance_target_min_cm,
-                distance_target_max_cm,
-                calibration_score,
-                status,
-                note
+                paziente_label,
+                protocol_name,
+                source_vendor,
+                source_format,
+                source_filename,
+                operator_name,
+                session_notes
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            RETURNING id
-        """, (
-            payload.get("paziente_id"),
-            payload.get("operatore"),
-            payload.get("protocollo"),
-            payload.get("camera_type"),
-            payload.get("distance_cm"),
-            payload.get("distance_mode"),
-            payload.get("distance_target_min_cm"),
-            payload.get("distance_target_max_cm"),
-            payload.get("calibration_score"),
-            payload.get("status", "draft"),
-            payload.get("note"),
-        ))
-        new_id = cur.fetchone()[0]
-        conn.commit()
-        return new_id
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cur.close()
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id;
+            """,
+            (
+                session_data.get("paziente_id"),
+                session_data.get("paziente_label"),
+                session_data.get("protocol_name"),
+                session_data.get("source_vendor"),
+                session_data.get("source_format"),
+                session_data.get("source_filename"),
+                session_data.get("operator_name"),
+                session_data.get("session_notes"),
+            ),
+        )
+        session_id = cur.fetchone()[0]
+    conn.commit()
+    return int(session_id)
 
 
-def insert_gaze_samples_bulk(conn, session_id: int, rows: list[dict]) -> int:
-    cur = conn.cursor()
-    try:
-        count = 0
-        for r in rows:
-            cur.execute("""
-                INSERT INTO gaze_samples (
-                    session_id,
-                    ts_ms,
-                    gaze_x,
-                    gaze_y,
-                    confidence,
-                    tracking_ok,
-                    distance_cm_est,
-                    distance_zone,
-                    target_x,
-                    target_y,
-                    target_label
-                )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            """, (
+def insert_gaze_samples_bulk(conn, session_id: int, df: pd.DataFrame) -> int:
+    rows = []
+    for idx, row in df.reset_index(drop=True).iterrows():
+        rows.append(
+            (
                 session_id,
-                r.get("ts_ms"),
-                r.get("gaze_x"),
-                r.get("gaze_y"),
-                r.get("confidence"),
-                r.get("tracking_ok"),
-                r.get("distance_cm_est"),
-                r.get("distance_zone"),
-                r.get("target_x"),
-                r.get("target_y"),
-                r.get("target_label"),
-            ))
-            count += 1
+                idx,
+                _safe_num(row.get("ts_ms")),
+                _safe_num(row.get("gaze_x")),
+                _safe_num(row.get("gaze_y")),
+                _safe_num(row.get("confidence")),
+                bool(row.get("fixation_flag", False)) if row.get("fixation_flag") is not None else False,
+                bool(row.get("saccade_flag", False)) if row.get("saccade_flag") is not None else False,
+                bool(row.get("blink_flag", False)) if row.get("blink_flag") is not None else False,
+                _safe_num(row.get("eye_left_x")),
+                _safe_num(row.get("eye_left_y")),
+                _safe_num(row.get("eye_right_x")),
+                _safe_num(row.get("eye_right_y")),
+                _safe_num(row.get("pupil_size")),
+                _safe_num(row.get("distance_cm_est")),
+                _safe_num(row.get("target_x")),
+                _safe_num(row.get("target_y")),
+                _safe_text(row.get("target_label")),
+                _safe_text(row.get("source_vendor")),
+                _safe_text(row.get("source_format")),
+                _safe_text(row.get("source_filename")),
+            )
+        )
 
-        conn.commit()
-        return count
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cur.close()
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO gaze_samples (
+                session_id,
+                sample_index,
+                ts_ms,
+                gaze_x,
+                gaze_y,
+                confidence,
+                fixation_flag,
+                saccade_flag,
+                blink_flag,
+                eye_left_x,
+                eye_left_y,
+                eye_right_x,
+                eye_right_y,
+                pupil_size,
+                distance_cm_est,
+                target_x,
+                target_y,
+                target_label,
+                source_vendor,
+                source_format,
+                source_filename
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+            """,
+            rows,
+        )
+    conn.commit()
+    return len(rows)
 
 
-def upsert_gaze_report(conn, session_id: int, report_payload: dict) -> None:
-    cur = conn.cursor()
-    try:
-        cur.execute("""
+def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> None:
+    summary_json = report_data.get("summary_json", {})
+    metrics_json = report_data.get("metrics", {})
+    clinical_indexes_json = report_data.get("clinical_indexes", {})
+    distance_metrics_json = report_data.get("distance_metrics", {})
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
             INSERT INTO gaze_reports (
                 session_id,
-                fixation_total_ms,
-                mean_fixation_ms,
-                saccade_count,
-                target_hit_rate,
-                tracking_loss_pct,
-                center_bias_pct,
-                distance_mean_cm,
-                distance_min_cm,
-                distance_max_cm,
-                distance_std_cm,
-                time_near_pct,
-                time_mid_pct,
-                time_far_pct,
+                report_version,
+                analytics_version,
+                metrics_json,
+                clinical_indexes_json,
+                distance_metrics_json,
                 summary_json
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
             ON CONFLICT (session_id)
             DO UPDATE SET
-                fixation_total_ms = EXCLUDED.fixation_total_ms,
-                mean_fixation_ms = EXCLUDED.mean_fixation_ms,
-                saccade_count = EXCLUDED.saccade_count,
-                target_hit_rate = EXCLUDED.target_hit_rate,
-                tracking_loss_pct = EXCLUDED.tracking_loss_pct,
-                center_bias_pct = EXCLUDED.center_bias_pct,
-                distance_mean_cm = EXCLUDED.distance_mean_cm,
-                distance_min_cm = EXCLUDED.distance_min_cm,
-                distance_max_cm = EXCLUDED.distance_max_cm,
-                distance_std_cm = EXCLUDED.distance_std_cm,
-                time_near_pct = EXCLUDED.time_near_pct,
-                time_mid_pct = EXCLUDED.time_mid_pct,
-                time_far_pct = EXCLUDED.time_far_pct,
-                summary_json = EXCLUDED.summary_json
-        """, (
-            session_id,
-            report_payload.get("fixation_total_ms"),
-            report_payload.get("mean_fixation_ms"),
-            report_payload.get("saccade_count"),
-            report_payload.get("target_hit_rate"),
-            report_payload.get("tracking_loss_pct"),
-            report_payload.get("center_bias_pct"),
-            report_payload.get("distance_mean_cm"),
-            report_payload.get("distance_min_cm"),
-            report_payload.get("distance_max_cm"),
-            report_payload.get("distance_std_cm"),
-            report_payload.get("time_near_pct"),
-            report_payload.get("time_mid_pct"),
-            report_payload.get("time_far_pct"),
-            json.dumps(report_payload.get("summary_json", {}), ensure_ascii=False),
-        ))
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cur.close()
+                report_version = EXCLUDED.report_version,
+                analytics_version = EXCLUDED.analytics_version,
+                metrics_json = EXCLUDED.metrics_json,
+                clinical_indexes_json = EXCLUDED.clinical_indexes_json,
+                distance_metrics_json = EXCLUDED.distance_metrics_json,
+                summary_json = EXCLUDED.summary_json,
+                updated_at = NOW();
+            """,
+            (
+                session_id,
+                summary_json.get("report_version"),
+                summary_json.get("analytics_version"),
+                json.dumps(metrics_json, ensure_ascii=False),
+                json.dumps(clinical_indexes_json, ensure_ascii=False),
+                json.dumps(distance_metrics_json, ensure_ascii=False),
+                json.dumps(summary_json, ensure_ascii=False),
+            ),
+        )
+    conn.commit()
 
 
-def get_gaze_session(conn, session_id: int) -> dict | None:
-    cur = conn.cursor()
+def _safe_num(value):
     try:
-        cur.execute("SELECT * FROM gaze_sessions WHERE id = %s", (session_id,))
-        row = cur.fetchone()
-        if not row:
+        if pd.isna(value):
             return None
-        cols = [d[0] for d in cur.description]
-        return dict(zip(cols, row))
-    finally:
-        cur.close()
-
-
-def list_gaze_sessions_by_patient(conn, paziente_id: int) -> list[dict]:
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT id, paziente_id, operatore, protocollo, camera_type, status, created_at
-            FROM gaze_sessions
-            WHERE paziente_id = %s
-            ORDER BY created_at DESC, id DESC
-        """, (paziente_id,))
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in rows]
-    finally:
-        cur.close()
-
-
-def delete_gaze_session(conn, session_id: int) -> None:
-    cur = conn.cursor()
-    try:
-        cur.execute("DELETE FROM gaze_sessions WHERE id = %s", (session_id,))
-        conn.commit()
+        return float(value)
     except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cur.close()
+        return None
+
+
+def _safe_text(value):
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+    return str(value)
