@@ -28,8 +28,19 @@ from modules.gaze_tracking.plots_gaze import (
 from modules.gaze_tracking.protocols_gaze import get_protocol_labels, protocol_label_to_code
 
 
-def ui_gaze_tracking(conn=None):
+def ui_gaze_tracking(conn=None, paziente_id=None, get_conn=None, paziente_label=None, **kwargs):
     st.subheader("Eye Tracking Clinico")
+
+    # Compatibilità con il gestionale principale
+    if conn is None and callable(get_conn):
+        try:
+            conn = get_conn()
+        except Exception as e:
+            st.error(f"Errore apertura connessione DB: {e}")
+            conn = None
+
+    if paziente_label:
+        st.caption(f"Paziente: {paziente_label}")
 
     if conn is not None:
         try:
@@ -38,11 +49,19 @@ def ui_gaze_tracking(conn=None):
             st.error(f"Errore init DB gaze_tracking: {e}")
             return
 
+    initial_paziente_id = int(paziente_id) if paziente_id not in (None, "") else 0
+
     with st.expander("Nuova sessione", expanded=True):
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            paziente_id = st.number_input("Paziente ID", min_value=0, value=0, step=1)
+            paziente_id_ui = st.number_input(
+                "Paziente ID",
+                min_value=0,
+                value=initial_paziente_id,
+                step=1,
+                disabled=initial_paziente_id > 0,
+            )
             operatore = st.text_input("Operatore", value="")
             protocol_label = st.selectbox("Protocollo", options=get_protocol_labels())
 
@@ -74,11 +93,15 @@ def ui_gaze_tracking(conn=None):
         screen_w_px = st.number_input("Larghezza schermo px", min_value=0, value=1920, step=1)
         screen_h_px = st.number_input("Altezza schermo px", min_value=0, value=1080, step=1)
 
-    uploaded = st.file_uploader("Carica file eye tracker", type=SUPPORTED_IMPORT_TYPES, key="gaze_file_upload")
+    uploaded = st.file_uploader(
+        "Carica file eye tracker",
+        type=SUPPORTED_IMPORT_TYPES,
+        key="gaze_file_upload",
+    )
 
     if uploaded is None:
         st.info("Carica un file CSV/XLS/XLSX per iniziare.")
-        _render_patient_sessions(conn, paziente_id)
+        _render_patient_sessions(conn, paziente_id_ui)
         return
 
     try:
@@ -91,7 +114,11 @@ def ui_gaze_tracking(conn=None):
     st.dataframe(raw_df.head(20), use_container_width=True)
 
     try:
-        df_imported = normalize_imported_dataframe(raw_df, screen_w_px=screen_w_px if screen_w_px > 0 else None, screen_h_px=screen_h_px if screen_h_px > 0 else None)
+        df_imported = normalize_imported_dataframe(
+            raw_df,
+            screen_w_px=screen_w_px if screen_w_px > 0 else None,
+            screen_h_px=screen_h_px if screen_h_px > 0 else None,
+        )
     except Exception as e:
         st.error(f"Errore normalizzazione file: {e}")
         return
@@ -134,8 +161,8 @@ def ui_gaze_tracking(conn=None):
 
             distance_metrics = compute_distance_metrics(samples_df)
             metrics.update(distance_metrics)
-            summary_json["distance"] = distance_metrics
 
+            summary_json["distance"] = distance_metrics
             st.session_state["gaze_result"] = {
                 "samples_df": samples_df,
                 "fix_df": fix_df,
@@ -146,7 +173,7 @@ def ui_gaze_tracking(conn=None):
                 "indexes": indexes,
                 "summary_json": summary_json,
                 "session_payload": {
-                    "paziente_id": int(paziente_id) if paziente_id > 0 else None,
+                    "paziente_id": int(paziente_id_ui) if paziente_id_ui > 0 else None,
                     "operatore": operatore,
                     "protocollo": protocol_label_to_code(protocol_label),
                     "camera_type": camera_type,
@@ -167,7 +194,7 @@ def ui_gaze_tracking(conn=None):
 
     gaze_result = st.session_state.get("gaze_result")
     if not gaze_result:
-        _render_patient_sessions(conn, paziente_id)
+        _render_patient_sessions(conn, paziente_id_ui)
         return
 
     samples_df = gaze_result["samples_df"]
@@ -203,26 +230,42 @@ def ui_gaze_tracking(conn=None):
     with st.expander("Summary JSON", expanded=False):
         st.json(summary_json)
 
-    tabs = st.tabs(["Fixations", "Saccades", "Transitions", "Lines", "Heatmap", "Scanpath", "Histograms", "Timeline"])
+    tabs = st.tabs([
+        "Fixations",
+        "Saccades",
+        "Transitions",
+        "Lines",
+        "Heatmap",
+        "Scanpath",
+        "Histograms",
+        "Timeline",
+    ])
 
     with tabs[0]:
         st.dataframe(fix_df, use_container_width=True)
+
     with tabs[1]:
         st.dataframe(sac_df, use_container_width=True)
+
     with tabs[2]:
         st.dataframe(trans_df, use_container_width=True)
+
     with tabs[3]:
         st.dataframe(lines_df, use_container_width=True)
+
     with tabs[4]:
         st.pyplot(build_heatmap_figure(fix_df))
+
     with tabs[5]:
         st.pyplot(build_scanpath_figure(fix_df, trans_df))
+
     with tabs[6]:
         col_h1, col_h2 = st.columns(2)
         with col_h1:
             st.pyplot(build_fixation_histogram_figure(fix_df))
         with col_h2:
             st.pyplot(build_saccade_histogram_figure(sac_df))
+
     with tabs[7]:
         st.pyplot(build_timeline_figure(samples_df, fix_df, trans_df))
 
@@ -272,11 +315,13 @@ def ui_gaze_tracking(conn=None):
         except Exception as e:
             st.error(f"Errore salvataggio DB: {e}")
 
-    _render_patient_sessions(conn, paziente_id)
+    _render_patient_sessions(conn, paziente_id_ui)
 
 
 def _render_patient_sessions(conn, paziente_id: int):
-    if conn is None or paziente_id <= 0:
+    if conn is None:
+        return
+    if paziente_id <= 0:
         return
 
     with st.expander("Sessioni precedenti del paziente", expanded=False):
