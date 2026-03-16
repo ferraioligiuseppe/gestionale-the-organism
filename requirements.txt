@@ -16,8 +16,6 @@ soundfile==0.12.1
 pydub==0.25.1
 streamlit-webrtc
 aiortc
-
-# 👇 VIDEO AI (FONDAMENTALE)
 mediapipe==0.10.32
 opencv-python-headless==4.10.0.84
 numpy==1.26.4
