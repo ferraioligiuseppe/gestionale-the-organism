@@ -21,3 +21,7 @@ openai
 soundfile==0.12.1
 pydub==0.25.1
 plotly
+mediapipe
+opencv-python-headless
+numpy
+Pillow
