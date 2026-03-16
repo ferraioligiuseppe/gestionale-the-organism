@@ -1,204 +1,290 @@
-
 from __future__ import annotations
+
 import streamlit as st
 
-from .protocols_gaze import PROTOCOLS, DISTANCE_MODES
-from .tasks_gaze import build_9_point_calibration, build_fixation_task, build_horizontal_saccades
-from .analytics_gaze import compute_basic_metrics
-from .db_gaze_tracking import ensure_schema, create_gaze_session, insert_gaze_samples, save_gaze_report, list_sessions
-from .distance_gaze import classify_distance_zone
+from modules.gaze_tracking.analytics_gaze import run_reading_analysis
+from modules.gaze_tracking.config_gaze import GAZE_PRESETS, SUPPORTED_IMPORT_TYPES
+from modules.gaze_tracking.db_gaze_tracking import (
+    init_db_gaze_tracking,
+    insert_gaze_session,
+    insert_gaze_samples_bulk,
+    list_gaze_sessions_by_patient,
+    upsert_gaze_report,
+)
+from modules.gaze_tracking.distance_gaze import add_distance_zone_column, compute_distance_metrics
+from modules.gaze_tracking.importer_gaze import (
+    dataframe_to_sample_rows,
+    load_eye_tracker_file,
+    normalize_imported_dataframe,
+    validate_imported_dataframe,
+)
+from modules.gaze_tracking.plots_gaze import (
+    build_fixation_histogram_figure,
+    build_heatmap_figure,
+    build_saccade_histogram_figure,
+    build_scanpath_figure,
+    build_timeline_figure,
+)
+from modules.gaze_tracking.protocols_gaze import get_protocol_labels, protocol_label_to_code
 
-try:
-    import av  # noqa: F401
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode
-    WEBRTC_AVAILABLE = True
-    WEBRTC_ERROR = None
-except Exception as e:
-    WEBRTC_AVAILABLE = False
-    WEBRTC_ERROR = e
 
-def _build_demo_samples(targets: list[dict], distance_mode: str, target_min: float | None, target_max: float | None) -> list[dict]:
-    # Campioni dimostrativi coerenti con la UI corrente.
-    samples = []
-    ts = 0
-    distances = [32, 36, 42, 48, 57, 63] if distance_mode == "multi" else [45, 47, 46, 44, 43]
-    for i, target in enumerate(targets[: min(len(targets), 30)]):
-        d = distances[i % len(distances)]
-        if distance_mode == "guided" and target_min and target_max:
-            d = round((target_min + target_max) / 2, 1)
-        samples.append({
-            "ts_ms": ts,
-            "gaze_x": target.get("x"),
-            "gaze_y": target.get("y"),
-            "confidence": 0.85,
-            "tracking_ok": True,
-            "distance_cm_est": d,
-            "distance_zone": classify_distance_zone(d),
-            "target_x": target.get("x"),
-            "target_y": target.get("y"),
-            "target_label": target.get("label"),
-        })
-        ts += 120
-    return samples
+def ui_gaze_tracking(conn=None):
+    st.subheader("Eye Tracking Clinico")
 
-def ui_gaze_tracking(paziente_id: int, get_conn, paziente_label: str = ""):
-    st.subheader("👁 Eye Tracking V3.0")
-    st.caption("Versione V3: webcam live + distanza dinamica + modalità libera/guidata/multi-distanza.")
+    if conn is not None:
+        try:
+            init_db_gaze_tracking(conn)
+        except Exception as e:
+            st.error(f"Errore init DB gaze_tracking: {e}")
+            return
 
-    st.session_state.setdefault("gaze_session_id", None)
-    st.session_state.setdefault("gaze_component_payload", {})
-    st.session_state.setdefault("gaze_v3_samples", [])
+    with st.expander("Nuova sessione", expanded=True):
+        col1, col2, col3 = st.columns(3)
 
-    conn = get_conn()
-    ensure_schema(conn)
+        with col1:
+            paziente_id = st.number_input("Paziente ID", min_value=0, value=0, step=1)
+            operatore = st.text_input("Operatore", value="")
+            protocol_label = st.selectbox("Protocollo", options=get_protocol_labels())
+
+        with col2:
+            camera_type = st.selectbox("Camera type", options=["webcam", "eye_tracker"])
+            distance_mode = st.selectbox("Modalità distanza", options=["manual", "estimated", "none"])
+            distance_cm = st.number_input("Distanza (cm)", min_value=0.0, value=0.0, step=1.0)
+
+        with col3:
+            distance_target_min_cm = st.number_input("Target distanza min (cm)", min_value=0.0, value=0.0, step=1.0)
+            distance_target_max_cm = st.number_input("Target distanza max (cm)", min_value=0.0, value=0.0, step=1.0)
+            calibration_score = st.number_input("Calibration score", min_value=0.0, value=0.0, step=0.1)
+
+        note = st.text_area("Note sessione", value="", height=80)
+
+    st.markdown("---")
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        preset_name = st.selectbox("Preset analisi", options=list(GAZE_PRESETS.keys()), index=0)
+    with col_b:
+        words_count = st.number_input("Numero parole testo", min_value=0, value=0, step=1)
+    with col_c:
+        show_debug = st.checkbox("Mostra debug", value=False)
+
+    config = GAZE_PRESETS[preset_name].copy()
+
+    with st.expander("Parametri display / import", expanded=False):
+        screen_w_px = st.number_input("Larghezza schermo px", min_value=0, value=1920, step=1)
+        screen_h_px = st.number_input("Altezza schermo px", min_value=0, value=1080, step=1)
+
+    uploaded = st.file_uploader("Carica file eye tracker", type=SUPPORTED_IMPORT_TYPES, key="gaze_file_upload")
+
+    if uploaded is None:
+        st.info("Carica un file CSV/XLS/XLSX per iniziare.")
+        _render_patient_sessions(conn, paziente_id)
+        return
+
     try:
-        conn.close()
-    except Exception:
-        pass
+        raw_df = load_eye_tracker_file(uploaded)
+    except Exception as e:
+        st.error(f"Errore lettura file: {e}")
+        return
 
-    if paziente_label:
-        st.markdown(f"**Paziente:** {paziente_label}")
+    st.write("Anteprima file importato")
+    st.dataframe(raw_df.head(20), use_container_width=True)
+
+    try:
+        df_imported = normalize_imported_dataframe(raw_df, screen_w_px=screen_w_px if screen_w_px > 0 else None, screen_h_px=screen_h_px if screen_h_px > 0 else None)
+    except Exception as e:
+        st.error(f"Errore normalizzazione file: {e}")
+        return
+
+    validation = validate_imported_dataframe(df_imported)
+    st.write("Validazione import")
+    st.json(validation)
+
+    if not validation["ok"]:
+        st.error("File non valido per l'analisi.")
+        return
+
+    with st.expander("Preview dataframe normalizzato", expanded=False):
+        st.dataframe(df_imported.head(50), use_container_width=True)
+
+    if st.button("Analizza", type="primary"):
+        try:
+            df_imported = add_distance_zone_column(
+                df_imported,
+                target_min=distance_target_min_cm if distance_target_min_cm > 0 else None,
+                target_max=distance_target_max_cm if distance_target_max_cm > 0 else None,
+            )
+
+            result = run_reading_analysis(
+                df_samples=df_imported,
+                config=config,
+                words_count=words_count if words_count > 0 else None,
+                screen_w_px=screen_w_px if screen_w_px > 0 else None,
+                screen_h_px=screen_h_px if screen_h_px > 0 else None,
+            )
+
+            samples_df = result["samples"]
+            fix_df = result["fixations"]
+            sac_df = result["saccades"]
+            lines_df = result["lines"]
+            trans_df = result["transitions"]
+            metrics = result["metrics"]
+            indexes = result["indexes"]
+            summary_json = result["summary"]
+
+            distance_metrics = compute_distance_metrics(samples_df)
+            metrics.update(distance_metrics)
+            summary_json["distance"] = distance_metrics
+
+            st.session_state["gaze_result"] = {
+                "samples_df": samples_df,
+                "fix_df": fix_df,
+                "sac_df": sac_df,
+                "lines_df": lines_df,
+                "trans_df": trans_df,
+                "metrics": metrics,
+                "indexes": indexes,
+                "summary_json": summary_json,
+                "session_payload": {
+                    "paziente_id": int(paziente_id) if paziente_id > 0 else None,
+                    "operatore": operatore,
+                    "protocollo": protocol_label_to_code(protocol_label),
+                    "camera_type": camera_type,
+                    "distance_cm": distance_cm if distance_cm > 0 else None,
+                    "distance_mode": distance_mode,
+                    "distance_target_min_cm": distance_target_min_cm if distance_target_min_cm > 0 else None,
+                    "distance_target_max_cm": distance_target_max_cm if distance_target_max_cm > 0 else None,
+                    "calibration_score": calibration_score if calibration_score > 0 else None,
+                    "status": "analyzed",
+                    "note": note,
+                },
+            }
+
+            st.success("Analisi completata.")
+        except Exception as e:
+            st.error(f"Errore durante l'analisi: {e}")
+            return
+
+    gaze_result = st.session_state.get("gaze_result")
+    if not gaze_result:
+        _render_patient_sessions(conn, paziente_id)
+        return
+
+    samples_df = gaze_result["samples_df"]
+    fix_df = gaze_result["fix_df"]
+    sac_df = gaze_result["sac_df"]
+    lines_df = gaze_result["lines_df"]
+    trans_df = gaze_result["trans_df"]
+    metrics = gaze_result["metrics"]
+    indexes = gaze_result["indexes"]
+    summary_json = gaze_result["summary_json"]
+
+    st.markdown("---")
+    st.subheader("Risultati")
 
     c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        protocollo = st.selectbox("Protocollo", list(PROTOCOLS.keys()), format_func=lambda x: PROTOCOLS.get(x, x))
-    with c2:
-        camera_type = st.selectbox("Camera", ["webcam_integrata", "webcam_usb"])
-    with c3:
-        distance_mode = st.selectbox("Modalità distanza", list(DISTANCE_MODES.keys()), format_func=lambda x: DISTANCE_MODES.get(x, x))
-    with c4:
-        operatore = st.text_input("Operatore", value="")
+    c1.metric("Fixations", metrics.get("fixation_count", 0))
+    c2.metric("Mean fixation (ms)", metrics.get("mean_fixation_ms", 0))
+    c3.metric("Regressions", metrics.get("regression_total", 0))
+    c4.metric("WPM", metrics.get("words_per_min") if metrics.get("words_per_min") is not None else "-")
 
-    g1, g2, g3 = st.columns(3)
-    with g1:
-        distance_cm = st.number_input("Distanza iniziale dichiarata (cm)", min_value=20, max_value=120, value=50)
-    with g2:
-        target_min = st.number_input("Target min cm", min_value=20, max_value=120, value=35 if distance_mode != "free" else 35)
-    with g3:
-        target_max = st.number_input("Target max cm", min_value=20, max_value=120, value=55 if distance_mode != "free" else 55)
-
-    screen_w = 1280
-    screen_h = 720
-
-    if protocollo == "calibration":
-        targets = build_9_point_calibration(screen_w, screen_h)
-    elif protocollo == "fixation_center":
-        targets = build_fixation_task(screen_w, screen_h)
-    else:
-        targets = build_horizontal_saccades(screen_w, screen_h)
-
-    left, right = st.columns([2, 1])
-
-    with right:
-        st.markdown("### Sessione")
-        if st.button("🆕 Crea sessione", use_container_width=True):
-            conn = get_conn()
-            ensure_schema(conn)
-            session_id = create_gaze_session(conn, {
-                "paziente_id": paziente_id,
-                "operatore": operatore,
-                "protocollo": protocollo,
-                "camera_type": camera_type,
-                "screen_width": screen_w,
-                "screen_height": screen_h,
-                "distance_cm": distance_cm,
-                "distance_mode": distance_mode,
-                "distance_target_min_cm": target_min if distance_mode != "free" else None,
-                "distance_target_max_cm": target_max if distance_mode != "free" else None,
-                "calibration_points": 9 if protocollo == "calibration" else None,
-                "status": "draft",
-            })
-            try:
-                conn.close()
-            except Exception:
-                pass
-            st.session_state["gaze_session_id"] = session_id
-            st.success(f"Sessione creata: {session_id}")
-
-        st.write("Session ID:", st.session_state.get("gaze_session_id") or "—")
-        st.write("Target protocollo:", len(targets))
-        st.write("Modalità distanza:", DISTANCE_MODES.get(distance_mode, distance_mode))
-
-        if distance_mode == "guided":
-            st.info(f"Fascia obiettivo: {target_min}–{target_max} cm")
-        elif distance_mode == "multi":
-            st.info("Blocchi consigliati: vicino / medio / lontano")
-        else:
-            st.info("Distanza libera: osservazione ecologica del comportamento visivo.")
-
-        if st.button("🧪 Genera campioni demo V3", use_container_width=True):
-            st.session_state["gaze_v3_samples"] = _build_demo_samples(targets, distance_mode, target_min, target_max)
-            st.success("Campioni demo generati.")
-
-    with left:
-        st.markdown("### Webcam / Feed")
-        if not WEBRTC_AVAILABLE:
-            st.error("Dipendenze webcam mancanti.")
-            st.exception(WEBRTC_ERROR)
-        else:
-            webrtc_streamer(
-                key=f"gaze_v3_webrtc_{st.session_state.get('gaze_session_id') or 'draft'}",
-                mode=WebRtcMode.SENDRECV,
-                media_stream_constraints={"video": True, "audio": False},
-            )
-            st.caption("Premi START nella preview per attivare la webcam. In V3.0 la distanza live è pronta a livello logico; la stima automatica frame-by-frame sarà il prossimo step.")
-
-    samples = st.session_state.get("gaze_v3_samples") or []
-
-    st.markdown("### Distanza dinamica")
     d1, d2, d3, d4 = st.columns(4)
-    distances = [s.get("distance_cm_est") for s in samples if s.get("distance_cm_est") is not None]
-    if distances:
-        current = distances[-1]
-        zone = classify_distance_zone(current)
-    else:
-        current = None
-        zone = "unknown"
-    with d1:
-        st.metric("Distanza attuale", f"{current} cm" if current is not None else "—")
-    with d2:
-        st.metric("Fascia", zone)
-    with d3:
-        st.metric("Campioni", len(samples))
-    with d4:
-        st.metric("Protocollo", PROTOCOLS.get(protocollo, protocollo))
+    d1.metric("Tracking loss %", metrics.get("tracking_loss_pct", 0))
+    d2.metric("Line losses", metrics.get("line_losses", 0))
+    d3.metric("Risk", indexes.get("risk_class", "-"))
+    d4.metric("Dyslexia oculomotor risk", indexes.get("dyslexia_oculomotor_risk", 0))
 
-    if samples:
-        st.dataframe(samples[-25:], use_container_width=True)
+    with st.expander("Metriche complete", expanded=False):
+        st.json(metrics)
 
-    b1, b2 = st.columns(2)
-    with b1:
-        if st.button("💾 Salva campioni nel DB", use_container_width=True, disabled=not (st.session_state.get("gaze_session_id") and samples)):
-            conn = get_conn()
-            ensure_schema(conn)
-            inserted = insert_gaze_samples(conn, int(st.session_state["gaze_session_id"]), samples)
-            try:
-                conn.close()
-            except Exception:
-                pass
-            st.success(f"Campioni salvati: {inserted}")
-    with b2:
-        if st.button("📊 Calcola report V3", use_container_width=True, disabled=not (st.session_state.get("gaze_session_id") and samples)):
-            report = compute_basic_metrics(samples, screen_w, screen_h, current_targets=targets)
-            conn = get_conn()
-            ensure_schema(conn)
-            save_gaze_report(conn, int(st.session_state["gaze_session_id"]), report)
-            try:
-                conn.close()
-            except Exception:
-                pass
-            st.success("Report V3 salvato.")
-            st.json(report)
+    with st.expander("Indici clinici sintetici", expanded=False):
+        st.json(indexes)
 
-    st.markdown("### Storico sessioni")
-    conn = get_conn()
-    ensure_schema(conn)
-    rows = list_sessions(conn, paziente_id)
-    try:
-        conn.close()
-    except Exception:
-        pass
-    if rows:
-        st.dataframe(rows, use_container_width=True)
-    else:
-        st.caption("Nessuna sessione ancora salvata per questo paziente.")
+    with st.expander("Summary JSON", expanded=False):
+        st.json(summary_json)
+
+    tabs = st.tabs(["Fixations", "Saccades", "Transitions", "Lines", "Heatmap", "Scanpath", "Histograms", "Timeline"])
+
+    with tabs[0]:
+        st.dataframe(fix_df, use_container_width=True)
+    with tabs[1]:
+        st.dataframe(sac_df, use_container_width=True)
+    with tabs[2]:
+        st.dataframe(trans_df, use_container_width=True)
+    with tabs[3]:
+        st.dataframe(lines_df, use_container_width=True)
+    with tabs[4]:
+        st.pyplot(build_heatmap_figure(fix_df))
+    with tabs[5]:
+        st.pyplot(build_scanpath_figure(fix_df, trans_df))
+    with tabs[6]:
+        col_h1, col_h2 = st.columns(2)
+        with col_h1:
+            st.pyplot(build_fixation_histogram_figure(fix_df))
+        with col_h2:
+            st.pyplot(build_saccade_histogram_figure(sac_df))
+    with tabs[7]:
+        st.pyplot(build_timeline_figure(samples_df, fix_df, trans_df))
+
+    if show_debug:
+        with st.expander("Debug dataframes", expanded=False):
+            st.write("Samples")
+            st.dataframe(samples_df.head(100), use_container_width=True)
+            st.write("Fixations")
+            st.dataframe(fix_df.head(100), use_container_width=True)
+            st.write("Transitions")
+            st.dataframe(trans_df.head(100), use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("Salvataggio su database")
+
+    if conn is None:
+        st.warning("Connessione DB non disponibile. Analisi eseguita solo in memoria.")
+        return
+
+    if st.button("Salva sessione + campioni + report"):
+        try:
+            session_payload = gaze_result["session_payload"]
+            session_id = insert_gaze_session(conn, session_payload)
+
+            sample_rows = dataframe_to_sample_rows(samples_df)
+            inserted_count = insert_gaze_samples_bulk(conn, session_id, sample_rows)
+
+            report_payload = {
+                "fixation_total_ms": metrics.get("fixation_total_ms"),
+                "mean_fixation_ms": metrics.get("mean_fixation_ms"),
+                "saccade_count": metrics.get("saccade_count"),
+                "target_hit_rate": None,
+                "tracking_loss_pct": metrics.get("tracking_loss_pct"),
+                "center_bias_pct": None,
+                "distance_mean_cm": metrics.get("distance_mean_cm"),
+                "distance_min_cm": metrics.get("distance_min_cm"),
+                "distance_max_cm": metrics.get("distance_max_cm"),
+                "distance_std_cm": metrics.get("distance_std_cm"),
+                "time_near_pct": metrics.get("time_near_pct"),
+                "time_mid_pct": metrics.get("time_mid_pct"),
+                "time_far_pct": metrics.get("time_far_pct"),
+                "summary_json": summary_json,
+            }
+            upsert_gaze_report(conn, session_id, report_payload)
+
+            st.success(f"Sessione salvata. session_id={session_id} | campioni inseriti={inserted_count}")
+        except Exception as e:
+            st.error(f"Errore salvataggio DB: {e}")
+
+    _render_patient_sessions(conn, paziente_id)
+
+
+def _render_patient_sessions(conn, paziente_id: int):
+    if conn is None or paziente_id <= 0:
+        return
+
+    with st.expander("Sessioni precedenti del paziente", expanded=False):
+        try:
+            sessions = list_gaze_sessions_by_patient(conn, int(paziente_id))
+            if not sessions:
+                st.info("Nessuna sessione trovata.")
+                return
+            st.dataframe(sessions, use_container_width=True)
+        except Exception as e:
+            st.error(f"Errore lettura sessioni: {e}")
