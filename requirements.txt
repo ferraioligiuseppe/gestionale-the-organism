@@ -22,7 +22,7 @@ soundfile==0.12.1
 pydub==0.25.1
 streamlit-webrtc
 aiortc
-avmediapipe==0.10.32
+mediapipe==0.10.32
 opencv-python-headless
 numpy
 Pillow
