@@ -14,8 +14,7 @@ from modules.gaze_tracking.db_gaze_tracking import (
 from modules.gaze_tracking.distance_gaze import add_distance_zone_column, compute_distance_metrics
 from modules.gaze_tracking.importer_gaze import (
     dataframe_to_sample_rows,
-    load_eye_tracker_file,
-    normalize_imported_dataframe,
+    import_eye_tracker_dataframe,
     validate_imported_dataframe,
 )
 from modules.gaze_tracking.plots_gaze import (
@@ -104,24 +103,30 @@ def ui_gaze_tracking(conn=None, paziente_id=None, get_conn=None, paziente_label=
         _render_patient_sessions(conn, paziente_id_ui)
         return
 
-    try:
-        raw_df = load_eye_tracker_file(uploaded)
-    except Exception as e:
-        st.error(f"Errore lettura file: {e}")
-        return
+    force_vendor = st.selectbox(
+        "Formato sorgente",
+        options=["auto", "tobii", "thomson", "generic"],
+        index=0,
+    )
 
-    st.write("Anteprima file importato")
-    st.dataframe(raw_df.head(20), use_container_width=True)
+    force_vendor_value = None if force_vendor == "auto" else force_vendor
 
     try:
-        df_imported = normalize_imported_dataframe(
-            raw_df,
+        df_imported, import_meta = import_eye_tracker_dataframe(
+            file_obj=uploaded,
             screen_w_px=screen_w_px if screen_w_px > 0 else None,
             screen_h_px=screen_h_px if screen_h_px > 0 else None,
+            force_vendor=force_vendor_value,
         )
     except Exception as e:
-        st.error(f"Errore normalizzazione file: {e}")
+        st.error(f"Errore import file: {e}")
         return
+
+    st.write("Meta import")
+    st.json(import_meta)
+
+    st.write("Anteprima file importato")
+    st.dataframe(df_imported.head(20), use_container_width=True)
 
     validation = validate_imported_dataframe(df_imported)
     st.write("Validazione import")
