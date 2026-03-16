@@ -8,10 +8,12 @@ from PIL import Image
 
 try:
     import mediapipe as mp
+    from mediapipe.python.solutions import face_mesh as mp_face_mesh
     import numpy as np
     MEDIAPIPE_AVAILABLE = True
 except Exception:
     mp = None
+    mp_face_mesh = None
     np = None
     MEDIAPIPE_AVAILABLE = False
 
@@ -19,12 +21,10 @@ from .mediapipe_draw import draw_landmarks_on_image
 from .metrics_face_oral import compute_face_oral_indexes, compute_face_oral_metrics
 
 
-
 def get_video_pipeline_status() -> dict[str, Any]:
     return {
         "mediapipe_available": MEDIAPIPE_AVAILABLE,
     }
-
 
 
 def _extract_face_landmarks_px(image: Image.Image) -> tuple[dict[int, tuple[float, float]], list[str]]:
@@ -36,13 +36,13 @@ def _extract_face_landmarks_px(image: Image.Image) -> tuple[dict[int, tuple[floa
     arr = np.array(rgb_image)
     h, w = arr.shape[:2]
 
-    with mp.solutions.face_mesh.FaceMesh(
+    with mp_face_mesh.FaceMesh(
         static_image_mode=True,
         refine_landmarks=True,
         max_num_faces=1,
         min_detection_confidence=0.5,
     ) as face_mesh:
-        results = face_mesh.process(arr)
+        results = face_mesh.process(arr.copy())
 
     if not results.multi_face_landmarks:
         return {}, ["Nessun volto rilevato nello snapshot."]
@@ -53,7 +53,6 @@ def _extract_face_landmarks_px(image: Image.Image) -> tuple[dict[int, tuple[floa
         points[idx] = (float(lm.x * w), float(lm.y * h))
 
     return points, warnings
-
 
 
 def analyze_face_image(image_bytes: bytes, protocol_name: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
