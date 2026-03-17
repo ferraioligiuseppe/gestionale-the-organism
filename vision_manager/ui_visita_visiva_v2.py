@@ -230,6 +230,7 @@ def ensure_visit_state():
         "vm_delete_confirm": None,
         "vm_mode": "new",
         "vm_current_patient_id": None,
+        "vm_form_dirty": False,
     }
 
     for key, value in defaults.items():
@@ -270,6 +271,11 @@ def clear_visit_form():
     st.session_state["vm_note"] = ""
     st.session_state["vm_loaded_visit_id"] = None
     st.session_state["vm_mode"] = "new"
+    st.session_state["vm_form_dirty"] = False
+
+
+def mark_visit_dirty():
+    st.session_state["vm_form_dirty"] = True
 
 
 # =========================================================
@@ -378,6 +384,7 @@ def load_visit_payload(payload, visit_id=None):
     st.session_state["vm_note"] = payload.get("note", "")
     st.session_state["vm_loaded_visit_id"] = visit_id
     st.session_state["vm_mode"] = "edit" if visit_id else "new"
+    st.session_state["vm_form_dirty"] = False
 
 
 def apply_pending_visit_load():
@@ -824,10 +831,7 @@ def ui_visita_visiva_v2(conn):
     selected_paziente = st.selectbox("Seleziona paziente", pazienti_options, index=default_idx)
     paziente_id = pazienti_map[selected_paziente]
 
-    previous_patient_id = st.session_state.get("vm_current_patient_id")
-    if previous_patient_id is None:
-        st.session_state["vm_current_patient_id"] = paziente_id
-    elif str(previous_patient_id) != str(paziente_id):
+    if st.session_state.get("vm_current_patient_id") != paziente_id:
         clear_visit_form()
         st.session_state["vm_current_patient_id"] = paziente_id
 
@@ -897,20 +901,32 @@ def ui_visita_visiva_v2(conn):
     top1, top2, top3 = st.columns([1, 1, 2])
 
     with top1:
-        if st.button("Nuova visita"):
+        if st.button("🆕 Nuova visita"):
             clear_visit_form()
             st.rerun()
 
     with top2:
-        if st.session_state.get("vm_mode") == "edit":
-            st.caption("Modalita: modifica")
-        else:
-            st.caption("Modalita: nuova")
+        if st.button("📂 Carica ultima visita"):
+            ultime_visite = list_visite(conn, paziente_id)
+            if ultime_visite:
+                row_last = ultime_visite[0]
+                st.session_state["vm_pending_load"] = {
+                    "visit_id": _row_get(row_last, "id", 0),
+                    "dati_json": _row_get(row_last, "dati_json", 2),
+                }
+                st.rerun()
+            else:
+                clear_visit_form()
+                st.info("Nessuna visita salvata per questo paziente.")
 
     with top3:
         loaded_id = st.session_state.get("vm_loaded_visit_id")
-        if loaded_id:
-            st.info(f"Visita caricata ID {loaded_id}")
+        if st.session_state.get("vm_mode") == "edit" and loaded_id and st.session_state.get("vm_form_dirty"):
+            st.warning(f"Visita ID {loaded_id} modificata e non ancora salvata")
+        elif st.session_state.get("vm_mode") == "edit" and loaded_id:
+            st.success(f"Visita caricata ID {loaded_id}")
+        else:
+            st.info("Nuova visita in compilazione")
 
     if selected_age is not None:
         st.info(f"Età paziente: {selected_age} anni")
@@ -919,37 +935,37 @@ def ui_visita_visiva_v2(conn):
 
     c1, c2 = st.columns(2)
     with c1:
-        st.selectbox("Tipo visita", ["oculistica"], key="vm_tipo_visita")
+        st.selectbox("Tipo visita", ["oculistica"], key="vm_tipo_visita", on_change=mark_visit_dirty)
     with c2:
-        st.date_input("Data visita", key="vm_data_visita")
+        st.date_input("Data visita", key="vm_data_visita", on_change=mark_visit_dirty)
 
-    st.text_area("Anamnesi", key="vm_anamnesi", height=120)
+    st.text_area("Anamnesi", key="vm_anamnesi", height=120, on_change=mark_visit_dirty)
 
     st.subheader("Acuita visiva")
     a1, a2, a3, a4 = st.columns(4)
     with a1:
-        st.text_input("AVN OD", key="vm_acuita_naturale_od")
+        st.text_input("AVN OD", key="vm_acuita_naturale_od", on_change=mark_visit_dirty)
     with a2:
-        st.text_input("AVN OS", key="vm_acuita_naturale_os")
+        st.text_input("AVN OS", key="vm_acuita_naturale_os", on_change=mark_visit_dirty)
     with a3:
-        st.text_input("AVC OD", key="vm_acuita_corretta_od")
+        st.text_input("AVC OD", key="vm_acuita_corretta_od", on_change=mark_visit_dirty)
     with a4:
-        st.text_input("AVC OS", key="vm_acuita_corretta_os")
+        st.text_input("AVC OS", key="vm_acuita_corretta_os", on_change=mark_visit_dirty)
 
     st.subheader("Esame obiettivo")
     e1, e2 = st.columns(2)
     with e1:
-        st.text_input("Congiuntiva", key="vm_congiuntiva")
-        st.text_input("Cornea", key="vm_cornea")
-        st.text_input("Camera anteriore", key="vm_camera_anteriore")
-        st.text_input("Cristallino", key="vm_cristallino")
-        st.text_input("Vitreo", key="vm_vitreo")
+        st.text_input("Congiuntiva", key="vm_congiuntiva", on_change=mark_visit_dirty)
+        st.text_input("Cornea", key="vm_cornea", on_change=mark_visit_dirty)
+        st.text_input("Camera anteriore", key="vm_camera_anteriore", on_change=mark_visit_dirty)
+        st.text_input("Cristallino", key="vm_cristallino", on_change=mark_visit_dirty)
+        st.text_input("Vitreo", key="vm_vitreo", on_change=mark_visit_dirty)
     with e2:
-        st.text_input("Fondo oculare", key="vm_fondo_oculare")
-        st.text_input("IOP OD", key="vm_iop_od")
-        st.text_input("IOP OS", key="vm_iop_os")
-        st.text_input("Pachimetria OD", key="vm_pachimetria_od")
-        st.text_input("Pachimetria OS", key="vm_pachimetria_os")
+        st.text_input("Fondo oculare", key="vm_fondo_oculare", on_change=mark_visit_dirty)
+        st.text_input("IOP OD", key="vm_iop_od", on_change=mark_visit_dirty)
+        st.text_input("IOP OS", key="vm_iop_os", on_change=mark_visit_dirty)
+        st.text_input("Pachimetria OD", key="vm_pachimetria_od", on_change=mark_visit_dirty)
+        st.text_input("Pachimetria OS", key="vm_pachimetria_os", on_change=mark_visit_dirty)
 
     iop_od_now = _safe_float(st.session_state.get("vm_iop_od"), None)
     iop_os_now = _safe_float(st.session_state.get("vm_iop_os"), None)
@@ -986,28 +1002,28 @@ def ui_visita_visiva_v2(conn):
     st.subheader("Correzione abituale")
     ca1, ca2, ca3 = st.columns(3)
     with ca1:
-        st.number_input("OD SF", key="vm_ca_od_sf", step=0.25, format="%.2f")
-        st.number_input("OS SF", key="vm_ca_os_sf", step=0.25, format="%.2f")
+        st.number_input("OD SF", key="vm_ca_od_sf", step=0.25, format="%.2f", on_change=mark_visit_dirty)
+        st.number_input("OS SF", key="vm_ca_os_sf", step=0.25, format="%.2f", on_change=mark_visit_dirty)
     with ca2:
-        st.number_input("OD CIL", key="vm_ca_od_cyl", step=0.25, format="%.2f")
-        st.number_input("OS CIL", key="vm_ca_os_cyl", step=0.25, format="%.2f")
+        st.number_input("OD CIL", key="vm_ca_od_cyl", step=0.25, format="%.2f", on_change=mark_visit_dirty)
+        st.number_input("OS CIL", key="vm_ca_os_cyl", step=0.25, format="%.2f", on_change=mark_visit_dirty)
     with ca3:
-        st.number_input("OD AX", key="vm_ca_od_ax", step=1, min_value=0, max_value=180)
-        st.number_input("OS AX", key="vm_ca_os_ax", step=1, min_value=0, max_value=180)
+        st.number_input("OD AX", key="vm_ca_od_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
+        st.number_input("OS AX", key="vm_ca_os_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
 
     st.subheader("Correzione finale")
     cf1, cf2, cf3 = st.columns(3)
     with cf1:
-        st.number_input("OD SF finale", key="vm_cf_od_sf", step=0.25, format="%.2f")
-        st.number_input("OS SF finale", key="vm_cf_os_sf", step=0.25, format="%.2f")
+        st.number_input("OD SF finale", key="vm_cf_od_sf", step=0.25, format="%.2f", on_change=mark_visit_dirty)
+        st.number_input("OS SF finale", key="vm_cf_os_sf", step=0.25, format="%.2f", on_change=mark_visit_dirty)
     with cf2:
-        st.number_input("OD CIL finale", key="vm_cf_od_cyl", step=0.25, format="%.2f")
-        st.number_input("OS CIL finale", key="vm_cf_os_cyl", step=0.25, format="%.2f")
+        st.number_input("OD CIL finale", key="vm_cf_od_cyl", step=0.25, format="%.2f", on_change=mark_visit_dirty)
+        st.number_input("OS CIL finale", key="vm_cf_os_cyl", step=0.25, format="%.2f", on_change=mark_visit_dirty)
     with cf3:
-        st.number_input("OD AX finale", key="vm_cf_od_ax", step=1, min_value=0, max_value=180)
-        st.number_input("OS AX finale", key="vm_cf_os_ax", step=1, min_value=0, max_value=180)
+        st.number_input("OD AX finale", key="vm_cf_od_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
+        st.number_input("OS AX finale", key="vm_cf_os_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
 
-    st.text_area("Note", key="vm_note", height=120)
+    st.text_area("Note", key="vm_note", height=120, on_change=mark_visit_dirty)
 
     save1, save2, save3 = st.columns([1, 1, 1])
 
@@ -1015,10 +1031,15 @@ def ui_visita_visiva_v2(conn):
         if st.session_state.get("vm_mode") == "edit" and st.session_state.get("vm_loaded_visit_id"):
             if st.button("Aggiorna visita"):
                 updated_id = update_existing_visit(conn, st.session_state["vm_loaded_visit_id"], paziente_id)
+                st.session_state["vm_form_dirty"] = False
+                st.session_state["vm_mode"] = "edit"
                 st.success(f"Visita aggiornata correttamente. ID: {updated_id}")
         else:
             if st.button("Salva visita"):
                 new_id = save_new_visit(conn, paziente_id)
+                st.session_state["vm_loaded_visit_id"] = new_id
+                st.session_state["vm_form_dirty"] = False
+                st.session_state["vm_mode"] = "edit"
                 st.success(f"Visita salvata correttamente. ID: {new_id}")
 
     payload_corrente = build_visit_payload()
