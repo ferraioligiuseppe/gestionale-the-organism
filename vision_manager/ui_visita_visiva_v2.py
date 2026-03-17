@@ -1,4 +1,5 @@
 import json
+import time
 import datetime as dt
 from datetime import date, datetime
 import calendar
@@ -236,6 +237,10 @@ def ensure_visit_state():
         "vm_selected_paziente_label": None,
         "vm_history_selected_visit_id": None,
         "vm_autosave_enabled": True,
+        "vm_autosave_status": None,
+        "vm_last_autosave_at": None,
+        "vm_last_saved_hash": None,
+        "vm_last_autosave_reason": None,
         "vm_flash_message": None,
         "vm_pending_form_reset": False,
     }
@@ -278,7 +283,7 @@ def _apply_form_reset_values():
     st.session_state["vm_note"] = ""
     st.session_state["vm_loaded_visit_id"] = None
     st.session_state["vm_mode"] = "new"
-    st.session_state["vm_form_dirty"] = False
+    _set_saved_state(build_visit_payload(), reason="nuova visita")
 
 
 def clear_visit_form():
@@ -355,6 +360,48 @@ def build_visit_payload():
     }
 
 
+def _payload_signature(payload):
+    try:
+        return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:
+        return str(payload)
+
+
+def _set_saved_state(payload, reason=None):
+    st.session_state["vm_form_dirty"] = False
+    st.session_state["vm_last_saved_hash"] = _payload_signature(payload)
+    st.session_state["vm_last_autosave_at"] = time.time()
+    st.session_state["vm_last_autosave_reason"] = reason
+
+
+def _autosave_caption():
+    ts = st.session_state.get("vm_last_autosave_at")
+    if not ts:
+        return None
+    when = datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M:%S")
+    reason = st.session_state.get("vm_last_autosave_reason")
+    if reason:
+        return f"Autosalvataggio: {when} · {reason}"
+    return f"Autosalvataggio: {when}"
+
+
+def maybe_autosave_current_visit(conn, paziente_id, reason="automatico"):
+    if not st.session_state.get("vm_autosave_enabled"):
+        return False, None, None
+    if not paziente_id or not st.session_state.get("vm_form_dirty"):
+        return False, None, None
+
+    payload = build_visit_payload()
+    payload_sig = _payload_signature(payload)
+    if payload_sig == st.session_state.get("vm_last_saved_hash"):
+        st.session_state["vm_form_dirty"] = False
+        return False, st.session_state.get("vm_loaded_visit_id"), "nessuna modifica"
+
+    visit_id, action = persist_current_visit(conn, paziente_id, payload=payload, reason=reason)
+    st.session_state["vm_autosave_status"] = ("success", f"Autosalvataggio {action}. ID: {visit_id}.")
+    return True, visit_id, action
+
+
 def load_visit_payload(payload, visit_id=None):
     acuita = payload.get("acuita", {}) or {}
     naturale = acuita.get("naturale", {}) or {}
@@ -402,7 +449,7 @@ def load_visit_payload(payload, visit_id=None):
     st.session_state["vm_note"] = payload.get("note", "")
     st.session_state["vm_loaded_visit_id"] = visit_id
     st.session_state["vm_mode"] = "edit" if visit_id else "new"
-    st.session_state["vm_form_dirty"] = False
+    _set_saved_state(build_visit_payload(), reason="caricamento visita")
 
 
 def apply_pending_visit_load():
@@ -786,7 +833,8 @@ def _label_for_patient_id(pazienti_map, paziente_id):
     return None
 
 
-def persist_current_visit(conn, paziente_id):
+def persist_current_visit(conn, paziente_id, payload=None, reason=None):
+    payload = payload or build_visit_payload()
     if st.session_state.get("vm_mode") == "edit" and st.session_state.get("vm_loaded_visit_id"):
         visit_id = update_existing_visit(conn, st.session_state["vm_loaded_visit_id"], paziente_id)
         action = "aggiornata"
@@ -796,7 +844,7 @@ def persist_current_visit(conn, paziente_id):
         st.session_state["vm_mode"] = "edit"
         action = "salvata"
 
-    st.session_state["vm_form_dirty"] = False
+    _set_saved_state(payload, reason=reason)
     return visit_id, action
 
 
@@ -856,6 +904,11 @@ def ui_visita_visiva_v2(conn):
     flash_message = st.session_state.pop("vm_flash_message", None)
     if flash_message:
         level, message = flash_message
+        getattr(st, level, st.info)(message)
+
+    autosave_status = st.session_state.pop("vm_autosave_status", None)
+    if autosave_status:
+        level, message = autosave_status
         getattr(st, level, st.info)(message)
 
     with st.expander("➕ Nuovo paziente", expanded=False):
@@ -938,7 +991,16 @@ def ui_visita_visiva_v2(conn):
     current_label = _label_for_patient_id(pazienti_map, current_paziente_id) or selected_paziente
 
     if requested_paziente_id != current_paziente_id:
-        if st.session_state.get("vm_form_dirty"):
+        if st.session_state.get("vm_form_dirty") and st.session_state.get("vm_autosave_enabled"):
+            maybe_autosave_current_visit(conn, current_paziente_id, reason="prima cambio paziente")
+            clear_visit_form()
+            st.session_state["vm_current_patient_id"] = requested_paziente_id
+            st.session_state["vision_last_pid"] = requested_paziente_id
+            current_paziente_id = requested_paziente_id
+            current_label = selected_paziente
+            st.session_state["vm_flash_message"] = ("success", "Bozza autosalvata prima del cambio paziente.")
+            st.rerun()
+        elif st.session_state.get("vm_form_dirty"):
             st.session_state["vm_pending_action"] = {
                 "type": "switch_patient",
                 "target_patient_id": requested_paziente_id,
@@ -969,7 +1031,7 @@ def ui_visita_visiva_v2(conn):
         pa1, pa2, pa3 = st.columns(3)
         with pa1:
             if st.button("💾 Autosalva e continua", key="vm_pending_autosave", type="primary"):
-                visit_id, action_label = persist_current_visit(conn, paziente_id)
+                visit_id, action_label = persist_current_visit(conn, paziente_id, reason="prima di azione con modifiche non salvate")
                 perform_pending_action(conn, pending_action, paziente_id, pazienti_map)
                 st.session_state["vm_flash_message"] = ("success", f"Visita {action_label} automaticamente (ID: {visit_id}).")
                 st.rerun()
@@ -1047,6 +1109,11 @@ def ui_visita_visiva_v2(conn):
 
     with top1:
         if st.button("🆕 Nuova visita"):
+            if st.session_state.get("vm_form_dirty") and st.session_state.get("vm_autosave_enabled"):
+                maybe_autosave_current_visit(conn, paziente_id, reason="prima di nuova visita")
+                clear_visit_form()
+                st.session_state["vm_flash_message"] = ("success", "Bozza autosalvata prima di iniziare una nuova visita.")
+                st.rerun()
             if st.session_state.get("vm_form_dirty"):
                 st.session_state["vm_pending_action"] = {"type": "new_visit"}
                 st.rerun()
@@ -1055,6 +1122,11 @@ def ui_visita_visiva_v2(conn):
 
     with top2:
         if st.button("📂 Carica ultima visita"):
+            if st.session_state.get("vm_form_dirty") and st.session_state.get("vm_autosave_enabled"):
+                maybe_autosave_current_visit(conn, paziente_id, reason="prima di caricare ultima visita")
+                perform_pending_action(conn, {"type": "load_latest"}, paziente_id, pazienti_map)
+                st.session_state["vm_flash_message"] = ("success", "Bozza autosalvata prima di caricare l'ultima visita.")
+                st.rerun()
             if st.session_state.get("vm_form_dirty"):
                 st.session_state["vm_pending_action"] = {"type": "load_latest"}
                 st.rerun()
@@ -1071,7 +1143,7 @@ def ui_visita_visiva_v2(conn):
             st.info("Nuova visita in compilazione")
 
     with top4:
-        st.checkbox("Prompt autosalvataggio", key="vm_autosave_enabled", help="Mostra l'avviso con autosalvataggio quando provi a cambiare paziente o caricare un'altra visita con modifiche non salvate.")
+        st.checkbox("Autosave avanzato", key="vm_autosave_enabled", help="Quando è attivo, le modifiche vengono autosalvate prima di cambiare paziente o caricare un'altra visita. Il salvataggio manuale resta comunque disponibile.")
 
     if selected_age is not None:
         st.info(f"Età paziente: {selected_age} anni")
@@ -1170,20 +1242,31 @@ def ui_visita_visiva_v2(conn):
 
     st.text_area("Note", key="vm_note", height=120, on_change=mark_visit_dirty)
 
+    auto1, auto2 = st.columns([2,1])
+    with auto1:
+        autosave_caption = _autosave_caption()
+        if autosave_caption:
+            st.caption(autosave_caption)
+        elif st.session_state.get("vm_autosave_enabled"):
+            st.caption("Autosave avanzato attivo.")
+    with auto2:
+        if st.session_state.get("vm_autosave_enabled") and st.session_state.get("vm_form_dirty"):
+            if st.button("⚡ Autosalva ora", key="vm_autosave_now"):
+                visit_id, action = persist_current_visit(conn, paziente_id, reason="autosalvataggio manuale")
+                st.success(f"Autosalvataggio {action}. ID: {visit_id}")
+                st.rerun()
+
     save1, save2, save3 = st.columns([1, 1, 1])
 
     with save1:
         if st.session_state.get("vm_mode") == "edit" and st.session_state.get("vm_loaded_visit_id"):
             if st.button("Aggiorna visita"):
-                updated_id = update_existing_visit(conn, st.session_state["vm_loaded_visit_id"], paziente_id)
-                st.session_state["vm_form_dirty"] = False
+                updated_id, _ = persist_current_visit(conn, paziente_id, reason="salvataggio manuale")
                 st.session_state["vm_mode"] = "edit"
                 st.success(f"Visita aggiornata correttamente. ID: {updated_id}")
         else:
             if st.button("Salva visita"):
-                new_id = save_new_visit(conn, paziente_id)
-                st.session_state["vm_loaded_visit_id"] = new_id
-                st.session_state["vm_form_dirty"] = False
+                new_id, _ = persist_current_visit(conn, paziente_id, reason="salvataggio manuale")
                 st.session_state["vm_mode"] = "edit"
                 st.success(f"Visita salvata correttamente. ID: {new_id}")
 
