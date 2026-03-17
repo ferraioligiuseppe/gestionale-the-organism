@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from io import BytesIO
@@ -10,10 +9,12 @@ IMPORT_ERROR = None
 
 try:
     import mediapipe as mp
+    from mediapipe.python.solutions import face_mesh as mp_face_mesh
     import numpy as np
     MEDIAPIPE_AVAILABLE = True
 except Exception as exc:
     mp = None
+    mp_face_mesh = None
     np = None
     MEDIAPIPE_AVAILABLE = False
     IMPORT_ERROR = str(exc)
@@ -40,19 +41,14 @@ def get_video_pipeline_status() -> dict[str, Any]:
 def _extract_face_landmarks_px(image: Image.Image) -> tuple[dict[int, tuple[float, float]], list[str]]:
     warnings: list[str] = []
 
-    if not MEDIAPIPE_AVAILABLE or mp is None or np is None:
+    if not MEDIAPIPE_AVAILABLE or mp_face_mesh is None or np is None:
         return {}, [f"MediaPipe import fallito: {IMPORT_ERROR or 'errore sconosciuto'}"]
 
     rgb_image = image.convert("RGB")
     arr = np.array(rgb_image)
     h, w = arr.shape[:2]
 
-    try:
-        face_mesh_module = mp.solutions.face_mesh
-    except Exception as exc:
-        return {}, [f"FaceMesh non disponibile in mediapipe: {exc}"]
-
-    with face_mesh_module.FaceMesh(
+    with mp_face_mesh.FaceMesh(
         static_image_mode=True,
         refine_landmarks=True,
         max_num_faces=1,
@@ -174,7 +170,7 @@ def analyze_face_image(image_bytes: bytes, protocol_name: str, metadata: dict[st
     overlay = draw_face_analysis_overlay(image, landmarks_px, metrics)
 
     summary_json = {
-        "report_version": "0.2.0-video-b",
+        "report_version": "0.2.1-video-b",
         "module": "face_eye_oral",
         "protocol_name": protocol_name,
         "metadata": metadata,
