@@ -6,6 +6,7 @@ from io import BytesIO
 
 import matplotlib.pyplot as plt
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
 
 # Se necessario, cambia questo import in:
 # from .db import get_conn
@@ -236,6 +237,7 @@ def ensure_visit_state():
         "vm_history_selected_visit_id": None,
         "vm_autosave_enabled": True,
         "vm_flash_message": None,
+        "vm_pending_form_reset": False,
     }
 
     for key, value in defaults.items():
@@ -243,7 +245,7 @@ def ensure_visit_state():
             st.session_state[key] = value
 
 
-def clear_visit_form():
+def _apply_form_reset_values():
     st.session_state["vm_tipo_visita"] = "oculistica"
     st.session_state["vm_data_visita"] = date.today()
     st.session_state["vm_anamnesi"] = ""
@@ -277,6 +279,17 @@ def clear_visit_form():
     st.session_state["vm_loaded_visit_id"] = None
     st.session_state["vm_mode"] = "new"
     st.session_state["vm_form_dirty"] = False
+
+
+def clear_visit_form():
+    try:
+        _apply_form_reset_values()
+        st.session_state["vm_pending_form_reset"] = False
+    except StreamlitAPIException:
+        st.session_state["vm_pending_form_reset"] = True
+        st.session_state["vm_loaded_visit_id"] = None
+        st.session_state["vm_mode"] = "new"
+        st.session_state["vm_form_dirty"] = False
 
 
 def mark_visit_dirty():
@@ -833,6 +846,9 @@ def perform_pending_action(conn, action, current_paziente_id, pazienti_map):
 
 def ui_visita_visiva_v2(conn):
     ensure_visit_state()
+    if st.session_state.get("vm_pending_form_reset"):
+        _apply_form_reset_values()
+        st.session_state["vm_pending_form_reset"] = False
     apply_pending_visit_load()
 
     st.title("Vision Manager")
