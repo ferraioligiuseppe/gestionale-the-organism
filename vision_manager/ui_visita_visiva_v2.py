@@ -9,14 +9,9 @@ import streamlit as st
 
 # Se necessario, cambia questo import in:
 # from .db import get_conn
-try:
-    from vision_manager.db import get_conn
-    from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
-    from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
-except ModuleNotFoundError:
-    from db import get_conn
-    from pdf_referto_oculistica import build_referto_oculistico_a4
-    from pdf_prescrizione import build_prescrizione_occhiali_a4
+from vision_manager.db import get_conn
+from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
+from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
 
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
@@ -234,6 +229,8 @@ def ensure_visit_state():
         "vm_loaded_visit_id": None,
         "vm_delete_confirm": None,
         "vm_mode": "new",
+        "vm_active_patient_id": None,
+        "vm_patient_drafts": {},
     }
 
     for key, value in defaults.items():
@@ -274,6 +271,31 @@ def clear_visit_form():
     st.session_state["vm_note"] = ""
     st.session_state["vm_loaded_visit_id"] = None
     st.session_state["vm_mode"] = "new"
+
+
+def _store_current_patient_draft(patient_id):
+    if not patient_id:
+        return
+
+    drafts = st.session_state.setdefault("vm_patient_drafts", {})
+    drafts[int(patient_id)] = {
+        "payload": build_visit_payload(),
+        "visit_id": st.session_state.get("vm_loaded_visit_id"),
+        "mode": st.session_state.get("vm_mode", "new"),
+    }
+
+
+def _restore_patient_draft(patient_id):
+    drafts = st.session_state.setdefault("vm_patient_drafts", {})
+    draft = drafts.get(int(patient_id)) if patient_id else None
+
+    if draft and draft.get("payload"):
+        load_visit_payload(draft.get("payload") or {}, visit_id=draft.get("visit_id"))
+        st.session_state["vm_mode"] = draft.get("mode", "new")
+    else:
+        clear_visit_form()
+
+    st.session_state["vm_active_patient_id"] = int(patient_id) if patient_id else None
 
 
 # =========================================================
@@ -825,8 +847,21 @@ def ui_visita_visiva_v2(conn):
             except Exception:
                 pass
 
-    selected_paziente = st.selectbox("Seleziona paziente", pazienti_options, index=default_idx)
+    selected_paziente = st.selectbox(
+        "Seleziona paziente",
+        pazienti_options,
+        index=default_idx,
+        key="vm_selected_paziente_label",
+    )
     paziente_id = pazienti_map[selected_paziente]
+
+    previous_patient_id = st.session_state.get("vm_active_patient_id")
+    if previous_patient_id is None:
+        st.session_state["vm_active_patient_id"] = int(paziente_id)
+    elif int(previous_patient_id) != int(paziente_id):
+        _store_current_patient_draft(previous_patient_id)
+        _restore_patient_draft(paziente_id)
+
     st.session_state["vision_last_pid"] = paziente_id
 
     selected_row = None
@@ -895,6 +930,13 @@ def ui_visita_visiva_v2(conn):
     with top1:
         if st.button("Nuova visita"):
             clear_visit_form()
+            active_pid = st.session_state.get("vm_active_patient_id")
+            if active_pid:
+                st.session_state.setdefault("vm_patient_drafts", {})[int(active_pid)] = {
+                    "payload": build_visit_payload(),
+                    "visit_id": None,
+                    "mode": "new",
+                }
             st.rerun()
 
     with top2:
