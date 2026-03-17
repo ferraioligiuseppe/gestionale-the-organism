@@ -6,7 +6,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-from vision_manager.db import get_conn
+try:
+    from vision_manager.db import get_conn
+except ModuleNotFoundError:
+    from db import get_conn
 
 
 def _inject_dashboard_css():

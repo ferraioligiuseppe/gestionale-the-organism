@@ -9,9 +9,14 @@ import streamlit as st
 
 # Se necessario, cambia questo import in:
 # from .db import get_conn
-from vision_manager.db import get_conn
-from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
-from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
+try:
+    from vision_manager.db import get_conn
+    from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
+    from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
+except ModuleNotFoundError:
+    from db import get_conn
+    from pdf_referto_oculistica import build_referto_oculistico_a4
+    from pdf_prescrizione import build_prescrizione_occhiali_a4
 
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
