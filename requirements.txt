@@ -17,7 +17,6 @@ pydub==0.25.1
 streamlit-webrtc
 aiortc
 mediapipe==0.10.32
-opencv-python-headless==4.10.0.84
+opencv-python-headless==4.8.1.78
 numpy==1.26.4
 Pillow
-opencv-python-headless==4.8.1.78
