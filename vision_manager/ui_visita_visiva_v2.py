@@ -905,7 +905,10 @@ def ui_visita_visiva_v2(conn):
             except Exception:
                 pass
 
-    if not st.session_state.get("vm_selected_paziente_label") or st.session_state.get("vm_selected_paziente_label") not in pazienti_map:
+    forced_label = st.session_state.pop("vm_force_selected_paziente_label", None)
+    if forced_label in pazienti_map:
+        st.session_state["vm_selected_paziente_label"] = forced_label
+    elif not st.session_state.get("vm_selected_paziente_label") or st.session_state.get("vm_selected_paziente_label") not in pazienti_map:
         st.session_state["vm_selected_paziente_label"] = pazienti_options[default_idx]
 
     selected_paziente = st.selectbox("Seleziona paziente", pazienti_options, key="vm_selected_paziente_label")
@@ -925,7 +928,7 @@ def ui_visita_visiva_v2(conn):
                 "target_patient_id": requested_paziente_id,
                 "target_patient_label": selected_paziente,
             }
-            st.session_state["vm_selected_paziente_label"] = current_label
+            st.session_state["vm_force_selected_paziente_label"] = current_label
             st.rerun()
         else:
             clear_visit_form()
@@ -936,7 +939,6 @@ def ui_visita_visiva_v2(conn):
 
     paziente_id = current_paziente_id
     selected_paziente = current_label
-    st.session_state["vm_selected_paziente_label"] = selected_paziente
 
     pending_action = st.session_state.get("vm_pending_action")
     if pending_action:
