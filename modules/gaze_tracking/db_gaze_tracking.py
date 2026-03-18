@@ -66,21 +66,86 @@ def init_gaze_tracking_db(conn) -> None:
                 clinical_indexes_json JSONB,
                 distance_metrics_json JSONB,
                 summary_json JSONB,
-                raw_payload_json JSONB,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
             """
         )
-        try:
-            cur.execute("ALTER TABLE gaze_reports ADD COLUMN IF NOT EXISTS raw_payload_json JSONB;")
-        except Exception:
-            pass
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gaze_browser_sessions (
+                id BIGSERIAL PRIMARY KEY,
+                paziente_id BIGINT NOT NULL,
+                paziente_label TEXT,
+                session_type TEXT NOT NULL DEFAULT 'browser_facemesh',
+                metrics_json JSONB,
+                timeline_json JSONB,
+                payload_json JSONB,
+                notes TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_sessions_paziente_id ON gaze_sessions(paziente_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_samples_session_id ON gaze_samples(session_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_reports_session_id ON gaze_reports(session_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_browser_sessions_paziente_id ON gaze_browser_sessions(paziente_id);")
     conn.commit()
+
+
+def save_browser_gaze_session(conn, paziente_id: int, paziente_label: str, payload: dict[str, Any], notes: str = "") -> int:
+    metrics = payload.get("metrics") or {}
+    timeline = payload.get("timeline") or []
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO gaze_browser_sessions (
+                paziente_id, paziente_label, metrics_json, timeline_json, payload_json, notes
+            ) VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s)
+            RETURNING id;
+            """,
+            (
+                int(paziente_id),
+                paziente_label,
+                json.dumps(metrics, ensure_ascii=False),
+                json.dumps(timeline, ensure_ascii=False),
+                json.dumps(payload, ensure_ascii=False),
+                notes,
+            ),
+        )
+        sid = cur.fetchone()[0]
+    conn.commit()
+    return int(sid)
+
+
+def list_browser_gaze_sessions(conn, paziente_id: int, limit: int = 20) -> list[dict[str, Any]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, paziente_id, paziente_label, metrics_json, timeline_json, payload_json, notes, created_at
+            FROM gaze_browser_sessions
+            WHERE paziente_id = %s
+            ORDER BY created_at DESC, id DESC
+            LIMIT %s;
+            """,
+            (int(paziente_id), int(limit)),
+        )
+        rows = cur.fetchall() or []
+
+    out = []
+    for r in rows:
+        if isinstance(r, dict):
+            row = dict(r)
+        else:
+            row = {
+                "id": r[0], "paziente_id": r[1], "paziente_label": r[2],
+                "metrics_json": r[3], "timeline_json": r[4], "payload_json": r[5],
+                "notes": r[6], "created_at": r[7],
+            }
+        out.append(row)
+    return out
 
 
 def insert_gaze_session(conn, session_data: dict[str, Any]) -> int:
@@ -184,7 +249,6 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
     metrics_json = report_data.get("metrics", {})
     clinical_indexes_json = report_data.get("clinical_indexes", {})
     distance_metrics_json = report_data.get("distance_metrics", {})
-    raw_payload_json = report_data.get("raw_payload", {})
 
     with conn.cursor() as cur:
         cur.execute(
@@ -196,10 +260,9 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
                 metrics_json,
                 clinical_indexes_json,
                 distance_metrics_json,
-                summary_json,
-                raw_payload_json
+                summary_json
             )
-            VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
+            VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
             ON CONFLICT (session_id)
             DO UPDATE SET
                 report_version = EXCLUDED.report_version,
@@ -208,7 +271,6 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
                 clinical_indexes_json = EXCLUDED.clinical_indexes_json,
                 distance_metrics_json = EXCLUDED.distance_metrics_json,
                 summary_json = EXCLUDED.summary_json,
-                raw_payload_json = EXCLUDED.raw_payload_json,
                 updated_at = NOW();
             """,
             (
@@ -219,79 +281,9 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
                 json.dumps(clinical_indexes_json, ensure_ascii=False),
                 json.dumps(distance_metrics_json, ensure_ascii=False),
                 json.dumps(summary_json, ensure_ascii=False),
-                json.dumps(raw_payload_json, ensure_ascii=False),
             ),
         )
     conn.commit()
-
-
-def save_browser_gaze_payload(conn, payload: dict[str, Any], operator_name: str | None = None, session_notes: str | None = None) -> int:
-    init_gaze_tracking_db(conn)
-
-    paziente_id = payload.get("patient_id") or payload.get("paziente_id")
-    paziente_label = payload.get("patient_label") or payload.get("paziente_label")
-    if paziente_id is None:
-        raise ValueError("Payload senza patient_id / paziente_id")
-
-    metrics = payload.get("metrics") or {}
-    indexes = payload.get("pnev_indexes") or payload.get("clinical_indexes") or {}
-    meta = payload.get("meta") or {}
-
-    session_data = {
-        "paziente_id": int(paziente_id),
-        "paziente_label": _safe_text(paziente_label),
-        "protocol_name": _safe_text(payload.get("protocol_name") or "webcam_browser_v3"),
-        "source_vendor": _safe_text(payload.get("source_vendor") or "mediapipe_js"),
-        "source_format": _safe_text(payload.get("source_format") or "browser_live_json"),
-        "source_filename": None,
-        "operator_name": _safe_text(operator_name),
-        "session_notes": _safe_text(session_notes),
-    }
-    session_id = insert_gaze_session(conn, session_data)
-
-    summary_json = {
-        "report_version": "browser_direct_save_v1",
-        "analytics_version": "browser_live_v1",
-        "saved_mode": "direct_on_click",
-        "timestamp": payload.get("timestamp"),
-        "session_started_at": payload.get("session_started_at"),
-        "face_detected": meta.get("face_detected"),
-        "frame_count": meta.get("frame_count"),
-        "image_width": meta.get("image_width"),
-        "image_height": meta.get("image_height"),
-    }
-    report_data = {
-        "summary_json": summary_json,
-        "metrics": metrics,
-        "clinical_indexes": indexes,
-        "distance_metrics": {},
-        "raw_payload": payload,
-    }
-    upsert_gaze_report(conn, session_id, report_data)
-    return int(session_id)
-
-
-def list_gaze_sessions_for_patient(conn, paziente_id: int, limit: int = 20):
-    init_gaze_tracking_db(conn)
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT
-                s.id,
-                s.created_at,
-                s.protocol_name,
-                s.operator_name,
-                r.metrics_json,
-                r.clinical_indexes_json
-            FROM gaze_sessions s
-            LEFT JOIN gaze_reports r ON r.session_id = s.id
-            WHERE s.paziente_id = %s
-            ORDER BY s.created_at DESC, s.id DESC
-            LIMIT %s;
-            """,
-            (int(paziente_id), int(limit)),
-        )
-        return cur.fetchall() or []
 
 
 def _safe_num(value):

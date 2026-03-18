@@ -6495,6 +6495,7 @@ def ui_dashboard():
 # ==========================
 # Eye Tracking / Gaze Pointer
 # ==========================
+
 def ui_gaze_tracking_section():
     import streamlit as st
 
@@ -6519,6 +6520,9 @@ def ui_gaze_tracking_section():
             st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
         return
 
+    st.caption(f"Pazienti rilevati: {len(paz_list)} • tabella: {paz_table or 'n/d'}")
+    search = st.text_input("Filtra paziente per nome, cognome o id", key="gaze_tracking_patient_filter").strip().lower()
+
     def _label(p):
         pid, cogn, nome, dn, scuola, eta = p
         dn_s = dn or ""
@@ -6529,9 +6533,19 @@ def ui_gaze_tracking_section():
             extra += f" • {scuola}"
         return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
+    filtered = []
+    for p in paz_list:
+        lbl = _label(p)
+        if not search or search in lbl.lower():
+            filtered.append(p)
+
+    if not filtered:
+        st.warning("Nessun paziente corrisponde al filtro inserito.")
+        return
+
     sel = st.selectbox(
         "Seleziona paziente",
-        paz_list,
+        filtered,
         format_func=_label,
         key="gaze_tracking_patient_select",
     )
