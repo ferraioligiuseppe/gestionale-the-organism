@@ -6,12 +6,8 @@ from .ui_webcam_browser_v3 import ui_webcam_browser_v3
 
 
 def ui_gaze_tracking(paziente_id=None, paziente_label="", **kwargs):
-    """Bridge verso il modulo browser-based.
-
-    Accetta **kwargs per compatibilità con vecchi caller che passavano
-    parametri come get_conn senza più usarli.
-    """
     return ui_webcam_browser_v3(
         paziente_id=paziente_id,
         paziente_label=paziente_label,
+        **kwargs,
     )
