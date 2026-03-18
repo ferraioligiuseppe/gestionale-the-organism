@@ -6498,10 +6498,16 @@ def ui_dashboard():
 def ui_gaze_tracking_section():
     import streamlit as st
 
+    st.markdown("## 👁️ Eye Tracking / Webcam AI")
+    st.caption(
+        "Modulo browser-based (MediaPipe JS) – compatibile con Streamlit Cloud. "
+        "Elaborazione lato browser, senza OpenCV o librerie native."
+    )
+
     try:
         from modules.gaze_tracking.ui_gaze_tracking import ui_gaze_tracking
     except Exception as e:
-        st.error("Errore nel modulo Eye Tracking. Verifica di aver copiato modules/gaze_tracking e components/gaze_tracker_component.")
+        st.error("Errore nel modulo Eye Tracking. Verifica la cartella modules/gaze_tracking.")
         st.exception(e)
         return
 
@@ -6517,11 +6523,18 @@ def ui_gaze_tracking_section():
         pid, cogn, nome, dn, scuola, eta = p
         dn_s = dn or ""
         extra = ""
-        if eta: extra += f" • {eta} anni"
-        if scuola: extra += f" • {scuola}"
+        if eta:
+            extra += f" • {eta} anni"
+        if scuola:
+            extra += f" • {scuola}"
         return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
-    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label, key="gaze_tracking_patient_select")
+    sel = st.selectbox(
+        "Seleziona paziente",
+        paz_list,
+        format_func=_label,
+        key="gaze_tracking_patient_select",
+    )
 
     if isinstance(sel, dict):
         paziente_id = sel.get("id") or sel.get("paziente_id")
@@ -6542,7 +6555,10 @@ def ui_gaze_tracking_section():
         return
 
     paziente_label = f"{cognome} {nome}".strip() or f"Paziente id {paziente_id}"
-    ui_gaze_tracking(paziente_id=int(paziente_id), get_conn=get_connection, paziente_label=paziente_label)
+    ui_gaze_tracking(
+        paziente_id=int(paziente_id),
+        paziente_label=paziente_label,
+    )
 
 # ==========================
 # Osteopatia (AUTO) - sezione menu
