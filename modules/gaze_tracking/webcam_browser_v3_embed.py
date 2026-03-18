@@ -105,6 +105,7 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
           <button id="btnStop" class="secondary">Stop</button>
           <button id="btnSnapshot" class="secondary">Snapshot PNG</button>
           <button id="btnJson" class="secondary">Export JSON</button>
+          <button id="btnSaveDb">Salva su DB</button>
           <button id="btnReset" class="danger">Reset metriche</button>
         </div>
         <div class="footer-note">
@@ -432,6 +433,7 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
     document.getElementById("btnStop").addEventListener("click", stopCamera);
     document.getElementById("btnSnapshot").addEventListener("click", exportSnapshot);
     document.getElementById("btnJson").addEventListener("click", exportJson);
+    document.getElementById("btnSaveDb").addEventListener("click", saveToDb);
     document.getElementById("btnReset").addEventListener("click", resetMetrics);
 
     updateUI(latestPayload);

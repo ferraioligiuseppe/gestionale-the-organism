@@ -14,7 +14,7 @@ def init_gaze_tracking_db(conn) -> None:
                 id BIGSERIAL PRIMARY KEY,
                 paziente_id BIGINT NOT NULL,
                 paziente_label TEXT,
-                protocol_name TEXT NOT NULL DEFAULT 'browser_live',
+                protocol_name TEXT NOT NULL,
                 source_vendor TEXT,
                 source_format TEXT,
                 source_filename TEXT,
@@ -66,17 +66,16 @@ def init_gaze_tracking_db(conn) -> None:
                 clinical_indexes_json JSONB,
                 distance_metrics_json JSONB,
                 summary_json JSONB,
+                raw_payload_json JSONB,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
             """
         )
-
-        # compat / browser-live columns
-        cur.execute("ALTER TABLE gaze_sessions ADD COLUMN IF NOT EXISTS session_mode TEXT DEFAULT 'browser_live';")
-        cur.execute("ALTER TABLE gaze_sessions ADD COLUMN IF NOT EXISTS browser_payload_json JSONB;")
-        cur.execute("ALTER TABLE gaze_sessions ADD COLUMN IF NOT EXISTS snapshot_data_url TEXT;")
-        cur.execute("ALTER TABLE gaze_sessions ADD COLUMN IF NOT EXISTS session_duration_sec DOUBLE PRECISION;")
+        try:
+            cur.execute("ALTER TABLE gaze_reports ADD COLUMN IF NOT EXISTS raw_payload_json JSONB;")
+        except Exception:
+            pass
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_sessions_paziente_id ON gaze_sessions(paziente_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_samples_session_id ON gaze_samples(session_id);")
@@ -96,28 +95,20 @@ def insert_gaze_session(conn, session_data: dict[str, Any]) -> int:
                 source_format,
                 source_filename,
                 operator_name,
-                session_notes,
-                session_mode,
-                browser_payload_json,
-                snapshot_data_url,
-                session_duration_sec
+                session_notes
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id;
             """,
             (
                 session_data.get("paziente_id"),
                 session_data.get("paziente_label"),
-                session_data.get("protocol_name", "browser_live"),
+                session_data.get("protocol_name"),
                 session_data.get("source_vendor"),
                 session_data.get("source_format"),
                 session_data.get("source_filename"),
                 session_data.get("operator_name"),
                 session_data.get("session_notes"),
-                session_data.get("session_mode", "browser_live"),
-                json.dumps(session_data.get("browser_payload_json") or {}, ensure_ascii=False),
-                session_data.get("snapshot_data_url"),
-                session_data.get("session_duration_sec"),
             ),
         )
         session_id = cur.fetchone()[0]
@@ -193,6 +184,7 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
     metrics_json = report_data.get("metrics", {})
     clinical_indexes_json = report_data.get("clinical_indexes", {})
     distance_metrics_json = report_data.get("distance_metrics", {})
+    raw_payload_json = report_data.get("raw_payload", {})
 
     with conn.cursor() as cur:
         cur.execute(
@@ -204,9 +196,10 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
                 metrics_json,
                 clinical_indexes_json,
                 distance_metrics_json,
-                summary_json
+                summary_json,
+                raw_payload_json
             )
-            VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
+            VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
             ON CONFLICT (session_id)
             DO UPDATE SET
                 report_version = EXCLUDED.report_version,
@@ -215,6 +208,7 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
                 clinical_indexes_json = EXCLUDED.clinical_indexes_json,
                 distance_metrics_json = EXCLUDED.distance_metrics_json,
                 summary_json = EXCLUDED.summary_json,
+                raw_payload_json = EXCLUDED.raw_payload_json,
                 updated_at = NOW();
             """,
             (
@@ -225,78 +219,59 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
                 json.dumps(clinical_indexes_json, ensure_ascii=False),
                 json.dumps(distance_metrics_json, ensure_ascii=False),
                 json.dumps(summary_json, ensure_ascii=False),
+                json.dumps(raw_payload_json, ensure_ascii=False),
             ),
         )
     conn.commit()
 
 
-def save_browser_gaze_session(
-    conn,
-    *,
-    paziente_id: int,
-    paziente_label: str,
-    payload: dict[str, Any],
-    operator_name: str | None = None,
-    session_notes: str | None = None,
-    snapshot_data_url: str | None = None,
-) -> int:
+def save_browser_gaze_payload(conn, payload: dict[str, Any], operator_name: str | None = None, session_notes: str | None = None) -> int:
     init_gaze_tracking_db(conn)
 
+    paziente_id = payload.get("patient_id") or payload.get("paziente_id")
+    paziente_label = payload.get("patient_label") or payload.get("paziente_label")
+    if paziente_id is None:
+        raise ValueError("Payload senza patient_id / paziente_id")
+
     metrics = payload.get("metrics") or {}
-    indexes = payload.get("pnev_indexes") or {}
+    indexes = payload.get("pnev_indexes") or payload.get("clinical_indexes") or {}
     meta = payload.get("meta") or {}
 
-    started_at = payload.get("session_started_at")
-    ended_at = payload.get("timestamp")
-    duration_sec = _estimate_duration_seconds(started_at, ended_at)
-
-    session_id = insert_gaze_session(
-        conn,
-        {
-            "paziente_id": int(paziente_id),
-            "paziente_label": paziente_label,
-            "protocol_name": "browser_live_v1",
-            "source_vendor": "mediapipe_js",
-            "source_format": "browser_json",
-            "source_filename": "live_session.json",
-            "operator_name": operator_name,
-            "session_notes": session_notes,
-            "session_mode": "browser_live",
-            "browser_payload_json": payload,
-            "snapshot_data_url": snapshot_data_url,
-            "session_duration_sec": duration_sec,
-        },
-    )
+    session_data = {
+        "paziente_id": int(paziente_id),
+        "paziente_label": _safe_text(paziente_label),
+        "protocol_name": _safe_text(payload.get("protocol_name") or "webcam_browser_v3"),
+        "source_vendor": _safe_text(payload.get("source_vendor") or "mediapipe_js"),
+        "source_format": _safe_text(payload.get("source_format") or "browser_live_json"),
+        "source_filename": None,
+        "operator_name": _safe_text(operator_name),
+        "session_notes": _safe_text(session_notes),
+    }
+    session_id = insert_gaze_session(conn, session_data)
 
     summary_json = {
-        "report_version": "browser_live_v1",
+        "report_version": "browser_direct_save_v1",
         "analytics_version": "browser_live_v1",
-        "source": "webcam_browser_v3",
-        "patient_id": paziente_id,
-        "patient_label": paziente_label,
-        "session_started_at": started_at,
-        "session_saved_at": ended_at,
-        "session_duration_sec": duration_sec,
-        "face_detected": bool(meta.get("face_detected")),
+        "saved_mode": "direct_on_click",
+        "timestamp": payload.get("timestamp"),
+        "session_started_at": payload.get("session_started_at"),
+        "face_detected": meta.get("face_detected"),
         "frame_count": meta.get("frame_count"),
         "image_width": meta.get("image_width"),
         "image_height": meta.get("image_height"),
     }
-
-    upsert_gaze_report(
-        conn,
-        session_id,
-        {
-            "summary_json": summary_json,
-            "metrics": metrics,
-            "clinical_indexes": indexes,
-            "distance_metrics": {},
-        },
-    )
+    report_data = {
+        "summary_json": summary_json,
+        "metrics": metrics,
+        "clinical_indexes": indexes,
+        "distance_metrics": {},
+        "raw_payload": payload,
+    }
+    upsert_gaze_report(conn, session_id, report_data)
     return int(session_id)
 
 
-def list_gaze_sessions_summary(conn, paziente_id: int, limit: int = 20) -> list[dict[str, Any]]:
+def list_gaze_sessions_for_patient(conn, paziente_id: int, limit: int = 20):
     init_gaze_tracking_db(conn)
     with conn.cursor() as cur:
         cur.execute(
@@ -306,77 +281,17 @@ def list_gaze_sessions_summary(conn, paziente_id: int, limit: int = 20) -> list[
                 s.created_at,
                 s.protocol_name,
                 s.operator_name,
-                s.session_notes,
-                s.session_duration_sec,
                 r.metrics_json,
-                r.clinical_indexes_json,
-                r.summary_json
+                r.clinical_indexes_json
             FROM gaze_sessions s
             LEFT JOIN gaze_reports r ON r.session_id = s.id
             WHERE s.paziente_id = %s
-            ORDER BY s.created_at DESC
+            ORDER BY s.created_at DESC, s.id DESC
             LIMIT %s;
             """,
             (int(paziente_id), int(limit)),
         )
-        rows = cur.fetchall() or []
-
-    out = []
-    for row in rows:
-        session_id, created_at, protocol_name, operator_name, session_notes, duration_sec, metrics_json, indexes_json, summary_json = row
-        out.append(
-            {
-                "id": session_id,
-                "created_at": str(created_at),
-                "protocol_name": protocol_name,
-                "operator_name": operator_name,
-                "session_notes": session_notes,
-                "session_duration_sec": duration_sec,
-                "metrics_json": _json_to_dict(metrics_json),
-                "clinical_indexes_json": _json_to_dict(indexes_json),
-                "summary_json": _json_to_dict(summary_json),
-            }
-        )
-    return out
-
-
-def _json_to_dict(value: Any) -> dict[str, Any]:
-    if value is None:
-        return {}
-    if isinstance(value, dict):
-        return value
-    try:
-        return json.loads(value)
-    except Exception:
-        return {}
-
-
-def _estimate_duration_seconds(started_at: Any, ended_at: Any) -> float | None:
-    from datetime import datetime
-
-    if not started_at or not ended_at:
-        return None
-
-    def _parse(v: Any) -> datetime | None:
-        if not v:
-            return None
-        try:
-            s = str(v).replace("Z", "+00:00")
-            return datetime.fromisoformat(s)
-        except Exception:
-            return None
-
-    sdt = _parse(started_at)
-    edt = _parse(ended_at)
-    if not sdt or not edt:
-        return None
-    try:
-        sec = (edt - sdt).total_seconds()
-        if sec < 0:
-            return None
-        return float(round(sec, 3))
-    except Exception:
-        return None
+        return cur.fetchall() or []
 
 
 def _safe_num(value):
