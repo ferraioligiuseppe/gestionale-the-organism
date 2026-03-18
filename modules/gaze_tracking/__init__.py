@@ -1,3 +1,3 @@
-from .ui_gaze_tracking import ui_gaze_tracking
+from .ui_webcam_browser_v3 import ui_webcam_browser_v3
 
-__all__ = ["ui_gaze_tracking"]
+__all__ = ["ui_webcam_browser_v3"]
