@@ -6495,7 +6495,7 @@ def ui_dashboard():
 # ==========================
 # Eye Tracking / Gaze Pointer
 # ==========================
-def ui_gaze_tracking_section():
+def ui_gaze_tracking_section(paziente_id=None, paziente_label="", get_conn=None, *args, **kwargs):
     import streamlit as st
 
     st.markdown("## 👁️ Eye Tracking / Webcam AI")
@@ -6511,50 +6511,76 @@ def ui_gaze_tracking_section():
         st.exception(e)
         return
 
-    conn = get_connection()
-    paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
-    if not paz_list:
-        st.error("Nessun paziente trovato nel database.")
-        if paz_table or paz_colmap:
-            st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
-        return
+    resolver = get_conn or globals().get("get_connection")
+    conn = None
 
-    def _label(p):
-        pid, cogn, nome, dn, scuola, eta = p
-        dn_s = dn or ""
-        extra = ""
-        if eta:
-            extra += f" • {eta} anni"
-        if scuola:
-            extra += f" • {scuola}"
-        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
+    if paziente_id is None:
+        try:
+            if resolver is None:
+                raise RuntimeError("get_connection non disponibile")
+            conn = resolver()
+            paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
+        except Exception as e:
+            st.error("Errore accesso database per selezione paziente.")
+            st.exception(e)
+            return
+        finally:
+            try:
+                if conn is not None:
+                    conn.close()
+            except Exception:
+                pass
 
-    sel = st.selectbox(
-        "Seleziona paziente",
-        paz_list,
-        format_func=_label,
-        key="gaze_tracking_patient_select",
-    )
+        if not paz_list:
+            st.error("Nessun paziente trovato nel database.")
+            if 'paz_table' in locals() and (paz_table or paz_colmap):
+                st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
+            return
 
-    if isinstance(sel, dict):
-        paziente_id = sel.get("id") or sel.get("paziente_id")
-        cognome = sel.get("cognome") or ""
-        nome = sel.get("nome") or ""
+        def _label(p):
+            pid, cogn, nome, dn, scuola, eta = p
+            dn_s = dn or ""
+            extra = ""
+            if eta:
+                extra += f" • {eta} anni"
+            if scuola:
+                extra += f" • {scuola}"
+            return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
+
+        sel = st.selectbox(
+            "Seleziona paziente",
+            paz_list,
+            format_func=_label,
+            key="gaze_tracking_patient_select",
+        )
+
+        if isinstance(sel, dict):
+            paziente_id = sel.get("id") or sel.get("paziente_id")
+            cognome = sel.get("cognome") or ""
+            nome = sel.get("nome") or ""
+        else:
+            try:
+                paziente_id = sel[0]
+                cognome = sel[1] if len(sel) > 1 else ""
+                nome = sel[2] if len(sel) > 2 else ""
+            except Exception:
+                paziente_id = None
+                cognome = ""
+                nome = ""
+
+        if not paziente_id:
+            st.error("Errore: id paziente non determinabile.")
+            return
+
+        paziente_label = f"{cognome} {nome}".strip() or f"Paziente id {paziente_id}"
     else:
         try:
-            paziente_id = sel[0]
-            cognome = sel[1] if len(sel) > 1 else ""
-            nome = sel[2] if len(sel) > 2 else ""
+            paziente_id = int(paziente_id)
         except Exception:
-            paziente_id = None
-            cognome = ""
-            nome = ""
+            st.error("Errore: id paziente non valido.")
+            return
+        paziente_label = (paziente_label or "").strip() or f"Paziente id {paziente_id}"
 
-    if not paziente_id:
-        st.error("Errore: id paziente non determinabile.")
-        return
-
-    paziente_label = f"{cognome} {nome}".strip() or f"Paziente id {paziente_id}"
     ui_gaze_tracking(
         paziente_id=int(paziente_id),
         paziente_label=paziente_label,

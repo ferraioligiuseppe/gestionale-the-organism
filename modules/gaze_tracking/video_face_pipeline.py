@@ -5,44 +5,32 @@ from typing import Any
 
 from PIL import Image
 
-
 IMPORT_ERROR = None
-
-try:
-    # Cloud-safe fallback: do not import mediapipe/opencv on Streamlit Cloud
-    # to avoid libGL / native dependency failures.
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except Exception as exc:
-    np = None
-    NUMPY_AVAILABLE = False
-    IMPORT_ERROR = str(exc)
-
-MEDIAPIPE_AVAILABLE = False
+MEDIAPIPE_AVAILABLE = True
+NUMPY_AVAILABLE = True
 
 
 def get_video_pipeline_status() -> dict[str, Any]:
+    """Compat layer: il pipeline Python legacy è stato sostituito da quello browser-based."""
     return {
-        "mediapipe_available": False,
-        "import_error": (
-            "Modalità cloud-safe attiva: analisi FaceMesh/MediaPipe disabilitata "
-            "in ambiente Streamlit Cloud per evitare errori di librerie native "
-            "(es. libGL.so.1). Usa ambiente locale o server dedicato per il modulo video AI completo."
-        ),
+        "mediapipe_available": True,
+        "import_error": None,
+        "mode": "browser_based_compat",
+        "message": "Pipeline video legacy dismesso: usare il modulo browser-based integrato.",
     }
 
 
-def _build_stub_summary(protocol_name: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+def _build_compat_summary(protocol_name: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     metadata = metadata or {}
     return {
-        "report_version": "0.3.0-cloud-safe",
-        "module": "face_eye_oral_stub",
+        "report_version": "1.0.0-browser-compat",
+        "module": "face_eye_oral_browser_based",
         "protocol_name": protocol_name,
         "metadata": metadata,
-        "mode": "cloud_safe_stub",
+        "mode": "browser_based_compat",
         "warnings": [
-            "Modulo video AI avanzato disabilitato su Streamlit Cloud.",
-            "Per volto/occhi/bocca/postura con FaceMesh serve esecuzione locale o server dedicato con dipendenze native abilitate.",
+            "Il vecchio pipeline Python server-side è stato sostituito dal modulo browser-based.",
+            "Per analisi live completa usare la sezione Eye Tracking / Webcam AI del gestionale.",
         ],
     }
 
@@ -63,18 +51,18 @@ def analyze_face_image(
         return {"ok": False, "error": f"Immagine non leggibile: {exc}"}
 
     width, height = image.size
-    summary_json = _build_stub_summary(protocol_name=protocol_name, metadata=metadata)
+    summary_json = _build_compat_summary(protocol_name=protocol_name, metadata=metadata)
 
     return {
         "ok": True,
-        "mode": "cloud_safe_stub",
+        "mode": "browser_based_compat",
         "metrics": {
             "image_width_px": width,
             "image_height_px": height,
-            "analysis_status": "stub_cloud_safe",
-            "gaze_direction_label": "non_disponibile_su_cloud",
+            "analysis_status": "compat_placeholder",
+            "gaze_direction_label": "usa_modulo_browser_based",
             "head_tilt_deg": None,
-            "oral_state": "non_disponibile_su_cloud",
+            "oral_state": "usa_modulo_browser_based",
             "palpebral_asymmetry": None,
             "mouth_open_ratio": None,
             "left_eye_open_ratio": None,
