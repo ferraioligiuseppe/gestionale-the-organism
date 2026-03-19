@@ -1,4 +1,5 @@
-# Sostituisci il richiamo Eye Tracking con questo:
+# In app_core.py lascia/usa questa chiamata:
+
 ui_gaze_tracking(
     paziente_id=int(paziente_id),
     paziente_label=paziente_label,
