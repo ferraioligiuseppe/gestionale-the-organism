@@ -4,66 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gaze Tracker Component</title>
-  <script src="https://unpkg.com/streamlit-component-lib@1.4.0/dist/index.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 </head>
 <body>
   <div class="wrap">
-    <div class="header">
-      <div>
-        <div class="title">Eye Tracking / Webcam AI</div>
-        <div class="subtitle">Custom Streamlit component • MediaPipe FaceMesh browser-side</div>
-        <div class="patient" id="patientInfo">Paziente: --</div>
-      </div>
-      <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">idle</span></div>
-    </div>
-
-    <div class="stage-card">
-      <div class="video-stage">
-        <video id="video" autoplay playsinline muted></video>
-        <canvas id="canvas"></canvas>
-        <div id="overlayText" class="overlay-text">Premi “Avvia webcam”</div>
-      </div>
-      <div class="controls">
-        <button id="startBtn">Avvia webcam</button>
-        <button id="stopBtn" class="secondary">Stop</button>
-        <button id="snapshotBtn" class="secondary">Snapshot PNG</button>
-        <button id="resetBtn" class="danger">Reset</button>
-      </div>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <div class="card-title">Metriche live</div>
-        <div class="metrics-grid">
-          <div class="metric"><span>Gaze</span><strong id="gaze_direction">--</strong></div>
-          <div class="metric"><span>Head tilt</span><strong id="head_tilt_deg">--</strong></div>
-          <div class="metric"><span>Mouth open</span><strong id="mouth_open_ratio">--</strong></div>
-          <div class="metric"><span>Blink index</span><strong id="blink_index">--</strong></div>
-          <div class="metric"><span>Occhio SX</span><strong id="left_eye_open_ratio">--</strong></div>
-          <div class="metric"><span>Occhio DX</span><strong id="right_eye_open_ratio">--</strong></div>
-          <div class="metric"><span>Asimmetria</span><strong id="palpebral_asymmetry">--</strong></div>
-          <div class="metric"><span>Yaw viso</span><strong id="head_yaw_deg">--</strong></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-title">Indici PNEV</div>
-        <div class="metrics-grid">
-          <div class="metric"><span>Oral instability</span><strong id="oral_instability_index">--</strong></div>
-          <div class="metric"><span>Oculo-postural</span><strong id="oculo_postural_index">--</strong></div>
-          <div class="metric"><span>Facial balance</span><strong id="facial_balance_index">--</strong></div>
-          <div class="metric"><span>Gaze stability</span><strong id="gaze_stability_index">--</strong></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Debug</div>
-      <div id="debugInfo" class="debug"></div>
-    </div>
+    <div class="header">Eye Tracking / Webcam AI</div>
+    <video id="video" autoplay playsinline muted></video>
+    <div id="status">In attesa webcam…</div>
   </div>
   <script src="app.js"></script>
 </body>

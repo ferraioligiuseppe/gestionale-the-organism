@@ -1,2 +1,1 @@
-from .ui_webcam_browser_v3 import ui_webcam_browser_v3
 from .ui_gaze_tracking import ui_gaze_tracking
