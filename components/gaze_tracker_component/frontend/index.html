@@ -4,27 +4,29 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gaze Tracker Component</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <script src="https://unpkg.com/streamlit-component-lib/dist/index.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://unpkg.com/streamlit-component-lib@2.0.0/dist/index.js"></script>
 </head>
 <body>
-  <div id="app">
+  <div class="wrap">
     <div class="toolbar">
-      <button id="startBtn">Avvia camera</button>
+      <button id="startBtn">Avvia webcam</button>
       <button id="stopBtn">Stop</button>
-      <span id="status">idle</span>
+      <span id="status">In attesa webcam</span>
     </div>
-
-    <div class="video-wrap">
+    <div class="stage">
       <video id="video" autoplay playsinline muted></video>
-      <div id="overlay">Camera non avviata</div>
+      <canvas id="canvas"></canvas>
     </div>
-
-    <div class="footer">
-      <small id="info">In attesa…</small>
+    <div class="metrics">
+      <div><strong>Gaze:</strong> <span id="gaze">--</span></div>
+      <div><strong>Head tilt:</strong> <span id="tilt">--</span></div>
+      <div><strong>Blink:</strong> <span id="blink">--</span></div>
     </div>
   </div>
-
-  <script src="./app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
