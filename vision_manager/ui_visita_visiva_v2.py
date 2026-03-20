@@ -1,3 +1,20 @@
+
+def _draw_professional_block(c, nome, qualifica, width, height):
+    if not nome:
+        return
+
+    x = 40
+    y_nome = height - 85
+    y_qualifica = height - 110
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(x, y_nome, nome)
+
+    if qualifica:
+        c.setFont("Helvetica", 13)
+        c.drawString(x, y_qualifica, qualifica)
+
+
 import json
 import time
 import datetime as dt
@@ -1559,7 +1576,7 @@ def ui_visita_visiva_v2(conn):
             payload_corrente,
             patient_label=selected_paziente,
             visit_id=st.session_state.get("vm_loaded_visit_id"),
-            include_professional=st.session_state.get("vm_include_professional_referto", False),
+            include_professional=True,
         )
         st.download_button(
             "PDF referto",
@@ -1757,7 +1774,7 @@ def ui_visita_visiva_v2(conn):
                 selected_preview,
                 patient_label=selected_paziente,
                 visit_id=selected_visit_id,
-                include_professional=st.session_state.get("vm_include_professional_referto", False),
+                include_professional=True,
             )
             st.download_button(
                 "Scarica PDF referto",
