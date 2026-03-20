@@ -1,6 +1,8 @@
 import json
 import time
 import datetime as dt
+import os
+import tempfile
 from datetime import date, datetime
 import calendar
 from io import BytesIO
@@ -16,6 +18,25 @@ from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
 
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
+
+
+def _plain_letterhead_path():
+    path = os.path.join(tempfile.gettempdir(), "vision_manager_blank_letterhead.jpg")
+    if os.path.exists(path):
+        return path
+    try:
+        from PIL import Image
+        img = Image.new("RGB", (2480, 3508), "white")
+        img.save(path, format="JPEG", quality=95)
+        return path
+    except Exception:
+        return None
+
+
+def _get_letterhead_path(include_cirillo=True):
+    if include_cirillo:
+        return LETTERHEAD
+    return _plain_letterhead_path()
 
 
 # =========================================================
@@ -247,6 +268,8 @@ def ensure_visit_state():
         "vm_last_autosave_reason": None,
         "vm_flash_message": None,
         "vm_pending_form_reset": False,
+        "vm_include_cirillo_referto": True,
+        "vm_include_cirillo_prescrizione": True,
     }
 
     for key, value in defaults.items():
@@ -520,7 +543,7 @@ def apply_pending_visit_load():
 # PDF / EXPORT
 # =========================================================
 
-def _build_referto_letterhead_pdf(payload, patient_label="Paziente", visit_id=None):
+def _build_referto_letterhead_pdf(payload, patient_label="Paziente", visit_id=None, include_cirillo=True):
     data_pdf = {
         "data": str(payload.get("data", "")),
         "paziente": patient_label,
@@ -529,7 +552,7 @@ def _build_referto_letterhead_pdf(payload, patient_label="Paziente", visit_id=No
         "esame_obiettivo": payload.get("esame_obiettivo", {}) or {},
         "note": payload.get("note", ""),
     }
-    return build_referto_oculistico_a4(data_pdf, LETTERHEAD)
+    return build_referto_oculistico_a4(data_pdf, _get_letterhead_path(include_cirillo))
 
 
 def _rx_add(rx, add_value):
@@ -545,7 +568,7 @@ def _rx_add(rx, add_value):
     }
 
 
-def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente"):
+def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente", include_cirillo=True):
     corr_fin = payload.get("correzione_finale", {}) or {}
     od = corr_fin.get("od", {}) or {}
     os_ = corr_fin.get("os", {}) or {}
@@ -584,7 +607,7 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente"):
         "add_od": add_data["vicino"],
         "add_os": add_data["vicino"],
     }
-    return build_prescrizione_occhiali_a4(data_pdf, LETTERHEAD)
+    return build_prescrizione_occhiali_a4(data_pdf, _get_letterhead_path(include_cirillo))
 
 
 # =========================================================
@@ -1348,6 +1371,19 @@ def ui_visita_visiva_v2(conn):
                 st.success(f"Autosalvataggio {action}. ID: {visit_id}")
                 st.rerun()
 
+    st.subheader("Opzioni stampa")
+    pr1, pr2 = st.columns(2)
+    with pr1:
+        st.checkbox(
+            "Usa intestazione Dr. Cirillo nel referto",
+            key="vm_include_cirillo_referto",
+        )
+    with pr2:
+        st.checkbox(
+            "Usa intestazione Dr. Cirillo nella prescrizione",
+            key="vm_include_cirillo_prescrizione",
+        )
+
     save1, save2, save3 = st.columns([1, 1, 1])
 
     with save1:
@@ -1369,6 +1405,7 @@ def ui_visita_visiva_v2(conn):
             payload_corrente,
             patient_label=selected_paziente,
             visit_id=st.session_state.get("vm_loaded_visit_id"),
+            include_cirillo=st.session_state.get("vm_include_cirillo_referto", True),
         )
         st.download_button(
             "PDF referto",
@@ -1382,6 +1419,7 @@ def ui_visita_visiva_v2(conn):
         current_prescrizione = _build_prescrizione_letterhead_pdf(
             payload_corrente,
             patient_label=selected_paziente,
+            include_cirillo=st.session_state.get("vm_include_cirillo_prescrizione", True),
         )
         st.download_button(
             "PDF prescrizione",
@@ -1565,6 +1603,7 @@ def ui_visita_visiva_v2(conn):
                 selected_preview,
                 patient_label=selected_paziente,
                 visit_id=selected_visit_id,
+                include_cirillo=st.session_state.get("vm_include_cirillo_referto", True),
             )
             st.download_button(
                 "Scarica PDF referto",
@@ -1578,6 +1617,7 @@ def ui_visita_visiva_v2(conn):
             pdf_pr_hist = _build_prescrizione_letterhead_pdf(
                 selected_preview,
                 patient_label=selected_paziente,
+                include_cirillo=st.session_state.get("vm_include_cirillo_prescrizione", True),
             )
             st.download_button(
                 "Scarica PDF prescrizione",
