@@ -93,13 +93,13 @@ def _get_active_professional():
 def _cover_cirillo_area(img):
     from PIL import ImageDraw
     draw = ImageDraw.Draw(img)
-    draw.rectangle([(18, 18), (470, 118)], fill="white")
+    draw.rectangle([(25, 30), (455, 205)], fill="white")
     return img
 
 
 @lru_cache(maxsize=16)
 def _professional_letterhead_path(professional_key, include_professional=True):
-    path = os.path.join(tempfile.gettempdir(), f"vision_manager_letterhead_v5_{professional_key}_{int(include_professional)}.jpg")
+    path = os.path.join(tempfile.gettempdir(), f"vision_manager_letterhead_v4_{professional_key}_{int(include_professional)}.jpg")
     if os.path.exists(path):
         return path
     try:
@@ -112,19 +112,19 @@ def _professional_letterhead_path(professional_key, include_professional=True):
             if lines:
                 draw = ImageDraw.Draw(img)
                 try:
-                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 108)
-                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 74)
-                    font_sub2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 66)
+                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 56)
+                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 38)
+                    font_sub2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 34)
                 except Exception:
                     font_main = ImageFont.load_default()
                     font_sub = ImageFont.load_default()
                     font_sub2 = ImageFont.load_default()
-                x = 36
-                y = 18
+                x = 52
+                y = 42
                 for idx, line in enumerate(lines[:3]):
                     font = font_main if idx == 0 else (font_sub if idx == 1 else font_sub2)
                     draw.text((x, y), line, fill="black", font=font)
-                    y += 92 if idx == 0 else 72
+                    y += 60 if idx == 0 else 42
         img.save(path, format="JPEG", quality=95)
         return path
     except Exception:
@@ -368,8 +368,8 @@ def ensure_visit_state():
         "vm_last_autosave_reason": None,
         "vm_flash_message": None,
         "vm_pending_form_reset": False,
-        "vm_include_professional_referto": True,
-        "vm_include_professional_prescrizione": True,
+        "vm_include_professional_referto": False,
+        "vm_include_professional_prescrizione": False,
         "vm_professionals": [dict(item) for item in PROFESSIONALS_DEFAULT],
         "vm_active_professional": "Dr. Giuseppe Ferraioli",
     }
