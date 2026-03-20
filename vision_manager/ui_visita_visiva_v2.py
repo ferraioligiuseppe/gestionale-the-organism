@@ -21,16 +21,19 @@ LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
 
 def _plain_letterhead_path():
-    path = os.path.join(tempfile.gettempdir(), "vision_manager_blank_letterhead.jpg")
+    path = os.path.join(tempfile.gettempdir(), "vision_manager_the_organism_no_cirillo.jpg")
     if os.path.exists(path):
         return path
     try:
-        from PIL import Image
-        img = Image.new("RGB", (2480, 3508), "white")
+        from PIL import Image, ImageDraw
+        img = Image.open(LETTERHEAD).convert("RGB")
+        draw = ImageDraw.Draw(img)
+        # Copre soltanto la dicitura del Dr. Cirillo, lasciando intatto The Organism
+        draw.rectangle([(30, 35), (740, 250)], fill="white")
         img.save(path, format="JPEG", quality=95)
         return path
     except Exception:
-        return None
+        return LETTERHEAD
 
 
 def _get_letterhead_path(include_cirillo=True):
@@ -976,7 +979,7 @@ def ui_visita_visiva_v2(conn):
         st.session_state["vm_pending_form_reset"] = False
     apply_pending_visit_load()
 
-    st.title("Vision Manager")
+    st.title("Vision Manager The Organism by Dr. Ferraioli Giuseppe")
 
     flash_message = st.session_state.pop("vm_flash_message", None)
     if flash_message:
@@ -1375,12 +1378,12 @@ def ui_visita_visiva_v2(conn):
     pr1, pr2 = st.columns(2)
     with pr1:
         st.checkbox(
-            "Usa intestazione Dr. Cirillo nel referto",
+            "Mostra nome Dr. Cirillo nel referto",
             key="vm_include_cirillo_referto",
         )
     with pr2:
         st.checkbox(
-            "Usa intestazione Dr. Cirillo nella prescrizione",
+            "Mostra nome Dr. Cirillo nella prescrizione",
             key="vm_include_cirillo_prescrizione",
         )
 
