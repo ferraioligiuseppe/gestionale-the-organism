@@ -6,10 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-try:
-    from vision_manager.db import get_conn
-except ModuleNotFoundError:
-    from db import get_conn
+from vision_manager.db import get_conn
 
 
 def _inject_dashboard_css():
@@ -258,6 +255,7 @@ def ui_dashboard_paziente():
 
     conn = get_conn()
 
+    st.title("© Vision Manager The Organism by Dr. Ferraioli Giuseppe")
     st.header("📊 Dashboard Paziente")
 
     pazienti = _list_pazienti_dashboard(conn)
