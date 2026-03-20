@@ -112,16 +112,16 @@ def _professional_letterhead_path(professional_key, include_professional=True):
             if lines:
                 draw = ImageDraw.Draw(img)
                 try:
-                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", 28)
-                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", 24)
+                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", 38)
+                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", 34)
                 except Exception:
                     font_main = ImageFont.load_default()
                     font_sub = ImageFont.load_default()
-                y = 52
+                y = 54
                 for idx, line in enumerate(lines[:3]):
                     font = font_main if idx == 0 else font_sub
                     draw.text((60, y), line, fill="black", font=font)
-                    y += 38 if idx == 0 else 32
+                    y += 46 if idx == 0 else 38
         img.save(path, format="JPEG", quality=95)
         return path
     except Exception:
@@ -365,8 +365,8 @@ def ensure_visit_state():
         "vm_last_autosave_reason": None,
         "vm_flash_message": None,
         "vm_pending_form_reset": False,
-        "vm_include_professional_referto": False,
-        "vm_include_professional_prescrizione": False,
+        "vm_include_professional_referto": True,
+        "vm_include_professional_prescrizione": True,
         "vm_professionals": [dict(item) for item in PROFESSIONALS_DEFAULT],
         "vm_active_professional": "Dr. Giuseppe Ferraioli",
     }
