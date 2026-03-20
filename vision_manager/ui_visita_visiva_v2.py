@@ -226,8 +226,10 @@ def ensure_visit_state():
         "vm_cf_os_sf": 0.0,
         "vm_cf_os_cyl": 0.0,
         "vm_cf_os_ax": 0,
-        "vm_add_target": "vicino",
-        "vm_add_value": 0.0,
+        "vm_enable_add_vicino": True,
+        "vm_enable_add_intermedio": False,
+        "vm_add_vicino": 0.0,
+        "vm_add_intermedio": 0.0,
         "vm_note": "",
         "vm_pending_load": None,
         "vm_loaded_visit_id": None,
@@ -282,8 +284,10 @@ def _apply_form_reset_values():
     st.session_state["vm_cf_os_sf"] = 0.0
     st.session_state["vm_cf_os_cyl"] = 0.0
     st.session_state["vm_cf_os_ax"] = 0
-    st.session_state["vm_add_target"] = "vicino"
-    st.session_state["vm_add_value"] = 0.0
+    st.session_state["vm_enable_add_vicino"] = True
+    st.session_state["vm_enable_add_intermedio"] = False
+    st.session_state["vm_add_vicino"] = 0.0
+    st.session_state["vm_add_intermedio"] = 0.0
     st.session_state["vm_note"] = ""
     st.session_state["vm_loaded_visit_id"] = None
     st.session_state["vm_mode"] = "new"
@@ -312,20 +316,14 @@ def _normalize_add_target(value):
     return "vicino"
 
 
-def _compute_additions(add_value, add_target):
-    add_value = _safe_float(add_value, 0.0)
-    target = _normalize_add_target(add_target)
-    if target == "intermedio":
-        add_intermedio = add_value
-        add_vicino = add_value * 2.0
-    else:
-        add_vicino = add_value
-        add_intermedio = add_value / 2.0
+def _compute_additions(add_vicino=None, add_intermedio=None, enable_vicino=True, enable_intermedio=False):
+    add_vicino = _safe_float(add_vicino, 0.0)
+    add_intermedio = _safe_float(add_intermedio, 0.0)
     return {
-        "target": target,
-        "input": round(add_value, 2),
-        "intermedio": round(add_intermedio, 2),
-        "vicino": round(add_vicino, 2),
+        "vicino": round(add_vicino if enable_vicino else 0.0, 2),
+        "intermedio": round(add_intermedio if enable_intermedio else 0.0, 2),
+        "enable_vicino": bool(enable_vicino),
+        "enable_intermedio": bool(enable_intermedio),
     }
 
 
@@ -383,8 +381,10 @@ def build_visit_payload():
                 "cyl": st.session_state.get("vm_cf_os_cyl", 0.0),
                 "ax": st.session_state.get("vm_cf_os_ax", 0),
             },
-            "add": _safe_float(st.session_state.get("vm_add_value", 0.0), 0.0),
-            "add_target": _normalize_add_target(st.session_state.get("vm_add_target", "vicino")),
+            "add_vicino": _safe_float(st.session_state.get("vm_add_vicino", 0.0), 0.0),
+            "add_intermedio": _safe_float(st.session_state.get("vm_add_intermedio", 0.0), 0.0),
+            "enable_add_vicino": bool(st.session_state.get("vm_enable_add_vicino", True)),
+            "enable_add_intermedio": bool(st.session_state.get("vm_enable_add_intermedio", False)),
         },
         "note": st.session_state.get("vm_note", ""),
     }
@@ -476,8 +476,22 @@ def load_visit_payload(payload, visit_id=None):
     st.session_state["vm_cf_os_sf"] = _safe_float(corr_fin_os.get("sf", 0.0))
     st.session_state["vm_cf_os_cyl"] = _safe_float(corr_fin_os.get("cyl", 0.0))
     st.session_state["vm_cf_os_ax"] = _safe_int(corr_fin_os.get("ax", 0))
-    st.session_state["vm_add_value"] = _safe_float(corr_fin.get("add", 0.0), 0.0)
-    st.session_state["vm_add_target"] = _normalize_add_target(corr_fin.get("add_target", "vicino"))
+    if any(k in corr_fin for k in ("add_vicino", "add_intermedio", "enable_add_vicino", "enable_add_intermedio")):
+        st.session_state["vm_add_vicino"] = _safe_float(corr_fin.get("add_vicino", 0.0), 0.0)
+        st.session_state["vm_add_intermedio"] = _safe_float(corr_fin.get("add_intermedio", 0.0), 0.0)
+        st.session_state["vm_enable_add_vicino"] = bool(corr_fin.get("enable_add_vicino", st.session_state.get("vm_add_vicino", 0.0) != 0.0))
+        st.session_state["vm_enable_add_intermedio"] = bool(corr_fin.get("enable_add_intermedio", st.session_state.get("vm_add_intermedio", 0.0) != 0.0))
+    else:
+        legacy_add = _safe_float(corr_fin.get("add", 0.0), 0.0)
+        legacy_target = _normalize_add_target(corr_fin.get("add_target", "vicino"))
+        if legacy_target == "intermedio":
+            st.session_state["vm_add_intermedio"] = legacy_add
+            st.session_state["vm_add_vicino"] = round(legacy_add * 2.0, 2)
+        else:
+            st.session_state["vm_add_vicino"] = legacy_add
+            st.session_state["vm_add_intermedio"] = round(legacy_add / 2.0, 2) if legacy_add else 0.0
+        st.session_state["vm_enable_add_vicino"] = st.session_state["vm_add_vicino"] != 0.0
+        st.session_state["vm_enable_add_intermedio"] = st.session_state["vm_add_intermedio"] != 0.0
     st.session_state["vm_note"] = payload.get("note", "")
     st.session_state["vm_loaded_visit_id"] = visit_id
     st.session_state["vm_mode"] = "edit" if visit_id else "new"
@@ -535,7 +549,12 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente"):
     corr_fin = payload.get("correzione_finale", {}) or {}
     od = corr_fin.get("od", {}) or {}
     os_ = corr_fin.get("os", {}) or {}
-    add_data = _compute_additions(corr_fin.get("add", 0.0), corr_fin.get("add_target", "vicino"))
+    add_data = _compute_additions(
+        corr_fin.get("add_vicino", corr_fin.get("add", 0.0)),
+        corr_fin.get("add_intermedio", 0.0),
+        corr_fin.get("enable_add_vicino", True),
+        corr_fin.get("enable_add_intermedio", False),
+    )
 
     data_pdf = {
         "data": str(payload.get("data", "")),
@@ -1275,25 +1294,43 @@ def ui_visita_visiva_v2(conn):
         st.number_input("OD AX finale", key="vm_cf_od_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
         st.number_input("OS AX finale", key="vm_cf_os_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
 
-    st.subheader("Addizione per prescrizione")
-    add1, add2, add3 = st.columns([1.2, 1, 1.2])
+    st.subheader("Addizioni per prescrizione")
+    st.caption("Seleziona una o entrambe le addizioni da riportare in prescrizione, partendo dalla refrazione finale.")
+    add1, add2 = st.columns(2)
     with add1:
-        st.selectbox(
-            "Seleziona addizione per",
-            options=["vicino", "intermedio"],
-            format_func=lambda x: "Vicino" if x == "vicino" else "Intermedio",
-            key="vm_add_target",
+        st.checkbox("Aggiungi prescrizione per vicino", key="vm_enable_add_vicino", on_change=mark_visit_dirty)
+        st.number_input(
+            "ADD vicino",
+            key="vm_add_vicino",
+            step=0.25,
+            format="%.2f",
+            min_value=0.0,
+            disabled=not st.session_state.get("vm_enable_add_vicino", True),
             on_change=mark_visit_dirty,
         )
     with add2:
-        st.number_input("Valore addizione", key="vm_add_value", step=0.25, format="%.2f", min_value=0.0, on_change=mark_visit_dirty)
-    add_preview = _compute_additions(st.session_state.get("vm_add_value", 0.0), st.session_state.get("vm_add_target", "vicino"))
-    with add3:
-        st.caption("Calcolo automatico prescrizione")
-        st.write(f"**ADD intermedio:** {add_preview['intermedio']:+.2f}")
-        st.write(f"**ADD vicino:** {add_preview['vicino']:+.2f}")
+        st.checkbox("Aggiungi prescrizione per intermedio", key="vm_enable_add_intermedio", on_change=mark_visit_dirty)
+        st.number_input(
+            "ADD intermedio",
+            key="vm_add_intermedio",
+            step=0.25,
+            format="%.2f",
+            min_value=0.0,
+            disabled=not st.session_state.get("vm_enable_add_intermedio", False),
+            on_change=mark_visit_dirty,
+        )
 
-    st.caption("La prescrizione PDF userà solo la refrazione finale e calcolerà automaticamente intermedio e vicino in base all'addizione inserita.")
+    add_preview = _compute_additions(
+        st.session_state.get("vm_add_vicino", 0.0),
+        st.session_state.get("vm_add_intermedio", 0.0),
+        st.session_state.get("vm_enable_add_vicino", True),
+        st.session_state.get("vm_enable_add_intermedio", False),
+    )
+    st.caption(
+        f"Prescrizione: vicino {'attivo' if add_preview['enable_vicino'] else 'non attivo'} "
+        f"({add_preview['vicino']:+.2f}) · intermedio {'attivo' if add_preview['enable_intermedio'] else 'non attivo'} "
+        f"({add_preview['intermedio']:+.2f})"
+    )
 
     st.text_area("Note", key="vm_note", height=120, on_change=mark_visit_dirty)
 
