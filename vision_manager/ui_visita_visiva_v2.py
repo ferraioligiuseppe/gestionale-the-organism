@@ -99,7 +99,7 @@ def _cover_cirillo_area(img):
 
 @lru_cache(maxsize=16)
 def _professional_letterhead_path(professional_key, include_professional=True):
-    path = os.path.join(tempfile.gettempdir(), f"vision_manager_letterhead_{professional_key}_{int(include_professional)}.jpg")
+    path = os.path.join(tempfile.gettempdir(), f"vision_manager_letterhead_v3_{professional_key}_{int(include_professional)}.jpg")
     if os.path.exists(path):
         return path
     try:
@@ -112,17 +112,17 @@ def _professional_letterhead_path(professional_key, include_professional=True):
             if lines:
                 draw = ImageDraw.Draw(img)
                 try:
-                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", 38)
-                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", 34)
+                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", 72)
+                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", 56)
                 except Exception:
                     font_main = ImageFont.load_default()
                     font_sub = ImageFont.load_default()
-                y = 54
+                y = 34
                 for idx, line in enumerate(lines[:3]):
                     font = font_main if idx == 0 else font_sub
-                    draw.text((60, y), line, fill="black", font=font)
-                    y += 46 if idx == 0 else 38
-        img.save(path, format="JPEG", quality=95)
+                    draw.text((52, y), line, fill="black", font=font)
+                    y += 78 if idx == 0 else 62
+        img.save(path, format="JPEG", quality=97)
         return path
     except Exception:
         return LETTERHEAD
