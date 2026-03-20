@@ -93,13 +93,13 @@ def _get_active_professional():
 def _cover_cirillo_area(img):
     from PIL import ImageDraw
     draw = ImageDraw.Draw(img)
-    draw.rectangle([(35, 45), (420, 180)], fill="white")
+    draw.rectangle([(25, 30), (455, 205)], fill="white")
     return img
 
 
 @lru_cache(maxsize=16)
 def _professional_letterhead_path(professional_key, include_professional=True):
-    path = os.path.join(tempfile.gettempdir(), f"vision_manager_letterhead_v3_{professional_key}_{int(include_professional)}.jpg")
+    path = os.path.join(tempfile.gettempdir(), f"vision_manager_letterhead_v4_{professional_key}_{int(include_professional)}.jpg")
     if os.path.exists(path):
         return path
     try:
@@ -112,17 +112,20 @@ def _professional_letterhead_path(professional_key, include_professional=True):
             if lines:
                 draw = ImageDraw.Draw(img)
                 try:
-                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf", 72)
-                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", 56)
+                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 56)
+                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 38)
+                    font_sub2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 34)
                 except Exception:
                     font_main = ImageFont.load_default()
                     font_sub = ImageFont.load_default()
-                y = 34
+                    font_sub2 = ImageFont.load_default()
+                x = 52
+                y = 42
                 for idx, line in enumerate(lines[:3]):
-                    font = font_main if idx == 0 else font_sub
-                    draw.text((52, y), line, fill="black", font=font)
-                    y += 78 if idx == 0 else 62
-        img.save(path, format="JPEG", quality=97)
+                    font = font_main if idx == 0 else (font_sub if idx == 1 else font_sub2)
+                    draw.text((x, y), line, fill="black", font=font)
+                    y += 60 if idx == 0 else 42
+        img.save(path, format="JPEG", quality=95)
         return path
     except Exception:
         return LETTERHEAD
@@ -365,8 +368,8 @@ def ensure_visit_state():
         "vm_last_autosave_reason": None,
         "vm_flash_message": None,
         "vm_pending_form_reset": False,
-        "vm_include_professional_referto": True,
-        "vm_include_professional_prescrizione": True,
+        "vm_include_professional_referto": False,
+        "vm_include_professional_prescrizione": False,
         "vm_professionals": [dict(item) for item in PROFESSIONALS_DEFAULT],
         "vm_active_professional": "Dr. Giuseppe Ferraioli",
     }
@@ -678,6 +681,8 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente", includ
         corr_fin.get("enable_add_intermedio", False),
     )
 
+    rx_blank = {"sf": None, "cyl": None, "ax": None}
+
     data_pdf = {
         "data": str(payload.get("data", "")),
         "paziente": patient_label,
@@ -694,17 +699,17 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente", includ
             },
         },
         "intermedio": {
-            "od": _rx_add(od, add_data["intermedio"]),
-            "os": _rx_add(os_, add_data["intermedio"]),
+            "od": _rx_add(od, add_data["intermedio"]) if add_data["enable_intermedio"] and add_data["intermedio"] else dict(rx_blank),
+            "os": _rx_add(os_, add_data["intermedio"]) if add_data["enable_intermedio"] and add_data["intermedio"] else dict(rx_blank),
         },
         "vicino": {
-            "od": _rx_add(od, add_data["vicino"]),
-            "os": _rx_add(os_, add_data["vicino"]),
+            "od": _rx_add(od, add_data["vicino"]) if add_data["enable_vicino"] and add_data["vicino"] else dict(rx_blank),
+            "os": _rx_add(os_, add_data["vicino"]) if add_data["enable_vicino"] and add_data["vicino"] else dict(rx_blank),
         },
         "lenti": [],
-        "add": add_data["vicino"],
-        "add_od": add_data["vicino"],
-        "add_os": add_data["vicino"],
+        "add": add_data["vicino"] if add_data["enable_vicino"] else 0.0,
+        "add_od": add_data["vicino"] if add_data["enable_vicino"] else 0.0,
+        "add_os": add_data["vicino"] if add_data["enable_vicino"] else 0.0,
     }
     return build_prescrizione_occhiali_a4(data_pdf, _get_letterhead_path(include_professional))
 
