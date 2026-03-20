@@ -226,6 +226,8 @@ def ensure_visit_state():
         "vm_cf_os_sf": 0.0,
         "vm_cf_os_cyl": 0.0,
         "vm_cf_os_ax": 0,
+        "vm_add_target": "vicino",
+        "vm_add_value": 0.0,
         "vm_note": "",
         "vm_pending_load": None,
         "vm_loaded_visit_id": None,
@@ -280,6 +282,8 @@ def _apply_form_reset_values():
     st.session_state["vm_cf_os_sf"] = 0.0
     st.session_state["vm_cf_os_cyl"] = 0.0
     st.session_state["vm_cf_os_ax"] = 0
+    st.session_state["vm_add_target"] = "vicino"
+    st.session_state["vm_add_value"] = 0.0
     st.session_state["vm_note"] = ""
     st.session_state["vm_loaded_visit_id"] = None
     st.session_state["vm_mode"] = "new"
@@ -299,6 +303,30 @@ def clear_visit_form():
 
 def mark_visit_dirty():
     st.session_state["vm_form_dirty"] = True
+
+
+def _normalize_add_target(value):
+    s = str(value or "vicino").strip().lower()
+    if s in ("intermedio", "computer", "pc"):
+        return "intermedio"
+    return "vicino"
+
+
+def _compute_additions(add_value, add_target):
+    add_value = _safe_float(add_value, 0.0)
+    target = _normalize_add_target(add_target)
+    if target == "intermedio":
+        add_intermedio = add_value
+        add_vicino = add_value * 2.0
+    else:
+        add_vicino = add_value
+        add_intermedio = add_value / 2.0
+    return {
+        "target": target,
+        "input": round(add_value, 2),
+        "intermedio": round(add_intermedio, 2),
+        "vicino": round(add_vicino, 2),
+    }
 
 
 # =========================================================
@@ -355,6 +383,8 @@ def build_visit_payload():
                 "cyl": st.session_state.get("vm_cf_os_cyl", 0.0),
                 "ax": st.session_state.get("vm_cf_os_ax", 0),
             },
+            "add": _safe_float(st.session_state.get("vm_add_value", 0.0), 0.0),
+            "add_target": _normalize_add_target(st.session_state.get("vm_add_target", "vicino")),
         },
         "note": st.session_state.get("vm_note", ""),
     }
@@ -446,6 +476,8 @@ def load_visit_payload(payload, visit_id=None):
     st.session_state["vm_cf_os_sf"] = _safe_float(corr_fin_os.get("sf", 0.0))
     st.session_state["vm_cf_os_cyl"] = _safe_float(corr_fin_os.get("cyl", 0.0))
     st.session_state["vm_cf_os_ax"] = _safe_int(corr_fin_os.get("ax", 0))
+    st.session_state["vm_add_value"] = _safe_float(corr_fin.get("add", 0.0), 0.0)
+    st.session_state["vm_add_target"] = _normalize_add_target(corr_fin.get("add_target", "vicino"))
     st.session_state["vm_note"] = payload.get("note", "")
     st.session_state["vm_loaded_visit_id"] = visit_id
     st.session_state["vm_mode"] = "edit" if visit_id else "new"
@@ -503,7 +535,7 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente"):
     corr_fin = payload.get("correzione_finale", {}) or {}
     od = corr_fin.get("od", {}) or {}
     os_ = corr_fin.get("os", {}) or {}
-    add_value = _safe_float(corr_fin.get("add", 0.0), 0.0)
+    add_data = _compute_additions(corr_fin.get("add", 0.0), corr_fin.get("add_target", "vicino"))
 
     data_pdf = {
         "data": str(payload.get("data", "")),
@@ -521,14 +553,17 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente"):
             },
         },
         "intermedio": {
-            "od": _rx_add(od, add_value / 2.0),
-            "os": _rx_add(os_, add_value / 2.0),
+            "od": _rx_add(od, add_data["intermedio"]),
+            "os": _rx_add(os_, add_data["intermedio"]),
         },
         "vicino": {
-            "od": _rx_add(od, add_value),
-            "os": _rx_add(os_, add_value),
+            "od": _rx_add(od, add_data["vicino"]),
+            "os": _rx_add(os_, add_data["vicino"]),
         },
         "lenti": [],
+        "add": add_data["vicino"],
+        "add_od": add_data["vicino"],
+        "add_os": add_data["vicino"],
     }
     return build_prescrizione_occhiali_a4(data_pdf, LETTERHEAD)
 
@@ -1239,6 +1274,26 @@ def ui_visita_visiva_v2(conn):
     with cf3:
         st.number_input("OD AX finale", key="vm_cf_od_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
         st.number_input("OS AX finale", key="vm_cf_os_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
+
+    st.subheader("Addizione per prescrizione")
+    add1, add2, add3 = st.columns([1.2, 1, 1.2])
+    with add1:
+        st.selectbox(
+            "Seleziona addizione per",
+            options=["vicino", "intermedio"],
+            format_func=lambda x: "Vicino" if x == "vicino" else "Intermedio",
+            key="vm_add_target",
+            on_change=mark_visit_dirty,
+        )
+    with add2:
+        st.number_input("Valore addizione", key="vm_add_value", step=0.25, format="%.2f", min_value=0.0, on_change=mark_visit_dirty)
+    add_preview = _compute_additions(st.session_state.get("vm_add_value", 0.0), st.session_state.get("vm_add_target", "vicino"))
+    with add3:
+        st.caption("Calcolo automatico prescrizione")
+        st.write(f"**ADD intermedio:** {add_preview['intermedio']:+.2f}")
+        st.write(f"**ADD vicino:** {add_preview['vicino']:+.2f}")
+
+    st.caption("La prescrizione PDF userà solo la refrazione finale e calcolerà automaticamente intermedio e vicino in base all'addizione inserita.")
 
     st.text_area("Note", key="vm_note", height=120, on_change=mark_visit_dirty)
 
