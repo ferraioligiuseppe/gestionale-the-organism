@@ -99,9 +99,36 @@ def _cover_cirillo_area(img):
 
 @lru_cache(maxsize=16)
 def _professional_letterhead_path(professional_key, include_professional=True):
-    # Compatibilità: non generare più intestazioni rasterizzate con nomi professionisti.
-    # Usa sempre la base pulita The Organism.
-    return LETTERHEAD
+    path = os.path.join(tempfile.gettempdir(), f"vision_manager_letterhead_v4_{professional_key}_{int(include_professional)}.jpg")
+    if os.path.exists(path):
+        return path
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.open(LETTERHEAD).convert("RGB")
+        img = _cover_cirillo_area(img)
+        if include_professional:
+            active = _get_active_professional()
+            lines = _normalize_professional_lines(active.get("lines") or [])
+            if lines:
+                draw = ImageDraw.Draw(img)
+                try:
+                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 56)
+                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 38)
+                    font_sub2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 34)
+                except Exception:
+                    font_main = ImageFont.load_default()
+                    font_sub = ImageFont.load_default()
+                    font_sub2 = ImageFont.load_default()
+                x = 52
+                y = 42
+                for idx, line in enumerate(lines[:3]):
+                    font = font_main if idx == 0 else (font_sub if idx == 1 else font_sub2)
+                    draw.text((x, y), line, fill="black", font=font)
+                    y += 60 if idx == 0 else 42
+        img.save(path, format="JPEG", quality=95)
+        return path
+    except Exception:
+        return LETTERHEAD
 
 
 def _get_letterhead_path(include_professional=True):
