@@ -4,7 +4,7 @@ from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
-
+from vision_manager.pdf_layout_the_organism import draw_letterhead, draw_professional_block
 
 def _fmt_paziente(p):
     if isinstance(p, dict):
