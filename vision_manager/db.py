@@ -6,7 +6,10 @@ def _env(key: str, default: str = "") -> str:
     v = os.getenv(key)
     return v if v not in (None, "") else default
 
-
+def list_professionisti(conn):
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, nome_visualizzato, riga_1, riga_2, riga_3 FROM professionisti WHERE attivo = TRUE ORDER BY id")
+        return cur.fetchall()
 def get_conn():
     """Restituisce una nuova connessione DB ogni volta."""
     db_url = _env("DATABASE_URL", "")
