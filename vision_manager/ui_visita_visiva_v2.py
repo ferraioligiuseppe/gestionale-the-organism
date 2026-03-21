@@ -1,13 +1,9 @@
 import json
 import time
 import datetime as dt
-import os
-import re
-import tempfile
 from datetime import date, datetime
 import calendar
 from io import BytesIO
-from functools import lru_cache
 
 import matplotlib.pyplot as plt
 import streamlit as st
@@ -20,122 +16,6 @@ from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
 
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
-
-PROFESSIONALS_DEFAULT = [
-    {
-        "label": "Dr. Giuseppe Ferraioli",
-        "lines": ["Dr. Giuseppe Ferraioli", "Neuropsicologo Optometrista"],
-    },
-    {
-        "label": "Dott. Salvatore Adriano Cirillo",
-        "lines": ["Dott. Salvatore Adriano Cirillo", "Medico Chirurgo", "Oculista"],
-    },
-]
-
-
-def _sanitize_filename_part(value):
-    txt = str(value or "").strip().lower()
-    txt = re.sub(r"[^a-z0-9]+", "_", txt)
-    return txt.strip("_") or "professionista"
-
-
-def _normalize_professional_lines(lines):
-    cleaned = []
-    for line in lines or []:
-        s = str(line or "").strip()
-        if s:
-            cleaned.append(s)
-    return cleaned[:3]
-
-
-def _ensure_professionals_state():
-    professionals = st.session_state.get("vm_professionals")
-    if not isinstance(professionals, list) or not professionals:
-        professionals = [dict(item) for item in PROFESSIONALS_DEFAULT]
-        st.session_state["vm_professionals"] = professionals
-
-    normalized = []
-    seen = set()
-    for item in professionals:
-        if not isinstance(item, dict):
-            continue
-        label = str(item.get("label") or "").strip()
-        lines = _normalize_professional_lines(item.get("lines") or [])
-        if not label and lines:
-            label = lines[0]
-        if not label:
-            continue
-        if label in seen:
-            continue
-        seen.add(label)
-        normalized.append({"label": label, "lines": lines or [label]})
-
-    if not normalized:
-        normalized = [dict(item) for item in PROFESSIONALS_DEFAULT]
-
-    st.session_state["vm_professionals"] = normalized
-
-    active = st.session_state.get("vm_active_professional")
-    labels = [item["label"] for item in normalized]
-    if active not in labels:
-        st.session_state["vm_active_professional"] = normalized[0]["label"]
-
-
-def _get_active_professional():
-    _ensure_professionals_state()
-    active_label = st.session_state.get("vm_active_professional")
-    for item in st.session_state.get("vm_professionals", []):
-        if item.get("label") == active_label:
-            return item
-    return st.session_state.get("vm_professionals", [PROFESSIONALS_DEFAULT[0]])[0]
-
-
-def _cover_cirillo_area(img):
-    from PIL import ImageDraw
-    draw = ImageDraw.Draw(img)
-    draw.rectangle([(25, 30), (455, 205)], fill="white")
-    return img
-
-
-@lru_cache(maxsize=16)
-def _professional_letterhead_path(professional_key, include_professional=True):
-    path = os.path.join(tempfile.gettempdir(), f"vision_manager_letterhead_v4_{professional_key}_{int(include_professional)}.jpg")
-    if os.path.exists(path):
-        return path
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-        img = Image.open(LETTERHEAD).convert("RGB")
-        img = _cover_cirillo_area(img)
-        if include_professional:
-            active = _get_active_professional()
-            lines = _normalize_professional_lines(active.get("lines") or [])
-            if lines:
-                draw = ImageDraw.Draw(img)
-                try:
-                    font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 56)
-                    font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 38)
-                    font_sub2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 34)
-                except Exception:
-                    font_main = ImageFont.load_default()
-                    font_sub = ImageFont.load_default()
-                    font_sub2 = ImageFont.load_default()
-                x = 52
-                y = 42
-                for idx, line in enumerate(lines[:3]):
-                    font = font_main if idx == 0 else (font_sub if idx == 1 else font_sub2)
-                    draw.text((x, y), line, fill="black", font=font)
-                    y += 60 if idx == 0 else 42
-        img.save(path, format="JPEG", quality=95)
-        return path
-    except Exception:
-        return LETTERHEAD
-
-
-def _get_letterhead_path(include_professional=True):
-    _ensure_professionals_state()
-    active = _get_active_professional()
-    key = _sanitize_filename_part(active.get("label"))
-    return _professional_letterhead_path(key, include_professional)
 
 
 # =========================================================
@@ -316,7 +196,6 @@ def _clinical_attention(iop_od, iop_os, cct_od, cct_os):
 # =========================================================
 
 def ensure_visit_state():
-    _ensure_professionals_state()
     defaults = {
         "vm_tipo_visita": "oculistica",
         "vm_data_visita": date.today(),
@@ -368,10 +247,6 @@ def ensure_visit_state():
         "vm_last_autosave_reason": None,
         "vm_flash_message": None,
         "vm_pending_form_reset": False,
-        "vm_include_professional_referto": False,
-        "vm_include_professional_prescrizione": False,
-        "vm_professionals": [dict(item) for item in PROFESSIONALS_DEFAULT],
-        "vm_active_professional": "Dr. Giuseppe Ferraioli",
     }
 
     for key, value in defaults.items():
@@ -645,7 +520,7 @@ def apply_pending_visit_load():
 # PDF / EXPORT
 # =========================================================
 
-def _build_referto_letterhead_pdf(payload, patient_label="Paziente", visit_id=None, include_professional=False):
+def _build_referto_letterhead_pdf(payload, patient_label="Paziente", visit_id=None):
     data_pdf = {
         "data": str(payload.get("data", "")),
         "paziente": patient_label,
@@ -654,7 +529,7 @@ def _build_referto_letterhead_pdf(payload, patient_label="Paziente", visit_id=No
         "esame_obiettivo": payload.get("esame_obiettivo", {}) or {},
         "note": payload.get("note", ""),
     }
-    return build_referto_oculistico_a4(data_pdf, _get_letterhead_path(include_professional))
+    return build_referto_oculistico_a4(data_pdf, LETTERHEAD)
 
 
 def _rx_add(rx, add_value):
@@ -670,7 +545,7 @@ def _rx_add(rx, add_value):
     }
 
 
-def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente", include_professional=False):
+def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente"):
     corr_fin = payload.get("correzione_finale", {}) or {}
     od = corr_fin.get("od", {}) or {}
     os_ = corr_fin.get("os", {}) or {}
@@ -711,7 +586,7 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente", includ
         "add_od": add_vicino if enable_vicino else 0.0,
         "add_os": add_vicino if enable_vicino else 0.0,
     }
-    return build_prescrizione_occhiali_a4(data_pdf, _get_letterhead_path(include_professional))
+    return build_prescrizione_occhiali_a4(data_pdf, LETTERHEAD)
 
 
 # =========================================================
@@ -1080,7 +955,7 @@ def ui_visita_visiva_v2(conn):
         st.session_state["vm_pending_form_reset"] = False
     apply_pending_visit_load()
 
-    st.title("© Vision Manager The Organism by Dr. Ferraioli Giuseppe")
+    st.title("Vision Manager")
 
     flash_message = st.session_state.pop("vm_flash_message", None)
     if flash_message:
@@ -1475,69 +1350,6 @@ def ui_visita_visiva_v2(conn):
                 st.success(f"Autosalvataggio {action}. ID: {visit_id}")
                 st.rerun()
 
-    st.subheader("Professionisti Studio The Organism")
-    _ensure_professionals_state()
-    professionisti = st.session_state.get("vm_professionals", [])
-    professionisti_labels = [item.get("label") for item in professionisti]
-    if professionisti_labels:
-        current_prof = st.session_state.get("vm_active_professional")
-        default_prof_idx = professionisti_labels.index(current_prof) if current_prof in professionisti_labels else 0
-        st.selectbox(
-            "Professionista attivo",
-            professionisti_labels,
-            index=default_prof_idx,
-            key="vm_active_professional",
-        )
-        active_prof = _get_active_professional()
-        active_lines = active_prof.get("lines") or [active_prof.get("label", "")]
-        st.caption(" · ".join([line for line in active_lines if line]))
-
-    with st.expander("➕ Gestione professionisti Studio The Organism", expanded=False):
-        gp1, gp2 = st.columns(2)
-        with gp1:
-            new_prof_label = st.text_input("Nome professionista", key="vm_new_prof_label")
-            new_prof_line2 = st.text_input("Qualifica riga 2", key="vm_new_prof_line2")
-        with gp2:
-            new_prof_line3 = st.text_input("Qualifica riga 3", key="vm_new_prof_line3")
-            st.markdown("&nbsp;", unsafe_allow_html=True)
-        if st.button("Aggiungi professionista", key="vm_add_professional"):
-            lines = _normalize_professional_lines([new_prof_label, new_prof_line2, new_prof_line3])
-            if not new_prof_label.strip():
-                st.warning("Inserisci almeno il nome del professionista.")
-            else:
-                existing = st.session_state.get("vm_professionals", [])
-                if any((item.get("label") == new_prof_label.strip()) for item in existing):
-                    st.info("Professionista già presente nell'elenco.")
-                else:
-                    existing.append({"label": new_prof_label.strip(), "lines": lines or [new_prof_label.strip()]})
-                    st.session_state["vm_professionals"] = existing
-                    st.session_state["vm_active_professional"] = new_prof_label.strip()
-                    st.success("Professionista aggiunto correttamente.")
-                    st.rerun()
-
-        removable = [lbl for lbl in professionisti_labels if lbl not in {"Dr. Giuseppe Ferraioli", "Dott. Salvatore Adriano Cirillo"}]
-        if removable:
-            prof_to_remove = st.selectbox("Rimuovi professionista aggiunto", [""] + removable, key="vm_remove_prof_select")
-            if prof_to_remove and st.button("Rimuovi professionista", key="vm_remove_professional_btn"):
-                st.session_state["vm_professionals"] = [item for item in st.session_state.get("vm_professionals", []) if item.get("label") != prof_to_remove]
-                if st.session_state.get("vm_active_professional") == prof_to_remove:
-                    st.session_state["vm_active_professional"] = "Dr. Giuseppe Ferraioli"
-                st.success("Professionista rimosso.")
-                st.rerun()
-
-    st.subheader("Opzioni stampa")
-    pr1, pr2 = st.columns(2)
-    with pr1:
-        st.checkbox(
-            "Mostra professionista attivo nel referto",
-            key="vm_include_professional_referto",
-        )
-    with pr2:
-        st.checkbox(
-            "Mostra professionista attivo nella prescrizione",
-            key="vm_include_professional_prescrizione",
-        )
-
     save1, save2, save3 = st.columns([1, 1, 1])
 
     with save1:
@@ -1559,7 +1371,6 @@ def ui_visita_visiva_v2(conn):
             payload_corrente,
             patient_label=selected_paziente,
             visit_id=st.session_state.get("vm_loaded_visit_id"),
-            include_professional=st.session_state.get("vm_include_professional_referto", False),
         )
         st.download_button(
             "PDF referto",
@@ -1573,7 +1384,6 @@ def ui_visita_visiva_v2(conn):
         current_prescrizione = _build_prescrizione_letterhead_pdf(
             payload_corrente,
             patient_label=selected_paziente,
-            include_professional=st.session_state.get("vm_include_professional_prescrizione", False),
         )
         st.download_button(
             "PDF prescrizione",
@@ -1757,7 +1567,6 @@ def ui_visita_visiva_v2(conn):
                 selected_preview,
                 patient_label=selected_paziente,
                 visit_id=selected_visit_id,
-                include_professional=st.session_state.get("vm_include_professional_referto", False),
             )
             st.download_button(
                 "Scarica PDF referto",
@@ -1771,7 +1580,6 @@ def ui_visita_visiva_v2(conn):
             pdf_pr_hist = _build_prescrizione_letterhead_pdf(
                 selected_preview,
                 patient_label=selected_paziente,
-                include_professional=st.session_state.get("vm_include_professional_prescrizione", False),
             )
             st.download_button(
                 "Scarica PDF prescrizione",
