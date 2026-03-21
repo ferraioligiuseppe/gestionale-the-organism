@@ -23,7 +23,7 @@ LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
 PROFESSIONALS_DEFAULT = [
     {
-        "label": "Dr. Giuseppe Ferraioli",
+        "label": "Dott. Salvatore Adriano Cirillo",
         "lines": ["Dr. Giuseppe Ferraioli", "Neuropsicologo Optometrista"],
     },
     {
@@ -371,7 +371,7 @@ def ensure_visit_state():
         "vm_include_professional_referto": False,
         "vm_include_professional_prescrizione": False,
         "vm_professionals": [dict(item) for item in PROFESSIONALS_DEFAULT],
-        "vm_active_professional": "Dr. Giuseppe Ferraioli",
+        "vm_active_professional": "Dott. Salvatore Adriano Cirillo",
     }
 
     for key, value in defaults.items():
