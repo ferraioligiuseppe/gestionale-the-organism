@@ -640,7 +640,27 @@ def apply_pending_visit_load():
     except Exception as e:
         st.error(f"Errore nel caricamento della visita: {e}")
 
+st.subheader("Professionista")
 
+professionisti = list_professionisti(conn)
+
+prof_map = {}
+labels = []
+
+for row in professionisti:
+    pid = row[0]
+    label = row[1]
+    prof_map[label] = {
+        "id": pid,
+        "riga_1": row[2],
+        "riga_2": row[3],
+        "riga_3": row[4],
+    }
+    labels.append(label)
+
+selected_prof = st.selectbox("Seleziona professionista", labels)
+
+active_prof = prof_map[selected_prof]
 # =========================================================
 # PDF / EXPORT
 # =========================================================
