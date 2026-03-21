@@ -194,9 +194,11 @@ def _build_rx_body(rx: Dict[str, Any]) -> str:
 def build_referto_oculistico_a4(data: Dict[str, Any], letterhead_jpeg_path: str) -> bytes:
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
+    draw_the_organism_letterhead(c, letterhead_path)
+    draw_professional_block(c, professional)
     w, h = A4
     try:
-        c.drawImage(letterhead_jpeg_path, 0, 0, width=w, height=h, mask='auto')
+       
     except Exception:
         pass
 
