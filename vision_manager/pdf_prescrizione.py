@@ -1,4 +1,3 @@
-
 from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
@@ -10,17 +9,10 @@ def build_prescrizione_occhiali_a4(data, letterhead_path=None):
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
-    # carta intestata
+    # SOLO carta intestata (NO nomi professionisti qui)
     c.drawImage(letterhead_path or LETTERHEAD, 0, 0, width=width, height=height)
 
-    # professionista (FIX STATICO STEP1)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(40, 780, "Dott. Giuseppe Ferraioli")
-
-    c.setFont("Helvetica", 12)
-    c.drawString(40, 762, "Neuropsicologo")
-
-    # contenuto base
+    # contenuto base (mantieni il tuo originale qui)
     c.setFont("Helvetica", 11)
     c.drawString(40, 700, "Prescrizione occhiali")
 
