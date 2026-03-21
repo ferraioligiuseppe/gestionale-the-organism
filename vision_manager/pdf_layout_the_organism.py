@@ -1,28 +1,35 @@
-from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
-LETTERHEAD_PATH = "vision_manager/assets/letterhead_the_organism_clean_A4.jpg"
+DEFAULT_LETTERHEAD = "vision_manager/assets/letterhead_the_organism_clean_A4.jpg"
 
-def draw_letterhead(c):
+
+def draw_the_organism_letterhead(c, letterhead_path=None):
     width, height = A4
-    c.drawImage(LETTERHEAD_PATH, 0, 0, width=width, height=height)
+    path = letterhead_path or DEFAULT_LETTERHEAD
+    c.drawImage(path, 0, 0, width=width, height=height)
 
-def draw_professional_block(c, professional):
+
+def draw_professional_block(c, professional=None):
     if not professional:
         return
 
-    x = 40
-    y = 780
+    riga_1 = (professional.get("riga_1") or "").strip()
+    riga_2 = (professional.get("riga_2") or "").strip()
+    riga_3 = (professional.get("riga_3") or "").strip()
 
-    # Nome
+    if not riga_1:
+        return
+
+    # posizione fissa coerente con carta intestata
+    x = 38
+    y = 785
+
     c.setFont("Helvetica-Bold", 15)
-    c.drawString(x, y, professional.get("riga_1", ""))
+    c.drawString(x, y, riga_1)
 
-    # Riga 2
-    if professional.get("riga_2"):
+    if riga_2:
         c.setFont("Helvetica", 11)
-        c.drawString(x, y - 18, professional.get("riga_2"))
+        c.drawString(x, y - 16, riga_2)
 
-    # Riga 3
-    if professional.get("riga_3"):
-        c.drawString(x, y - 34, professional.get("riga_3"))
+    if riga_3:
+        c.drawString(x, y - 30, riga_3)
