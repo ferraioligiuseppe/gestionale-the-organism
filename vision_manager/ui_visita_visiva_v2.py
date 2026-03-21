@@ -674,12 +674,12 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente", includ
     corr_fin = payload.get("correzione_finale", {}) or {}
     od = corr_fin.get("od", {}) or {}
     os_ = corr_fin.get("os", {}) or {}
-
-    add_vicino = _safe_float(corr_fin.get("add_vicino", corr_fin.get("add", 0.0)), 0.0)
-    add_intermedio = _safe_float(corr_fin.get("add_intermedio", 0.0), 0.0)
-
-    enable_vicino = bool(corr_fin.get("enable_add_vicino", True)) and add_vicino > 0.0
-    enable_intermedio = bool(corr_fin.get("enable_add_intermedio", False)) and add_intermedio > 0.0
+    add_data = _compute_additions(
+        corr_fin.get("add_vicino", corr_fin.get("add", 0.0)),
+        corr_fin.get("add_intermedio", 0.0),
+        corr_fin.get("enable_add_vicino", True),
+        corr_fin.get("enable_add_intermedio", False),
+    )
 
     rx_blank = {"sf": None, "cyl": None, "ax": None}
 
@@ -699,17 +699,17 @@ def _build_prescrizione_letterhead_pdf(payload, patient_label="Paziente", includ
             },
         },
         "intermedio": {
-            "od": _rx_add(od, add_intermedio) if enable_intermedio else dict(rx_blank),
-            "os": _rx_add(os_, add_intermedio) if enable_intermedio else dict(rx_blank),
+            "od": _rx_add(od, add_data["intermedio"]) if add_data["enable_intermedio"] and add_data["intermedio"] else dict(rx_blank),
+            "os": _rx_add(os_, add_data["intermedio"]) if add_data["enable_intermedio"] and add_data["intermedio"] else dict(rx_blank),
         },
         "vicino": {
-            "od": _rx_add(od, add_vicino) if enable_vicino else dict(rx_blank),
-            "os": _rx_add(os_, add_vicino) if enable_vicino else dict(rx_blank),
+            "od": _rx_add(od, add_data["vicino"]) if add_data["enable_vicino"] and add_data["vicino"] else dict(rx_blank),
+            "os": _rx_add(os_, add_data["vicino"]) if add_data["enable_vicino"] and add_data["vicino"] else dict(rx_blank),
         },
         "lenti": [],
-        "add": add_vicino if enable_vicino else 0.0,
-        "add_od": add_vicino if enable_vicino else 0.0,
-        "add_os": add_vicino if enable_vicino else 0.0,
+        "add": add_data["vicino"] if add_data["enable_vicino"] else 0.0,
+        "add_od": add_data["vicino"] if add_data["enable_vicino"] else 0.0,
+        "add_os": add_data["vicino"] if add_data["enable_vicino"] else 0.0,
     }
     return build_prescrizione_occhiali_a4(data_pdf, _get_letterhead_path(include_professional))
 
@@ -1480,6 +1480,10 @@ def ui_visita_visiva_v2(conn):
     professionisti = st.session_state.get("vm_professionals", [])
     professionisti_labels = [item.get("label") for item in professionisti]
     if professionisti_labels:
+        forced_prof = st.session_state.pop("vm_force_active_professional", None)
+        if forced_prof in professionisti_labels:
+            st.session_state["vm_active_professional"] = forced_prof
+
         current_prof = st.session_state.get("vm_active_professional")
         default_prof_idx = professionisti_labels.index(current_prof) if current_prof in professionisti_labels else 0
         st.selectbox(
@@ -1511,7 +1515,7 @@ def ui_visita_visiva_v2(conn):
                 else:
                     existing.append({"label": new_prof_label.strip(), "lines": lines or [new_prof_label.strip()]})
                     st.session_state["vm_professionals"] = existing
-                    st.session_state["vm_active_professional"] = new_prof_label.strip()
+                    st.session_state["vm_force_active_professional"] = new_prof_label.strip()
                     st.success("Professionista aggiunto correttamente.")
                     st.rerun()
 
@@ -1521,7 +1525,7 @@ def ui_visita_visiva_v2(conn):
             if prof_to_remove and st.button("Rimuovi professionista", key="vm_remove_professional_btn"):
                 st.session_state["vm_professionals"] = [item for item in st.session_state.get("vm_professionals", []) if item.get("label") != prof_to_remove]
                 if st.session_state.get("vm_active_professional") == prof_to_remove:
-                    st.session_state["vm_active_professional"] = "Dr. Giuseppe Ferraioli"
+                    st.session_state["vm_force_active_professional"] = "Dr. Giuseppe Ferraioli"
                 st.success("Professionista rimosso.")
                 st.rerun()
 
