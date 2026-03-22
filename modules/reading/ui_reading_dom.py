@@ -1,109 +1,175 @@
+
 import json
+from pathlib import Path
+
 import streamlit as st
 
 from modules.reading.dom_renderer import build_reading_html
 from modules.reading.dom_bbox_bridge import get_dom_bboxes_js
-from modules.reading.test_loader import load_tests
+from modules.reading.stimulus_library import (
+    list_stimuli,
+    load_text_content,
+    get_stimulus_by_filename,
+    render_library_manager,
+)
 
 
-def _get_text_from_source():
+def _select_source():
     st.markdown("### Sorgente stimolo")
 
     mode = st.radio(
         "Seleziona modalità",
-        ["Testo libero", "Libreria test"],
+        ["Testo libero", "Libreria stimoli"],
         horizontal=True,
         key="reading_dom_source_mode",
     )
 
-    if mode == "Libreria test":
-        tests = load_tests()
-        if not tests:
-            st.warning("Nessun test disponibile nella libreria.")
-            return ""
-
-        labels = [f"{t.get('title', t.get('test_id', 'Test'))} · {t.get('category', '')}" for t in tests]
-        idx = st.selectbox("Seleziona test", range(len(tests)), format_func=lambda i: labels[i], key="reading_dom_test_idx")
-        selected_test = tests[idx]
-
-        st.caption(
-            f"Categoria: {selected_test.get('category', '-') } | "
-            f"Difficoltà: {selected_test.get('difficulty', '-')}"
+    if mode == "Testo libero":
+        default_text = (
+            "Il bambino osserva la figura e poi inizia a leggere lentamente il testo.\n"
+            "Durante la lettura si possono osservare fissazioni, regressioni e salti di riga.\n"
+            "L'obiettivo è associare il gaze alle parole reali mostrate sullo schermo."
         )
-        return selected_test.get("content", "")
+        text_input = st.text_area(
+            "Testo clinico / stimolo",
+            value=default_text,
+            height=220,
+            key="reading_dom_text_input",
+        )
+        return {
+            "mode": mode,
+            "stimulus_type": "text",
+            "stimulus_id": "free_text",
+            "title": "Testo libero",
+            "text": text_input,
+            "filename": None,
+        }
 
-    default_text = (
-        "Il bambino osserva la figura e poi inizia a leggere lentamente il testo.\n"
-        "Durante la lettura si possono osservare fissazioni, regressioni e salti di riga.\n"
-        "L'obiettivo è associare il gaze alle parole reali mostrate sullo schermo."
+    items = list_stimuli()
+    if not items:
+        st.info("La libreria è vuota. Carica dei file nella scheda 'Gestione libreria'.")
+        return {
+            "mode": mode,
+            "stimulus_type": "none",
+            "stimulus_id": "empty_library",
+            "title": "Libreria vuota",
+            "text": "",
+            "filename": None,
+        }
+
+    labels = [
+        f"{x['title']} | {x['type']} | {x['filename']}"
+        for x in items
+    ]
+    idx = st.selectbox(
+        "Seleziona file",
+        range(len(items)),
+        format_func=lambda i: labels[i],
+        key="reading_dom_library_idx",
     )
-    return st.text_area(
-        "Testo clinico / stimolo",
-        value=default_text,
-        height=220,
-        key="reading_dom_text_input",
-    )
+    selected = items[idx]
+
+    result = {
+        "mode": mode,
+        "stimulus_type": selected["type"],
+        "stimulus_id": selected["id"],
+        "title": selected["title"],
+        "text": "",
+        "filename": selected["filename"],
+        "path": selected["path"],
+    }
+
+    if selected["type"] == "text":
+        result["text"] = load_text_content(selected["filename"])
+
+    return result
+
+
+def _preview_non_text(stimulus):
+    st.markdown("### Anteprima stimolo")
+    fp = Path(stimulus["path"])
+
+    if stimulus["stimulus_type"] == "image":
+        st.image(str(fp), caption=stimulus["filename"], use_container_width=True)
+        st.info("Le immagini possono essere usate come stimoli visivi, ma non per mapping parola-per-parola.")
+        return
+
+    if stimulus["stimulus_type"] == "pdf":
+        with open(fp, "rb") as f:
+            st.download_button(
+                "Scarica PDF",
+                data=f.read(),
+                file_name=fp.name,
+                mime="application/pdf",
+                key=f"download_pdf_{fp.name}",
+            )
+        st.info("Il PDF è presente in libreria. Per il tracking DOM parola-per-parola conviene usare TXT o JSON.")
+        return
 
 
 def ui_reading_dom():
     st.subheader("Lettura Avanzata DOM")
-    st.write("Render HTML parola per parola con raccolta bounding box reali del browser.")
+    tab1, tab2 = st.tabs(["Stimolo e analisi", "Gestione libreria"])
 
-    col1, col2 = st.columns([2, 1])
+    with tab2:
+        render_library_manager()
 
-    with col1:
-        text_input = _get_text_from_source()
+    with tab1:
+        stimulus = _select_source()
 
-    with col2:
-        stimulus_id = st.text_input("Stimulus ID", value="stim_reading_001")
-        font_size_px = st.slider("Font size", 16, 48, 28)
-        line_height = st.slider("Line height", 1.0, 2.5, 1.7, 0.1)
-        letter_spacing_px = st.slider("Letter spacing", 0.0, 3.0, 0.2, 0.1)
-        text_align = st.selectbox("Allineamento", ["left", "center", "justify"], index=0)
+        col1, col2 = st.columns([2, 1])
 
-    rendered_html = build_reading_html(
-        text=text_input,
-        stimulus_id=stimulus_id,
-        font_size_px=font_size_px,
-        line_height=line_height,
-        letter_spacing_px=letter_spacing_px,
-        text_align=text_align,
-    )
+        with col2:
+            default_stimulus_id = stimulus.get("stimulus_id", "stim_reading_001")
+            stimulus_id = st.text_input("Stimulus ID", value=default_stimulus_id)
+            font_size_px = st.slider("Font size", 16, 48, 28)
+            line_height = st.slider("Line height", 1.0, 2.5, 1.7, 0.1)
+            letter_spacing_px = st.slider("Letter spacing", 0.0, 3.0, 0.2, 0.1)
+            text_align = st.selectbox("Allineamento", ["left", "center", "justify"], index=0)
 
-    st.markdown("### Preview DOM reale")
-    preview_wrap = f'''
-    <div style="background:#f8fbf8;padding:16px;border-radius:12px;border:1px solid #d9e2d9;">
-        {rendered_html}
-    </div>
-    '''
-    st.markdown(preview_wrap, unsafe_allow_html=True)
+        with col1:
+            st.markdown(f"**Stimolo selezionato:** {stimulus.get('title', '-')}")
+            if stimulus.get("filename"):
+                st.caption(stimulus["filename"])
 
-    st.markdown("### Bounding Box reali (DOM)")
-    st.caption("Il pulsante legge i box direttamente dal DOM della pagina Streamlit.")
+            if stimulus["stimulus_type"] == "text":
+                rendered_html = build_reading_html(
+                    text=stimulus["text"],
+                    stimulus_id=stimulus_id,
+                    font_size_px=font_size_px,
+                    line_height=line_height,
+                    letter_spacing_px=letter_spacing_px,
+                    text_align=text_align,
+                )
 
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        acquire = st.button("Acquisisci bounding box reali", type="primary")
-    with c2:
-        show_html = st.checkbox("Mostra HTML generato", value=False)
+                st.markdown("### Preview DOM reale")
+                preview_wrap = f'''
+                <div style="background:#f8fbf8;padding:16px;border-radius:12px;border:1px solid #d9e2d9;">
+                    {rendered_html}
+                </div>
+                '''
+                st.markdown(preview_wrap, unsafe_allow_html=True)
 
-    if acquire:
-        data = get_dom_bboxes_js()
+                st.markdown("### Bounding Box reali (DOM)")
+                acquire = st.button("Acquisisci bounding box reali", type="primary")
 
-        if data and isinstance(data, dict) and data.get("ok"):
-            st.success(f"{len(data.get('bbox_items', []))} token rilevati")
-            st.session_state["reading_dom_bbox"] = data
-            st.json(data)
+                if acquire:
+                    data = get_dom_bboxes_js()
+                    if data and isinstance(data, dict) and data.get("ok"):
+                        st.success(f"{len(data.get('bbox_items', []))} token rilevati")
+                        st.session_state["reading_dom_bbox"] = data
+                        st.json(data)
+                        st.download_button(
+                            "Scarica JSON bbox",
+                            data=json.dumps(data, ensure_ascii=False, indent=2),
+                            file_name=f"{stimulus_id}_bbox.json",
+                            mime="application/json",
+                        )
+                    else:
+                        err = data.get("error", "Errore acquisizione DOM") if isinstance(data, dict) else "Errore acquisizione DOM"
+                        st.error(err)
 
-            st.download_button(
-                "Scarica JSON bbox",
-                data=json.dumps(data, ensure_ascii=False, indent=2),
-                file_name=f"{stimulus_id}_bbox.json",
-                mime="application/json",
-            )
-        else:
-            err = data.get("error", "Errore acquisizione DOM") if isinstance(data, dict) else "Errore acquisizione DOM"
-            st.error(err)
-
-    if show_html:
-        st.code(rendered_html, language="html")
+                if st.checkbox("Mostra HTML generato", value=False):
+                    st.code(rendered_html, language="html")
+            else:
+                _preview_non_text(stimulus)
