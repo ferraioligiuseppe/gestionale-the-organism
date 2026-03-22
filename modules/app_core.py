@@ -17,10 +17,6 @@ from modules.app_menu import build_sections
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
-from modules.ui_lenti_inverse import ui_lenti_inverse
-from modules.ui_lac_ametropie import ui_lac_ametropie
-from modules.ui_calcolatore_lac import ui_calcolatore_lac
-from modules.ui_esa_ortho6 import ui_esa_ortho6
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -32,42 +28,6 @@ from modules.app_sections import (
     SECTION_OSTEOPATIA,
     SECTION_RELAZIONI,
 )
-
-SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
-SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
-SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
-SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
-
-_build_sections_original = build_sections
-
-def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
-    sections = _build_sections_original(is_admin, app_mode)
-    if SECTION_LENTI_INVERSE not in sections:
-        try:
-            from modules.app_sections import SECTION_VISION
-            idx = sections.index(SECTION_VISION) + 1
-        except Exception:
-            idx = 3
-        sections.insert(idx, SECTION_LENTI_INVERSE)
-    if SECTION_LAC_AMETROPIE not in sections:
-        try:
-            idx2 = sections.index(SECTION_LENTI_INVERSE) + 1
-        except Exception:
-            idx2 = 4
-        sections.insert(idx2, SECTION_LAC_AMETROPIE)
-    if SECTION_CALCOLATORE not in sections:
-        try:
-            idx3 = sections.index(SECTION_LAC_AMETROPIE) + 1
-        except Exception:
-            idx3 = 5
-        sections.insert(idx3, SECTION_CALCOLATORE)
-    if SECTION_ESA not in sections:
-        try:
-            idx4 = sections.index(SECTION_CALCOLATORE) + 1
-        except Exception:
-            idx4 = 6
-        sections.insert(idx4, SECTION_ESA)
-    return sections
 
 import pnev_module as pnev
 
@@ -5363,6 +5323,9 @@ def ui_valutazioni_visive():
         with col_p2:
             pachim_os = st.number_input("Pachimetria OS (µm)", 400.0, 700.0, 540.0, 1.0, key="pachim_os")
 
+        # ── IOP CORRETTA PER CCT ──────────────────────────────────────────
+        _iop_result = ui_iop_cct_inline(tono_od, tono_os, pachim_od, pachim_os)
+
         fondo = st.text_area("Fondo oculare (descrizione)", "")
         campo_visivo = st.text_area("Campo visivo (descrizione / esito)", "")
         oct = st.text_area("OCT (descrizione)", "")
@@ -5753,6 +5716,12 @@ ESAMI STRUTTURALI / FUNZIONALI
         st.info("Nessuna valutazione per questo paziente.")
         conn.close()
         return
+
+    # ── Storico IOP e tabella Dresdner ───────────────────────────────────
+    with st.expander("📈 Andamento IOP / Spessore corneale nel tempo", expanded=False):
+        ui_iop_storico(rows)
+    with st.expander("📋 Tabella di correzione Dresdner (CCT → IOPc)", expanded=False):
+        ui_dresdner_table()
 
     labels = [
         f"{r['id']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
@@ -9785,26 +9754,6 @@ def main():
         ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
         ui_db_cleanup=ui_db_cleanup,
     ):
-        return
-
-    # routing lenti inverse
-    if sezione == SECTION_LENTI_INVERSE:
-        ui_lenti_inverse()
-        return
-
-    # routing LAC ametropie
-    if sezione == SECTION_LAC_AMETROPIE:
-        ui_lac_ametropie()
-        return
-
-    # routing Calcolatore LAC
-    if sezione == SECTION_CALCOLATORE:
-        ui_calcolatore_lac()
-        return
-
-    # routing ESA Ortho-6
-    if sezione == SECTION_ESA:
-        ui_esa_ortho6()
         return
 
     # routing principale (estratto)
