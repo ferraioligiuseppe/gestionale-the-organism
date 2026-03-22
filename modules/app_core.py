@@ -5268,6 +5268,52 @@ def ui_valutazioni_visive():
     paziente = cur.fetchone()
 
 
+    # ── Cheratometria (fuori dal form per on_change bidirezionale) ────────
+    CK_kera = 337.5
+    for _k,_v in [("k1_od_mm",7.80),("k1_od_D",round(CK_kera/7.80,2)),
+                  ("k2_od_mm",7.80),("k2_od_D",round(CK_kera/7.80,2)),
+                  ("k1_os_mm",7.80),("k1_os_D",round(CK_kera/7.80,2)),
+                  ("k2_os_mm",7.80),("k2_os_D",round(CK_kera/7.80,2))]:
+        if _k not in st.session_state: st.session_state[_k] = _v
+
+    def _mk1_od_r(): v=st.session_state.get("k1_od_mm",0); st.session_state["k1_od_D"]=round(CK_kera/v,2) if v>0 else 0
+    def _mk1_od_D(): v=st.session_state.get("k1_od_D",0); st.session_state["k1_od_mm"]=round(CK_kera/v,3) if v>0 else 0
+    def _mk2_od_r(): v=st.session_state.get("k2_od_mm",0); st.session_state["k2_od_D"]=round(CK_kera/v,2) if v>0 else 0
+    def _mk2_od_D(): v=st.session_state.get("k2_od_D",0); st.session_state["k2_od_mm"]=round(CK_kera/v,3) if v>0 else 0
+    def _mk1_os_r(): v=st.session_state.get("k1_os_mm",0); st.session_state["k1_os_D"]=round(CK_kera/v,2) if v>0 else 0
+    def _mk1_os_D(): v=st.session_state.get("k1_os_D",0); st.session_state["k1_os_mm"]=round(CK_kera/v,3) if v>0 else 0
+    def _mk2_os_r(): v=st.session_state.get("k2_os_mm",0); st.session_state["k2_os_D"]=round(CK_kera/v,2) if v>0 else 0
+    def _mk2_os_D(): v=st.session_state.get("k2_os_D",0); st.session_state["k2_os_mm"]=round(CK_kera/v,3) if v>0 else 0
+
+    st.markdown("### Cheratometria")
+    st.caption("Modifica mm → aggiorna D automaticamente e viceversa")
+    _kc = st.columns(4)
+    with _kc[0]: st.number_input("OD K1 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="k1_od_mm", on_change=_mk1_od_r)
+    with _kc[1]: st.number_input("OD K1 (D)",  35.0,50.0,step=0.25, format="%.2f", key="k1_od_D",  on_change=_mk1_od_D)
+    with _kc[2]: st.number_input("OD K2 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="k2_od_mm", on_change=_mk2_od_r)
+    with _kc[3]: st.number_input("OD K2 (D)",  35.0,50.0,step=0.25, format="%.2f", key="k2_od_D",  on_change=_mk2_od_D)
+    _kc2 = st.columns(4)
+    with _kc2[0]: st.number_input("OS K1 (mm)",6.0, 9.5, step=0.01, format="%.2f", key="k1_os_mm", on_change=_mk1_os_r)
+    with _kc2[1]: st.number_input("OS K1 (D)", 35.0,50.0,step=0.25, format="%.2f", key="k1_os_D",  on_change=_mk1_os_D)
+    with _kc2[2]: st.number_input("OS K2 (mm)",6.0, 9.5, step=0.01, format="%.2f", key="k2_os_mm", on_change=_mk2_os_r)
+    with _kc2[3]: st.number_input("OS K2 (D)", 35.0,50.0,step=0.25, format="%.2f", key="k2_os_D",  on_change=_mk2_os_D)
+
+    _ast_od = abs(st.session_state.get("k1_od_D",0) - st.session_state.get("k2_od_D",0))
+    _ast_os = abs(st.session_state.get("k1_os_D",0) - st.session_state.get("k2_os_D",0))
+    if _ast_od > 0.1 or _ast_os > 0.1:
+        st.caption(f"Astigmatismo corneale → OD: {_ast_od:.2f} D | OS: {_ast_os:.2f} D")
+
+    # Legge i valori K nel form dal session_state
+    k1_od_mm = st.session_state.get("k1_od_mm", 7.80)
+    k1_od_D  = st.session_state.get("k1_od_D",  43.25)
+    k2_od_mm = st.session_state.get("k2_od_mm", 7.80)
+    k2_od_D  = st.session_state.get("k2_od_D",  43.25)
+    k1_os_mm = st.session_state.get("k1_os_mm", 7.80)
+    k1_os_D  = st.session_state.get("k1_os_D",  43.25)
+    k2_os_mm = st.session_state.get("k2_os_mm", 7.80)
+    k2_os_D  = st.session_state.get("k2_os_D",  43.25)
+    st.divider()
+
     with st.form("nuova_val_visiva"):
         st.subheader("Nuova valutazione visiva / oculistica")
         data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
@@ -5330,46 +5376,7 @@ def ui_valutazioni_visive():
         with col_os6:
             ax_sogg_os = st.number_input("OS AX soggettiva (°)", 0, 180, 0, 1, key="ax_sogg_os")
 
-        st.markdown("### Cheratometria")
-        # Helper conversione r↔D
-        def _r2d(r): return round(337.5/r, 2) if r and r > 0 else 0.0
-        def _d2r(d): return round(337.5/d, 3) if d and d > 0 else 0.0
-
-        col_kod1, col_kod2, col_kod3, col_kod4 = st.columns(4)
-        with col_kod1:
-            k1_od_mm = st.number_input("OD K1 (mm)", 6.0, 9.5, 7.80, 0.01, key="k1_od_mm")
-            st.caption(f"= {_r2d(k1_od_mm):.2f} D")
-        with col_kod2:
-            k1_od_D = st.number_input("OD K1 (D)", 35.0, 50.0, _r2d(st.session_state.get("k1_od_mm", 7.80)), 0.25, key="k1_od_D")
-            st.caption(f"= {_d2r(k1_od_D):.3f} mm")
-        with col_kod3:
-            k2_od_mm = st.number_input("OD K2 (mm)", 6.0, 9.5, 7.80, 0.01, key="k2_od_mm")
-            st.caption(f"= {_r2d(k2_od_mm):.2f} D")
-        with col_kod4:
-            k2_od_D = st.number_input("OD K2 (D)", 35.0, 50.0, _r2d(st.session_state.get("k2_od_mm", 7.80)), 0.25, key="k2_od_D")
-            st.caption(f"= {_d2r(k2_od_D):.3f} mm")
-
-        ast_od = abs(k1_od_D - k2_od_D)
-        if ast_od > 0.1:
-            st.caption(f"Astigmatismo OD: {ast_od:.2f} D")
-
-        col_kos1, col_kos2, col_kos3, col_kos4 = st.columns(4)
-        with col_kos1:
-            k1_os_mm = st.number_input("OS K1 (mm)", 6.0, 9.5, 7.80, 0.01, key="k1_os_mm")
-            st.caption(f"= {_r2d(k1_os_mm):.2f} D")
-        with col_kos2:
-            k1_os_D = st.number_input("OS K1 (D)", 35.0, 50.0, _r2d(st.session_state.get("k1_os_mm", 7.80)), 0.25, key="k1_os_D")
-            st.caption(f"= {_d2r(k1_os_D):.3f} mm")
-        with col_kos3:
-            k2_os_mm = st.number_input("OS K2 (mm)", 6.0, 9.5, 7.80, 0.01, key="k2_os_mm")
-            st.caption(f"= {_r2d(k2_os_mm):.2f} D")
-        with col_kos4:
-            k2_os_D = st.number_input("OS K2 (D)", 35.0, 50.0, _r2d(st.session_state.get("k2_os_mm", 7.80)), 0.25, key="k2_os_D")
-            st.caption(f"= {_d2r(k2_os_D):.3f} mm")
-
-        ast_os = abs(k1_os_D - k2_os_D)
-        if ast_os > 0.1:
-            st.caption(f"Astigmatismo OS: {ast_os:.2f} D")
+        # Cheratometria gestita fuori dal form (vedi sopra)
 
         st.markdown("### Tonometria / Pressione oculare")
         col_t1, col_t2 = st.columns(2)

@@ -357,21 +357,85 @@ def ui_lenti_inverse():
 
 def _ui_nuova_scheda(conn, cur, paz_id):
     st.subheader("Nuova scheda lente inversa")
+
+    # ── Campi raggio/potere FUORI dal form (on_change funziona) ──────────
+    CK = 337.5
+
+    def _sync(key_mm, key_D):
+        def _from_mm():
+            v = st.session_state.get(key_mm, 0)
+            if v and v > 0:
+                st.session_state[key_D] = round(CK / v, 2)
+        def _from_D():
+            v = st.session_state.get(key_D, 0)
+            if v and v > 0:
+                st.session_state[key_mm] = round(CK / v, 3)
+        return _from_mm, _from_D
+
+    # Inizializza valori di default
+    for k, v in [("li_kflat_mm",7.80),("li_kflat_D",43.25),
+                 ("li_ksteep_mm",7.70),("li_ksteep_D",43.75),
+                 ("li_raggio_ap",7.80),
+                 ("li_rb",8.73),("li_rb_D",round(CK/8.73,2)),
+                 ("li_r0",7.60),("li_r0_D",round(CK/7.60,2))]:
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+    st.markdown("### Topografia corneale")
+    _kfl_r, _kfl_D = _sync("li_kflat_mm","li_kflat_D")
+    _kst_r, _kst_D = _sync("li_ksteep_mm","li_ksteep_D")
+    c1,c2,c3,c4 = st.columns(4)
+    with c1:
+        topo_k_flat_mm = st.number_input("K flat (mm)", 6.0, 9.5, step=0.01,
+            format="%.2f", key="li_kflat_mm", on_change=_kfl_r)
+    with c2:
+        topo_k_flat_D = st.number_input("K flat (D)", 35.0, 52.0, step=0.25,
+            format="%.2f", key="li_kflat_D", on_change=_kfl_D)
+    with c3:
+        topo_k_steep_mm = st.number_input("K steep (mm)", 6.0, 9.5, step=0.01,
+            format="%.2f", key="li_ksteep_mm", on_change=_kst_r)
+    with c4:
+        topo_k_steep_D = st.number_input("K steep (D)", 35.0, 52.0, step=0.25,
+            format="%.2f", key="li_ksteep_D", on_change=_kst_D)
+
+    if abs(topo_k_flat_D - topo_k_steep_D) > 0.1:
+        st.caption(f"Astigmatismo corneale: {abs(topo_k_flat_D-topo_k_steep_D):.2f} D")
+
+    # Rb e r0 con on_change
+    _rb_r, _rb_D  = _sync("li_rb","li_rb_D")
+    _r0_r, _r0_D  = _sync("li_r0","li_r0_D")
+    st.markdown("### Parametri lente – Raggi e Potere")
+    lp_cols = st.columns(4)
+    with lp_cols[0]:
+        lente_rb = st.number_input("Raggio base Rb (mm)", 7.0, 11.0, step=0.001,
+            format="%.3f", key="li_rb", on_change=_rb_r,
+            help="Modifica → aggiorna Rb (D) automaticamente")
+    with lp_cols[1]:
+        lente_rb_D = st.number_input("Rb (D)", 28.0, 50.0, step=0.25,
+            format="%.2f", key="li_rb_D", on_change=_rb_D,
+            help="Modifica → aggiorna Rb (mm) automaticamente")
+    with lp_cols[2]:
+        lente_r0 = st.number_input("Raggio apicale r0 (mm)", 6.0, 9.5, step=0.01,
+            format="%.2f", key="li_r0", on_change=_r0_r)
+    with lp_cols[3]:
+        lente_r0_D = st.number_input("r0 (D)", 35.0, 56.0, step=0.25,
+            format="%.2f", key="li_r0_D", on_change=_r0_D)
+
+    st.divider()
+
     with st.form("form_nuova_lente_inversa"):
         col_oc, col_data = st.columns(2)
         with col_oc:   occhio      = st.selectbox("Occhio", ["OD","OS","OD+OS"], key="li_occhio")
         with col_data: data_scheda = st.text_input("Data scheda (gg/mm/aaaa)", _today_str(), key="li_data")
 
-        st.markdown("### Topografia corneale")
-        c1,c2,c3,c4 = st.columns(4)
-        with c1:
-            topo_k_flat_mm = st.number_input("K flat (mm)", 6.0, 9.5, 7.80, 0.01, key="li_kflat_mm")
-            st.caption(f"= {r_to_d(topo_k_flat_mm):.2f} D")
-        with c2:
-            topo_k_flat_D = st.number_input("K flat (D)", 35.0, 52.0, r_to_d(st.session_state.get("li_kflat_mm",7.80)), 0.25, key="li_kflat_D")
-            st.caption(f"= {d_to_r(topo_k_flat_D):.3f} mm")
-        with c3: topo_k_steep_mm = st.number_input("K steep (mm)", 6.0, 9.5,  7.70, 0.01, key="li_ksteep_mm")
-        with c4: topo_k_steep_D  = st.number_input("K steep (D)", 35.0, 52.0, 43.75, 0.25, key="li_ksteep_D")
+        # Recupera i valori già impostati fuori dal form
+        topo_k_flat_mm  = st.session_state.get("li_kflat_mm", 7.80)
+        topo_k_flat_D   = st.session_state.get("li_kflat_D",  43.25)
+        topo_k_steep_mm = st.session_state.get("li_ksteep_mm",7.70)
+        topo_k_steep_D  = st.session_state.get("li_ksteep_D", 43.75)
+        lente_rb  = st.session_state.get("li_rb", 8.73)
+        lente_r0  = st.session_state.get("li_r0", 7.60)
+        st.info(f"Topografia: K flat {topo_k_flat_mm:.2f} mm ({topo_k_flat_D:.2f} D) · K steep {topo_k_steep_mm:.2f} mm ({topo_k_steep_D:.2f} D) · Rb {lente_rb:.3f} mm ({round(CK/lente_rb,2):.2f} D)")
 
         c5,c6,c7,c8 = st.columns(4)
         with c5: topo_ecc_media = st.number_input("Eccentricita media", 0.0, 1.5, 0.50, 0.01, key="li_ecc_media")

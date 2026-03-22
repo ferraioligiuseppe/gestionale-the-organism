@@ -394,6 +394,65 @@ def ui_lac_ametropie():
 def _ui_nuova_scheda(conn, cur, paz_id):
     st.subheader("Nuova scheda LAC")
 
+    # ── Raggio/potere fuori dal form con on_change ───────────────────────
+    CK = 337.5
+    for k, v in [("lam_rb",8.60),("lam_rb_D",round(CK/8.60,2)),
+                 ("lam_kflat_mm",7.80),("lam_kflat_D",round(CK/7.80,2)),
+                 ("lam_ksteep_mm",7.70),("lam_ksteep_D",round(CK/7.70,2))]:
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+    def _rb_r():
+        v = st.session_state.get("lam_rb",0)
+        if v>0: st.session_state["lam_rb_D"] = round(CK/v,2)
+    def _rb_D():
+        v = st.session_state.get("lam_rb_D",0)
+        if v>0: st.session_state["lam_rb"] = round(CK/v,3)
+    def _kfl_r():
+        v = st.session_state.get("lam_kflat_mm",0)
+        if v>0: st.session_state["lam_kflat_D"] = round(CK/v,2)
+    def _kfl_D():
+        v = st.session_state.get("lam_kflat_D",0)
+        if v>0: st.session_state["lam_kflat_mm"] = round(CK/v,3)
+    def _kst_r():
+        v = st.session_state.get("lam_ksteep_mm",0)
+        if v>0: st.session_state["lam_ksteep_D"] = round(CK/v,2)
+    def _kst_D():
+        v = st.session_state.get("lam_ksteep_D",0)
+        if v>0: st.session_state["lam_ksteep_mm"] = round(CK/v,3)
+
+    st.markdown("### Raggio base Rb")
+    rb_c1, rb_c2 = st.columns(2)
+    with rb_c1:
+        st.number_input("Raggio base Rb (mm)", 7.0, 10.5, step=0.01, format="%.2f",
+            key="lam_rb", on_change=_rb_r,
+            help="Modifica → aggiorna Rb (D) automaticamente")
+    with rb_c2:
+        st.number_input("Rb (D)", 28.0, 50.0, step=0.25, format="%.2f",
+            key="lam_rb_D", on_change=_rb_D,
+            help="Modifica → aggiorna Rb (mm) automaticamente")
+
+    st.markdown("### Topografia K")
+    k1,k2,k3,k4 = st.columns(4)
+    with k1:
+        st.number_input("K flat (mm)", 6.0, 9.5, step=0.01, format="%.2f",
+            key="lam_kflat_mm", on_change=_kfl_r)
+    with k2:
+        st.number_input("K flat (D)", 35.0, 52.0, step=0.25, format="%.2f",
+            key="lam_kflat_D", on_change=_kfl_D)
+    with k3:
+        st.number_input("K steep (mm)", 6.0, 9.5, step=0.01, format="%.2f",
+            key="lam_ksteep_mm", on_change=_kst_r)
+    with k4:
+        st.number_input("K steep (D)", 35.0, 52.0, step=0.25, format="%.2f",
+            key="lam_ksteep_D", on_change=_kst_D)
+
+    _kfl = st.session_state.get("lam_kflat_D", CK/7.80)
+    _kst = st.session_state.get("lam_ksteep_D", CK/7.70)
+    if abs(_kfl - _kst) > 0.1:
+        st.caption(f"Astigmatismo corneale: {abs(_kfl-_kst):.2f} D")
+
+    st.divider()
     with st.form("form_lac_ametropie"):
 
         # Intestazione
@@ -407,18 +466,8 @@ def _ui_nuova_scheda(conn, cur, paz_id):
         # ── TOPOGRAFIA ──────────────────────────────────────────────────
         st.markdown("### Topografia corneale")
         c1,c2,c3,c4,c5 = st.columns(5)
-        with c1:
-            topo_k_flat_mm = st.number_input("K flat (mm)", 6.0, 9.5, 7.80, 0.01, key="lam_kflat_mm")
-            st.caption(f"= {r_to_d(topo_k_flat_mm):.2f} D")
-        with c2:
-            topo_k_flat_D = st.number_input("K flat (D)", 35.0, 52.0, r_to_d(st.session_state.get("lam_kflat_mm",7.80)), 0.25, key="lam_kflat_D")
-            st.caption(f"= {d_to_r(topo_k_flat_D):.3f} mm")
-        with c3:
-            topo_k_steep_mm = st.number_input("K steep (mm)", 6.0, 9.5, 7.70, 0.01, key="lam_ksteep_mm")
-            st.caption(f"= {r_to_d(topo_k_steep_mm):.2f} D")
-        with c4:
-            topo_k_steep_D = st.number_input("K steep (D)", 35.0, 52.0, r_to_d(st.session_state.get("lam_ksteep_mm",7.70)), 0.25, key="lam_ksteep_D")
-            st.caption(f"= {d_to_r(topo_k_steep_D):.3f} mm")
+        # K già impostati fuori dal form — usati da session_state sopra
+        pass
         with c5: topo_asse_steep = st.number_input("Asse steep (gradi)", 0, 180, 90, 1,     key="lam_asse_steep")
 
         c6,c7,c8,c9 = st.columns(4)

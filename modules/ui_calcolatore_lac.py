@@ -419,6 +419,7 @@ def ui_calcolatore_lac():
 # ---------------------------------------------------------------------------
 
 def _ui_calcolo_manuale(conn, cur, paz_id):
+    CK = 337.5
     st.subheader("Parametri di ingresso")
 
     col_sx, col_dx = st.columns([1, 1])
@@ -426,14 +427,29 @@ def _ui_calcolo_manuale(conn, cur, paz_id):
     with col_sx:
         st.markdown("#### Dati corneali")
         occhio       = st.selectbox("Occhio", ["OD","OS"], key="calc_occhio")
-        r0 = st.number_input("Raggio apicale r₀ (mm)", 6.0, 9.5, 7.60, 0.01, format="%.3f", key="calc_r0")
-        st.caption(f"r₀ = {r_to_d(r0):.2f} D (K flat equivalente)")
+        # Inizializza valori
+        for _k,_v in [("calc_r0",7.60),("calc_r0_D",round(CK/7.60,2)),
+                      ("calc_kfl",7.60),("calc_kfl_D",round(CK/7.60,2)),
+                      ("calc_kst",7.50),("calc_kst_D",round(CK/7.50,2))]:
+            if _k not in st.session_state: st.session_state[_k] = _v
+
+        def _r0_mm(): v=st.session_state.get("calc_r0",0); st.session_state["calc_r0_D"]=round(CK/v,2) if v>0 else 0
+        def _r0_D():  v=st.session_state.get("calc_r0_D",0); st.session_state["calc_r0"]=round(CK/v,3) if v>0 else 0
+        def _kfl_mm(): v=st.session_state.get("calc_kfl",0); st.session_state["calc_kfl_D"]=round(CK/v,2) if v>0 else 0
+        def _kfl_D2(): v=st.session_state.get("calc_kfl_D",0); st.session_state["calc_kfl"]=round(CK/v,3) if v>0 else 0
+        def _kst_mm(): v=st.session_state.get("calc_kst",0); st.session_state["calc_kst_D"]=round(CK/v,2) if v>0 else 0
+        def _kst_D2(): v=st.session_state.get("calc_kst_D",0); st.session_state["calc_kst"]=round(CK/v,3) if v>0 else 0
+
+        _rc1,_rc2 = st.columns(2)
+        with _rc1: r0 = st.number_input("Raggio apicale r₀ (mm)", 6.0, 9.5, step=0.01, format="%.3f", key="calc_r0", on_change=_r0_mm)
+        with _rc2: st.number_input("r₀ (D)", 35.0, 56.0, step=0.25, format="%.2f", key="calc_r0_D", on_change=_r0_D)
         e = st.number_input("Eccentricità e", 0.0, 1.5, 0.50, 0.01, key="calc_e")
-        k_flat_mm = st.number_input("K flat (mm)", 6.0, 9.5, 7.60, 0.01, format="%.2f", key="calc_kfl")
-        k_flat_D  = st.number_input("K flat (D)", 35.0, 52.0, r_to_d(st.session_state.get("calc_kfl",7.60)), 0.25, key="calc_kfl_D")
-        st.caption(f"K flat: {k_flat_mm:.2f} mm = {r_to_d(k_flat_mm):.2f} D")
-        k_steep_mm = st.number_input("K steep (mm)", 6.0, 9.5, 7.50, 0.01, format="%.2f", key="calc_kst")
-        k_steep_D  = st.number_input("K steep (D)", 35.0, 52.0, r_to_d(st.session_state.get("calc_kst",7.50)), 0.25, key="calc_kst_D")
+        _kc1,_kc2 = st.columns(2)
+        with _kc1: k_flat_mm = st.number_input("K flat (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="calc_kfl", on_change=_kfl_mm)
+        with _kc2: k_flat_D  = st.number_input("K flat (D)",  35.0, 52.0, step=0.25, format="%.2f", key="calc_kfl_D", on_change=_kfl_D2)
+        _ks1,_ks2 = st.columns(2)
+        with _ks1: k_steep_mm = st.number_input("K steep (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="calc_kst", on_change=_kst_mm)
+        with _ks2: k_steep_D  = st.number_input("K steep (D)",  35.0, 52.0, step=0.25, format="%.2f", key="calc_kst_D", on_change=_kst_D2)
         if abs(k_flat_D - k_steep_D) > 0.1:
             st.caption(f"Astigmatismo: {abs(k_flat_D-k_steep_D):.2f} D")
 

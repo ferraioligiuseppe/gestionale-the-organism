@@ -239,15 +239,25 @@ def ui_esa_ortho6():
 
 
 def _ui_calcolo(conn, cur, paz_id):
+    CK = 337.5
     st.subheader("Ricerca parametri ESA")
 
     col1, col2, col3 = st.columns(3)
     with col1:
         occhio  = st.selectbox("Occhio", ["OD","OS"], key="esa_occhio")
-        K_input = st.number_input("K corneale (mm)", 7.20, 8.60, 7.60, 0.01,
-                                   format="%.2f", key="esa_K",
-                                   help="K flat dal topografo o dalla cheratometria")
-        st.caption(f"K = {r_to_d(K_input):.2f} D")
+        if "esa_K" not in st.session_state: st.session_state["esa_K"] = 7.60
+        if "esa_K_D" not in st.session_state: st.session_state["esa_K_D"] = round(CK/7.60, 2)
+        def _esa_K_mm(): v=st.session_state.get("esa_K",0); st.session_state["esa_K_D"]=round(CK/v,2) if v>0 else 0
+        def _esa_K_D():  v=st.session_state.get("esa_K_D",0); st.session_state["esa_K"]=round(CK/v,3) if v>0 else 0
+        _ek1, _ek2 = st.columns(2)
+        with _ek1:
+            K_input = st.number_input("K corneale (mm)", 7.20, 8.60, step=0.01,
+                format="%.2f", key="esa_K", on_change=_esa_K_mm,
+                help="Modifica → aggiorna K (D) in tempo reale")
+        with _ek2:
+            st.number_input("K corneale (D)", 35.0, 48.0, step=0.25,
+                format="%.2f", key="esa_K_D", on_change=_esa_K_D,
+                help="Modifica → aggiorna K (mm) in tempo reale")
     with col2:
         miopia  = st.number_input("Miopia da correggere (D)", -5.0, -0.5, -3.0, 0.25,
                                    key="esa_mio",
