@@ -5324,7 +5324,17 @@ def ui_valutazioni_visive():
             pachim_os = st.number_input("Pachimetria OS (µm)", 400.0, 700.0, 540.0, 1.0, key="pachim_os")
 
         # ── IOP CORRETTA PER CCT ──────────────────────────────────────────
-        _iop_result = ui_iop_cct_inline(tono_od, tono_os, pachim_od, pachim_os)
+        try:
+            from modules.ui_iop_cct import ui_iop_cct_inline as _iop_fn
+        except ImportError:
+            try:
+                from ui_iop_cct import ui_iop_cct_inline as _iop_fn
+            except ImportError:
+                _iop_fn = None
+        if _iop_fn:
+            _iop_result = _iop_fn(tono_od, tono_os, pachim_od, pachim_os)
+        else:
+            _iop_result = {}
 
         fondo = st.text_area("Fondo oculare (descrizione)", "")
         campo_visivo = st.text_area("Campo visivo (descrizione / esito)", "")
@@ -5718,10 +5728,19 @@ ESAMI STRUTTURALI / FUNZIONALI
         return
 
     # ── Storico IOP e tabella Dresdner ───────────────────────────────────
-    with st.expander("📈 Andamento IOP / Spessore corneale nel tempo", expanded=False):
-        ui_iop_storico(rows)
-    with st.expander("📋 Tabella di correzione Dresdner (CCT → IOPc)", expanded=False):
-        ui_dresdner_table()
+    try:
+        from modules.ui_iop_cct import ui_iop_storico as _storico_fn, ui_dresdner_table as _dresdner_fn
+    except ImportError:
+        try:
+            from ui_iop_cct import ui_iop_storico as _storico_fn, ui_dresdner_table as _dresdner_fn
+        except ImportError:
+            _storico_fn = None; _dresdner_fn = None
+    if _storico_fn:
+        with st.expander("📈 Andamento IOP / Spessore corneale nel tempo", expanded=False):
+            _storico_fn(rows)
+    if _dresdner_fn:
+        with st.expander("📋 Tabella di correzione Dresdner (CCT → IOPc)", expanded=False):
+            _dresdner_fn()
 
     labels = [
         f"{r['id']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
