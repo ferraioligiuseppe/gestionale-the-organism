@@ -29,6 +29,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+try:
+    from scipy.ndimage import gaussian_filter
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
 from matplotlib.patches import Circle
 import streamlit as st
 
@@ -154,26 +159,54 @@ def clearance_um(y: float, theta: float, zone: dict,
 # Colormap fluorescein
 # ─────────────────────────────────────────────────────────────────────────────
 
-FLUOR_COLORS = [
-    (-999,  -10, "#050d05"),   # compressione forte
-    (-10,    0,  "#0a1a0a"),   # contatto
-    (0,     20,  "#005000"),   # clearance minima
-    (20,    80,  "#009900"),   # clearance lieve
-    (80,   200,  "#44cc00"),   # clearance normale
-    (200,  400,  "#bbee00"),   # clearance media-alta
-    (400,  700,  "#ffee00"),   # clearance alta
-    (700, 9999,  "#ff7700"),   # eccessiva
-]
-
-def fluor_color(um: float) -> tuple:
-    """Ritorna colore RGBA (0-1) per clearance in µm."""
+def fluor_color(um: float, design: str = "mio",
+               noise: bool = True) -> tuple:
+    """
+    Colore RGBA realistico per simulazione fluorescein.
+    Basato su legge di Beer-Lambert per assorbimento/emissione lacrimale:
+      I = I0 * (1 - exp(-um/lambda))
+    Con gradiente tonalità:
+      contatto/compressione → nero
+      0-30 µm              → verde scuro (film minimo)
+      30-100 µm            → verde vivo (allineamento)
+      100-300 µm           → verde brillante/giallo-verde (riserva lacrimale)
+      300-600 µm           → giallo brillante
+      >600 µm              → bianco-giallo (eccessivo)
+    """
+    import random
     if math.isnan(um):
         return (0.0, 0.0, 0.0, 1.0)
-    for lo, hi, hex_col in FLUOR_COLORS:
-        if lo <= um < hi:
-            rgb = mcolors.to_rgb(hex_col)
-            return (*rgb, 1.0)
-    return mcolors.to_rgba("#ff4400")
+
+    if um < -5:
+        return (0.0, 0.0, 0.0, 1.0)
+    if um < 0:
+        t = max(0.0, (um + 5) / 5.0)
+        return (0.0, t * 0.12, 0.0, 1.0)
+
+    # Rumore film lacrimale
+    n = (random.random() - 0.5) * 0.03 if noise else 0.0
+
+    if um < 30:
+        t = um / 30.0
+        r, g, b = 0.0, 0.04 + t * 0.32, 0.0
+    elif um < 100:
+        t = (um - 30) / 70.0
+        r, g, b = t * 0.08, 0.36 + t * 0.48, t * 0.04
+    elif um < 300:
+        t = (um - 100) / 200.0
+        r, g, b = 0.08 + t * 0.52, 0.84 + t * 0.11, 0.04 - t * 0.04
+    elif um < 600:
+        t = (um - 300) / 300.0
+        r, g, b = 0.60 + t * 0.28, 0.95, 0.0
+    else:
+        r, g, b = 0.90, 0.96, 0.18
+
+    return (
+        min(1.0, max(0.0, r + n)),
+        min(1.0, max(0.0, g + n * 0.5)),
+        min(1.0, max(0.0, b)),
+        1.0
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -198,7 +231,7 @@ def render_frontale(r0, rb, zo, e, design, ast_D=0.0,
             theta = math.atan2(dy, dx)
             zone  = get_zone_at(y, zones)
             cl    = clearance_um(y, theta, zone, r0, e, design, ast_D)
-            img[iy, ix] = fluor_color(cl)
+            img[iy, ix] = fluor_color(cl, design)
 
     fig, ax = plt.subplots(figsize=(5, 5), facecolor='black')
     ax.set_facecolor('black')
@@ -245,6 +278,23 @@ def render_frontale(r0, rb, zo, e, design, ast_D=0.0,
                     fontsize=6, facecolor='#111',
                     labelcolor='white', framealpha=0.8)
 
+    # Sfocatura gaussiana (simula diffusione ottica fluorescein)
+    if HAS_SCIPY:
+        for c in range(3):
+            img[:, :, c] = gaussian_filter(img[:, :, c], sigma=1.2)
+
+    # Riflesso cornea (arco chiaro in alto-sx)
+    ax.contourf(
+        np.linspace(-td2, td2, res),
+        np.linspace(-td2, td2, res),
+        np.fromfunction(
+            lambda i, j: np.exp(
+                -((i/res - 0.25)**2 + (j/res - 0.32)**2) / 0.004
+            ), (res, res)
+        ),
+        levels=[0.85, 1.0], colors=['white'], alpha=0.10
+    )
+
     fig.tight_layout(pad=0.5)
     return fig
 
@@ -288,7 +338,7 @@ def render_sagittale(r0, rb, zo, e, design, ast_D=0.0,
         sc1, sc2 = sag_c[i], sag_c[i+1]
         sl1, sl2 = sag_l[i], sag_l[i+1]
         cl = clr_um[i]
-        color = fluor_color(cl)[:3]
+        color = fluor_color(float(cl), design, noise=False)[:3]
         ax1.fill_betweenx([sl1, sl2], [y1, y2], [y1, y2],
                           alpha=0)  # placeholder
         ax1.fill([y1, y2, y2, y1], [sc1, sc2, sl2, sl1],
@@ -320,7 +370,7 @@ def render_sagittale(r0, rb, zo, e, design, ast_D=0.0,
     ax1.invert_yaxis()
 
     # ── Clearance (µm) ────────────────────────────────────────────────────
-    colors_line = [fluor_color(float(c)) for c in clr_um]
+    colors_line = [fluor_color(float(c), design, noise=False) for c in clr_um]
     for i in range(n-1):
         ax2.plot([ys[i], ys[i+1]], [clr_um[i], clr_um[i+1]],
                  color=colors_line[i][:3], linewidth=1.5)
