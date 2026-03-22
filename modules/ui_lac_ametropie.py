@@ -514,7 +514,7 @@ def _ui_nuova_scheda(conn, cur, paz_id):
         st.markdown("### Parametri lente")
 
         lp1,lp2,lp3,lp4 = st.columns(4)
-        with lp1: lente_rb   = st.number_input("Raggio base (mm)", 7.0, 10.5, 8.60, 0.01, format="%.2f", key="lam_rb")
+        lente_rb = st.session_state.get("lam_rb", 8.60)  # già impostato fuori dal form
         with lp2: lente_diam = st.number_input("Diametro (mm)", 8.0, 22.0, 14.0, 0.1,                    key="lam_diam")
         with lp3: lente_potere_lon = st.number_input("Potere lontano (D)", -20.0, 20.0, 0.0, 0.25,       key="lam_pot_lon")
         with lp4: lente_potere_vic = st.number_input("Potere vicino (D)", -20.0, 20.0, 0.0, 0.25,        key="lam_pot_vic")

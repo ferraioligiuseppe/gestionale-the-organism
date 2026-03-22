@@ -471,10 +471,11 @@ def _ui_nuova_scheda(conn, cur, paz_id):
         with m2: rx_miopia_rid = st.number_input("Miopia da ridurre (D)", -25.0, 0.0, 0.0, 0.25, key="li_mior")
 
         st.markdown("### Parametri lente inversa")
-        lp1,lp2,lp3 = st.columns(3)
+        # r0 e Rb già impostati fuori dal form con on_change
+        lente_r0 = st.session_state.get("li_r0", 7.60)
+        lente_rb = st.session_state.get("li_rb", 8.73)
+        lp1, = st.columns(1)
         with lp1: lente_tipo_zo = st.selectbox("Tipo ZO", ["Sferica","Asferica"], key="li_tipo_zo")
-        with lp2: lente_r0 = st.number_input("Raggio apicale r0 (mm)", 6.0, 9.5, 7.60, 0.01, key="li_r0")
-        with lp3: lente_rb = st.number_input("Raggio base Rb (mm)", 7.0, 11.0, 8.73, 0.001, format="%.3f", key="li_rb")
 
         lp4,lp5,lp6,lp7 = st.columns(4)
         with lp4: lente_ecc_zo  = st.number_input("Eccentricita ZO", 0.0, 2.0, 0.50, 0.01, key="li_ecc_zo")
