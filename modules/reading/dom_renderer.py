@@ -1,5 +1,6 @@
 import html
 import re
+import textwrap
 from typing import List, Dict, Any
 
 
@@ -52,75 +53,54 @@ def build_reading_html(
 ) -> str:
     tokens = tokenize_text(text)
 
-    html_parts = [
-        f"""
-        <style>
-        .reading-dom-root {{
-            width: {container_width};
-            margin: 0 auto;
-            background: #ffffff;
-            border: 1px solid #d9e2d9;
-            border-radius: 12px;
-            padding: 28px;
-            box-sizing: border-box;
-        }}
+    style_block = textwrap.dedent(f"""
+    <style>
+    .reading-dom-root {{
+        width: {container_width};
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #d9e2d9;
+        border-radius: 12px;
+        padding: 28px;
+        box-sizing: border-box;
+    }}
 
-        .reading-dom-text {{
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: {font_size_px}px;
-            line-height: {line_height};
-            letter-spacing: {letter_spacing_px}px;
-            color: #111;
-            text-align: {text_align};
-            white-space: normal;
-            word-wrap: break-word;
-        }}
+    .reading-dom-text {{
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: {font_size_px}px;
+        line-height: {line_height};
+        letter-spacing: {letter_spacing_px}px;
+        color: #111;
+        text-align: {text_align};
+        white-space: normal;
+        word-wrap: break-word;
+    }}
 
-        .reading-word {{
-            display: inline-block;
-            position: relative;
-            margin-right: 0.22em;
-            margin-bottom: 0.05em;
-            border-radius: 4px;
-            padding: 0 1px;
-        }}
+    .reading-word {{
+        display: inline-block;
+        position: relative;
+        margin-right: 0.22em;
+        margin-bottom: 0.05em;
+        border-radius: 4px;
+        padding: 0 1px;
+    }}
 
-        .reading-word.word-seen {{
-            background: rgba(80, 140, 255, 0.22);
-        }}
+    .reading-linebreak {{
+        display: block;
+        height: 0;
+        width: 100%;
+    }}
+    </style>
+    """).strip()
 
-        .reading-word.word-high-dwell {{
-            background: rgba(255, 210, 70, 0.35);
-        }}
-
-        .reading-word.word-revisited {{
-            background: rgba(255, 90, 90, 0.30);
-        }}
-
-        .reading-word.word-skipped {{
-            background: rgba(180, 180, 180, 0.22);
-        }}
-
-        .reading-linebreak {{
-            display: block;
-            height: 0;
-            width: 100%;
-        }}
-        </style>
-        """
-    ]
-
-    html_parts.append(
-        f'<div class="reading-dom-root" id="reading-dom-root-{html.escape(stimulus_id)}">'
-    )
+    html_parts = [style_block]
+    html_parts.append(f'<div class="reading-dom-root" id="reading-dom-root-{html.escape(stimulus_id)}">')
     html_parts.append(
         f'<div class="reading-dom-text" id="reading-dom-text" data-stimulus-id="{html.escape(stimulus_id)}">'
     )
 
     for token in tokens:
-        ttype = token["type"]
-
-        if ttype == "linebreak":
+        if token["type"] == "linebreak":
             html_parts.append('<span class="reading-linebreak"></span>')
             continue
 
@@ -131,15 +111,13 @@ def build_reading_html(
         line_idx_declared = html.escape(str(token["line_index_declared"]))
 
         html_parts.append(
-            f'''
-            <span
-                class="reading-word"
-                data-token-id="{token_id}"
-                data-word-index="{word_index}"
-                data-line-index-declared="{line_idx_declared}"
-                data-token-type="{token_type}"
-            >{token_text}</span>
-            '''
+            (
+                f'<span class="reading-word" '
+                f'data-token-id="{token_id}" '
+                f'data-word-index="{word_index}" '
+                f'data-line-index-declared="{line_idx_declared}" '
+                f'data-token-type="{token_type}">{token_text}</span>'
+            )
         )
 
     html_parts.append("</div></div>")
