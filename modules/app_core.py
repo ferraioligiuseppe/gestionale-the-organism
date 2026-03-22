@@ -5331,25 +5331,45 @@ def ui_valutazioni_visive():
             ax_sogg_os = st.number_input("OS AX soggettiva (°)", 0, 180, 0, 1, key="ax_sogg_os")
 
         st.markdown("### Cheratometria")
+        # Helper conversione r↔D
+        def _r2d(r): return round(337.5/r, 2) if r and r > 0 else 0.0
+        def _d2r(d): return round(337.5/d, 3) if d and d > 0 else 0.0
+
         col_kod1, col_kod2, col_kod3, col_kod4 = st.columns(4)
         with col_kod1:
             k1_od_mm = st.number_input("OD K1 (mm)", 6.0, 9.5, 7.80, 0.01, key="k1_od_mm")
+            st.caption(f"= {_r2d(k1_od_mm):.2f} D")
         with col_kod2:
-            k1_od_D = st.number_input("OD K1 (D)", 35.0, 50.0, 43.00, 0.25, key="k1_od_D")
+            k1_od_D = st.number_input("OD K1 (D)", 35.0, 50.0, _r2d(st.session_state.get("k1_od_mm", 7.80)), 0.25, key="k1_od_D")
+            st.caption(f"= {_d2r(k1_od_D):.3f} mm")
         with col_kod3:
             k2_od_mm = st.number_input("OD K2 (mm)", 6.0, 9.5, 7.80, 0.01, key="k2_od_mm")
+            st.caption(f"= {_r2d(k2_od_mm):.2f} D")
         with col_kod4:
-            k2_od_D = st.number_input("OD K2 (D)", 35.0, 50.0, 43.00, 0.25, key="k2_od_D")
+            k2_od_D = st.number_input("OD K2 (D)", 35.0, 50.0, _r2d(st.session_state.get("k2_od_mm", 7.80)), 0.25, key="k2_od_D")
+            st.caption(f"= {_d2r(k2_od_D):.3f} mm")
+
+        ast_od = abs(k1_od_D - k2_od_D)
+        if ast_od > 0.1:
+            st.caption(f"Astigmatismo OD: {ast_od:.2f} D")
 
         col_kos1, col_kos2, col_kos3, col_kos4 = st.columns(4)
         with col_kos1:
             k1_os_mm = st.number_input("OS K1 (mm)", 6.0, 9.5, 7.80, 0.01, key="k1_os_mm")
+            st.caption(f"= {_r2d(k1_os_mm):.2f} D")
         with col_kos2:
-            k1_os_D = st.number_input("OS K1 (D)", 35.0, 50.0, 43.00, 0.25, key="k1_os_D")
+            k1_os_D = st.number_input("OS K1 (D)", 35.0, 50.0, _r2d(st.session_state.get("k1_os_mm", 7.80)), 0.25, key="k1_os_D")
+            st.caption(f"= {_d2r(k1_os_D):.3f} mm")
         with col_kos3:
             k2_os_mm = st.number_input("OS K2 (mm)", 6.0, 9.5, 7.80, 0.01, key="k2_os_mm")
+            st.caption(f"= {_r2d(k2_os_mm):.2f} D")
         with col_kos4:
-            k2_os_D = st.number_input("OS K2 (D)", 35.0, 50.0, 43.00, 0.25, key="k2_os_D")
+            k2_os_D = st.number_input("OS K2 (D)", 35.0, 50.0, _r2d(st.session_state.get("k2_os_mm", 7.80)), 0.25, key="k2_os_D")
+            st.caption(f"= {_d2r(k2_os_D):.3f} mm")
+
+        ast_os = abs(k1_os_D - k2_os_D)
+        if ast_os > 0.1:
+            st.caption(f"Astigmatismo OS: {ast_os:.2f} D")
 
         st.markdown("### Tonometria / Pressione oculare")
         col_t1, col_t2 = st.columns(2)

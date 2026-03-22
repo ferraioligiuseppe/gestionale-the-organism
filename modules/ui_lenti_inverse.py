@@ -7,6 +7,11 @@ Compatibile con SQLite e PostgreSQL (Neon).
 
 import json
 import streamlit as st
+try:
+    from modules.ui_raggio_potere import r_to_d, d_to_r
+except ImportError:
+    def r_to_d(r): return round(337.5/r, 2) if r and r>0 else 0.0
+    def d_to_r(d): return round(337.5/d, 3) if d and d>0 else 0.0
 from datetime import datetime, date
 
 
@@ -359,8 +364,12 @@ def _ui_nuova_scheda(conn, cur, paz_id):
 
         st.markdown("### Topografia corneale")
         c1,c2,c3,c4 = st.columns(4)
-        with c1: topo_k_flat_mm  = st.number_input("K flat (mm)",  6.0, 9.5,  7.80, 0.01, key="li_kflat_mm")
-        with c2: topo_k_flat_D   = st.number_input("K flat (D)",  35.0, 52.0, 43.25, 0.25, key="li_kflat_D")
+        with c1:
+            topo_k_flat_mm = st.number_input("K flat (mm)", 6.0, 9.5, 7.80, 0.01, key="li_kflat_mm")
+            st.caption(f"= {r_to_d(topo_k_flat_mm):.2f} D")
+        with c2:
+            topo_k_flat_D = st.number_input("K flat (D)", 35.0, 52.0, r_to_d(st.session_state.get("li_kflat_mm",7.80)), 0.25, key="li_kflat_D")
+            st.caption(f"= {d_to_r(topo_k_flat_D):.3f} mm")
         with c3: topo_k_steep_mm = st.number_input("K steep (mm)", 6.0, 9.5,  7.70, 0.01, key="li_ksteep_mm")
         with c4: topo_k_steep_D  = st.number_input("K steep (D)", 35.0, 52.0, 43.75, 0.25, key="li_ksteep_D")
 

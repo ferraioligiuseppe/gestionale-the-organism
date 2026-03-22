@@ -13,6 +13,11 @@ Implementa l'algoritmo del software "Inversa 6" di G. Toffoli:
 
 import math
 import json
+try:
+    from modules.ui_raggio_potere import r_to_d, d_to_r
+except ImportError:
+    def r_to_d(r): return round(337.5/r, 2) if r and r>0 else 0.0
+    def d_to_r(d): return round(337.5/d, 3) if d and d>0 else 0.0
 import io
 import streamlit as st
 import pandas as pd
@@ -421,12 +426,16 @@ def _ui_calcolo_manuale(conn, cur, paz_id):
     with col_sx:
         st.markdown("#### Dati corneali")
         occhio       = st.selectbox("Occhio", ["OD","OS"], key="calc_occhio")
-        r0           = st.number_input("Raggio apicale r₀ (mm)", 6.0, 9.5, 7.60, 0.01, format="%.3f", key="calc_r0")
-        e            = st.number_input("Eccentricità e", 0.0, 1.5, 0.50, 0.01, key="calc_e")
-        k_flat_mm    = st.number_input("K flat (mm)", 6.0, 9.5, 7.60, 0.01, format="%.2f", key="calc_kfl")
-        k_flat_D     = st.number_input("K flat (D)", 35.0, 52.0, 44.41, 0.25, key="calc_kfl_D")
-        k_steep_mm   = st.number_input("K steep (mm)", 6.0, 9.5, 7.50, 0.01, format="%.2f", key="calc_kst")
-        k_steep_D    = st.number_input("K steep (D)", 35.0, 52.0, 45.00, 0.25, key="calc_kst_D")
+        r0 = st.number_input("Raggio apicale r₀ (mm)", 6.0, 9.5, 7.60, 0.01, format="%.3f", key="calc_r0")
+        st.caption(f"r₀ = {r_to_d(r0):.2f} D (K flat equivalente)")
+        e = st.number_input("Eccentricità e", 0.0, 1.5, 0.50, 0.01, key="calc_e")
+        k_flat_mm = st.number_input("K flat (mm)", 6.0, 9.5, 7.60, 0.01, format="%.2f", key="calc_kfl")
+        k_flat_D  = st.number_input("K flat (D)", 35.0, 52.0, r_to_d(st.session_state.get("calc_kfl",7.60)), 0.25, key="calc_kfl_D")
+        st.caption(f"K flat: {k_flat_mm:.2f} mm = {r_to_d(k_flat_mm):.2f} D")
+        k_steep_mm = st.number_input("K steep (mm)", 6.0, 9.5, 7.50, 0.01, format="%.2f", key="calc_kst")
+        k_steep_D  = st.number_input("K steep (D)", 35.0, 52.0, r_to_d(st.session_state.get("calc_kst",7.50)), 0.25, key="calc_kst_D")
+        if abs(k_flat_D - k_steep_D) > 0.1:
+            st.caption(f"Astigmatismo: {abs(k_flat_D-k_steep_D):.2f} D")
 
         st.markdown("#### Dati refrattivi")
         miopia_D     = st.number_input("Miopia da ridurre (D)", -20.0, 0.0, -5.25, 0.25, key="calc_mio")

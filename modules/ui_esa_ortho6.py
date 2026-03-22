@@ -12,6 +12,11 @@ Per valori intermedi usa interpolazione bilineare.
 
 import math
 import json
+try:
+    from modules.ui_raggio_potere import r_to_d, d_to_r
+except ImportError:
+    def r_to_d(r): return round(337.5/r, 2) if r and r>0 else 0.0
+    def d_to_r(d): return round(337.5/d, 3) if d and d>0 else 0.0
 import numpy as np
 import io
 import streamlit as st
@@ -242,6 +247,7 @@ def _ui_calcolo(conn, cur, paz_id):
         K_input = st.number_input("K corneale (mm)", 7.20, 8.60, 7.60, 0.01,
                                    format="%.2f", key="esa_K",
                                    help="K flat dal topografo o dalla cheratometria")
+        st.caption(f"K = {r_to_d(K_input):.2f} D")
     with col2:
         miopia  = st.number_input("Miopia da correggere (D)", -5.0, -0.5, -3.0, 0.25,
                                    key="esa_mio",
@@ -280,7 +286,8 @@ def _mostra_risultato_esa(res, conn, cur, paz_id, materiale, dk):
 
     st.markdown("### Parametri lente")
     c1,c2,c3,c4 = st.columns(4)
-    c1.metric("BOZR r₀ (mm)", f"{res['r0']:.2f}")
+    c1.metric("BOZR r₀ (mm)", f"{res['r0']:.2f}", 
+              delta=f"= {r_to_d(res['r0']):.2f} D")
     c2.metric("BOZD Ø₀ (mm)", f"{res['BOZD']:.1f}")
     c3.metric("Diam. totale (mm)", f"{res['TD']:.1f}")
     c4.metric("Potere (D)", f"{res['PWR']:+.2f}")
