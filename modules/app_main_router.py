@@ -7,6 +7,9 @@ errori quando si modifica il file centrale.
 """
 
 from typing import Callable, Any
+
+import streamlit as st
+
 from .app_sections import (
     SECTION_PAZIENTI,
     SECTION_PNEV,
@@ -20,6 +23,8 @@ from .app_sections import (
     SECTION_PRIVACY,
     SECTION_DEBUG,
     SECTION_IMPORT,
+    SECTION_GAZE,
+    SECTION_READING_DOM,
     SECTION_UTENTI,
 )
 from .pazienti import render_pazienti_section
@@ -36,6 +41,7 @@ from .sections.ui_cliniche import (
     render_evolutiva_section,
     render_debug_section,
     render_import_section,
+    render_gaze_section,
     render_utenti_section,
 )
 
@@ -44,40 +50,72 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
     if sezione == SECTION_PAZIENTI:
         render_pazienti_section()
         return True
+
     if sezione == SECTION_PNEV:
         render_pnev_section()
         return True
+
     if sezione == SECTION_VISION:
         render_vision_section()
         return True
+
     if sezione == SECTION_SEDUTE:
         render_sedute_section()
         return True
+
     if sezione == SECTION_OSTEOPATIA:
         render_osteopatia_section()
         return True
+
     if sezione == SECTION_COUPON:
         render_coupon_section()
         return True
+
     if sezione == SECTION_DASHBOARD:
         render_dashboard_section()
         return True
+
     if sezione == SECTION_RELAZIONI:
         render_relazioni_section()
         return True
+
     if sezione == SECTION_EVOLUTIVA:
         render_evolutiva_section()
         return True
+
     if sezione == SECTION_PRIVACY:
         render_privacy_section()
         return True
+
     if sezione == SECTION_DEBUG:
         render_debug_section()
         return True
+
     if sezione == SECTION_IMPORT:
         render_import_section()
         return True
+
+    if sezione == SECTION_GAZE:
+        render_gaze_section()
+        return True
+
+    if sezione == SECTION_READING_DOM:
+        try:
+            from .reading.ui_reading_dom import ui_reading_dom
+        except Exception as e:
+            st.error("Modulo Lettura Avanzata DOM non disponibile.")
+            st.exception(e)
+            st.info(
+                "Verifica che nella repo esistano i file di modules/reading "
+                "e che la dipendenza streamlit-javascript sia installata."
+            )
+            return True
+
+        ui_reading_dom()
+        return True
+
     if sezione == SECTION_UTENTI:
         render_utenti_section(get_connection)
         return True
+
     return False
