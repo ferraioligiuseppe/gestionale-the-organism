@@ -9841,20 +9841,27 @@ def main():
     sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
 
     # routing moduli uditivi (estratti)
-    if dispatch_udito_section(
-        sezione=sezione,
-        app_mode=APP_MODE,
-        get_connection=get_connection,
-        paziente_selector_fn=_select_paziente_minimal,
-        ui_orl_eq=ui_orl_eq,
-        ui_generatore_stimolazione=ui_generatore_stimolazione,
-        ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
-        ui_audiogramma_test=ui_audiogramma_test,
-        ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
-        ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
-        ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
-        ui_db_cleanup=ui_db_cleanup,
-    ):
+    try:
+        _udito_handled = dispatch_udito_section(
+            sezione=sezione,
+            app_mode=APP_MODE,
+            get_connection=get_connection,
+            paziente_selector_fn=_select_paziente_minimal,
+            ui_orl_eq=ui_orl_eq,
+            ui_generatore_stimolazione=ui_generatore_stimolazione,
+            ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
+            ui_audiogramma_test=ui_audiogramma_test,
+            ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
+            ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
+            ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
+            ui_db_cleanup=ui_db_cleanup,
+        )
+    except Exception as _udito_err:
+        import traceback
+        st.error(f"Errore sezione uditiva: {type(_udito_err).__name__}: {_udito_err}")
+        st.code(traceback.format_exc())
+        return
+    if _udito_handled:
         return
 
     # routing lenti inverse
