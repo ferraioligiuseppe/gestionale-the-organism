@@ -1,24 +1,8 @@
 import json
 import streamlit as st
-import streamlit.components.v1 as components
 
 from modules.reading.dom_renderer import build_reading_html
 from modules.reading.dom_bbox_bridge import get_dom_bboxes_js
-
-
-def _build_bbox_component(rendered_html: str) -> str:
-    return f"""
-    <!doctype html>
-    <html>
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-    </head>
-    <body style="margin:0; padding:0; background:#f8fbf8;">
-      {rendered_html}
-    </body>
-    </html>
-    """
 
 
 def ui_reading_dom():
@@ -57,26 +41,29 @@ def ui_reading_dom():
         text_align=text_align,
     )
 
-    st.markdown("### Preview testo DOM")
-    components.html(_build_bbox_component(rendered_html), height=700, scrolling=True)
+    st.markdown("### Preview DOM reale")
+    st.markdown(rendered_html, unsafe_allow_html=True)
 
-    st.markdown("### Bounding Box Reali (DOM)")
-    if st.button("Acquisisci bounding box reali"):
+    st.markdown("### Bounding Box reali (DOM)")
+    st.caption("Questa versione legge i box direttamente dal DOM della pagina Streamlit, senza iframe.")
+
+    if st.button("Acquisisci bounding box reali", type="primary"):
         data = get_dom_bboxes_js()
 
-        if data:
-            st.success(f"{len(data['bbox_items'])} parole rilevate")
+        if data and isinstance(data, dict) and data.get("ok"):
+            st.success(f"{len(data.get('bbox_items', []))} token rilevati")
             st.session_state["reading_dom_bbox"] = data
             st.json(data)
 
             st.download_button(
-                "Scarica bbox JSON",
+                "Scarica JSON bbox",
                 data=json.dumps(data, ensure_ascii=False, indent=2),
                 file_name=f"{stimulus_id}_bbox.json",
                 mime="application/json",
             )
         else:
-            st.error("Errore acquisizione DOM")
+            err = data.get("error", "Errore acquisizione DOM") if isinstance(data, dict) else "Errore acquisizione DOM"
+            st.error(err)
 
-    if st.button("Mostra HTML generato"):
+    with st.expander("Mostra HTML generato"):
         st.code(rendered_html, language="html")

@@ -4,22 +4,21 @@ from streamlit_javascript import st_javascript
 
 
 def get_dom_bboxes_js():
-    """
-    Esegue JS nel browser e ritorna i bounding box in Python.
-    """
-    js_code = """
+    js_code = '''
     (() => {
         const root = document.getElementById("reading-dom-text");
-        if (!root) return null;
+        if (!root) {
+            return { ok: false, error: "reading-dom-text non trovato nel DOM" };
+        }
 
         const rootRect = root.getBoundingClientRect();
+        const stimulusId = root.dataset.stimulusId || null;
         const nodes = Array.from(root.querySelectorAll(".reading-word"));
 
         const items = nodes.map((el) => {
             const r = el.getBoundingClientRect();
-
             return {
-                stimulus_id: window.READING_STIMULUS_ID || null,
+                stimulus_id: stimulusId,
                 token_id: el.dataset.tokenId || null,
                 word_index: Number(el.dataset.wordIndex),
                 line_index_declared: Number(el.dataset.lineIndexDeclared),
@@ -46,13 +45,13 @@ def get_dom_bboxes_js():
         });
 
         return {
-            stimulus_id: window.READING_STIMULUS_ID || null,
+            ok: true,
+            stimulus_id: stimulusId,
             bbox_items: items,
             timestamp: Date.now()
         };
     })()
-    """
-
+    '''
     return st_javascript(js_code)
 
 
@@ -62,7 +61,7 @@ def ui_bbox_debug():
     if st.button("Calcola bounding box DOM"):
         data = get_dom_bboxes_js()
 
-        if data:
+        if data and data.get("ok"):
             st.success(f"Ricevuti {len(data.get('bbox_items', []))} token")
             st.json(data)
             st.download_button(
@@ -72,4 +71,4 @@ def ui_bbox_debug():
                 mime="application/json",
             )
         else:
-            st.warning("Nessun dato ricevuto. Assicurati che il DOM sia visibile.")
+            st.error(data.get("error", "Nessun dato ricevuto") if isinstance(data, dict) else "Nessun dato ricevuto")

@@ -1,5 +1,4 @@
 import html
-import json
 import re
 from typing import List, Dict, Any
 
@@ -8,15 +7,8 @@ WORD_RE = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 
 
 def tokenize_text(text: str) -> List[Dict[str, Any]]:
-    """
-    Divide il testo in token semplici mantenendo:
-    - parole
-    - punteggiatura
-    - ritorni a capo logici
-    """
     tokens: List[Dict[str, Any]] = []
     word_index = 0
-
     lines = text.splitlines()
 
     for line_idx, line in enumerate(lines):
@@ -58,12 +50,7 @@ def build_reading_html(
     container_width: str = "100%",
     text_align: str = "left",
 ) -> str:
-    """
-    Costruisce HTML con ogni parola/punteggiatura in uno span separato.
-    Il browser potrà poi misurare i bounding box reali.
-    """
     tokens = tokenize_text(text)
-    tokens_json = json.dumps(tokens, ensure_ascii=False)
 
     html_parts = [
         f"""
@@ -123,7 +110,9 @@ def build_reading_html(
         """
     ]
 
-    html_parts.append(f'<div class="reading-dom-root" id="reading-dom-root-{html.escape(stimulus_id)}">')
+    html_parts.append(
+        f'<div class="reading-dom-root" id="reading-dom-root-{html.escape(stimulus_id)}">'
+    )
     html_parts.append(
         f'<div class="reading-dom-text" id="reading-dom-text" data-stimulus-id="{html.escape(stimulus_id)}">'
     )
@@ -142,7 +131,7 @@ def build_reading_html(
         line_idx_declared = html.escape(str(token["line_index_declared"]))
 
         html_parts.append(
-            f"""
+            f'''
             <span
                 class="reading-word"
                 data-token-id="{token_id}"
@@ -150,17 +139,8 @@ def build_reading_html(
                 data-line-index-declared="{line_idx_declared}"
                 data-token-type="{token_type}"
             >{token_text}</span>
-            """
+            '''
         )
 
     html_parts.append("</div></div>")
-    html_parts.append(
-        f"""
-        <script>
-        window.READING_TOKENS = {tokens_json};
-        window.READING_STIMULUS_ID = {json.dumps(stimulus_id, ensure_ascii=False)};
-        </script>
-        """
-    )
-
     return "\n".join(html_parts)
