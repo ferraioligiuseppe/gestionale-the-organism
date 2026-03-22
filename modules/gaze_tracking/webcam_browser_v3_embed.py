@@ -6,7 +6,12 @@ import json
 def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
     """
     HTML embeddato per Streamlit components.html().
-    Niente f-string: usiamo placeholder + replace per non rompere JS/CSS con le graffe.
+    Versione corretta per migliorare l'aggancio della mesh al volto:
+    - video e canvas con object-fit: contain
+    - video e canvas entrambi specchiati
+    - reset della trasformazione canvas a ogni draw
+    - soglie tracking più stabili
+    - risoluzione webcam più leggera/stabile
     """
     patient_id_json = json.dumps(paziente_id)
     patient_label_json = json.dumps(paziente_label or "")
@@ -68,10 +73,21 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
       border-radius: 14px; overflow: hidden; border: 1px solid #1e293b;
     }
     video, canvas {
-      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #020617;
     }
-    video { transform: scaleX(-1); opacity: 0.22; }
-    canvas { z-index: 2; }
+    video {
+      transform: scaleX(-1);
+      opacity: 0.22;
+    }
+    canvas {
+      z-index: 2;
+      transform: scaleX(-1);
+    }
     .controls {
       display: flex; flex-wrap: wrap; gap: 8px; padding: 12px;
       border-top: 1px solid var(--line); background: rgba(255,255,255,0.025);
@@ -329,6 +345,7 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
 
     function drawOverlay(landmarks, width, height) {
       canvasCtx.save();
+      canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
       canvasCtx.clearRect(0, 0, width, height);
 
       drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, { color: "rgba(34,197,94,0.25)", lineWidth: 0.5 });
@@ -362,10 +379,12 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
       setText("left_eye_open_ratio", m.left_eye_open_ratio, 3, "");
       setText("right_eye_open_ratio", m.right_eye_open_ratio, 3, "");
       setText("palpebral_asymmetry", m.palpebral_asymmetry, 3, "");
+
       setText("oral_instability_index", p.oral_instability_index, 3, "");
       setText("oculo_postural_index", p.oculo_postural_index, 3, "");
       setText("facial_balance_index", p.facial_balance_index, 3, "");
       setText("gaze_stability_index", p.gaze_stability_index, 3, "");
+
       faceDetectedEl.textContent = payload.meta && payload.meta.face_detected ? "Sì" : "No";
       jsonOutput.textContent = JSON.stringify(payload, null, 2);
     }
@@ -383,6 +402,7 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
       if (gazeHistory.length > 90) gazeHistory.shift();
 
       const gazeStability = computeGazeStability(gazeHistory);
+
       const oralInstability = clamp01(mouth * 2.2);
       const oculoPostural = clamp01((Math.abs(headTilt) / 25) * 0.55 + (asymmetry * 2.5) * 0.45);
       const facialBalance = clamp01(1 - asymmetry * 4);
@@ -456,8 +476,11 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
       const blob = new Blob([text], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click(); a.remove();
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       URL.revokeObjectURL(url);
     }
 
@@ -485,7 +508,11 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
 
       try {
         streamRef = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: {
+            facingMode: "user",
+            width: { ideal: 960 },
+            height: { ideal: 540 }
+          },
           audio: false
         });
 
@@ -499,16 +526,19 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
         faceMesh.setOptions({
           maxNumFaces: 1,
           refineLandmarks: true,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
+          minDetectionConfidence: 0.6,
+          minTrackingConfidence: 0.6
         });
 
         faceMesh.onResults((results) => {
           const width = results.image.width;
           const height = results.image.height;
+
           if (canvasEl.width !== width) canvasEl.width = width;
           if (canvasEl.height !== height) canvasEl.height = height;
+
           canvasCtx.save();
+          canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
           canvasCtx.clearRect(0, 0, width, height);
           canvasCtx.restore();
 
@@ -526,7 +556,10 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
               session_started_at: new Date(sessionStartTs).toISOString(),
               metrics: {},
               pnev_indexes: {},
-              meta: { frame_count: frameCount, face_detected: false }
+              meta: {
+                frame_count: frameCount,
+                face_detected: false
+              }
             };
             updateUI(latestPayload);
             setStatus("Volto non rilevato", false);
@@ -535,8 +568,8 @@ def get_webcam_browser_v3_html(paziente_id=None, paziente_label="") -> str:
 
         mpCamera = new Camera(videoEl, {
           onFrame: async () => { await faceMesh.send({ image: videoEl }); },
-          width: 1280,
-          height: 720
+          width: 960,
+          height: 540
         });
 
         mpCamera.start();
