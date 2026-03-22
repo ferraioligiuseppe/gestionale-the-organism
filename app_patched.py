@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
+from modules.ui_lenti_inverse import ui_lenti_inverse
 
 import pnev_module as pnev
 
@@ -9492,6 +9493,7 @@ def main():
         "Pazienti",
         "Valutazione PNEV",
         "Valutazioni visive / oculistiche",
+        "👁️ Lenti Inverse (Ortok)",
         "Sedute / Terapie",
         "Osteopatia",
         "Coupon OF / SDS",
@@ -9522,6 +9524,8 @@ def main():
         ui_anamnesi()
     elif sezione == "Valutazioni visive / oculistiche":
         ui_valutazioni_visive()
+    elif sezione == "👁️ Lenti Inverse (Ortok)":
+        ui_lenti_inverse()
     elif sezione == "Sedute / Terapie":
         ui_sedute()
     elif sezione == "Osteopatia":
