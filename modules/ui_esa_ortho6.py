@@ -12,6 +12,7 @@ Per valori intermedi usa interpolazione bilineare.
 
 import math
 import json
+import numpy as np
 import io
 import streamlit as st
 import pandas as pd
@@ -352,7 +353,6 @@ def _mostra_risultato_esa(res, conn, cur, paz_id, materiale, dk):
         z_acc += r - math.sqrt(max(r**2 - dy_tot**2, 0.0))
 
     # interpolazione ys_l su ys_c
-    import numpy as np
     ys_arr = np.array(ys_c)
     zs_c_arr = np.array(zs_c)
     zs_l_interp = np.interp(ys_arr, ys_l, zs_l)
