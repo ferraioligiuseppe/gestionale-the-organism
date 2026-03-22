@@ -19,6 +19,8 @@ from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
 from modules.ui_lenti_inverse import ui_lenti_inverse
 from modules.ui_lac_ametropie import ui_lac_ametropie
+from modules.ui_calcolatore_lac import ui_calcolatore_lac
+from modules.ui_esa_ortho6 import ui_esa_ortho6
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -33,6 +35,8 @@ from modules.app_sections import (
 
 SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
 SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
+SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
+SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
 
 _build_sections_original = build_sections
 
@@ -51,6 +55,18 @@ def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
         except Exception:
             idx2 = 4
         sections.insert(idx2, SECTION_LAC_AMETROPIE)
+    if SECTION_CALCOLATORE not in sections:
+        try:
+            idx3 = sections.index(SECTION_LAC_AMETROPIE) + 1
+        except Exception:
+            idx3 = 5
+        sections.insert(idx3, SECTION_CALCOLATORE)
+    if SECTION_ESA not in sections:
+        try:
+            idx4 = sections.index(SECTION_CALCOLATORE) + 1
+        except Exception:
+            idx4 = 6
+        sections.insert(idx4, SECTION_ESA)
     return sections
 
 import pnev_module as pnev
@@ -9779,6 +9795,16 @@ def main():
     # routing LAC ametropie
     if sezione == SECTION_LAC_AMETROPIE:
         ui_lac_ametropie()
+        return
+
+    # routing Calcolatore LAC
+    if sezione == SECTION_CALCOLATORE:
+        ui_calcolatore_lac()
+        return
+
+    # routing ESA Ortho-6
+    if sezione == SECTION_ESA:
+        ui_esa_ortho6()
         return
 
     # routing principale (estratto)
