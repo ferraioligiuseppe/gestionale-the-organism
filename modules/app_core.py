@@ -1,4 +1,17 @@
 # -*- coding: utf-8 -*-
+import os
+import io
+import csv
+import math
+import hmac
+import json
+import secrets
+import hashlib
+import textwrap
+import urllib.parse
+from functools import lru_cache
+from datetime import timedelta, timezone
+
 import streamlit as st
 from modules.app_menu import build_sections
 from modules.app_udito_router import dispatch_udito_section
@@ -26,11 +39,7 @@ except Exception:
     pnev_ai = None
     PNEV_AI_AVAILABLE = False
 
-# --- Token/public links helpers ---
-import secrets
-import hmac
-import hashlib
-from datetime import timedelta, timezone
+
 
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
@@ -550,9 +559,9 @@ def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: 
     stats = {"scanned": 0, "updated": 0, "skipped_has_pnev": 0, "skipped_no_content": 0}
 
     if paziente_id is None:
-        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi ORDER BY id DESC LIMIT ?", (int(limit),))
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi ORDER BY id DESC LIMIT %s", (int(limit),))
     else:
-        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY id DESC LIMIT ?", (int(paziente_id), int(limit)))
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY id DESC LIMIT %s", (int(paziente_id), int(limit)))
 
     rows = cur.fetchall() or []
     for r in rows:
@@ -816,13 +825,7 @@ from pdf_templates import build_pdf
 
 # A4 2×A5
 
-import os
-import io
-import urllib.parse
-import csv
-from functools import lru_cache
-import math  # <-- aggiungi questa riga se non c'è
-import textwrap  # per andare a capo nel referto
+
 
 # PDF (referti e prescrizioni A4/A5)
 
@@ -4340,7 +4343,7 @@ def _count_refs(cur, paziente_id: int) -> dict:
     counts = {}
     for tbl, col in _patient_child_tables():
         try:
-            cur.execute(f"SELECT COUNT(*) AS N FROM {tbl} WHERE {col} = ?", (paziente_id,))
+            cur.execute(f"SELECT COUNT(*) AS N FROM {tbl} WHERE {col} = %s", (paziente_id,))
             r = cur.fetchone()
             try:
                 n = int(r["N"]) if isinstance(r, dict) else int(r[0])
@@ -4361,7 +4364,7 @@ def db_merge_patients(cur, master_id: int, dup_ids: list):
             continue
         for tbl, col in _patient_child_tables():
             try:
-                cur.execute(f"UPDATE {tbl} SET {col} = ? WHERE {col} = ?", (master_id, dup_id))
+                cur.execute(f"UPDATE {tbl} SET {col} = %s WHERE {col} = %s", (master_id, dup_id))
                 moved = getattr(cur, "rowcount", None)
                 report["moved"].setdefault(tbl, 0)
                 if moved is not None and moved >= 0:
@@ -4369,7 +4372,7 @@ def db_merge_patients(cur, master_id: int, dup_ids: list):
             except Exception as e:
                 report["errors"].append(f"{tbl}: {e}")
         try:
-            cur.execute("DELETE FROM Pazienti WHERE id = ?", (dup_id,))
+            cur.execute("DELETE FROM Pazienti WHERE id = %s", (dup_id,))
             report["deleted"].append(dup_id)
         except Exception as e:
             report["errors"].append(f"DELETE Pazienti({dup_id}): {e}")
@@ -4787,23 +4790,23 @@ def ui_pazienti():
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         if st.button("Archivia paziente", key="archivia"):
-            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ARCHIVIATO' WHERE id = ?", (sel_id,))
+            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ARCHIVIATO' WHERE id = %s", (sel_id,))
             conn.commit()
             st.success("Paziente archiviato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_b:
         if st.button("Riattiva paziente", key="riattiva"):
-            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ATTIVO' WHERE id = ?", (sel_id,))
+            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ATTIVO' WHERE id = %s", (sel_id,))
             conn.commit()
             st.success("Paziente riattivato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_c:
         if st.button("Elimina definitivamente", key="elimina"):
-            cur.execute("DELETE anamnesi WHERE paziente_id = ?", (sel_id,))
-            cur.execute("DELETE FROM Valutazioni_Visive WHERE paziente_id = ?", (sel_id,))
-            cur.execute("DELETE FROM Sedute WHERE paziente_id = ?", (sel_id,))
-            cur.execute("DELETE FROM Coupons WHERE paziente_id = ?", (sel_id,))
-            cur.execute("DELETE FROM Pazienti WHERE id = ?", (sel_id,))
+            cur.execute("DELETE FROM anamnesi WHERE paziente_id = %s", (sel_id,))
+            cur.execute("DELETE FROM Valutazioni_Visive WHERE paziente_id = %s", (sel_id,))
+            cur.execute("DELETE FROM Sedute WHERE paziente_id = %s", (sel_id,))
+            cur.execute("DELETE FROM Coupons WHERE paziente_id = %s", (sel_id,))
+            cur.execute("DELETE FROM Pazienti WHERE id = %s", (sel_id,))
             conn.commit()
             st.success("Paziente e dati associati eliminati.")
             conn.close()
@@ -5182,7 +5185,7 @@ def ui_anamnesi():
         st.rerun()
 
     if 'cancella' in locals() and cancella:
-        cur.execute("DELETE anamnesi WHERE id = ?", (an_id,))
+        cur.execute("DELETE FROM anamnesi WHERE id = %s", (an_id,))
         conn.commit()
         st.success("Valutazione PNEV eliminata.")
         st.rerun()
@@ -5212,7 +5215,7 @@ def ui_valutazioni_visive():
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
-    cur.execute("SELECT * FROM Pazienti WHERE id = ?", (paz_id,))
+    cur.execute("SELECT * FROM Pazienti WHERE id = %s", (paz_id,))
     paziente = cur.fetchone()
 
 
@@ -5863,7 +5866,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         st.success("Valutazione aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Valutazioni_Visive WHERE id = ?", (val_id,))
+        cur.execute("DELETE FROM Valutazioni_Visive WHERE id = %s", (val_id,))
         conn.commit()
         st.success("Valutazione eliminata.")
     st.markdown("---")
@@ -6130,7 +6133,7 @@ def ui_sedute():
         st.success("Seduta aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Sedute WHERE id = ?", (sed_id,))
+        cur.execute("DELETE FROM Sedute WHERE id = %s", (sed_id,))
         conn.commit()
         st.success("Seduta eliminata.")
 
@@ -6259,7 +6262,7 @@ def ui_coupons():
                     st.rerun()
         with col4:
             if st.button("Elimina", key=f"c_del_{c['id']}"):
-                cur.execute("DELETE FROM Coupons WHERE id = ?", (c["id"],))
+                cur.execute("DELETE FROM Coupons WHERE id = %s", (c["id"],))
                 conn.commit()
                 st.rerun()
 
@@ -6919,13 +6922,8 @@ def ui_import_pazienti():
 # ================================
 # PRIVACY PDF (Compilabili) + Cloud privato (Presigned 24h)
 # ================================
-import io
-import os
-import hashlib
 import datetime as _dt
 import urllib.parse as _urlparse
-import json
-import hmac
 
 try:
     import boto3
@@ -7896,7 +7894,7 @@ def _seed_default_devices_if_empty(conn):
         try:
             cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
         except Exception:
-            cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (?,?,?,?)",
+            cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (%s,%s,%s,%s)",
                         (now, label, vol, notes))
     conn.commit()
     try: cur.close()
@@ -7941,7 +7939,7 @@ def ui_calibrazione_cuffie_test():
                 try:
                     cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
                 except Exception:
-                    cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (?,?,?,?)",
+                    cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (%s,%s,%s,%s)",
                                 (datetime.now().isoformat(timespec="seconds"), label, vol, notes))
                 conn.commit()
                 try: cur.close()
@@ -7976,7 +7974,7 @@ def ui_calibrazione_cuffie_test():
                     cur.execute("INSERT INTO audio_headphones (brand, model, hp_type, notes) VALUES (%s,%s,%s,%s)",
                                 (brand, model, hp_type, notes))
                 except Exception:
-                    cur.execute("INSERT INTO audio_headphones (created_at, brand, model, hp_type, notes) VALUES (?,?,?,?,?)",
+                    cur.execute("INSERT INTO audio_headphones (created_at, brand, model, hp_type, notes) VALUES (%s,%s,%s,%s,%s)",
                                 (datetime.now().isoformat(timespec="seconds"), brand, model, hp_type, notes))
                 conn.commit()
                 try: cur.close()
@@ -8104,7 +8102,7 @@ def ui_calibrazione_cuffie_test():
                     cur.execute("UPDATE audio_calibration_profiles2 SET is_active=FALSE WHERE device_id=%s AND headphones_id=%s",
                                 (int(dev[0]), int(hp[0])))
                 except Exception:
-                    cur.execute("UPDATE audio_calibration_profiles2 SET is_active=0 WHERE device_id=? AND headphones_id=?",
+                    cur.execute("UPDATE audio_calibration_profiles2 SET is_active=0 WHERE device_id=%s AND headphones_id=%s",
                                 (int(dev[0]), int(hp[0])))
 
                 payload = json.dumps(offsets)

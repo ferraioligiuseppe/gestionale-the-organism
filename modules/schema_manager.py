@@ -76,7 +76,7 @@ def ensure_auth_schema(conn, backend: Backend = "postgres") -> None:
             """)
             # Seed roles
             for r in ("admin", "vision", "osteo", "segreteria", "clinico"):
-                cur.execute("INSERT OR IGNORE INTO auth_roles(name) VALUES (?)", (r,))
+                cur.execute("INSERT OR IGNORE INTO auth_roles(name) VALUES (?)", (r,))  # SQLite syntax: OK
         else:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS auth_users (
