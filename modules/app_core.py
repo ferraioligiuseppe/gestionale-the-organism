@@ -17,6 +17,11 @@ from modules.app_menu import build_sections
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
+from modules.ui_lenti_inverse import ui_lenti_inverse
+from modules.ui_lac_ametropie import ui_lac_ametropie
+from modules.ui_calcolatore_lac import ui_calcolatore_lac
+from modules.ui_esa_ortho6 import ui_esa_ortho6
+from modules.ui_esami_strumentali import ui_esami_strumentali
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -28,6 +33,50 @@ from modules.app_sections import (
     SECTION_OSTEOPATIA,
     SECTION_RELAZIONI,
 )
+
+SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
+SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
+SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
+SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
+SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
+
+_build_sections_original = build_sections
+
+def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
+    sections = _build_sections_original(is_admin, app_mode)
+    if SECTION_LENTI_INVERSE not in sections:
+        try:
+            from modules.app_sections import SECTION_VISION
+            idx = sections.index(SECTION_VISION) + 1
+        except Exception:
+            idx = 3
+        sections.insert(idx, SECTION_LENTI_INVERSE)
+    if SECTION_LAC_AMETROPIE not in sections:
+        try:
+            idx2 = sections.index(SECTION_LENTI_INVERSE) + 1
+        except Exception:
+            idx2 = 4
+        sections.insert(idx2, SECTION_LAC_AMETROPIE)
+    if SECTION_CALCOLATORE not in sections:
+        try:
+            idx3 = sections.index(SECTION_LAC_AMETROPIE) + 1
+        except Exception:
+            idx3 = 5
+        sections.insert(idx3, SECTION_CALCOLATORE)
+    if SECTION_ESA not in sections:
+        try:
+            idx4 = sections.index(SECTION_CALCOLATORE) + 1
+        except Exception:
+            idx4 = 6
+        sections.insert(idx4, SECTION_ESA)
+    if SECTION_ESAMI_STRUM not in sections:
+        try:
+            from modules.app_sections import SECTION_VISION
+            idx5 = sections.index(SECTION_VISION) + 1
+        except Exception:
+            idx5 = 4
+        sections.insert(idx5, SECTION_ESAMI_STRUM)
+    return sections
 
 import pnev_module as pnev
 
@@ -5323,7 +5372,7 @@ def ui_valutazioni_visive():
         with col_p2:
             pachim_os = st.number_input("Pachimetria OS (µm)", 400.0, 700.0, 540.0, 1.0, key="pachim_os")
 
-        # ── IOP CORRETTA PER CCT ──────────────────────────────────────────
+        # ── IOP CORRETTA PER CCT ─────────────────────────────────────
         try:
             from modules.ui_iop_cct import ui_iop_cct_inline as _iop_fn
         except ImportError:
@@ -5333,8 +5382,6 @@ def ui_valutazioni_visive():
                 _iop_fn = None
         if _iop_fn:
             _iop_result = _iop_fn(tono_od, tono_os, pachim_od, pachim_os)
-        else:
-            _iop_result = {}
 
         fondo = st.text_area("Fondo oculare (descrizione)", "")
         campo_visivo = st.text_area("Campo visivo (descrizione / esito)", "")
@@ -5727,7 +5774,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         conn.close()
         return
 
-    # ── Storico IOP e tabella Dresdner ───────────────────────────────────
+    # ── Storico IOP e tabella Dresdner ───────────────────────────────
     try:
         from modules.ui_iop_cct import ui_iop_storico as _storico_fn, ui_dresdner_table as _dresdner_fn
     except ImportError:
@@ -9773,6 +9820,31 @@ def main():
         ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
         ui_db_cleanup=ui_db_cleanup,
     ):
+        return
+
+    # routing lenti inverse
+    if sezione == SECTION_LENTI_INVERSE:
+        ui_lenti_inverse()
+        return
+
+    # routing LAC ametropie
+    if sezione == SECTION_LAC_AMETROPIE:
+        ui_lac_ametropie()
+        return
+
+    # routing Calcolatore LAC
+    if sezione == SECTION_CALCOLATORE:
+        ui_calcolatore_lac()
+        return
+
+    # routing ESA Ortho-6
+    if sezione == SECTION_ESA:
+        ui_esa_ortho6()
+        return
+
+    # routing Esami Strumentali
+    if sezione == SECTION_ESAMI_STRUM:
+        ui_esami_strumentali()
         return
 
     # routing principale (estratto)
