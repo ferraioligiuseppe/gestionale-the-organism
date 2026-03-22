@@ -263,8 +263,6 @@ def render_frontale(r0, rb, zo, e, design, ast_D=0.0,
         spine.set_edgecolor('white')
 
     # Colorbar legenda
-    cmap_data = [(um, col) for um, _, col in
-                 [(v[0], v[1], v[2]) for v in FLUOR_COLORS]]
     from matplotlib.patches import Patch
     handles = [
         Patch(facecolor=col, label=f"{lo}–{hi} µm")
