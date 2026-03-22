@@ -104,6 +104,14 @@ CREATE TABLE IF NOT EXISTS esami_strumentali (
     tipo_esame          TEXT,
     operatore           TEXT,
     strumento           TEXT,
+    cv_strategia        TEXT,
+    cv_programma        TEXT,
+    cv_correzione       TEXT,
+    cv_consiglio        TEXT,
+    cv_ght_od           TEXT,
+    cv_ght_os           TEXT,
+    cv_sf_od            TEXT,
+    cv_sf_os            TEXT,
     cv_md_od            DOUBLE PRECISION,
     cv_md_os            DOUBLE PRECISION,
     cv_psd_od           DOUBLE PRECISION,
@@ -154,6 +162,8 @@ CREATE TABLE IF NOT EXISTS esami_strumentali (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     paziente_id INTEGER NOT NULL,
     data_esame TEXT, tipo_esame TEXT, operatore TEXT, strumento TEXT,
+    cv_strategia TEXT, cv_programma TEXT, cv_correzione TEXT, cv_consiglio TEXT,
+    cv_ght_od TEXT, cv_ght_os TEXT, cv_sf_od TEXT, cv_sf_os TEXT,
     cv_md_od REAL, cv_md_os REAL, cv_psd_od REAL, cv_psd_os REAL,
     cv_vfi_od REAL, cv_vfi_os REAL, cv_pattern_od TEXT, cv_pattern_os TEXT,
     cv_affidabilita_od TEXT, cv_affidabilita_os TEXT,
@@ -182,6 +192,32 @@ def _init_db(conn):
     else:
         cur.execute(_SQL_SL)
     conn.commit()
+    # Migrazione sicura colonne nuove
+    _migrate_cv_cols(conn)
+
+
+# ---------------------------------------------------------------------------
+# Migrazione colonne CV aggiuntive
+# ---------------------------------------------------------------------------
+
+def _migrate_cv_cols(conn):
+    cur = conn.cursor()
+    pg = _is_postgres(conn)
+    new_cols = [
+        ("cv_strategia","TEXT"),("cv_programma","TEXT"),
+        ("cv_correzione","TEXT"),("cv_consiglio","TEXT"),
+        ("cv_ght_od","TEXT"),("cv_ght_os","TEXT"),
+        ("cv_sf_od","TEXT"),("cv_sf_os","TEXT"),
+    ]
+    for col, typ in new_cols:
+        try:
+            if pg:
+                cur.execute(f"ALTER TABLE esami_strumentali ADD COLUMN IF NOT EXISTS {col} {typ}")
+            else:
+                cur.execute(f"ALTER TABLE esami_strumentali ADD COLUMN {col} {typ}")
+            conn.commit()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -277,30 +313,55 @@ def _analisi_ai_immagine(
             "Non inventare dati non presenti nell'immagine o nei valori forniti."
         )
 
-        canovaccio = f"""Redigi un referto strutturato per il seguente esame: {tipo_esame}
+        # Seleziona canovaccio in base al tipo esame
+        is_cv = "Campo Visivo" in tipo_esame or "Perimetri" in tipo_esame
+
+        if is_cv:
+            canovaccio = f"""Redigi un referto di campo visivo seguendo esattamente questo canovaccio clinico standard (CADMO / Humphrey).
+
+Paziente: {paziente_label or 'N/D'}
+Medico esaminatore: {medico or 'N/D'}
+Data: {date.today().strftime('%d/%m/%Y')}
+Strumento: {dati_numerici.get('strumento', 'Perimetro Computerizzato Humphrey')}
+Strategia: soglia, programma 24-2
+{num_txt}
+
+**ESAME DEL CAMPO VISIVO**
+
+L'esame eseguito con strategia di soglia e programma 24-2 ha evidenziato in:
+
+**ODx –** [Descrivi: pattern di deviazione totale, modello di deviazione, macchia cieca, indici perimetrici (MD/PSD/VFI), sensibilità foveale, indici di attendibilità, collaborazione, GHT]
+
+**OSn –** [Descrivi gli stessi elementi per l'occhio sinistro]
+
+**CONCLUSIONI:** [Sintesi clinica complessiva OO, correzione utilizzata se rilevante]
+
+**Si consiglia:** {dati_numerici.get("cv_consiglio", "Ripetere esame tra mesi X")}
+
+Se dai dati numerici emergono pattern compatibili con patologia neurodegenerativa (MD < -6 dB, deficit arcuati, allargamento macchia cieca bilaterale), aggiungilo nelle conclusioni."""
+        else:
+            canovaccio = f"""Redigi un referto OCT strutturato seguendo il canovaccio clinico standard (CNV/OCT).
 
 Paziente: {paziente_label or 'N/D'}
 Medico esaminatore: {medico or 'N/D'}
 Data: {date.today().strftime('%d/%m/%Y')}
 {num_txt}
 
-Il referto deve seguire questa struttura:
-
 **{tipo_esame.upper()}**
 
 **ODx (Occhio Destro)**
-[Descrizione dettagliata dei reperti morfologici e funzionali rilevati]
+[Descrivi: alterazioni del profilo retinico, interfaccia vitreo-retinica, aspetto del neuropitelio (normotrofico/ipotrofico), presenza di lacune cistiche o iporeflettenti, alterazioni del complesso EPR/coriocapillare, eventuale fibrosi o CNV]
 
 **OSn (Occhio Sinistro)**
-[Descrizione dettagliata dei reperti morfologici e funzionali rilevati]
+[Stessa struttura descrittiva per l'occhio sinistro]
 
 **CONCLUSIONI**
 
-**ODx** [Diagnosi/interpretazione clinica concisa]
+**ODx** [Quadro tomografico sintetico: diagnosi/interpretazione, fase (attiva/cicatriziale/stabile)]
 
-**OSn** [Diagnosi/interpretazione clinica concisa]
+**OSn** [Quadro tomografico sintetico]
 
-Se rilevante, aggiungi una nota su eventuali correlazioni con patologie neurodegenerative (Alzheimer, Parkinson, demenza vascolare) basandoti sui dati RNFL e maculari."""
+Se i dati RNFL o maculari suggeriscono perdita di fibre nervose compatibile con patologia neurodegenerativa (Alzheimer, Parkinson), aggiungilo in nota."""
 
         # Costruisce i messaggi con le immagini
         content = []
@@ -448,24 +509,54 @@ def _ui_nuovo_esame(conn, cur, paz_id, paz_label):
     # ── CAMPO VISIVO ────────────────────────────────────────────────────
     if mostra_cv:
         st.markdown("### 👁️ Campo Visivo")
+
+        cv_head1, cv_head2, cv_head3 = st.columns(3)
+        with cv_head1:
+            dati["cv_strategia"] = st.selectbox("Strategia",
+                ["Soglia", "SITA Standard", "SITA Fast", "Full Threshold", "Screening"],
+                key="cv_strat")
+        with cv_head2:
+            dati["cv_programma"] = st.selectbox("Programma",
+                ["24-2", "30-2", "10-2", "60-4", "Macula", "Altro"],
+                key="cv_prog")
+        with cv_head3:
+            dati["cv_correzione"] = st.text_input("Correzione utilizzata", "",
+                key="cv_corr", help="es. correzione a tempiale, lenti da vicino +2.50")
+
         cv1, cv2 = st.columns(2)
         with cv1:
-            st.markdown("**OD – Occhio Destro**")
+            st.markdown("**ODx – Occhio Destro**")
             dati["cv_md_od"]  = st.number_input("MD OD (dB)", -35.0, 5.0, 0.0, 0.1, key="cv_md_od")
             dati["cv_psd_od"] = st.number_input("PSD OD (dB)", 0.0, 20.0, 0.0, 0.1, key="cv_psd_od")
             dati["cv_vfi_od"] = st.number_input("VFI OD (%)", 0.0, 100.0, 100.0, 1.0, key="cv_vfi_od")
+            dati["cv_ght_od"] = st.selectbox("GHT OD", [
+                "Nella norma", "Sensibilità ridotta", "Fuori dai limiti normali",
+                "Sospetto", "Non determinabile"], key="cv_ght_od",
+                help="Glaucoma Hemifield Test")
+            dati["cv_sf_od"]  = st.selectbox("Sensibilità foveale OD",
+                ["Normale", "Ridotta", "Molto ridotta", "Non misurabile"], key="cv_sf_od")
             dati["cv_pattern_od"] = st.text_input("Pattern difetto OD", "", key="cv_pat_od",
-                help="es. difetto arcuato, scotoma paracentrale, emianopsia...")
+                help="es. difetto arcuato, scotoma paracentrale, emianopsia, macchia cieca ingrandita...")
             dati["cv_affidabilita_od"] = st.selectbox("Affidabilità OD",
                 ["Affidabile", "Borderline", "Non affidabile"], key="cv_aff_od")
         with cv2:
-            st.markdown("**OS – Occhio Sinistro**")
+            st.markdown("**OSn – Occhio Sinistro**")
             dati["cv_md_os"]  = st.number_input("MD OS (dB)", -35.0, 5.0, 0.0, 0.1, key="cv_md_os")
             dati["cv_psd_os"] = st.number_input("PSD OS (dB)", 0.0, 20.0, 0.0, 0.1, key="cv_psd_os")
             dati["cv_vfi_os"] = st.number_input("VFI OS (%)", 0.0, 100.0, 100.0, 1.0, key="cv_vfi_os")
+            dati["cv_ght_os"] = st.selectbox("GHT OS", [
+                "Nella norma", "Sensibilità ridotta", "Fuori dai limiti normali",
+                "Sospetto", "Non determinabile"], key="cv_ght_os")
+            dati["cv_sf_os"]  = st.selectbox("Sensibilità foveale OS",
+                ["Normale", "Ridotta", "Molto ridotta", "Non misurabile"], key="cv_sf_os")
             dati["cv_pattern_os"] = st.text_input("Pattern difetto OS", "", key="cv_pat_os")
             dati["cv_affidabilita_os"] = st.selectbox("Affidabilità OS",
                 ["Affidabile", "Borderline", "Non affidabile"], key="cv_aff_os")
+
+        dati["cv_consiglio"] = st.text_input(
+            "Si consiglia", "Ripetere esame tra mesi 6",
+            key="cv_consiglio",
+            help="Indicazione follow-up da riportare nel referto")
 
     # ── OCT RNFL ────────────────────────────────────────────────────────
     if mostra_rnfl:
@@ -625,6 +716,10 @@ def _ui_nuovo_esame(conn, cur, paz_id, paz_label):
         params = (
             paz_id, _parse_date(data_esame) or date.today().isoformat(),
             tipo_esame, operatore, strumento,
+            dati.get("cv_strategia"), dati.get("cv_programma"),
+            dati.get("cv_correzione"), dati.get("cv_consiglio"),
+            dati.get("cv_ght_od"), dati.get("cv_ght_os"),
+            dati.get("cv_sf_od"), dati.get("cv_sf_os"),
             dati.get("cv_md_od"), dati.get("cv_md_os"),
             dati.get("cv_psd_od"), dati.get("cv_psd_os"),
             dati.get("cv_vfi_od"), dati.get("cv_vfi_os"),
@@ -651,6 +746,8 @@ def _ui_nuovo_esame(conn, cur, paz_id, paz_label):
         sql = (
             "INSERT INTO esami_strumentali ("
             "paziente_id, data_esame, tipo_esame, operatore, strumento,"
+            "cv_strategia, cv_programma, cv_correzione, cv_consiglio,"
+            "cv_ght_od, cv_ght_os, cv_sf_od, cv_sf_os,"
             "cv_md_od, cv_md_os, cv_psd_od, cv_psd_os, cv_vfi_od, cv_vfi_os,"
             "cv_pattern_od, cv_pattern_os, cv_affidabilita_od, cv_affidabilita_os,"
             "oct_rnfl_sup_od, oct_rnfl_nas_od, oct_rnfl_inf_od, oct_rnfl_tem_od, oct_rnfl_avg_od,"
