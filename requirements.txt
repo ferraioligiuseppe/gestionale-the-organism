@@ -42,3 +42,5 @@ soundfile==0.12.1
 pydub==0.25.1
 streamlit-webrtc>=0.47.0
 aiortc>=1.9.0
+
+streamlit-javascript
