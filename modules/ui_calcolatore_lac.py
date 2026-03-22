@@ -464,18 +464,16 @@ def _ui_calcolo_manuale(conn, cur, paz_id):
                 ampiezze=tuple(ampiezze),
                 diametro_tot=diametro_tot,
             )
+        st.session_state["_calc_data"] = {
+            "res": res, "occhio": occhio,
+            "r0": r0, "e": e,
+            "kfl": k_flat_mm, "kfl_D": k_flat_D,
+            "kst": k_steep_mm, "kst_D": k_steep_D,
+        }
 
-        st.session_state["_calc_result"] = res
-        st.session_state["_calc_occhio"] = occhio
-        st.session_state["_calc_r0"] = r0
-        st.session_state["_calc_e"] = e
-        st.session_state["_calc_kfl"] = k_flat_mm
-        st.session_state["_calc_kfl_D"] = k_flat_D
-        st.session_state["_calc_kst"] = k_steep_mm
-        st.session_state["_calc_kst_D"] = k_steep_D
-
-    if "_calc_result" in st.session_state:
-        _mostra_risultati(conn, cur, paz_id, st.session_state["_calc_result"])
+    if "_calc_data" in st.session_state:
+        d = st.session_state["_calc_data"]
+        _mostra_risultati(conn, cur, paz_id, d["res"])
 
 
 def _mostra_risultati(conn, cur, paz_id, res):
@@ -521,7 +519,7 @@ def _mostra_risultati(conn, cur, paz_id, res):
     if paz_id:
         st.divider()
         st.markdown("#### Salva parametri calcolati nel gestionale")
-        occhio_sal = st.session_state.get("_calc_occhio", "OD")
+        occhio_sal = st.session_state.get("_calc_data", {}).get("occhio", "OD")
         col_s1, col_s2 = st.columns(2)
         with col_s1:
             mat = st.text_input("Materiale lente", "Boston XO", key="calc_sal_mat")
@@ -531,10 +529,10 @@ def _mostra_risultati(conn, cur, paz_id, res):
 
         if st.button("Salva in scheda Lenti Inverse", key="btn_salva_calc"):
             _salva_in_lenti_inverse(conn, cur, paz_id, occhio_sal, res, mat, dk, note_sal,
-                                    st.session_state.get("_calc_kfl", res["r0_mm"]),
-                                    st.session_state.get("_calc_kfl_D", res["k_flat_D"]),
-                                    st.session_state.get("_calc_kst", res["r0_mm"]),
-                                    st.session_state.get("_calc_kst_D", res["k_flat_D"]))
+                                    st.session_state.get("_calc_data", {}).get("kfl", res["r0_mm"]),
+                                    st.session_state.get("_calc_data", {}).get("kfl_D", res["k_flat_D"]),
+                                    st.session_state.get("_calc_data", {}).get("kst", res["r0_mm"]),
+                                    st.session_state.get("_calc_data", {}).get("kst_D", res["k_flat_D"]))
 
 
 def _grafico_profilo(res):
@@ -717,14 +715,12 @@ def _ui_import_topografo(conn, cur, paz_id):
         if st.button("Calcola da dati importati", type="primary", key="btn_calc_imp"):
             res = calcola_lac_inversa(
                 r0=r0_imp, e=e_imp, miopia_D=mio_imp, zona_ottica=zo_imp)
-            st.session_state["_calc_result"]  = res
-            st.session_state["_calc_occhio"]  = occhio_imp
-            st.session_state["_calc_r0"]      = r0_imp
-            st.session_state["_calc_e"]       = e_imp
-            st.session_state["_calc_kfl"]     = kfl_imp
-            st.session_state["_calc_kfl_D"]   = kfl_D_imp
-            st.session_state["_calc_kst"]     = kst_imp
-            st.session_state["_calc_kst_D"]   = kst_D_imp
+            st.session_state["_calc_data"] = {
+                "res": res, "occhio": occhio_imp,
+                "r0": r0_imp, "e": e_imp,
+                "kfl": kfl_imp, "kfl_D": kfl_D_imp,
+                "kst": kst_imp, "kst_D": kst_D_imp,
+            }
             _mostra_risultati(conn, cur, paz_id, res)
 
 
