@@ -13,17 +13,6 @@ def tokenize_text(text: str) -> List[Dict[str, Any]]:
     - parole
     - punteggiatura
     - ritorni a capo logici
-
-    Output:
-    [
-        {
-            "token_id": "tok_0",
-            "word_index": 0,
-            "text": "Ciao",
-            "type": "word"
-        },
-        ...
-    ]
     """
     tokens: List[Dict[str, Any]] = []
     word_index = 0
@@ -74,7 +63,6 @@ def build_reading_html(
     Il browser potrà poi misurare i bounding box reali.
     """
     tokens = tokenize_text(text)
-
     tokens_json = json.dumps(tokens, ensure_ascii=False)
 
     html_parts = [
@@ -166,7 +154,6 @@ def build_reading_html(
         )
 
     html_parts.append("</div></div>")
-
     html_parts.append(
         f"""
         <script>

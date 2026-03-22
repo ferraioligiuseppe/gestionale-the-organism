@@ -36,7 +36,6 @@ function collectReadingWordBoxes(rootSelector = "#reading-dom-text") {
   });
 }
 
-
 function inferVisualLines(bboxItems, yTolerance = 12) {
   const items = [...bboxItems].sort((a, b) => {
     if (Math.abs(a.rel_y - b.rel_y) > yTolerance) return a.rel_y - b.rel_y;
@@ -64,7 +63,6 @@ function inferVisualLines(bboxItems, yTolerance = 12) {
 
   return items;
 }
-
 
 function buildReadingDomPayload() {
   const raw = collectReadingWordBoxes("#reading-dom-text");
