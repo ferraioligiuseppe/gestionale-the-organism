@@ -1,4 +1,3 @@
-
 import json
 from pathlib import Path
 
@@ -9,7 +8,6 @@ from modules.reading.dom_bbox_bridge import get_dom_bboxes_js
 from modules.reading.stimulus_library import (
     list_stimuli,
     load_text_content,
-    get_stimulus_by_filename,
     render_library_manager,
 )
 
@@ -43,6 +41,7 @@ def _select_source():
             "title": "Testo libero",
             "text": text_input,
             "filename": None,
+            "path": None,
         }
 
     items = list_stimuli()
@@ -55,12 +54,10 @@ def _select_source():
             "title": "Libreria vuota",
             "text": "",
             "filename": None,
+            "path": None,
         }
 
-    labels = [
-        f"{x['title']} | {x['type']} | {x['filename']}"
-        for x in items
-    ]
+    labels = [f"{x['title']} | {x['type']} | {x['filename']}" for x in items]
     idx = st.selectbox(
         "Seleziona file",
         range(len(items)),
@@ -71,30 +68,39 @@ def _select_source():
 
     result = {
         "mode": mode,
-        "stimulus_type": selected["type"],
-        "stimulus_id": selected["id"],
-        "title": selected["title"],
+        "stimulus_type": selected.get("type", "none"),
+        "stimulus_id": selected.get("id", "unknown_stimulus"),
+        "title": selected.get("title", "Stimolo"),
         "text": "",
-        "filename": selected["filename"],
-        "path": selected["path"],
+        "filename": selected.get("filename"),
+        "path": selected.get("path"),
     }
 
-    if selected["type"] == "text":
-        result["text"] = load_text_content(selected["filename"])
+    if result["stimulus_type"] == "text" and result["filename"]:
+        result["text"] = load_text_content(result["filename"])
 
     return result
 
 
 def _preview_non_text(stimulus):
     st.markdown("### Anteprima stimolo")
-    fp = Path(stimulus["path"])
 
-    if stimulus["stimulus_type"] == "image":
-        st.image(str(fp), caption=stimulus["filename"], use_container_width=True)
+    path_value = stimulus.get("path")
+    if not path_value:
+        st.warning("Nessun percorso file disponibile per questo stimolo.")
+        return
+
+    fp = Path(path_value)
+    if not fp.exists():
+        st.error(f"File non trovato: {fp}")
+        return
+
+    if stimulus.get("stimulus_type") == "image":
+        st.image(str(fp), caption=stimulus.get("filename") or fp.name, use_container_width=True)
         st.info("Le immagini possono essere usate come stimoli visivi, ma non per mapping parola-per-parola.")
         return
 
-    if stimulus["stimulus_type"] == "pdf":
+    if stimulus.get("stimulus_type") == "pdf":
         with open(fp, "rb") as f:
             st.download_button(
                 "Scarica PDF",
@@ -105,6 +111,8 @@ def _preview_non_text(stimulus):
             )
         st.info("Il PDF è presente in libreria. Per il tracking DOM parola-per-parola conviene usare TXT o JSON.")
         return
+
+    st.warning("Tipo di stimolo non supportato per l'anteprima.")
 
 
 def ui_reading_dom():
@@ -132,9 +140,11 @@ def ui_reading_dom():
             if stimulus.get("filename"):
                 st.caption(stimulus["filename"])
 
-            if stimulus["stimulus_type"] == "text":
+            stimulus_type = stimulus.get("stimulus_type", "none")
+
+            if stimulus_type == "text":
                 rendered_html = build_reading_html(
-                    text=stimulus["text"],
+                    text=stimulus.get("text", ""),
                     stimulus_id=stimulus_id,
                     font_size_px=font_size_px,
                     line_height=line_height,
@@ -171,5 +181,9 @@ def ui_reading_dom():
 
                 if st.checkbox("Mostra HTML generato", value=False):
                     st.code(rendered_html, language="html")
-            else:
+
+            elif stimulus_type in ("pdf", "image"):
                 _preview_non_text(stimulus)
+
+            else:
+                st.info("Seleziona un file dalla libreria oppure usa il testo libero.")
