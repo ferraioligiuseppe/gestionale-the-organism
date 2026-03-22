@@ -17,6 +17,7 @@ from modules.app_menu import build_sections
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
+from modules.ui_lenti_inverse import ui_lenti_inverse
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -28,6 +29,21 @@ from modules.app_sections import (
     SECTION_OSTEOPATIA,
     SECTION_RELAZIONI,
 )
+
+SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
+
+# --- Inject voce menu Lenti Inverse ---
+_build_sections_original = build_sections
+
+def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
+    sections = _build_sections_original(is_admin, app_mode)
+    if SECTION_LENTI_INVERSE not in sections:
+        try:
+            idx = sections.index(SECTION_VISION) + 1
+        except ValueError:
+            idx = 3
+        sections.insert(idx, SECTION_LENTI_INVERSE)
+    return sections
 
 import pnev_module as pnev
 
@@ -9745,6 +9761,11 @@ def main():
         ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
         ui_db_cleanup=ui_db_cleanup,
     ):
+        return
+
+    # routing lenti inverse / ortocheratologia
+    if sezione == "👁️ Lenti Inverse (Ortok)":
+        ui_lenti_inverse()
         return
 
     # routing principale (estratto)
