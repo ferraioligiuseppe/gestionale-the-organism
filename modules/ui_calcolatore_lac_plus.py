@@ -26,6 +26,10 @@ Formule principali:
 
 import math
 import json
+try:
+    from modules.ui_fluorescein import ui_fluorescein_simulator as _fluor
+except ImportError:
+    _fluor = None
 import streamlit as st
 import pandas as pd
 from datetime import date
@@ -826,6 +830,16 @@ def _mostra_risultati(res, r0, e, medico, paziente, label):
     # Schema
     with st.expander("📋 Schema per il laboratorio"):
         st.code(_schema_laboratorio(res, r0, e, medico, paziente), language=None)
+    if _fluor:
+        with st.expander("🔬 Fluoresceinogramma simulato"):
+            Q_v = res.get("Q_target", -0.45)
+            _fluor("presb", r0, res["Rb_mm"], res.get("zo_diam",5.6), e,
+                   Q_presb=Q_v, key_prefix="fluor_presb", show_controls=False)
+    if _fluor:
+        with st.expander("🔬 Fluoresceinogramma simulato"):
+            design_map = {"Ipermetropia":"iper","Ipermetropia + Presbiopia":"iper","Combinata":"iper"}
+            _fluor(design_map.get(res.get("tipo",""),"mio"), r0, res["Rb_mm"],
+                   res.get("zo_diam",5.6), e, key_prefix="fluor_plus", show_controls=False)
 
 
 def _mostra_risultati_torico(res, r_fl, r_st, e_fl, e_st, medico, paziente):
@@ -858,6 +872,11 @@ def _mostra_risultati_torico(res, r_fl, r_st, e_fl, e_st, medico, paziente):
 
     with st.expander("📋 Schema per il laboratorio"):
         st.code(_schema_laboratorio(res, r_fl, e_fl, medico, paziente), language=None)
+    if _fluor:
+        with st.expander("🔬 Fluoresceinogramma simulato (meridiano flat)"):
+            ast_D_val = abs(res.get("toricity_D", 0))
+            _fluor("ast", r_fl, res["Rb_flat_mm"], res.get("zo_diam",5.6),
+                   e_fl, ast_D=ast_D_val, key_prefix="fluor_ast", show_controls=False)
 
 
 def _mostra_risultati_presbiopia(res, r0, e, medico, paziente):
@@ -893,3 +912,8 @@ def _mostra_risultati_presbiopia(res, r0, e, medico, paziente):
 
     with st.expander("📋 Schema per il laboratorio"):
         st.code(_schema_laboratorio(res, r0, e, medico, paziente), language=None)
+    if _fluor:
+        with st.expander("🔬 Fluoresceinogramma simulato"):
+            Q_v = res.get("Q_target", -0.45)
+            _fluor("presb", r0, res["Rb_mm"], res.get("zo_diam",5.6), e,
+                   Q_presb=Q_v, key_prefix="fluor_presb", show_controls=False)

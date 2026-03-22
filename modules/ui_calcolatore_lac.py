@@ -14,6 +14,10 @@ Implementa l'algoritmo del software "Inversa 6" di G. Toffoli:
 import math
 import json
 try:
+    from modules.ui_fluorescein import ui_fluorescein_simulator as _fluor
+except ImportError:
+    _fluor = None
+try:
     from modules.ui_raggio_potere import r_to_d, d_to_r
 except ImportError:
     def r_to_d(r): return round(337.5/r, 2) if r and r>0 else 0.0
@@ -499,6 +503,14 @@ def _ui_calcolo_manuale(conn, cur, paz_id):
     if "_calc_data" in st.session_state:
         d = st.session_state["_calc_data"]
         _mostra_risultati(conn, cur, paz_id, d["res"])
+        # Fluorescein
+        if _fluor:
+            st.divider()
+            r0_f = d.get("r0", st.session_state.get("calc_r0", 7.60))
+            rb_f = d["res"].get("Rb_mm", 8.73)
+            zo_f = d["res"].get("zo_diam", 5.6)
+            e_f  = d.get("e", st.session_state.get("calc_e", 0.50))
+            _fluor("mio", r0_f, rb_f, zo_f, e_f, key_prefix="fluor_calc", show_controls=False)
 
 
 def _mostra_risultati(conn, cur, paz_id, res):

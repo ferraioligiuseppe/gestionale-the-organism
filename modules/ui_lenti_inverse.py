@@ -8,6 +8,10 @@ Compatibile con SQLite e PostgreSQL (Neon).
 import json
 import streamlit as st
 try:
+    from modules.ui_fluorescein import ui_fluorescein_simulator as _fluor
+except ImportError:
+    _fluor = None
+try:
     from modules.ui_raggio_potere import r_to_d, d_to_r
 except ImportError:
     def r_to_d(r): return round(337.5/r, 2) if r and r>0 else 0.0
@@ -343,12 +347,18 @@ def ui_lenti_inverse():
     paz_id = int(sel.split(" - ", 1)[0])
     st.divider()
 
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "Nuova Scheda Lente", "Schede Esistenti", "Ordini", "Visite di Controllo"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Nuova Scheda Lente", "Schede Esistenti", "Ordini",
+        "Visite di Controllo", "🔬 Fluorescein"])
     with tab1: _ui_nuova_scheda(conn, cur, paz_id)
     with tab2: _ui_storico_schede(conn, cur, paz_id)
     with tab3: _ui_ordini(conn, cur, paz_id)
     with tab4: _ui_visite(conn, cur, paz_id)
+    with tab5:
+        if _fluor:
+            _fluor(key_prefix="fluor_li", show_controls=True)
+        else:
+            st.info("Modulo fluorescein non disponibile.")
 
 
 # ---------------------------------------------------------------------------
