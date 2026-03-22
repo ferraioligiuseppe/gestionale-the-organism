@@ -1,0 +1,23 @@
+[
+  {
+    "test_id": "reading_short_1",
+    "title": "Brano breve 1",
+    "category": "lettura",
+    "difficulty": "facile",
+    "content": "Il gatto corre nel prato. Il sole splende alto nel cielo."
+  },
+  {
+    "test_id": "reading_medium_1",
+    "title": "Brano medio 1",
+    "category": "lettura",
+    "difficulty": "media",
+    "content": "Il bambino osserva attentamente il libro e prova a leggere parola per parola, cercando di comprendere il significato della frase."
+  },
+  {
+    "test_id": "words_low_freq",
+    "title": "Parole bassa frequenza",
+    "category": "parole",
+    "difficulty": "media",
+    "content": "abete chimera globo trincea vortice prisma falco drago"
+  }
+]
