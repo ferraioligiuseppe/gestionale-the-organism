@@ -22,6 +22,7 @@ from modules.ui_lac_ametropie import ui_lac_ametropie
 from modules.ui_calcolatore_lac import ui_calcolatore_lac
 from modules.ui_esa_ortho6 import ui_esa_ortho6
 from modules.ui_esami_strumentali import ui_esami_strumentali
+from modules.ui_calcolatore_lac_plus import ui_calcolatore_lac_plus
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -38,6 +39,7 @@ SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
 SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
 SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
 SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
+SECTION_LAC_PLUS     = "🔴 LAC Inverse Ametropie Avanzate"
 SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
 
 _build_sections_original = build_sections
@@ -76,6 +78,12 @@ def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
         except Exception:
             idx5 = 4
         sections.insert(idx5, SECTION_ESAMI_STRUM)
+    if SECTION_LAC_PLUS not in sections:
+        try:
+            idx6 = sections.index(SECTION_ESA) + 1
+        except Exception:
+            idx6 = 8
+        sections.insert(idx6, SECTION_LAC_PLUS)
     return sections
 
 import pnev_module as pnev
@@ -9872,6 +9880,11 @@ def main():
     # routing Esami Strumentali
     if sezione == SECTION_ESAMI_STRUM:
         ui_esami_strumentali()
+        return
+
+    # routing LAC Ametropie Avanzate
+    if sezione == SECTION_LAC_PLUS:
+        ui_calcolatore_lac_plus()
         return
 
     # routing principale (estratto)
