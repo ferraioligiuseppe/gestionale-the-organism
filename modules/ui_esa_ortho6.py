@@ -246,9 +246,9 @@ def _ui_calcolo(conn, cur, paz_id):
         miopia  = st.number_input("Miopia da correggere (D)", -5.0, -0.5, -3.0, 0.25,
                                    key="esa_mio",
                                    help="Valore negativo, es. -3.00")
-        k_steep = st.number_input("K steep (mm) – opzionale", 7.0, 9.0, 0.0, 0.01,
+        k_steep = st.number_input("K steep (mm) – opzionale", 7.0, 9.0, 7.60, 0.01,
                                    format="%.2f", key="esa_kst",
-                                   help="Solo per calcolo astigmatismo")
+                                   help="Solo per calcolo astigmatismo (uguale a K flat se non astigmatico)")
     with col3:
         materiale = st.text_input("Materiale lente", "Boston XO", key="esa_mat")
         dk        = st.number_input("DK", 0.0, 200.0, 100.0, 1.0, key="esa_dk")
@@ -299,9 +299,10 @@ def _mostra_risultato_esa(res, conn, cur, paz_id, materiale, dk):
     # Astigmatismo corneale
     K_val  = st.session_state.get("esa_K_save", 7.6)
     K_st   = st.session_state.get("esa_kst_save", 0.0) or 0.0
-    if K_st > 0 and K_st != K_val:
+    if K_st and K_st != K_val and K_st > 6.5:
         ast_D = abs(337.5/K_val - 337.5/K_st)
-        st.info(f"Astigmatismo corneale stimato: **{ast_D:.2f} D** (K flat {K_val:.2f} – K steep {K_st:.2f} mm)")
+        if ast_D > 0.01:
+            st.info(f"Astigmatismo corneale stimato: **{ast_D:.2f} D** (K flat {K_val:.2f} – K steep {K_st:.2f} mm)")
 
     # Schema per laboratorio
     st.markdown("### Schema per il laboratorio")
