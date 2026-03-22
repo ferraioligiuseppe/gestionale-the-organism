@@ -186,12 +186,23 @@ CREATE TABLE IF NOT EXISTS esami_strumentali (
 """
 
 def _init_db(conn):
-    cur = conn.cursor()
+    raw_conn = getattr(conn, "_conn", conn)
+    try:
+        cur = raw_conn.cursor()
+    except Exception:
+        cur = conn.cursor()
     if _is_postgres(conn):
-        cur.execute(_SQL_PG)
+        try:
+            cur.execute(_SQL_PG)
+        except Exception:
+            try: raw_conn.rollback()
+            except Exception: pass
     else:
         cur.execute(_SQL_SL)
-    conn.commit()
+    try:
+        raw_conn.commit()
+    except Exception:
+        conn.commit()
     # Migrazione sicura colonne nuove
     _migrate_cv_cols(conn)
 
@@ -201,7 +212,11 @@ def _init_db(conn):
 # ---------------------------------------------------------------------------
 
 def _migrate_cv_cols(conn):
-    cur = conn.cursor()
+    raw_conn = getattr(conn, "_conn", conn)
+    try:
+        cur = raw_conn.cursor()
+    except Exception:
+        cur = conn.cursor()
     pg = _is_postgres(conn)
     new_cols = [
         ("cv_strategia","TEXT"),("cv_programma","TEXT"),

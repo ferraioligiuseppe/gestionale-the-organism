@@ -308,7 +308,11 @@ CREATE TABLE IF NOT EXISTS lac_ametropie_visite (
 
 def init_lac_ametropie_db(conn) -> None:
     pg = _is_postgres(conn)
-    cur = conn.cursor()
+    raw_conn = getattr(conn, "_conn", conn)
+    try:
+        cur = raw_conn.cursor()
+    except Exception:
+        cur = conn.cursor()
     if pg:
         cur.execute(_SQL_PG_SCHEDE)
         cur.execute(_SQL_PG_ORDINI)
