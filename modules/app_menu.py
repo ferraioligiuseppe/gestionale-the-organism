@@ -19,6 +19,7 @@ from .app_sections import (
     SECTION_DEBUG,
     SECTION_IMPORT,
     SECTION_GAZE,
+    SECTION_READING_DOM,
     SECTION_UTENTI,
 )
 
@@ -27,6 +28,7 @@ BASE_SECTIONS = [
     SECTION_PAZIENTI,
     SECTION_PNEV,
     SECTION_VISION,
+    SECTION_READING_DOM,
     SECTION_SEDUTE,
     SECTION_OSTEOPATIA,
     SECTION_COUPON,
@@ -43,18 +45,19 @@ ADMIN_SECTIONS = [
 ]
 
 UDITO_PROD_SECTIONS = [
-    "🎧 ORL + EQ (MODULO)",
-    "🎧 Genera stimolazione (JOB)",
-    "🎧 Stimolazione uditiva (TEST)",
+    " ORL + EQ (MODULO)",
+    " Genera stimolazione (JOB)",
+    " Stimolazione uditiva (TEST)",
 ]
 
 UDITO_TEST_ONLY_SECTIONS = [
-    "🎧 Audiogramma funzionale (TEST)",
-    "🩺 Esami ORL – soglie tonali (TEST)",
-    "🎚️ EQ stimolazione uditiva (TEST)",
-    "🔧 Calibrazione cuffie (TEST)",
-    "🧹 Pulizia DB (TEST)",
+    " Audiogramma funzionale (TEST)",
+    " Esami ORL – soglie tonali (TEST)",
+    "️ EQ stimolazione uditiva (TEST)",
+    " Calibrazione cuffie (TEST)",
+    " Pulizia DB (TEST)",
 ]
+
 
 def build_sections(is_admin: bool, app_mode: str) -> list[str]:
     sections = list(BASE_SECTIONS)
