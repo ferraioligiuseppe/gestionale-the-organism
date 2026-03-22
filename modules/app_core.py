@@ -18,6 +18,7 @@ from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
 from modules.ui_lenti_inverse import ui_lenti_inverse
+from modules.ui_lac_ametropie import ui_lac_ametropie
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -31,18 +32,25 @@ from modules.app_sections import (
 )
 
 SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
+SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
 
-# --- Inject voce menu Lenti Inverse ---
 _build_sections_original = build_sections
 
 def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
     sections = _build_sections_original(is_admin, app_mode)
     if SECTION_LENTI_INVERSE not in sections:
         try:
+            from modules.app_sections import SECTION_VISION
             idx = sections.index(SECTION_VISION) + 1
-        except ValueError:
+        except Exception:
             idx = 3
         sections.insert(idx, SECTION_LENTI_INVERSE)
+    if SECTION_LAC_AMETROPIE not in sections:
+        try:
+            idx2 = sections.index(SECTION_LENTI_INVERSE) + 1
+        except Exception:
+            idx2 = 4
+        sections.insert(idx2, SECTION_LAC_AMETROPIE)
     return sections
 
 import pnev_module as pnev
@@ -9763,9 +9771,14 @@ def main():
     ):
         return
 
-    # routing lenti inverse / ortocheratologia
-    if sezione == "👁️ Lenti Inverse (Ortok)":
+    # routing lenti inverse
+    if sezione == SECTION_LENTI_INVERSE:
         ui_lenti_inverse()
+        return
+
+    # routing LAC ametropie
+    if sezione == SECTION_LAC_AMETROPIE:
+        ui_lac_ametropie()
         return
 
     # routing principale (estratto)
