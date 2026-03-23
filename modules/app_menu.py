@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Menu principale del gestionale.
-
-Step 1-2 della modularizzazione: qui vivono le definizioni delle voci sidebar,
-riusando costanti condivise con il routing.
-"""
+"""Menu principale del gestionale."""
 
 from .app_sections import (
     SECTION_PAZIENTI,
@@ -44,7 +40,6 @@ ADMIN_SECTIONS = [
     SECTION_UTENTI,
 ]
 
-
 UDITO_PROD_SECTIONS = [
     "🎧 ORL + EQ (MODULO)",
     "🎧 Genera stimolazione (JOB)",
@@ -52,8 +47,6 @@ UDITO_PROD_SECTIONS = [
 ]
 
 UDITO_TEST_ONLY_SECTIONS = [
-    "🔧 Calibrazione cuffie",
-    "🎧 Audiogramma funzionale (TEST)",
     "🩺 Esami ORL – soglie tonali (TEST)",
     "🎚️ EQ stimolazione uditiva (TEST)",
     "🔧 Calibrazione cuffie (TEST)",

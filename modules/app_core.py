@@ -17,12 +17,7 @@ from modules.app_menu import build_sections
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
-from modules.ui_lenti_inverse import ui_lenti_inverse
-from modules.ui_lac_ametropie import ui_lac_ametropie
-from modules.ui_calcolatore_lac import ui_calcolatore_lac
-from modules.ui_esa_ortho6 import ui_esa_ortho6
 from modules.ui_esami_strumentali import ui_esami_strumentali
-from modules.ui_calcolatore_lac_plus import ui_calcolatore_lac_plus
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
