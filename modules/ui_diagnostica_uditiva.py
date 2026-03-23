@@ -316,9 +316,8 @@ def ui_diagnostica_uditiva(conn=None):
 
     st.divider()
 
-    tab_fisher, tab_scapa, tab_tonale, tab_storico = st.tabs([
-        "Fisher — Bambini", "SCAP-A — Adulti",
-        "Test Tonale + EQ", "Storico"
+    tab_fisher, tab_scapa, tab_storico = st.tabs([
+        "Fisher — Bambini", "SCAP-A — Adulti", "Storico"
     ])
 
     with tab_fisher:
@@ -327,11 +326,12 @@ def ui_diagnostica_uditiva(conn=None):
     with tab_scapa:
         _ui_scapa(conn, paz_id, op)
 
-    with tab_tonale:
-        ui_test_tonale(conn, paz_id, op)
-
     with tab_storico:
         _ui_storico(conn, cur, paz_id)
+
+    st.divider()
+    with st.expander("🎵 Test Tonale Audiometrico + EQ", expanded=False):
+        ui_test_tonale(conn, paz_id, op)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab Fisher
