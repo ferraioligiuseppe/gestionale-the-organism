@@ -316,8 +316,9 @@ def ui_diagnostica_uditiva(conn=None):
 
     st.divider()
 
-    tab_fisher, tab_scapa, tab_storico = st.tabs([
-        "Fisher — Bambini", "SCAP-A — Adulti", "Storico"
+    tab_fisher, tab_scapa, tab_tonale, tab_storico = st.tabs([
+        "Fisher — Bambini", "SCAP-A — Adulti",
+        "Test Tonale + EQ", "Storico"
     ])
 
     with tab_fisher:
@@ -325,6 +326,9 @@ def ui_diagnostica_uditiva(conn=None):
 
     with tab_scapa:
         _ui_scapa(conn, paz_id, op)
+
+    with tab_tonale:
+        ui_test_tonale(conn, paz_id, op)
 
     with tab_storico:
         _ui_storico(conn, cur, paz_id)
@@ -545,3 +549,372 @@ def _ui_storico(conn, cur, paz_id):
                         col.metric(cat, f"{v}/{len(info['items'])}")
             except Exception:
                 pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST TONALE AUDIOMETRICO
+# ─────────────────────────────────────────────────────────────────────────────
+
+import io, wave, math
+import numpy as np
+
+FREQS_TON    = [125, 250, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 8000]
+FLABELS_TON  = ['125','250','500','750','1k','1.5k','2k','3k','4k','6k','8k']
+FREQ_ORDER   = [8000, 6000, 4000, 3000, 2000, 1500, 1000, 750, 500, 250, 125]
+TOMATIS_STD  = [-5, -8, -10, -12, -14, -15, -14, -15, -12, -8, -5]
+
+
+def _genera_tono_wav(freq_hz: int, db_hl: float, orecchio: str,
+                     secondi: float = 2.5, sr: int = 44100) -> bytes:
+    """Genera tono WAV stereo: OD = canale destro, OS = sinistro."""
+    dbfs = db_hl - 90.0
+    amp  = 10 ** (dbfs / 20.0)
+    amp  = max(0.001, min(0.95, amp))
+    t    = np.linspace(0, secondi, int(sr * secondi), endpoint=False)
+    sig  = amp * np.sin(2 * math.pi * freq_hz * t)
+    fade = int(sr * 0.02)
+    if len(sig) > 2 * fade:
+        sig[:fade]  *= np.linspace(0, 1, fade)
+        sig[-fade:] *= np.linspace(1, 0, fade)
+    # Stereo: OD = R, OS = L
+    if orecchio == "OD":
+        L = np.zeros_like(sig)
+        R = sig
+    elif orecchio == "OS":
+        L = sig
+        R = np.zeros_like(sig)
+    else:  # Binaurale
+        L = sig
+        R = sig
+    stereo = np.stack([L, R], axis=1)
+    pcm = np.int16(np.clip(stereo, -1, 1) * 32767)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(pcm.tobytes())
+    return buf.getvalue()
+
+
+def _calc_eq_tomatis(soglie_od, soglie_os, tomatis):
+    """Calcola delta EQ = Tomatis - soglia paziente per ogni frequenza."""
+    eq_od = [round(tomatis[i] - soglie_od[i], 1)
+             if soglie_od[i] is not None else None
+             for i in range(len(FREQS_TON))]
+    eq_os = [round(tomatis[i] - soglie_os[i], 1)
+             if soglie_os[i] is not None else None
+             for i in range(len(FREQS_TON))]
+    return eq_od, eq_os
+
+
+def ui_test_tonale(conn, paz_id, operatore=""):
+    """Tab test tonale audiometrico dentro Diagnostica Uditiva."""
+
+    st.subheader("Test tonale audiometrico")
+    st.caption(
+        "Via aerea (AC) e via ossea (BC) · Start 30 dB → -20 dB → risalita 5 dB · "
+        "Ordine Hipérion: acuti → gravi · Curva Tomatis sovrapposta"
+    )
+
+    # ── Stato sessione ──────────────────────────────────────────────────────
+    ss = st.session_state
+    pfx = f"ton_{paz_id}_"
+    if pfx+"od_ac"   not in ss: ss[pfx+"od_ac"]   = [None]*11
+    if pfx+"os_ac"   not in ss: ss[pfx+"os_ac"]   = [None]*11
+    if pfx+"od_bc"   not in ss: ss[pfx+"od_bc"]   = [None]*11
+    if pfx+"os_bc"   not in ss: ss[pfx+"os_bc"]   = [None]*11
+    if pfx+"tomatis" not in ss: ss[pfx+"tomatis"]  = list(TOMATIS_STD)
+    if pfx+"ear"     not in ss: ss[pfx+"ear"]      = "OD"
+    if pfx+"via"     not in ss: ss[pfx+"via"]      = "AC"
+    if pfx+"fidx"    not in ss: ss[pfx+"fidx"]     = 0
+    if pfx+"db"      not in ss: ss[pfx+"db"]       = 30
+    if pfx+"last_r"  not in ss: ss[pfx+"last_r"]   = None
+    if pfx+"mode"    not in ss: ss[pfx+"mode"]     = "Manuale"
+
+    # ── Controlli ──────────────────────────────────────────────────────────
+    col_ear, col_via, col_mode = st.columns(3)
+
+    with col_ear:
+        ear = st.radio("Orecchio", ["OD","OS"], horizontal=True,
+                       key=pfx+"ear_r",
+                       index=["OD","OS"].index(ss[pfx+"ear"]))
+        ss[pfx+"ear"] = ear
+
+    with col_via:
+        via = st.radio("Via", ["AC (aerea)","BC (ossea)"], horizontal=True,
+                       key=pfx+"via_r",
+                       index=["AC (aerea)","BC (ossea)"].index(
+                           "AC (aerea)" if ss[pfx+"via"]=="AC" else "BC (ossea)"))
+        ss[pfx+"via"] = "AC" if "AC" in via else "BC"
+
+    with col_mode:
+        mode = st.radio("Modalità", ["Manuale","Semi-auto","Automatico"],
+                        horizontal=True, key=pfx+"mode_r",
+                        index=["Manuale","Semi-auto","Automatico"].index(ss[pfx+"mode"]))
+        ss[pfx+"mode"] = mode
+
+    # ── Selezione frequenza ────────────────────────────────────────────────
+    st.markdown("**Frequenza** (ordine Hipérion: acuti → gravi)")
+    fcols = st.columns(11)
+    for i, (f, lbl) in enumerate(zip(FREQS_TON, FLABELS_TON)):
+        od_ac = ss[pfx+"od_ac"][i]
+        os_ac = ss[pfx+"os_ac"][i]
+        od_bc = ss[pfx+"od_bc"][i]
+        os_bc = ss[pfx+"os_bc"][i]
+        done = (od_ac is not None or os_ac is not None or
+                od_bc is not None or os_bc is not None)
+        is_cur = (i == ss[pfx+"fidx"])
+        tag = " ✓" if done else ""
+        if fcols[i].button(lbl+tag, key=pfx+f"fb_{i}",
+                           type="primary" if is_cur else "secondary",
+                           use_container_width=True):
+            ss[pfx+"fidx"] = i
+            ss[pfx+"db"] = 30
+            ss[pfx+"last_r"] = None
+            st.rerun()
+
+    cur_f   = FREQS_TON[ss[pfx+"fidx"]]
+    cur_db  = ss[pfx+"db"]
+    cur_ear = ss[pfx+"ear"]
+    cur_via = ss[pfx+"via"]
+
+    # ── Display livello ────────────────────────────────────────────────────
+    st.divider()
+    dc1, dc2, dc3 = st.columns([1,1,2])
+    with dc1:
+        st.metric("Frequenza", f"{cur_f} Hz" if cur_f < 1000 else
+                  f"{cur_f/1000:.1f} kHz")
+        st.metric("Via", f"{cur_ear} — {'Aerea' if cur_via=='AC' else 'Ossea'}")
+    with dc2:
+        col = "#2D7D6F" if cur_db < 20 else "#BA7517" if cur_db < 40 else "#E24B4A"
+        st.markdown(
+            f"<div style='text-align:center;padding:8px'>"
+            f"<div style='font-size:44px;font-weight:600;color:{col}'>{cur_db}</div>"
+            f"<div style='font-size:13px;color:#888'>dB HL</div></div>",
+            unsafe_allow_html=True)
+    with dc3:
+        last_r = ss[pfx+"last_r"]
+        if last_r is not None:
+            st.metric("Ultima risposta", f"{last_r} dB HL")
+        # Soglia già validata per questa freq/orecchio/via
+        key_soglia = pfx + ("od" if cur_ear=="OD" else "os") + "_" + cur_via.lower()
+        cur_soglia = ss[key_soglia][ss[pfx+"fidx"]]
+        if cur_soglia is not None:
+            st.metric("Soglia validata ✓", f"{cur_soglia} dB HL")
+
+    # ── Genera tono ───────────────────────────────────────────────────────
+    st.markdown("**Genera tono**")
+    tc1, tc2 = st.columns([1, 3])
+    with tc1:
+        dur = st.select_slider("Durata", [0.5,1.0,1.5,2.0,2.5,3.0],
+                               value=2.0, key=pfx+"dur",
+                               format_func=lambda x: f"{x}s")
+    with tc2:
+        if st.button("▶ Invia tono", type="primary",
+                     key=pfx+"play", use_container_width=True):
+            wav = _genera_tono_wav(cur_f, float(cur_db), cur_ear, float(dur))
+            st.audio(wav, format="audio/wav", autoplay=True)
+            if mode == "Semi-auto":
+                st.info(f"Tono {cur_f} Hz a {cur_db} dB HL — Risponde?")
+
+    # ── Regola dB ────────────────────────────────────────────────────────
+    db_cols = st.columns(6)
+    for delta, lbl, col in zip([-10,-5,-1,1,5,10],
+                               ["-10","-5","-1","+1","+5","+10"],
+                               db_cols):
+        if col.button(lbl, key=pfx+f"adj_{delta}", use_container_width=True):
+            ss[pfx+"db"] = max(-20, min(90, ss[pfx+"db"] + delta))
+            if mode in ("Semi-auto","Automatico"):
+                wav = _genera_tono_wav(FREQS_TON[ss[pfx+"fidx"]],
+                                       float(ss[pfx+"db"]), cur_ear, float(dur))
+                st.audio(wav, format="audio/wav", autoplay=True)
+            st.rerun()
+
+    new_db = st.slider("dB HL", -20, 90, cur_db, 5, key=pfx+"db_sl",
+                       label_visibility="collapsed")
+    if new_db != cur_db:
+        ss[pfx+"db"] = new_db
+        st.rerun()
+
+    # ── Risposta paziente ─────────────────────────────────────────────────
+    st.divider()
+    rc1, rc2, rc3, rc4 = st.columns(4)
+
+    with rc1:
+        if st.button("✓ Risponde", key=pfx+"resp_y", use_container_width=True):
+            ss[pfx+"last_r"] = ss[pfx+"db"]
+            ss[pfx+"db"] = -20 if ss[pfx+"db"] == 30 else max(-20, ss[pfx+"db"] - 5)
+            if mode == "Automatico":
+                wav = _genera_tono_wav(FREQS_TON[ss[pfx+"fidx"]],
+                                       float(ss[pfx+"db"]), cur_ear, 2.0)
+                st.audio(wav, format="audio/wav", autoplay=True)
+            st.rerun()
+
+    with rc2:
+        if st.button("✗ Non risponde", key=pfx+"resp_n", use_container_width=True):
+            ss[pfx+"db"] = min(90, ss[pfx+"db"] + 5)
+            if mode == "Automatico":
+                wav = _genera_tono_wav(FREQS_TON[ss[pfx+"fidx"]],
+                                       float(ss[pfx+"db"]), cur_ear, 2.0)
+                st.audio(wav, format="audio/wav", autoplay=True)
+            st.rerun()
+
+    with rc3:
+        val_dis = ss[pfx+"last_r"] is None
+        if st.button("✅ Valida soglia", key=pfx+"val",
+                     disabled=val_dis, type="primary",
+                     use_container_width=True):
+            db_val = ss[pfx+"last_r"]
+            key_arr = pfx + ("od" if cur_ear=="OD" else "os") + "_" + cur_via.lower()
+            ss[key_arr][ss[pfx+"fidx"]] = db_val
+            ss[pfx+"last_r"] = None
+            ss[pfx+"db"] = 30
+            # Avanza alla freq successiva
+            ci = FREQ_ORDER.index(cur_f) if cur_f in FREQ_ORDER else -1
+            if ci >= 0 and ci < len(FREQ_ORDER)-1:
+                nf = FREQ_ORDER[ci+1]
+                if nf in FREQS_TON:
+                    ss[pfx+"fidx"] = FREQS_TON.index(nf)
+            st.success(f"Soglia {cur_f} Hz {cur_ear} {cur_via} = {db_val} dB HL")
+            st.rerun()
+
+    with rc4:
+        if st.button("→ Successiva", key=pfx+"next", use_container_width=True):
+            ci = FREQ_ORDER.index(cur_f) if cur_f in FREQ_ORDER else -1
+            if ci >= 0 and ci < len(FREQ_ORDER)-1:
+                nf = FREQ_ORDER[ci+1]
+                if nf in FREQS_TON:
+                    ss[pfx+"fidx"] = FREQS_TON.index(nf)
+                    ss[pfx+"db"] = 30
+                    ss[pfx+"last_r"] = None
+            st.rerun()
+
+    # ── Soglie registrate ─────────────────────────────────────────────────
+    st.divider()
+    st.markdown("**Soglie registrate**")
+    scols = st.columns(4)
+    for col, (key_s, label, color) in zip(scols, [
+        (pfx+"od_ac", "OD — AC", "#c0392b"),
+        (pfx+"os_ac", "OS — AC", "#2980b9"),
+        (pfx+"od_bc", "OD — BC", "#8e44ad"),
+        (pfx+"os_bc", "OS — BC", "#16a085"),
+    ]):
+        col.markdown(f"<div style='font-size:11px;font-weight:600;color:{color};"
+                     f"margin-bottom:4px'>{label}</div>", unsafe_allow_html=True)
+        for i, v in enumerate(ss[key_s]):
+            if v is not None:
+                col.markdown(
+                    f"<span style='background:var(--color-background-secondary);"
+                    f"border:1px solid {color};border-radius:8px;padding:2px 7px;"
+                    f"font-size:11px;color:{color};margin:1px;display:inline-block'>"
+                    f"{FLABELS_TON[i]}:{v}dB</span>",
+                    unsafe_allow_html=True)
+
+    # ── Curva Tomatis personalizzabile ────────────────────────────────────
+    with st.expander("Curva Tomatis (modifica per questo paziente)", expanded=False):
+        tc = st.columns(11)
+        for i, (f, lbl) in enumerate(zip(FREQS_TON, FLABELS_TON)):
+            v = tc[i].number_input(lbl, -30, 10, ss[pfx+"tomatis"][i], 1,
+                                   key=pfx+f"tom_{i}")
+            ss[pfx+"tomatis"][i] = v
+        if st.button("Ripristina standard", key=pfx+"tom_reset"):
+            ss[pfx+"tomatis"] = list(TOMATIS_STD)
+            st.rerun()
+
+    # ── Grafico audiogramma + EQ ───────────────────────────────────────────
+    od_ac = ss[pfx+"od_ac"]
+    os_ac = ss[pfx+"os_ac"]
+    tom   = ss[pfx+"tomatis"]
+
+    if any(v is not None for v in od_ac + os_ac):
+        st.divider()
+        st.markdown("**Audiogramma + curva Tomatis**")
+        _mostra_audiogramma(od_ac, os_ac, tom)
+
+        eq_od, eq_os = _calc_eq_tomatis(od_ac, os_ac, tom)
+        st.markdown("**Delta EQ terapeutico** (Tomatis − soglia)")
+        eq_cols = st.columns(11)
+        for i, (lbl, vod, vos) in enumerate(zip(FLABELS_TON, eq_od, eq_os)):
+            v = vod if vod is not None else vos
+            if v is not None:
+                col_c = "green" if v > 3 else "red" if v < -3 else "orange"
+                eq_cols[i].markdown(
+                    f"<div style='text-align:center'>"
+                    f"<b style='color:{col_c};font-size:14px'>{v:+.0f}</b>"
+                    f"<br><span style='font-size:9px;color:#888'>{lbl}</span></div>",
+                    unsafe_allow_html=True)
+
+    # ── Salvataggio ───────────────────────────────────────────────────────
+    st.divider()
+    nota_ton = st.text_area("Note cliniche", key=pfx+"note", height=60)
+    if st.button("💾 Salva audiogramma", type="primary", key=pfx+"save"):
+        eq_od, eq_os = _calc_eq_tomatis(od_ac, os_ac, tom)
+        n_soglie = sum(1 for v in od_ac+os_ac if v is not None)
+        dati = {
+            "od_ac": od_ac, "os_ac": os_ac,
+            "od_bc": ss[pfx+"od_bc"], "os_bc": ss[pfx+"os_bc"],
+            "tomatis": tom, "eq_od": eq_od, "eq_os": eq_os,
+        }
+        score = sum(1 for v in od_ac if v is not None)
+        cls = f"{n_soglie} soglie AC"
+        if _salva(conn, paz_id, "Audiogramma", dati, float(score), cls,
+                  operatore, nota_ton):
+            st.success(f"Audiogramma salvato — {n_soglie} soglie registrate.")
+
+
+def _mostra_audiogramma(od, os_, tom):
+    """Disegna audiogramma con matplotlib."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(9, 4), facecolor="white")
+        ax.set_facecolor("white")
+        ax.set_ylim(90, -20)
+        ax.set_xlim(-0.5, 10.5)
+        ax.set_xticks(range(11))
+        ax.set_xticklabels(FLABELS_TON, fontsize=8)
+        ax.set_yticks(range(-20, 91, 10))
+        ax.set_ylabel("dB HL", fontsize=9)
+        ax.axhline(0, color="gray", lw=0.8, ls="--", alpha=0.5)
+        ax.grid(True, alpha=0.15, lw=0.5)
+        ax.fill_between(range(11), -20, 0, alpha=0.04, color="#2d7d6f")
+        ax.text(0.01, 0.02, "Iperudizione", transform=ax.transAxes,
+                fontsize=7, color="#2d7d6f", alpha=0.7)
+
+        # Tomatis
+        ax.plot(range(len(tom)), tom, color="#2d7d6f", lw=2,
+                ls="--", label="Tomatis (target)", zorder=3)
+
+        # OD AC
+        pts_od = [(i, v) for i, v in enumerate(od) if v is not None]
+        if pts_od:
+            xi, yi = zip(*pts_od)
+            ax.plot(xi, yi, color="#c0392b", lw=1.8,
+                    marker="o", ms=6, label="OD AC", zorder=4)
+            for x, y in pts_od:
+                ax.text(x, y-4, "O", ha="center", fontsize=9,
+                        color="#c0392b", fontweight="bold")
+
+        # OS AC
+        pts_os = [(i, v) for i, v in enumerate(os_) if v is not None]
+        if pts_os:
+            xi, yi = zip(*pts_os)
+            ax.plot(xi, yi, color="#2980b9", lw=1.8,
+                    marker="x", ms=6, label="OS AC", zorder=4)
+            for x, y in pts_os:
+                ax.text(x, y+5, "X", ha="center", fontsize=9,
+                        color="#2980b9", fontweight="bold")
+
+        ax.legend(fontsize=8, loc="lower right")
+        fig.tight_layout(pad=0.5)
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=110, bbox_inches="tight",
+                    facecolor="white")
+        plt.close(fig)
+        buf.seek(0)
+        st.image(buf, use_container_width=True)
+    except Exception as e:
+        st.warning(f"Grafico non disponibile: {e}")
