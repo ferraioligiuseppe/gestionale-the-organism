@@ -3,37 +3,65 @@ import streamlit as st
 
 def ui_lenti_contatto():
     st.title("👁️ Lenti a contatto")
-    st.markdown("### Modulo unico LAC – PNEV")
+    st.markdown("### Sistema unico LAC – The Organism (PNEV)")
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "Ortho-K / Inverse",
-        "Calcolo Toffoli",
-        "ESA Ortho-6",
-        "Morbide / Toriche / Presbiopia",
-        "Avanzate (Calossi)",
-        "Fluoresceina"
+    # --- Paziente (placeholder: integra con il tuo selector) ---
+    st.subheader("Paziente")
+    st.info("Collega qui il selector paziente del gestionale")
+
+    tab_base, tab_toriche, tab_presb, tab_rgp, tab_orthok, tab_avanz, tab_storico = st.tabs([
+        "Base (sferiche)",
+        "Toriche",
+        "Presbiopia",
+        "RGP",
+        "Ortho-K",
+        "Avanzate",
+        "Storico"
     ])
 
-    with tab1:
-        from modules.ui_lenti_inverse import ui_lenti_inverse
-        ui_lenti_inverse()
+    # --- BASE ---
+    with tab_base:
+        st.markdown("### LAC morbide sferiche")
+        sf = st.number_input("Sfera (D)", step=0.25, value=0.0)
+        if st.button("Calcola lente base"):
+            st.success(f"Lente suggerita: {sf:+.2f} D")
 
-    with tab2:
-        from modules.ui_calcolatore_lac import ui_calcolatore_lac
-        ui_calcolatore_lac()
+    # --- TORICHE ---
+    with tab_toriche:
+        st.markdown("### LAC toriche")
+        sf = st.number_input("Sfera", key="t_sf")
+        cyl = st.number_input("Cilindro", key="t_cyl")
+        ax = st.number_input("Asse", min_value=0, max_value=180, key="t_ax")
+        if st.button("Calcola torica"):
+            st.success(f"SF {sf:+.2f} / CIL {cyl:+.2f} AX {ax}")
 
-    with tab3:
-        from modules.ui_esa_ortho6 import ui_esa_ortho6
-        ui_esa_ortho6()
+    # --- PRESBIOPIA ---
+    with tab_presb:
+        st.markdown("### Multifocale / Presbiopia")
+        add = st.number_input("ADD", step=0.25)
+        if st.button("Calcola multifocale"):
+            st.success(f"ADD consigliata: {add:+.2f}")
 
-    with tab4:
-        from modules.ui_lac_ametropie import ui_lac_ametropie
-        ui_lac_ametropie()
+    # --- RGP ---
+    with tab_rgp:
+        st.markdown("### Lenti RGP")
+        k = st.number_input("K medio (mm)", value=7.8)
+        if st.button("Calcola RGP"):
+            st.success(f"Raggio base suggerito: {k:.2f} mm")
 
-    with tab5:
-        from modules.ui_calcolatore_lac_plus import ui_calcolatore_lac_plus
-        ui_calcolatore_lac_plus()
+    # --- ORTHO-K ---
+    with tab_orthok:
+        st.markdown("### Ortho-K / Inverse")
+        myo = st.number_input("Miopia da ridurre", step=0.25)
+        if st.button("Calcola Ortho-K"):
+            st.success(f"Riduzione target: {myo:+.2f} D")
 
-    with tab6:
-        from modules.ui_fluorescein import ui_fluorescein_simulator
-        ui_fluorescein_simulator()
+    # --- AVANZATE ---
+    with tab_avanz:
+        st.markdown("### LAC su misura (avanzate)")
+        st.info("Qui integreremo Toffoli / Calossi / ESA in modo unificato")
+
+    # --- STORICO ---
+    with tab_storico:
+        st.markdown("### Storico LAC")
+        st.info("Collega qui il database unificato")
