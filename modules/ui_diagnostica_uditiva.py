@@ -232,20 +232,26 @@ def ui_diagnostica_uditiva():
     cur = conn.cursor()
 
     try:
-        cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
-        pazienti = cur.fetchall()
+        from modules.app_core import fetch_pazienti_for_select
+        rows, _, _ = fetch_pazienti_for_select(conn)
     except Exception as e:
-        st.error(f"Errore pazienti: {e}"); return
+        st.error(f"Errore caricamento pazienti: {e}"); return
 
-    if not pazienti:
+    if not rows:
         st.info("Nessun paziente registrato."); return
 
-    opts = [f"{_rg(p,'id')} - {_rg(p,'Cognome','')} {_rg(p,'Nome','')}".strip()
-            for p in pazienti]
+    options = []
+    for r in rows:
+        pid, cogn, nome = r[0], r[1], r[2]
+        options.append((int(pid), f"{cogn} {nome}"))
+
     c1, c2 = st.columns([3, 1])
-    with c1: sel = st.selectbox("Paziente", opts, key="du_paz")
-    with c2: op = st.text_input("Operatore", "", key="du_op")
-    paz_id = int(sel.split(" - ", 1)[0])
+    with c1:
+        sel = st.selectbox("Paziente", options=options,
+                           format_func=lambda x: x[1], key="du_paz")
+    with c2:
+        op = st.text_input("Operatore", "", key="du_op")
+    paz_id = sel[0]
 
     st.divider()
 
