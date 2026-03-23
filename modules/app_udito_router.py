@@ -1,20 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Routing dedicato ai moduli uditivi.
-
-Secondo step di modularizzazione: tutta la logica di visibilità/chiamata
-delle sezioni uditive esce da app.py/app_core.py.
-"""
+"""Routing dedicato ai moduli uditivi."""
 
 from typing import Callable, Any
 
 SECTION_ORL_EQ = "🎧 ORL + EQ (MODULO)"
 SECTION_GENERA = "🎧 Genera stimolazione (JOB)"
-SECTION_STIM = "🎧 Stimolazione uditiva (TEST)"
-SECTION_AUDIOGRAMMA = "🎧 Audiogramma funzionale (TEST)"
+SECTION_STIM   = "🎧 Stimolazione uditiva (TEST)"
 SECTION_ESAMI_ORL = "🩺 Esami ORL – soglie tonali (TEST)"
-SECTION_EQ_TEST = "🎚️ EQ stimolazione uditiva (TEST)"
-SECTION_CALIB = "🔧 Calibrazione cuffie (TEST)"
-SECTION_CLEANUP = "🧹 Pulizia DB (TEST)"
+SECTION_EQ_TEST   = "🎚️ EQ stimolazione uditiva (TEST)"
+SECTION_CALIB     = "🔧 Calibrazione cuffie (TEST)"
+SECTION_CLEANUP   = "🧹 Pulizia DB (TEST)"
+
 
 def dispatch_udito_section(
     *,
@@ -46,9 +42,6 @@ def dispatch_udito_section(
     if str(app_mode).lower().strip() != "test":
         return False
 
-    if sezione == SECTION_AUDIOGRAMMA:
-        ui_audiogramma_test()
-        return True
     if sezione == SECTION_ESAMI_ORL:
         ui_esami_orl_tonali_test()
         return True
