@@ -232,14 +232,10 @@ def ui_diagnostica_uditiva():
     cur = conn.cursor()
 
     try:
-        cur.execute('SELECT id, "Cognome", "Nome" FROM "Pazienti" ORDER BY "Cognome", "Nome"')
+        cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
         pazienti = cur.fetchall()
-    except Exception:
-        try:
-            cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
-            pazienti = cur.fetchall()
-        except Exception as e:
-            st.error(f"Errore pazienti: {e}"); return
+    except Exception as e:
+        st.error(f"Errore pazienti: {e}"); return
 
     if not pazienti:
         st.info("Nessun paziente registrato."); return
