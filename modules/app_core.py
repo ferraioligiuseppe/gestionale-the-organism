@@ -30,56 +30,7 @@ from modules.app_sections import (
     SECTION_RELAZIONI,
 )
 
-SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
-SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
-SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
-SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
-SECTION_LAC_PLUS          = "🔴 LAC Inverse Ametropie Avanzate"
-SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
 
-_build_sections_original = build_sections
-
-def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
-    sections = _build_sections_original(is_admin, app_mode)
-    if SECTION_LENTI_INVERSE not in sections:
-        try:
-            from modules.app_sections import SECTION_VISION
-            idx = sections.index(SECTION_VISION) + 1
-        except Exception:
-            idx = 3
-        sections.insert(idx, SECTION_LENTI_INVERSE)
-    if SECTION_LAC_AMETROPIE not in sections:
-        try:
-            idx2 = sections.index(SECTION_LENTI_INVERSE) + 1
-        except Exception:
-            idx2 = 4
-        sections.insert(idx2, SECTION_LAC_AMETROPIE)
-    if SECTION_CALCOLATORE not in sections:
-        try:
-            idx3 = sections.index(SECTION_LAC_AMETROPIE) + 1
-        except Exception:
-            idx3 = 5
-        sections.insert(idx3, SECTION_CALCOLATORE)
-    if SECTION_ESA not in sections:
-        try:
-            idx4 = sections.index(SECTION_CALCOLATORE) + 1
-        except Exception:
-            idx4 = 6
-        sections.insert(idx4, SECTION_ESA)
-    if SECTION_ESAMI_STRUM not in sections:
-        try:
-            from modules.app_sections import SECTION_VISION
-            idx5 = sections.index(SECTION_VISION) + 1
-        except Exception:
-            idx5 = 4
-        sections.insert(idx5, SECTION_ESAMI_STRUM)
-    if SECTION_LAC_PLUS not in sections:
-        try:
-            idx6 = sections.index(SECTION_ESA) + 1
-        except Exception:
-            idx6 = 8
-        sections.insert(idx6, SECTION_LAC_PLUS)
-    return sections
 
 import pnev_module as pnev
 
@@ -9859,35 +9810,11 @@ def main():
     if _udito_handled:
         return
 
-    # routing lenti inverse
-    if sezione == SECTION_LENTI_INVERSE:
-        ui_lenti_inverse()
-        return
 
     # routing LAC ametropie
-    if sezione == SECTION_LAC_AMETROPIE:
-        ui_lac_ametropie()
-        return
 
-    # routing Calcolatore LAC
-    if sezione == SECTION_CALCOLATORE:
-        ui_calcolatore_lac()
-        return
-
-    # routing ESA Ortho-6
-    if sezione == SECTION_ESA:
-        ui_esa_ortho6()
-        return
-
-    # routing Esami Strumentali
-    if sezione == SECTION_ESAMI_STRUM:
-        ui_esami_strumentali()
-        return
 
     # routing LAC Ametropie Avanzate
-    if sezione == SECTION_LAC_PLUS:
-        ui_calcolatore_lac_plus()
-        return
 
 
 
