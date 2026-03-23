@@ -714,7 +714,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
         if st.button("▶ Invia tono", type="primary",
                      key=pfx+"play", use_container_width=True):
             wav = _genera_tono_wav(cur_f, float(cur_db), cur_ear, float(dur))
-            st.audio(wav, format="audio/wav", autoplay=True)
+            st.audio(wav, format="audio/wav")
             if mode == "Semi-auto":
                 st.info(f"Tono {cur_f} Hz a {cur_db} dB HL — Risponde?")
 
@@ -728,7 +728,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
             if mode in ("Semi-auto","Automatico"):
                 wav = _genera_tono_wav(FREQS_TON[ss[pfx+"fidx"]],
                                        float(ss[pfx+"db"]), cur_ear, float(dur))
-                st.audio(wav, format="audio/wav", autoplay=True)
+                st.audio(wav, format="audio/wav")
             st.rerun()
 
     new_db = st.slider("dB HL", -20, 90, cur_db, 5, key=pfx+"db_sl",
@@ -748,7 +748,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
             if mode == "Automatico":
                 wav = _genera_tono_wav(FREQS_TON[ss[pfx+"fidx"]],
                                        float(ss[pfx+"db"]), cur_ear, 2.0)
-                st.audio(wav, format="audio/wav", autoplay=True)
+                st.audio(wav, format="audio/wav")
             st.rerun()
 
     with rc2:
@@ -757,7 +757,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
             if mode == "Automatico":
                 wav = _genera_tono_wav(FREQS_TON[ss[pfx+"fidx"]],
                                        float(ss[pfx+"db"]), cur_ear, 2.0)
-                st.audio(wav, format="audio/wav", autoplay=True)
+                st.audio(wav, format="audio/wav")
             st.rerun()
 
     with rc3:
