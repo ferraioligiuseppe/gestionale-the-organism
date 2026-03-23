@@ -390,7 +390,7 @@ def _ui_fisher(conn, paz_id, operatore):
     for col, (cat, info) in zip([apc1,apc2,apc3,apc4], APD_CATS.items()):
         col.metric(info["label"], f"{apd[cat]}/{len(info['items'])}")
 
-    nota = st.text_area("Note cliniche", key="f_note_i", height=80)
+    nota = st.text_area("Note Fisher", key="f_note_i", height=80)
 
     if st.button("Salva Fisher", type="primary", key="f_save"):
         dati = {
@@ -484,7 +484,7 @@ def _ui_scapa(conn, paz_id, operatore):
         st.markdown(f"<p style='color:{color};font-weight:500'>{interp}</p>",
                     unsafe_allow_html=True)
 
-    nota = st.text_area("Note cliniche", key="a_note_i", height=80)
+    nota = st.text_area("Note SCAP-A", key="a_note_i", height=80)
 
     if st.button("Salva SCAP-A", type="primary", key="a_save"):
         dati = {
@@ -847,7 +847,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
 
     # ── Salvataggio ───────────────────────────────────────────────────────
     st.divider()
-    nota_ton = st.text_area("Note cliniche", key=pfx+"ton_note", height=60)
+    nota_ton = st.text_area("Note audiogramma", key=pfx+"ton_note", height=60)
     if st.button("💾 Salva audiogramma", type="primary", key=pfx+"save"):
         eq_od, eq_os = _calc_eq_tomatis(od_ac, os_ac, tom)
         n_soglie = sum(1 for v in od_ac+os_ac if v is not None)
