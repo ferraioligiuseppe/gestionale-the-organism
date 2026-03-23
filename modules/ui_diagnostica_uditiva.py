@@ -847,7 +847,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
 
     # ── Salvataggio ───────────────────────────────────────────────────────
     st.divider()
-    nota_ton = st.text_area("Note cliniche", key=pfx+"note", height=60)
+    nota_ton = st.text_area("Note cliniche", key=pfx+"ton_note", height=60)
     if st.button("💾 Salva audiogramma", type="primary", key=pfx+"save"):
         eq_od, eq_os = _calc_eq_tomatis(od_ac, os_ac, tom)
         n_soglie = sum(1 for v in od_ac+os_ac if v is not None)
