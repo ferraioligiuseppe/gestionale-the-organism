@@ -17,12 +17,14 @@ from modules.app_menu import build_sections
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
-from modules.ui_lenti_inverse import ui_lenti_inverse
-from modules.ui_lac_ametropie import ui_lac_ametropie
-from modules.ui_calcolatore_lac import ui_calcolatore_lac
-from modules.ui_esa_ortho6 import ui_esa_ortho6
+from modules.ui_lenti_contatto import ui_lenti_contatto
 from modules.ui_esami_strumentali import ui_esami_strumentali
-from modules.ui_calcolatore_lac_plus import ui_calcolatore_lac_plus
+from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
+from modules.ui_audiometria_funzionale import ui_audiometria_funzionale
+try:
+    from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
+except Exception:
+    _ui_calib_cuffie_ext = None
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -35,42 +37,22 @@ from modules.app_sections import (
     SECTION_RELAZIONI,
 )
 
-SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
-SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
-SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
-SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
-SECTION_LAC_PLUS     = "🔴 LAC Inverse Ametropie Avanzate"
+SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
+SECTION_BILANCIO_UDITIVO   = "🎧 Bilancio Uditivo"
+SECTION_AUDIOMETRIA_FUN    = "📊 Audiometria Funzionale"
 SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
 
 _build_sections_original = build_sections
 
 def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
     sections = _build_sections_original(is_admin, app_mode)
-    if SECTION_LENTI_INVERSE not in sections:
+    if SECTION_LENTI_CONTATTO not in sections:
         try:
             from modules.app_sections import SECTION_VISION
             idx = sections.index(SECTION_VISION) + 1
         except Exception:
             idx = 3
-        sections.insert(idx, SECTION_LENTI_INVERSE)
-    if SECTION_LAC_AMETROPIE not in sections:
-        try:
-            idx2 = sections.index(SECTION_LENTI_INVERSE) + 1
-        except Exception:
-            idx2 = 4
-        sections.insert(idx2, SECTION_LAC_AMETROPIE)
-    if SECTION_CALCOLATORE not in sections:
-        try:
-            idx3 = sections.index(SECTION_LAC_AMETROPIE) + 1
-        except Exception:
-            idx3 = 5
-        sections.insert(idx3, SECTION_CALCOLATORE)
-    if SECTION_ESA not in sections:
-        try:
-            idx4 = sections.index(SECTION_CALCOLATORE) + 1
-        except Exception:
-            idx4 = 6
-        sections.insert(idx4, SECTION_ESA)
+        sections.insert(idx, SECTION_LENTI_CONTATTO)
     if SECTION_ESAMI_STRUM not in sections:
         try:
             from modules.app_sections import SECTION_VISION
@@ -78,12 +60,6 @@ def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
         except Exception:
             idx5 = 4
         sections.insert(idx5, SECTION_ESAMI_STRUM)
-    if SECTION_LAC_PLUS not in sections:
-        try:
-            idx6 = sections.index(SECTION_ESA) + 1
-        except Exception:
-            idx6 = 8
-        sections.insert(idx6, SECTION_LAC_PLUS)
     return sections
 
 import pnev_module as pnev
@@ -9841,40 +9817,32 @@ def main():
     sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
 
     # routing moduli uditivi (estratti)
-    if dispatch_udito_section(
-        sezione=sezione,
-        app_mode=APP_MODE,
-        get_connection=get_connection,
-        paziente_selector_fn=_select_paziente_minimal,
-        ui_orl_eq=ui_orl_eq,
-        ui_generatore_stimolazione=ui_generatore_stimolazione,
-        ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
-        ui_audiogramma_test=ui_audiogramma_test,
-        ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
-        ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
-        ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
-        ui_db_cleanup=ui_db_cleanup,
-    ):
+    try:
+        _udito_handled = dispatch_udito_section(
+            sezione=sezione,
+            app_mode=APP_MODE,
+            get_connection=get_connection,
+            paziente_selector_fn=_select_paziente_minimal,
+            ui_orl_eq=ui_orl_eq,
+            ui_generatore_stimolazione=ui_generatore_stimolazione,
+            ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
+            ui_audiogramma_test=ui_audiogramma_test,
+            ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
+            ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
+            ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
+            ui_db_cleanup=ui_db_cleanup,
+        )
+    except Exception as _udito_err:
+        import traceback
+        st.error(f"Errore sezione uditiva: {type(_udito_err).__name__}: {_udito_err}")
+        st.code(traceback.format_exc())
+        return
+    if _udito_handled:
         return
 
-    # routing lenti inverse
-    if sezione == SECTION_LENTI_INVERSE:
-        ui_lenti_inverse()
-        return
-
-    # routing LAC ametropie
-    if sezione == SECTION_LAC_AMETROPIE:
-        ui_lac_ametropie()
-        return
-
-    # routing Calcolatore LAC
-    if sezione == SECTION_CALCOLATORE:
-        ui_calcolatore_lac()
-        return
-
-    # routing ESA Ortho-6
-    if sezione == SECTION_ESA:
-        ui_esa_ortho6()
+    # routing Lenti a contatto
+    if sezione == SECTION_LENTI_CONTATTO:
+        ui_lenti_contatto()
         return
 
     # routing Esami Strumentali
@@ -9882,9 +9850,14 @@ def main():
         ui_esami_strumentali()
         return
 
-    # routing LAC Ametropie Avanzate
-    if sezione == SECTION_LAC_PLUS:
-        ui_calcolatore_lac_plus()
+    # routing Bilancio Uditivo
+    if sezione == SECTION_BILANCIO_UDITIVO:
+        ui_bilancio_uditivo()
+        return
+
+    # routing Audiometria Funzionale
+    if sezione == SECTION_AUDIOMETRIA_FUN:
+        ui_audiometria_funzionale()
         return
 
     # routing principale (estratto)
