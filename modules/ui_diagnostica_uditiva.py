@@ -333,6 +333,9 @@ def ui_diagnostica_uditiva(conn=None):
     with st.expander("🎵 Test Tonale Audiometrico + EQ", expanded=False):
         ui_test_tonale(conn, paz_id, op)
 
+    with st.expander("🎧 Test Dicotico Johansen", expanded=False):
+        ui_test_johansen(conn, paz_id, op)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab Fisher
 # ─────────────────────────────────────────────────────────────────────────────
@@ -780,3 +783,144 @@ def _mostra_audiogramma(od, os_, tom):
         st.image(buf, use_container_width=True)
     except Exception as e:
         st.warning(f"Grafico non disponibile: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST DICOTICO JOHANSEN
+# ─────────────────────────────────────────────────────────────────────────────
+
+JOHANSEN_COPPIE = [
+    {"od":"DAT","os":"SOT"},{"od":"MYL","os":"GIF"},{"od":"NIK","os":"VEF"},
+    {"od":"GIF","os":"KIT"},{"od":"FAK","os":"BAT"},{"od":"NUR","os":"NIK"},
+    {"od":"SOT","os":"VYF"},{"od":"GEP","os":"RIS"},{"od":"VYF","os":"MYL"},
+    {"od":"POS","os":"LIR"},{"od":"BOT","os":"TIK"},{"od":"VEF","os":"FAK"},
+    {"od":"KIR","os":"DAT"},{"od":"KIT","os":"NUR"},{"od":"TIK","os":"BOT"},
+    {"od":"LYM","os":"LYM"},{"od":"TOS","os":"HUT"},{"od":"BAT","os":"GEP"},
+    {"od":"RIS","os":"POS"},{"od":"HUT","os":"TOS"},
+]
+
+JOHANSEN_TRACCE = [
+    {"n":1,"desc":"Istruzioni","dur":"~10s"},
+    {"n":2,"desc":"Compito 1 — risposta OD","dur":"~69s"},
+    {"n":3,"desc":"Compito 2 — risposta OS","dur":"~73s"},
+    {"n":4,"desc":"Compito 3 — risposte DX","dur":"~75s"},
+    {"n":5,"desc":"Compito 4 — risposte SX","dur":"~73s"},
+    {"n":6,"desc":"Compito 5 — entrambi","dur":"~100s"},
+]
+
+
+def _load_johansen_track(n: int):
+    """Carica traccia Johansen da assets/johansen/ nel repo."""
+    import pathlib
+    # Cerca nella cartella assets/johansen relativa al modulo
+    base = pathlib.Path(__file__).parent.parent / "assets" / "johansen"
+    path = base / f"traccia_{n:02d}.mp3"
+    if path.exists():
+        return path.read_bytes(), "audio/mp3"
+    return None, None
+
+
+def ui_test_johansen(conn, paz_id, operatore=""):
+    """Test dicotico di Johansen con tracce audio incorporate."""
+
+    st.subheader("Test dicotico di Johansen")
+    st.caption(
+        "20 coppie sillabe OD/OS simultanee · 5 compiti · "
+        "Calcolo automatico indice di lateralità"
+    )
+
+    # ── Tracce audio ──────────────────────────────────────────────────────
+    st.markdown("**Riproduci le tracce in ordine:**")
+    for info in JOHANSEN_TRACCE:
+        n = info["n"]
+        data, mime = _load_johansen_track(n)
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            st.markdown(
+                f"**Traccia {n}** — {info['desc']} ({info['dur']})")
+        with c2:
+            if data:
+                st.audio(data, format=mime)
+            else:
+                st.warning(f"File non trovato: traccia_{n:02d}.mp3")
+
+    st.divider()
+
+    # ── Tabella risposte ──────────────────────────────────────────────────
+    st.markdown("**Registra le risposte del paziente**")
+    st.caption("Comp.3 = risposta DX · Comp.4 = risposta SX · Comp.5 = entrambi")
+
+    if "joh_risposte" not in st.session_state:
+        st.session_state.joh_risposte = {}
+
+    opts = ["", "OD", "OS", "Entrambi"]
+
+    # Header
+    h = st.columns([0.4, 0.7, 0.7, 1.2, 1.2, 1.2])
+    for lbl, col in zip(["#","OD","OS","Comp.3 DX","Comp.4 SX","Comp.5 Both"], h):
+        col.markdown(f"<div style='font-size:11px;font-weight:600;"
+                     f"color:var(--color-text-secondary)'>{lbl}</div>",
+                     unsafe_allow_html=True)
+
+    for i, coppia in enumerate(JOHANSEN_COPPIE):
+        c0,c1,c2,c3,c4,c5 = st.columns([0.4,0.7,0.7,1.2,1.2,1.2])
+        c0.markdown(f"<div style='font-size:11px;color:var(--color-text-secondary);"
+                    f"padding-top:8px'>{i+1}</div>", unsafe_allow_html=True)
+        c1.markdown(f"<div style='color:#c0392b;font-weight:600;font-size:13px;"
+                    f"padding-top:6px'>{coppia['od']}</div>", unsafe_allow_html=True)
+        c2.markdown(f"<div style='color:#2980b9;font-weight:600;font-size:13px;"
+                    f"padding-top:6px'>{coppia['os']}</div>", unsafe_allow_html=True)
+
+        r = st.session_state.joh_risposte.get(i, {})
+        for comp, col in [("c3",c3),("c4",c4),("c5",c5)]:
+            cur_v = r.get(comp, "")
+            idx = opts.index(cur_v) if cur_v in opts else 0
+            v = col.selectbox("", opts, index=idx,
+                              key=f"joh_{comp}_{i}",
+                              label_visibility="collapsed")
+            if v:
+                st.session_state.joh_risposte.setdefault(i, {})[comp] = v
+
+    # ── Calcolo punteggi ─────────────────────────────────────────────────
+    jod, jos = 0, 0
+    for i, r in st.session_state.joh_risposte.items():
+        if r.get("c3") == "OD": jod += 1
+        if r.get("c4") == "OS": jos += 1
+        if r.get("c5") in ["OD","Entrambi"]: jod += 1
+        if r.get("c5") in ["OS","Entrambi"]: jos += 1
+
+    tot = jod + jos
+    idx_lat = round((jod-jos)*100/tot, 1) if tot > 0 else 0
+    dom = "OD dominante" if idx_lat > 10 else "OS dominante" if idx_lat < -10 else "Bilanciato"
+
+    st.divider()
+    m1,m2,m3 = st.columns(3)
+    m1.metric("Punteggio OD", jod)
+    m2.metric("Punteggio OS", jos)
+    m3.metric("Indice lateralità", f"{idx_lat:+.1f}" if tot > 0 else "—")
+
+    if tot > 0:
+        color = "#c0392b" if idx_lat > 10 else "#2980b9" if idx_lat < -10 else "#2d7d6f"
+        st.markdown(
+            f"<div style='padding:8px 12px;border-radius:8px;"
+            f"border-left:4px solid {color};font-size:13px;"
+            f"background:var(--color-background-secondary);margin:8px 0'>"
+            f"<b style='color:{color}'>{dom}</b> "
+            f"(indice {idx_lat:+.1f}/100)</div>",
+            unsafe_allow_html=True)
+
+    nota_joh = st.text_input("Note Johansen", key="joh_note_v2")
+
+    if st.button("Salva test Johansen", type="primary", key="joh_save_v2"):
+        data = {
+            "jod": jod, "jos": jos,
+            "indice": idx_lat, "dominanza": dom,
+            "risposte": {str(k): v for k,v in
+                         st.session_state.joh_risposte.items()}
+        }
+        if _salva(conn, paz_id, "Johansen", data, idx_lat, dom,
+                  operatore, nota_joh):
+            st.success(f"Test Johansen salvato — {dom} (indice {idx_lat:+.1f})")
+
+    if st.button("Reset risposte", key="joh_reset_v2"):
+        st.session_state.joh_risposte = {}
