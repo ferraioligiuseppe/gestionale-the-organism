@@ -287,11 +287,12 @@ def _fetch_pazienti(conn):
     return []
 
 
-def ui_diagnostica_uditiva():
+def ui_diagnostica_uditiva(conn=None):
     st.header("Diagnostica Uditiva Funzionale")
     st.caption("Questionario Fisher (bambini) · SCAP-A (adulti) · Primo step della valutazione uditiva")
 
-    conn = _get_conn()
+    if conn is None:
+        conn = _get_conn()
     _init_db(conn)
     cur = conn.cursor()
 
@@ -301,21 +302,7 @@ def ui_diagnostica_uditiva():
         st.error(f"Errore caricamento pazienti: {e}"); return
 
     if not rows:
-        # Debug: mostra tabelle disponibili nel DB
-        try:
-            cur2 = conn.cursor()
-            try:
-                cur2.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-                tables = [r[0] for r in cur2.fetchall()]
-            except Exception:
-                cur2.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name")
-                tables = [r[0] for r in cur2.fetchall()]
-            paz_tables = [t for t in tables if 'paz' in t.lower() or 'patient' in t.lower()]
-            st.error(f"Tabelle trovate nel DB: {tables[:20]}")
-            st.info(f"Tabelle con 'paz'/'patient': {paz_tables}")
-        except Exception as e2:
-            st.error(f"Debug fallito: {e2}")
-        return
+        st.info("Nessun paziente registrato."); return
 
     options = [(int(r[0]), f"{r[1]} {r[2]}") for r in rows]
 

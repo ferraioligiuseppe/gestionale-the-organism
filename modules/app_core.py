@@ -9793,7 +9793,7 @@ def main():
     # routing Diagnostica Uditiva
     if sezione == "🔉 Diagnostica Uditiva":
         if _ui_diag_uditiva:
-            _ui_diag_uditiva()
+            _ui_diag_uditiva(conn=get_connection())
         else:
             st.error("Modulo diagnostica uditiva non disponibile.")
         return
