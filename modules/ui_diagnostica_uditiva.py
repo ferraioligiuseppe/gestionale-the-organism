@@ -712,9 +712,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
 
     # Salvataggio
     st.divider()
-    nota_ton = st.text_area("Note", key="tt_note", height=60,
-                            label_visibility="collapsed",
-                            placeholder="Note audiogramma...")
+    nota_ton = st.text_area("Note audiogramma", key="tt_note", height=60)
     if st.button("Salva audiogramma", type="primary", key="tt_save"):
         od_bc = [st.session_state.get("tt_soglie_OD_bc",{}).get(i) for i in range(11)]
         os_bc = [st.session_state.get("tt_soglie_OS_bc",{}).get(i) for i in range(11)]
