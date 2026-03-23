@@ -14,17 +14,14 @@ from datetime import timedelta, timezone
 
 import streamlit as st
 from modules.app_menu import build_sections
+try:
+    from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
+except Exception:
+    _ui_diag_uditiva = None
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
-from modules.ui_lenti_contatto import ui_lenti_contatto
 from modules.ui_esami_strumentali import ui_esami_strumentali
-from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
-from modules.ui_audiometria_funzionale import ui_audiometria_funzionale
-try:
-    from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
-except Exception:
-    _ui_calib_cuffie_ext = None
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -37,30 +34,7 @@ from modules.app_sections import (
     SECTION_RELAZIONI,
 )
 
-SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
-SECTION_BILANCIO_UDITIVO   = "🎧 Bilancio Uditivo"
-SECTION_AUDIOMETRIA_FUN    = "📊 Audiometria Funzionale"
-SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
 
-_build_sections_original = build_sections
-
-def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
-    sections = _build_sections_original(is_admin, app_mode)
-    if SECTION_LENTI_CONTATTO not in sections:
-        try:
-            from modules.app_sections import SECTION_VISION
-            idx = sections.index(SECTION_VISION) + 1
-        except Exception:
-            idx = 3
-        sections.insert(idx, SECTION_LENTI_CONTATTO)
-    if SECTION_ESAMI_STRUM not in sections:
-        try:
-            from modules.app_sections import SECTION_VISION
-            idx5 = sections.index(SECTION_VISION) + 1
-        except Exception:
-            idx5 = 4
-        sections.insert(idx5, SECTION_ESAMI_STRUM)
-    return sections
 
 import pnev_module as pnev
 
@@ -9816,6 +9790,14 @@ def main():
 
     sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
 
+    # routing Diagnostica Uditiva
+    if sezione == "🔉 Diagnostica Uditiva":
+        if _ui_diag_uditiva:
+            _ui_diag_uditiva(conn=get_connection())
+        else:
+            st.error("Modulo diagnostica uditiva non disponibile.")
+        return
+
     # routing moduli uditivi (estratti)
     try:
         _udito_handled = dispatch_udito_section(
@@ -9840,25 +9822,13 @@ def main():
     if _udito_handled:
         return
 
-    # routing Lenti a contatto
-    if sezione == SECTION_LENTI_CONTATTO:
-        ui_lenti_contatto()
-        return
 
-    # routing Esami Strumentali
-    if sezione == SECTION_ESAMI_STRUM:
-        ui_esami_strumentali()
-        return
+    # routing LAC ametropie
 
-    # routing Bilancio Uditivo
-    if sezione == SECTION_BILANCIO_UDITIVO:
-        ui_bilancio_uditivo()
-        return
 
-    # routing Audiometria Funzionale
-    if sezione == SECTION_AUDIOMETRIA_FUN:
-        ui_audiometria_funzionale()
-        return
+    # routing LAC Ametropie Avanzate
+
+
 
     # routing principale (estratto)
     if dispatch_main_section(
