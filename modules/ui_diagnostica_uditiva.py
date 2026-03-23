@@ -627,9 +627,9 @@ def ui_test_tonale(conn, paz_id, operatore=""):
     cur_db = st.slider("Livello dB HL", min_value=-20, max_value=90,
                        value=30, step=5, key="tt_db")
 
-    dur = st.select_slider("Durata", options=[1.0, 1.5, 2.0, 2.5, 3.0],
-                           value=2.0, key="tt_dur",
-                           format_func=lambda x: f"{x}s")
+    dur_str = st.select_slider("Durata", options=["1.0","1.5","2.0","2.5","3.0"],
+                               value="2.0", key="tt_dur")
+    dur = float(dur_str)
 
     if st.button("Invia tono", type="primary", key="tt_play", use_container_width=True):
         wav = _genera_tono_wav(int(cur_f), float(cur_db), ear_code, float(dur))
@@ -682,9 +682,9 @@ def ui_test_tonale(conn, paz_id, operatore=""):
             st.session_state["tt_tomatis"] = list(TOMATIS_STD)
         tc = st.columns(11)
         for i, lbl in enumerate(FLABELS_TON):
-            v = tc[i].number_input(lbl, -30, 10,
-                                   int(st.session_state["tt_tomatis"][i]),
-                                   1, key=f"tt_tm{i}")
+            v = tc[i].number_input(lbl, min_value=-30, max_value=10,
+                                   value=int(st.session_state["tt_tomatis"][i]),
+                                   step=1, key=f"tt_tm{i}")
             st.session_state["tt_tomatis"][i] = int(v)
         if st.button("Standard", key="tt_tm_rst"):
             st.session_state["tt_tomatis"] = list(TOMATIS_STD)
