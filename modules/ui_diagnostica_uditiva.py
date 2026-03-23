@@ -619,7 +619,13 @@ def ui_test_tonale(conn, paz_id, operatore=""):
 
     # ── Stato sessione ──────────────────────────────────────────────────────
     ss = st.session_state
-    pfx = f"ton_{paz_id}_"
+    pfx = "ton_"  # chiave fissa per evitare duplicati Streamlit
+    # Reset se paziente cambia
+    if ss.get(pfx+"paz_id") != paz_id:
+        for k in list(ss.keys()):
+            if k.startswith(pfx):
+                del ss[k]
+        ss[pfx+"paz_id"] = paz_id
     if pfx+"od_ac"   not in ss: ss[pfx+"od_ac"]   = [None]*11
     if pfx+"os_ac"   not in ss: ss[pfx+"os_ac"]   = [None]*11
     if pfx+"od_bc"   not in ss: ss[pfx+"od_bc"]   = [None]*11
