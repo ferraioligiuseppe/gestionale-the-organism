@@ -223,6 +223,70 @@ def _calc_scapa(answers: list):
 # UI principale
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _fetch_pazienti(conn):
+    """Carica lista pazienti senza dipendere da app_core."""
+    cur = conn.cursor()
+    # Prova a scoprire il nome reale della tabella
+    candidates = ['Pazienti','pazienti','Patients','patients']
+    try:
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [r[0] for r in cur.fetchall()]
+        for t in tables:
+            if 'paz' in t.lower() or 'patient' in t.lower():
+                if t not in candidates:
+                    candidates.insert(0, t)
+    except Exception:
+        try:
+            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+            tables = [r[0] for r in cur.fetchall()]
+            for t in tables:
+                if 'paz' in t.lower() or 'patient' in t.lower():
+                    if t not in candidates:
+                        candidates.insert(0, t)
+        except Exception:
+            pass
+
+    col_id = ['id']
+    col_cogn = ['Cognome','cognome','LastName','last_name']
+    col_nome = ['Nome','nome','FirstName','first_name']
+
+    def get_cols(table):
+        try:
+            cur.execute(f'PRAGMA table_info("{table}")')
+            return [r[1] for r in cur.fetchall()]
+        except Exception:
+            try:
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema='public' AND table_name=%s", (table,))
+                return [r[0] for r in cur.fetchall()]
+            except Exception:
+                return []
+
+    def pick(cols, candidates):
+        s = set(cols)
+        for c in candidates:
+            if c in s: return c
+        low = {x.lower(): x for x in cols}
+        for c in candidates:
+            if c.lower() in low: return low[c.lower()]
+        return None
+
+    for table in candidates:
+        cols = get_cols(table)
+        if not cols: continue
+        idc  = pick(cols, col_id)
+        cc   = pick(cols, col_cogn)
+        nc   = pick(cols, col_nome)
+        if not (idc and cc and nc): continue
+        try:
+            cur.execute(f'SELECT "{idc}","{cc}","{nc}" FROM "{table}" ORDER BY "{cc}","{nc}"')
+            return cur.fetchall()
+        except Exception:
+            continue
+    return []
+
+
 def ui_diagnostica_uditiva():
     st.header("Diagnostica Uditiva Funzionale")
     st.caption("Questionario Fisher (bambini) · SCAP-A (adulti) · Primo step della valutazione uditiva")
@@ -232,18 +296,14 @@ def ui_diagnostica_uditiva():
     cur = conn.cursor()
 
     try:
-        from modules.app_core import fetch_pazienti_for_select
-        rows, _, _ = fetch_pazienti_for_select(conn)
+        rows = _fetch_pazienti(conn)
     except Exception as e:
         st.error(f"Errore caricamento pazienti: {e}"); return
 
     if not rows:
         st.info("Nessun paziente registrato."); return
 
-    options = []
-    for r in rows:
-        pid, cogn, nome = r[0], r[1], r[2]
-        options.append((int(pid), f"{cogn} {nome}"))
+    options = [(int(r[0]), f"{r[1]} {r[2]}") for r in rows]
 
     c1, c2 = st.columns([3, 1])
     with c1:
