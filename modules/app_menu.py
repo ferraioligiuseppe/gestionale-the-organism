@@ -40,8 +40,12 @@ ADMIN_SECTIONS = [
     SECTION_UTENTI,
 ]
 
+SECTION_DIAGNOSTICA_UDITIVA = "🔉 Diagnostica Uditiva"
+
+
 def build_sections(is_admin: bool, app_mode: str) -> list[str]:
     sections = list(BASE_SECTIONS)
     if is_admin:
         sections.extend(ADMIN_SECTIONS)
+    sections.append(SECTION_DIAGNOSTICA_UDITIVA)
     return sections
