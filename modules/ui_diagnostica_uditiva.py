@@ -677,17 +677,17 @@ def ui_test_tonale(conn, paz_id, operatore=""):
                 unsafe_allow_html=True)
 
     # Tomatis
-    with st.expander("Curva Tomatis", expanded=False):
-        if "diag_ton_tomatis_v2" not in st.session_state:
-            st.session_state["diag_ton_tomatis_v2"] = list(TOMATIS_STD)
-        tc = st.columns(11)
-        for i, lbl in enumerate(FLABELS_TON):
-            v = tc[i].number_input(lbl, min_value=-30, max_value=10,
-                                   value=int(st.session_state["diag_ton_tomatis_v2"][i]),
-                                   step=1, key=f"diag_ton_tm{i}_v2")
-            st.session_state["diag_ton_tomatis_v2"][i] = int(v)
-        if st.button("Standard", key="diag_ton_tm_rst_v2"):
-            st.session_state["diag_ton_tomatis_v2"] = list(TOMATIS_STD)
+    st.markdown("**Curva Tomatis** (modifica valori target)")
+    if "diag_ton_tomatis_v2" not in st.session_state:
+        st.session_state["diag_ton_tomatis_v2"] = list(TOMATIS_STD)
+    tc = st.columns(11)
+    for i, lbl in enumerate(FLABELS_TON):
+        v = tc[i].number_input(lbl, min_value=-30, max_value=10,
+                               value=int(st.session_state["diag_ton_tomatis_v2"][i]),
+                               step=1, key=f"diag_ton_tm{i}_v2")
+        st.session_state["diag_ton_tomatis_v2"][i] = int(v)
+    if st.button("Ripristina standard", key="diag_ton_tm_rst_v2"):
+        st.session_state["diag_ton_tomatis_v2"] = list(TOMATIS_STD)
 
     # Grafico
     od_ac = [st.session_state.get("diag_ton_soglie_OD_ac",{}).get(i) for i in range(11)]
