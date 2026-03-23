@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-try:
-    from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
-except Exception:
-    _ui_diag_uditiva = None
+from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
 from modules.ui_lenti_inverse import ui_lenti_inverse
 
@@ -9544,7 +9541,7 @@ def main():
     elif sezione == "👥 Utenti / Ruoli":
         ui_gestione_utenti(get_connection)
     elif sezione == "🔉 Diagnostica Uditiva":
-        if _ui_diag_uditiva: _ui_diag_uditiva()
+        _ui_diag_uditiva()
     elif sezione == "🔧 Calibrazione cuffie (TEST)":
         ui_calibrazione_cuffie_test()
     elif sezione == "🎧 Audiogramma funzionale (TEST)":
