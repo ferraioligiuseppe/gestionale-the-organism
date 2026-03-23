@@ -3,12 +3,6 @@
 
 from typing import Callable, Any
 
-SECTION_ORL_EQ = "🎧 ORL + EQ (MODULO)"
-SECTION_GENERA = "🎧 Genera stimolazione (JOB)"
-SECTION_STIM   = "🎧 Stimolazione uditiva (TEST)"
-SECTION_ESAMI_ORL = "🩺 Esami ORL – soglie tonali (TEST)"
-SECTION_EQ_TEST   = "🎚️ EQ stimolazione uditiva (TEST)"
-SECTION_CALIB     = "🔧 Calibrazione cuffie (TEST)"
 SECTION_CLEANUP   = "🧹 Pulizia DB (TEST)"
 
 
