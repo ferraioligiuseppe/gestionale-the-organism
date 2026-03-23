@@ -23,11 +23,6 @@ from modules.ui_calcolatore_lac import ui_calcolatore_lac
 from modules.ui_esa_ortho6 import ui_esa_ortho6
 from modules.ui_esami_strumentali import ui_esami_strumentali
 from modules.ui_calcolatore_lac_plus import ui_calcolatore_lac_plus
-from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
-try:
-    from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
-except Exception:
-    _ui_calib_cuffie_ext = None
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -45,7 +40,6 @@ SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
 SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
 SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
 SECTION_LAC_PLUS          = "🔴 LAC Inverse Ametropie Avanzate"
-SECTION_BILANCIO_UDITIVO   = "🎧 Bilancio Uditivo"
 SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
 
 _build_sections_original = build_sections
@@ -9900,10 +9894,6 @@ def main():
         ui_calcolatore_lac_plus()
         return
 
-    # routing Bilancio Uditivo
-    if sezione == SECTION_BILANCIO_UDITIVO:
-        ui_bilancio_uditivo()
-        return
 
 
     # routing principale (estratto)
