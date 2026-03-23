@@ -614,24 +614,24 @@ def ui_test_tonale(conn, paz_id, operatore=""):
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        ear = st.selectbox("Orecchio", ["OD - Destro", "OS - Sinistro"], key="tt_ear")
+        ear = st.selectbox("Orecchio", ["OD - Destro", "OS - Sinistro"], key="diag_ton_ear_v2")
         ear_code = "OD" if "OD" in ear else "OS"
     with col2:
-        via = st.selectbox("Via", ["AC - Aerea", "BC - Ossea"], key="tt_via")
+        via = st.selectbox("Via", ["AC - Aerea", "BC - Ossea"], key="diag_ton_via_v2")
         via_code = "ac" if "AC" in via else "bc"
     with col3:
         cur_f = st.selectbox("Frequenza Hz", FREQS_TON,
                              format_func=lambda f: str(f) if f < 1000 else f"{f//1000}k",
-                             key="tt_freq")
+                             key="diag_ton_freq_v2")
 
     cur_db = st.slider("Livello dB HL", min_value=-20, max_value=90,
-                       value=30, step=5, key="tt_db")
+                       value=30, step=5, key="diag_ton_db_v2")
 
     dur_str = st.select_slider("Durata", options=["1.0","1.5","2.0","2.5","3.0"],
-                               value="2.0", key="tt_dur")
+                               value="2.0", key="diag_ton_dur_v2")
     dur = float(dur_str)
 
-    if st.button("Invia tono", type="primary", key="tt_play", use_container_width=True):
+    if st.button("Invia tono", type="primary", key="diag_ton_play_v2", use_container_width=True):
         wav = _genera_tono_wav(int(cur_f), float(cur_db), ear_code, float(dur))
         st.audio(wav, format="audio/wav")
 
@@ -639,11 +639,11 @@ def ui_test_tonale(conn, paz_id, operatore=""):
     st.markdown("**Risposta paziente**")
     b1, b2, b3 = st.columns(3)
     with b1:
-        risp = st.button("Risponde", key="tt_si", use_container_width=True)
+        risp = st.button("Risponde", key="diag_ton_si_v2", use_container_width=True)
     with b2:
-        no_risp = st.button("Non risponde", key="tt_no", use_container_width=True)
+        no_risp = st.button("Non risponde", key="diag_ton_no_v2", use_container_width=True)
     with b3:
-        valida = st.button("Valida soglia", key="tt_val", type="primary",
+        valida = st.button("Valida soglia", key="diag_ton_val_v2", type="primary",
                            use_container_width=True)
 
     if risp:
@@ -651,7 +651,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
     if no_risp:
         st.warning(f"Non risponde a {cur_db} dB — alza il livello e reinvia il tono")
     if valida:
-        key_s = f"tt_soglie_{ear_code}_{via_code}"
+        key_s = f"diag_ton_soglie_{ear_code}_{via_code}"
         if key_s not in st.session_state:
             st.session_state[key_s] = {}
         fidx = FREQS_TON.index(int(cur_f))
@@ -668,7 +668,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
     ]):
         col.markdown(f"<b style='color:{color};font-size:11px'>{label}</b>",
                      unsafe_allow_html=True)
-        soglie = st.session_state.get(f"tt_soglie_{ek}_{vk}", {})
+        soglie = st.session_state.get(f"diag_ton_soglie_{ek}_{vk}", {})
         for fi, v in sorted(soglie.items()):
             col.markdown(
                 f"<span style='border:1px solid {color};border-radius:6px;"
@@ -678,21 +678,21 @@ def ui_test_tonale(conn, paz_id, operatore=""):
 
     # Tomatis
     with st.expander("Curva Tomatis", expanded=False):
-        if "tt_tomatis" not in st.session_state:
-            st.session_state["tt_tomatis"] = list(TOMATIS_STD)
+        if "diag_ton_tomatis_v2" not in st.session_state:
+            st.session_state["diag_ton_tomatis_v2"] = list(TOMATIS_STD)
         tc = st.columns(11)
         for i, lbl in enumerate(FLABELS_TON):
             v = tc[i].number_input(lbl, min_value=-30, max_value=10,
-                                   value=int(st.session_state["tt_tomatis"][i]),
-                                   step=1, key=f"tt_tm{i}")
-            st.session_state["tt_tomatis"][i] = int(v)
-        if st.button("Standard", key="tt_tm_rst"):
-            st.session_state["tt_tomatis"] = list(TOMATIS_STD)
+                                   value=int(st.session_state["diag_ton_tomatis_v2"][i]),
+                                   step=1, key=f"diag_ton_tm{i}_v2")
+            st.session_state["diag_ton_tomatis_v2"][i] = int(v)
+        if st.button("Standard", key="diag_ton_tm_rst_v2"):
+            st.session_state["diag_ton_tomatis_v2"] = list(TOMATIS_STD)
 
     # Grafico
-    od_ac = [st.session_state.get("tt_soglie_OD_ac",{}).get(i) for i in range(11)]
-    os_ac = [st.session_state.get("tt_soglie_OS_ac",{}).get(i) for i in range(11)]
-    tom   = st.session_state.get("tt_tomatis", list(TOMATIS_STD))
+    od_ac = [st.session_state.get("diag_ton_soglie_OD_ac",{}).get(i) for i in range(11)]
+    os_ac = [st.session_state.get("diag_ton_soglie_OS_ac",{}).get(i) for i in range(11)]
+    tom   = st.session_state.get("diag_ton_tomatis_v2", list(TOMATIS_STD))
 
     if any(v is not None for v in od_ac + os_ac):
         st.divider()
@@ -712,10 +712,10 @@ def ui_test_tonale(conn, paz_id, operatore=""):
 
     # Salvataggio
     st.divider()
-    nota_ton = st.text_area("Note audiogramma", key="tt_note", height=60)
-    if st.button("Salva audiogramma", type="primary", key="tt_save"):
-        od_bc = [st.session_state.get("tt_soglie_OD_bc",{}).get(i) for i in range(11)]
-        os_bc = [st.session_state.get("tt_soglie_OS_bc",{}).get(i) for i in range(11)]
+    nota_ton = st.text_area("Note audiogramma", key="diag_ton_note_v2", height=60)
+    if st.button("Salva audiogramma", type="primary", key="diag_ton_save_v2"):
+        od_bc = [st.session_state.get("diag_ton_soglie_OD_bc",{}).get(i) for i in range(11)]
+        os_bc = [st.session_state.get("diag_ton_soglie_OS_bc",{}).get(i) for i in range(11)]
         eq_od, eq_os = _calc_eq_tomatis(od_ac, os_ac, tom)
         n = sum(1 for v in od_ac+os_ac if v is not None)
         dati = {"od_ac":od_ac,"os_ac":os_ac,"od_bc":od_bc,"os_bc":os_bc,
