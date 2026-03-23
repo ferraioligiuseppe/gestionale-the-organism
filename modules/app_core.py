@@ -14,6 +14,10 @@ from datetime import timedelta, timezone
 
 import streamlit as st
 from modules.app_menu import build_sections
+try:
+    from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
+except Exception:
+    _ui_diag_uditiva = None
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
@@ -9785,6 +9789,14 @@ def main():
             st.session_state[nav_key] = target
 
     sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
+
+    # routing Diagnostica Uditiva
+    if sezione == "🔉 Diagnostica Uditiva":
+        if _ui_diag_uditiva:
+            _ui_diag_uditiva()
+        else:
+            st.error("Modulo diagnostica uditiva non disponibile.")
+        return
 
     # routing moduli uditivi (estratti)
     try:
