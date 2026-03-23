@@ -9507,14 +9507,7 @@ def main():
     if is_admin():
         sections.append("👥 Utenti / Ruoli")
 
-    sections.append("🎧 ORL + EQ (MODULO)")
-    sections.append("🎧 Genera stimolazione (JOB)")
-    sections.append("🎧 Stimolazione uditiva (TEST)")
-    if APP_MODE == "test":
-        sections.append("🩺 Esami ORL – soglie tonali (TEST)")
-        sections.append("🎚️ EQ stimolazione uditiva (TEST)")
-        sections.append("🔧 Calibrazione cuffie (TEST)")
-        sections.append("🧹 Pulizia DB (TEST)")
+
     sezione = st.sidebar.radio("Vai a", sections)
 
     # routing alle varie sezioni
