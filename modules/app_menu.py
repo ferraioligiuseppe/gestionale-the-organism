@@ -45,7 +45,6 @@ ADMIN_SECTIONS = [
 ]
 
 SECTION_BILANCIO_UDITIVO = "🎧 Bilancio Uditivo"
-SECTION_AUDIOMETRIA_FUN  = "📊 Audiometria Funzionale"
 
 UDITO_PROD_SECTIONS = [
     "🎧 ORL + EQ (MODULO)",
@@ -68,7 +67,6 @@ def build_sections(is_admin: bool, app_mode: str) -> list[str]:
     if is_admin:
         sections.extend(ADMIN_SECTIONS)
     sections.append(SECTION_BILANCIO_UDITIVO)
-    sections.append(SECTION_AUDIOMETRIA_FUN)
     sections.extend(UDITO_PROD_SECTIONS)
     if str(app_mode).lower().strip() == "test":
         sections.extend(UDITO_TEST_ONLY_SECTIONS)

@@ -24,7 +24,6 @@ from modules.ui_esa_ortho6 import ui_esa_ortho6
 from modules.ui_esami_strumentali import ui_esami_strumentali
 from modules.ui_calcolatore_lac_plus import ui_calcolatore_lac_plus
 from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
-from modules.ui_audiometria_funzionale import ui_audiometria_funzionale
 try:
     from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
 except Exception:
@@ -47,7 +46,6 @@ SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
 SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
 SECTION_LAC_PLUS          = "🔴 LAC Inverse Ametropie Avanzate"
 SECTION_BILANCIO_UDITIVO   = "🎧 Bilancio Uditivo"
-SECTION_AUDIOMETRIA_FUN    = "📊 Audiometria Funzionale"
 SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
 
 _build_sections_original = build_sections
@@ -9907,10 +9905,6 @@ def main():
         ui_bilancio_uditivo()
         return
 
-    # routing Audiometria Funzionale
-    if sezione == SECTION_AUDIOMETRIA_FUN:
-        ui_audiometria_funzionale()
-        return
 
     # routing principale (estratto)
     if dispatch_main_section(
