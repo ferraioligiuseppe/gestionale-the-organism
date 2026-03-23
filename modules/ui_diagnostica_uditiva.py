@@ -113,9 +113,6 @@ def _rg(row, key, default=None):
 
 def _get_conn():
     try:
-        from modules.app_core import get_connection; return get_connection()
-    except Exception: pass
-    try:
         import sys, os
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if root not in sys.path: sys.path.insert(0, root)
