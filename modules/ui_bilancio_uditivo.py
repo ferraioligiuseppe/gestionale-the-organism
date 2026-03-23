@@ -811,7 +811,7 @@ def ui_bilancio_uditivo():
 
     st.divider()
     with st.expander("Storico bilanci uditivi", expanded=False):
-        _ui_storico(conn, cur, paz_id)
+        _ui_storico_audio(conn, cur, paz_id)
 
     st.divider()
 
