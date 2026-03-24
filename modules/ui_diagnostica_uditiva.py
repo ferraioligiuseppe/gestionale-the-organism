@@ -944,7 +944,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
   });
 })();
 </script>
-""", height=0, key="ton_kbd_js")
+""", height=0)
 
     # Pad grande touch-friendly
     pad_css = """
