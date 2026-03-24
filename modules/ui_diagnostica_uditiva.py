@@ -330,9 +330,6 @@ def ui_diagnostica_uditiva(conn=None):
         _ui_storico(conn, cur, paz_id)
 
     st.divider()
-    with st.expander("🔧 Calibrazione Cuffie", expanded=False):
-        _ui_calibrazione_semplice()
-
     with st.expander("🔧 Calibrazione cuffie", expanded=False):
         _ui_calibrazione_rapida()
 
