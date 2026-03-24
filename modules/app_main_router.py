@@ -44,6 +44,9 @@ from .sections.ui_cliniche import (
     render_gaze_section,
     render_utenti_section,
 )
+from .ui_lenti_contatto import ui_lenti_contatto
+
+SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
 
 
 def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -> bool:
@@ -57,6 +60,10 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
 
     if sezione == SECTION_VISION:
         render_vision_section()
+        return True
+
+    if sezione == SECTION_LENTI_CONTATTO:
+        ui_lenti_contatto()
         return True
 
     if sezione == SECTION_SEDUTE:
