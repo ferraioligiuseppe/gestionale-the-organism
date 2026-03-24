@@ -7,6 +7,7 @@ Questo file riduce il rischio di refusi tra menu e routing.
 SECTION_PAZIENTI = "Pazienti"
 SECTION_PNEV = "Valutazione PNEV"
 SECTION_VISION = "Valutazioni visive / oculistiche"
+SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
 SECTION_SEDUTE = "Sedute / Terapie"
 SECTION_OSTEOPATIA = "Osteopatia"
 SECTION_COUPON = "Coupon OF / SDS"
