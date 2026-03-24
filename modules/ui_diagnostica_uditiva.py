@@ -289,7 +289,7 @@ def _fetch_pazienti(conn):
 
 def ui_diagnostica_uditiva(conn=None):
     st.header("Diagnostica Uditiva Funzionale")
-    st.caption("Questionario Fisher (bambini) · SCAP-A (adulti) · Primo step della valutazione uditiva")
+    st.caption("Questionario Fisher (bambini) - SCAP-A (adulti) - Primo step della valutazione uditiva")
 
     if conn is None:
         conn = _get_conn()
@@ -624,8 +624,8 @@ def _ui_calibrazione_semplice():
 
     st.subheader("Calibrazione cuffie")
     st.caption(
-        "Genera toni di riferimento a livello noto · "
-        "Misura con fonometro (app smartphone o fonometro fisico) · "
+        "Genera toni di riferimento a livello noto - "
+        "Misura con fonometro (app smartphone o fonometro fisico) - "
         "Salva il profilo di calibrazione"
     )
 
@@ -664,7 +664,7 @@ def _ui_calibrazione_semplice():
                  use_container_width=True):
         wav = _genera_tono_wav(int(cal_freq), float(cal_db), cal_ear, 3.0)
         st.audio(wav, format="audio/wav")
-        st.caption(f"Tono {cal_freq} Hz a {cal_db} dB HL · {cal_ear}")
+        st.caption(f"Tono {cal_freq} Hz a {cal_db} dB HL - {cal_ear}")
 
     st.divider()
     st.markdown("**Step 3 — Registra misura fonometro**")
@@ -787,7 +787,7 @@ def _ui_calibrazione_rapida():
     offset_od = spl_od - 70
     offset_os = spl_os - 70
     st.info(
-        f"Offset calibrazione → OD: {offset_od:+d} dB · OS: {offset_os:+d} dB  "
+        f"Offset calibrazione → OD: {offset_od:+d} dB - OS: {offset_os:+d} dB  "
         f"(verranno applicati automaticamente al test tonale)"
     )
 
@@ -795,25 +795,14 @@ def _ui_calibrazione_rapida():
         st.session_state["cal_offset_od"] = offset_od
         st.session_state["cal_offset_os"] = offset_os
         st.success(
-            f"Calibrazione salvata — OD: {offset_od:+d} dB · OS: {offset_os:+d} dB")
+            f"Calibrazione salvata — OD: {offset_od:+d} dB - OS: {offset_os:+d} dB")
 
-    # Procedura posizionamento
-    with st.expander("Come posizionare il microfono", expanded=False):
-        st.markdown("""
-**Procedura:**
-1. Collega le cuffie al PC con volume al massimo e EQ sistema disattivato
-2. Posiziona il microfono dello smartphone esattamente **al centro del padiglione**
-3. Premi leggermente il padiglione sul microfono per isolare i rumori esterni
-4. Invia il tono di riferimento e leggi il valore sull'app fonometro
-5. Ripeti per OD e OS separatamente
 
-**App consigliate:** Decibel X (iOS) · NIOSH SLM (iOS) · Sound Meter (Android)
-        """)
 
 
 def ui_test_tonale(conn, paz_id, operatore=""):
     st.subheader("Test tonale audiometrico")
-    st.caption("Via aerea e ossea · Metodo Hipérion · Curva Tomatis")
+    st.caption("Via aerea e ossea - Metodo Hipérion - Curva Tomatis")
 
     # ── Shortcut tastiera via JavaScript ─────────────────────────────────
     import streamlit.components.v1 as _components
@@ -912,7 +901,7 @@ def ui_test_tonale(conn, paz_id, operatore=""):
     # ── PAD risposta + keyboard shortcuts ───────────────────────────────
     st.divider()
     st.markdown("**Risposta paziente**")
-    st.caption("⌨️ SPAZIO = invia tono · ↑ = +5dB · ↓ = -5dB · R = risponde · N = non risponde")
+    st.caption("⌨️ SPAZIO = invia tono - ↑ = +5dB - ↓ = -5dB - R = risponde - N = non risponde")
 
     # JS per keyboard shortcuts
     import streamlit.components.v1 as _stc_kbd
@@ -1169,7 +1158,7 @@ def ui_test_johansen(conn, paz_id, operatore=""):
 
     st.subheader("Test dicotico di Johansen")
     st.caption(
-        "20 coppie sillabe OD/OS simultanee · 5 compiti · "
+        "20 coppie sillabe OD/OS simultanee - 5 compiti - "
         "Calcolo automatico indice di lateralità"
     )
 
@@ -1192,7 +1181,7 @@ def ui_test_johansen(conn, paz_id, operatore=""):
 
     # ── Tabella risposte ──────────────────────────────────────────────────
     st.markdown("**Registra le risposte del paziente**")
-    st.caption("Comp.3 = risposta DX · Comp.4 = risposta SX · Comp.5 = entrambi")
+    st.caption("Comp.3 = risposta DX - Comp.4 = risposta SX - Comp.5 = entrambi")
 
     if "joh_risposte" not in st.session_state:
         st.session_state.joh_risposte = {}
