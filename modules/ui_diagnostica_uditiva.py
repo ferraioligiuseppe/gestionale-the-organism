@@ -859,13 +859,41 @@ def ui_test_tonale(conn, paz_id, operatore=""):
     # Livello dB
     cur_db = st.slider("Livello dB HL", -20, 90, 30, 5, key="tt_db")
 
-    # ── Invia tono ───────────────────────────────────────────────────────
+    # ── Invia tono (WebAudio — zero latenza) ─────────────────────────────
+    cal_offset = st.session_state.get("cal_profilo_globale", {}).get(
+        f"offset_{ear_code.lower()}", 0)
+    db_eff = int(cur_db) + cal_offset
+
+    # Componente WebAudio: tono istantaneo nel browser
+    import streamlit.components.v1 as _sc
+    _sc.html(f"""<script>
+(function(){{
+  var _a=new(window.AudioContext||window.webkitAudioContext)();
+  if(_a.state==='suspended')_a.resume();
+  var _o=_a.createOscillator(),_g=_a.createGain(),_p=_a.createStereoPanner();
+  _p.pan.value={0.9 if ear_code=='OD' else -0.9};
+  _o.frequency.value={int(cur_f)};_o.type='sine';
+  var _amp=Math.pow(10,({db_eff}-90)/20)*0.85;
+  _amp=Math.max(0.001,Math.min(0.95,_amp));
+  _g.gain.setValueAtTime(0,_a.currentTime);
+  _g.gain.linearRampToValueAtTime(_amp,_a.currentTime+0.02);
+  _g.gain.setValueAtTime(_amp,_a.currentTime+{dur}-0.05);
+  _g.gain.linearRampToValueAtTime(0,_a.currentTime+{dur});
+  _o.connect(_g);_g.connect(_p);_p.connect(_a.destination);
+  _o.start();_o.stop(_a.currentTime+{dur});
+}})();
+</script><div style="display:none">t</div>""", height=0)
+
     c_play, c_m5, c_p5, c_m1, c_p1 = st.columns([3,1,1,1,1])
     with c_play:
-        if st.button("▶  Invia tono  [SPAZIO]", type="primary",
-                     key="tt_play", use_container_width=True):
-            wav = _genera_tono_wav(int(cur_f), float(cur_db), ear_code, dur)
-            st.audio(wav, format="audio/wav")
+        tono_inviato = st.button("▶  Invia tono  [SPAZIO]", type="primary",
+                     key="tt_play", use_container_width=True)
+        if tono_inviato:
+            st.session_state["tt_play_now"] = True
+    # Il tono parte AUTOMATICAMENTE al caricamento del componente html sopra
+    # Il pulsante serve per rigenerarlo
+    if st.session_state.get("tt_play_now"):
+        st.session_state["tt_play_now"] = False
     with c_m5:
         st.button("-5  [↓]", key="tt_m5", use_container_width=True)
     with c_p5:
@@ -883,40 +911,108 @@ def ui_test_tonale(conn, paz_id, operatore=""):
     # JS per keyboard shortcuts
     import streamlit.components.v1 as _stc_kbd
     _stc_kbd.html("""
+<style>
+body{margin:0;padding:0;background:transparent}
+</style>
 <script>
 (function(){
   if(window._kbdBound) return;
   window._kbdBound = true;
+  var actx = null;
+  var curOsc = null;
+
+  function getCtx(){
+    if(!actx) actx = new(window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended') actx.resume();
+    return actx;
+  }
+
+  // Legge freq e dB dalla pagina parent
+  function getParams(){
+    try {
+      var doc = window.parent.document;
+      // Frequenza dal selectbox
+      var freqSel = doc.querySelector('select[data-testid="stSelectbox"]');
+      var freqVal = 1000;
+      if(freqSel) freqVal = parseInt(freqSel.value) || 1000;
+
+      // dB dallo slider
+      var dbSlider = doc.querySelector('input[type="range"]');
+      var dbVal = 30;
+      if(dbSlider) dbVal = parseFloat(dbSlider.value) || 30;
+
+      // Orecchio
+      var earRadios = doc.querySelectorAll('input[type="radio"]:checked');
+      var ear = 'OD';
+      earRadios.forEach(function(r){ if(r.value==='OD'||r.value==='OS') ear=r.value; });
+
+      return {freq: freqVal, db: dbVal, ear: ear};
+    } catch(e){ return {freq:1000, db:30, ear:'OD'}; }
+  }
+
+  function playTone(freq, dbHL, ear, dur){
+    if(curOsc){ try{curOsc.stop();}catch(e){} curOsc=null; }
+    var ctx = getCtx();
+    var dbfs = dbHL - 90.0;
+    var amp = Math.pow(10, dbfs/20) * 0.85;
+    amp = Math.max(0.001, Math.min(0.95, amp));
+
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    var pan = ctx.createStereoPanner();
+
+    pan.pan.value = ear==='OD' ? 0.9 : -0.9;
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(amp, ctx.currentTime + 0.02);
+    gain.gain.setValueAtTime(amp, ctx.currentTime + dur - 0.05);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + dur);
+
+    osc.connect(gain);
+    gain.connect(pan);
+    pan.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + dur);
+    curOsc = osc;
+  }
+
+  // Esponi funzione globale per il pulsante Streamlit
+  window._playTone = function(freq, db, ear, dur){
+    playTone(freq, db, ear, dur || 2.0);
+  };
+
   document.addEventListener('keydown', function(e){
-    const tag = document.activeElement ? document.activeElement.tagName : '';
+    var tag = document.activeElement ? document.activeElement.tagName : '';
     if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT') return;
+
     if(e.code==='Space'){
       e.preventDefault();
-      // Clicca il pulsante Invia tono
-      const btns = window.parent.document.querySelectorAll('button');
-      btns.forEach(b=>{ if(b.textContent.includes('Invia tono')) b.click(); });
+      var p = getParams();
+      playTone(p.freq, p.db, p.ear, 2.0);
     }
     if(e.code==='ArrowUp'){
       e.preventDefault();
-      const btns = window.parent.document.querySelectorAll('button');
-      btns.forEach(b=>{ if(b.textContent.trim()==='+5') b.click(); });
+      var btns = window.parent.document.querySelectorAll('button');
+      btns.forEach(function(b){ if(b.textContent.trim()==='+5') b.click(); });
     }
     if(e.code==='ArrowDown'){
       e.preventDefault();
-      const btns = window.parent.document.querySelectorAll('button');
-      btns.forEach(b=>{ if(b.textContent.trim()==='-5') b.click(); });
+      var btns = window.parent.document.querySelectorAll('button');
+      btns.forEach(function(b){ if(b.textContent.trim()==='-5') b.click(); });
     }
     if(e.key==='r'||e.key==='R'){
-      const btns = window.parent.document.querySelectorAll('button');
-      btns.forEach(b=>{ if(b.textContent.includes('RISPONDE') && !b.textContent.includes('NON')) b.click(); });
+      var btns = window.parent.document.querySelectorAll('button');
+      btns.forEach(function(b){ if(b.textContent.includes('RISPONDE')&&!b.textContent.includes('NON')) b.click(); });
     }
     if(e.key==='n'||e.key==='N'){
-      const btns = window.parent.document.querySelectorAll('button');
-      btns.forEach(b=>{ if(b.textContent.includes('NON RISPONDE')) b.click(); });
+      var btns = window.parent.document.querySelectorAll('button');
+      btns.forEach(function(b){ if(b.textContent.includes('NON RISPONDE')) b.click(); });
     }
     if(e.key==='v'||e.key==='V'){
-      const btns = window.parent.document.querySelectorAll('button');
-      btns.forEach(b=>{ if(b.textContent.includes('VALIDA')) b.click(); });
+      var btns = window.parent.document.querySelectorAll('button');
+      btns.forEach(function(b){ if(b.textContent.includes('VALIDA')) b.click(); });
     }
   });
 })();
