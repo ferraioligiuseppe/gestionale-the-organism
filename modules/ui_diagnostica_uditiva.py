@@ -737,67 +737,44 @@ def _tone_calib(freq_hz, dbfs=-20.0, seconds=2.0, sr=44100):
 
 
 def _ui_calibrazione_rapida():
-    """Wizard calibrazione cuffie con fonometro."""
-    st.markdown("**Wizard calibrazione cuffie**")
-    st.caption(
-        "Posiziona il microfono al centro del padiglione. "
-        "Invia il tono di riferimento, leggi il valore sul fonometro "
-        "(o app: Decibel X, NIOSH SLM) e inserisci il valore misurato."
-    )
+    """Wizard calibrazione cuffie con SVG animate e profilo globale."""
+    import streamlit.components.v1 as _stc_cal
+    import json as _json_cal
 
-    CALIB_FREQS = [1000, 2000, 4000, 500, 250]
-    CALIB_LABELS = ["1 kHz","2 kHz","4 kHz","500 Hz","250 Hz"]
+    _HTML = '<!DOCTYPE html><html><head><meta charset="utf-8">\n<style>\n*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}\nbody{padding:10px;background:#f8f7f4;color:#1a1a1a}\n.steps{display:flex;gap:0;margin-bottom:14px;position:relative}\n.steps::before{content:\'\';position:absolute;top:17px;left:22px;right:22px;height:2px;background:#d4cec5;z-index:0}\n.step{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;z-index:1}\n.dot{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;border:2px solid #d4cec5;background:#f8f7f4;color:#8a8a8a;transition:all .3s}\n.dot.active{background:#1d9e75;border-color:#1d9e75;color:#fff}\n.dot.done{background:#e1f5ee;border-color:#1d9e75;color:#1d9e75}\n.step-lbl{font-size:9px;color:#8a8a8a;text-align:center;max-width:66px}\n.card{background:#fff;border:1px solid #d4cec5;border-radius:10px;padding:12px 14px;margin-bottom:8px}\nh3{font-size:13px;font-weight:500;margin-bottom:3px}\n.cap{font-size:11px;color:#8a8a8a;margin-bottom:8px;line-height:1.4}\nbutton{font-family:inherit;font-size:12px;padding:5px 10px;border-radius:7px;border:1.5px solid #d4cec5;background:#fff;color:#4a4a4a;cursor:pointer}\nbutton:hover{background:#e1f5ee;border-color:#1d9e75;color:#0f6e56}\nbutton.primary{background:#1d9e75;border-color:#1d9e75;color:#fff}\nbutton:disabled{opacity:.35;cursor:not-allowed}\n.btn-row{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}\n.sec{display:none}.sec.on{display:block}\n.metric{background:#f8f7f4;border-radius:7px;padding:8px 10px;text-align:center}\n.metric .v{font-size:18px;font-weight:500}.metric .l{font-size:10px;color:#8a8a8a;margin-top:2px}\n.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0}\n.row{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}\n.row label{min-width:110px;font-size:11px;color:#4a4a4a}\ninput[type=number]{width:70px;padding:4px 6px;border-radius:6px;border:1px solid #d4cec5;font-size:13px;text-align:center}\ninput[type=text]{flex:1;padding:4px 8px;border-radius:6px;border:1px solid #d4cec5;font-size:12px}\n.status{font-size:12px;padding:5px 9px;border-radius:6px;margin:6px 0}\n.ok{background:#e1f5ee;color:#0f6e56}.warn{background:#fef7ec;color:#7a4f0a}.info{background:#ebf5fb;color:#154360}\n</style></head><body>\n<div class="steps">\n  <div class="step"><div class="dot active" id="d0">1</div><div class="step-lbl">Setup</div></div>\n  <div class="step"><div class="dot" id="d1">2</div><div class="step-lbl">Posizione</div></div>\n  <div class="step"><div class="dot" id="d2">3</div><div class="step-lbl">Misura</div></div>\n  <div class="step"><div class="dot" id="d3">4</div><div class="step-lbl">Profilo</div></div>\n</div>\n<div class="sec on" id="s0">\n<div class="card"><h3>Setup iniziale</h3><p class="cap">Verifica che tutto sia pronto.</p>\n<label style="display:flex;gap:7px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" id="ck1" onchange="chk()"> Cuffie collegate, volume PC al massimo</label>\n<label style="display:flex;gap:7px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" id="ck2" onchange="chk()"> EQ sistema e audio enhancer disattivati</label>\n<label style="display:flex;gap:7px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" id="ck3" onchange="chk()"> Fonometro pronto (Decibel X, NIOSH SLM, Sound Meter)</label>\n<label style="display:flex;gap:7px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" id="ck4" onchange="chk()"> Stanza silenziosa</label>\n<div id="ckSt" class="status warn" style="margin-top:8px">Spunta tutti i requisiti per continuare.</div></div>\n<div class="btn-row"><button class="primary" id="b0" onclick="go(1)" disabled>Avanti</button></div>\n</div>\n<div class="sec" id="s1">\n<div class="card"><h3>Posizionamento microfono</h3><p class="cap">La posizione esatta del microfono e critica per la misura.</p>\n<svg width="100%" viewBox="0 0 680 180">\n<text x="170" y="16" text-anchor="middle" style="font-size:12px;font-weight:500;fill:#0f6e56">CORRETTO</text>\n<ellipse cx="170" cy="100" rx="55" ry="65" fill="#e1f5ee" stroke="#1d9e75" stroke-width="2"/>\n<ellipse cx="170" cy="100" rx="35" ry="44" fill="#1d9e75" opacity="0.1"/>\n<circle cx="170" cy="100" r="10" fill="#ba7517"><animate attributeName="r" values="10;14;10" dur="1.5s" repeatCount="indefinite"/></circle>\n<circle cx="170" cy="100" r="5" fill="#fff"/>\n<circle cx="252" cy="18" r="12" fill="#1d9e75"/>\n<path d="M245 18 L250 24 L259 12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>\n<text x="170" y="176" text-anchor="middle" style="font-size:11px;fill:#8a8a8a">Mic al centro del padiglione</text>\n<line x1="340" y1="16" x2="340" y2="168" stroke="#d4cec5" stroke-width="0.5" stroke-dasharray="4,3"/>\n<text x="510" y="16" text-anchor="middle" style="font-size:12px;font-weight:500;fill:#a32d2d">ERRATO</text>\n<ellipse cx="510" cy="100" rx="55" ry="65" fill="#fcebeb" stroke="#e24b4a" stroke-width="2"/>\n<circle cx="548" cy="55" r="10" fill="#ba7517"/><circle cx="548" cy="55" r="5" fill="#fff"/>\n<line x1="546" y1="67" x2="528" y2="84" stroke="#a32d2d" stroke-width="1.5" stroke-dasharray="3,2"/>\n<circle cx="592" cy="18" r="12" fill="#e24b4a"/>\n<line x1="585" y1="12" x2="599" y2="24" stroke="#fff" stroke-width="2.5"/>\n<line x1="599" y1="12" x2="585" y2="24" stroke="#fff" stroke-width="2.5"/>\n<text x="510" y="176" text-anchor="middle" style="font-size:11px;fill:#8a8a8a">Mic fuori asse</text>\n</svg>\n<div class="status info">Premi leggermente il padiglione sul microfono per sigillare e isolare.</div></div>\n<div class="btn-row"><button onclick="go(0)">Indietro</button><button class="primary" onclick="go(2)">Avanti</button></div>\n</div>\n<div class="sec" id="s2">\n<div class="card"><h3>Misura frequenza per frequenza</h3><p class="cap">Per ogni frequenza: invia il tono dalla sezione Test Tonale, leggi il fonometro, inserisci il valore e conferma.</p>\n<div style="display:flex;gap:10px;align-items:center;margin:8px 0">\n  <div id="fchips" style="display:flex;flex-wrap:wrap;gap:4px;flex:1"></div>\n  <div style="text-align:center;min-width:65px"><div style="font-size:26px;font-weight:600;color:#1d9e75" id="curFreq">1000</div><div style="font-size:11px;color:#8a8a8a">Hz</div></div>\n</div>\n<div class="row"><label>dB(A) misurato OD</label><input type="number" id="splOD" value="73" min="30" max="120"><button onclick="adj(\'splOD\',-1)">-1</button><button onclick="adj(\'splOD\',1)">+1</button></div>\n<div class="row"><label>dB(A) misurato OS</label><input type="number" id="splOS" value="72" min="30" max="120"><button onclick="adj(\'splOS\',-1)">-1</button><button onclick="adj(\'splOS\',1)">+1</button></div>\n<div class="btn-row">\n  <button class="primary" onclick="confFreq()">Conferma questa frequenza</button>\n  <button onclick="nextFreq()">Freq. successiva</button>\n</div>\n<div id="misStatus" class="status info">Inserisci il valore letto sul fonometro e conferma.</div>\n<div id="misGrid" style="margin-top:8px;display:none"><div style="font-size:11px;color:#8a8a8a;margin-bottom:4px">Misure confermate:</div><div class="grid3" id="misValues"></div></div>\n</div>\n<div class="btn-row"><button onclick="go(1)">Indietro</button><button class="primary" onclick="go(3)">Salva profilo</button></div>\n</div>\n<div class="sec" id="s3">\n<div class="card"><h3>Salva profilo di calibrazione globale</h3><p class="cap">Questo profilo verra usato per tutti i test finche non viene aggiornato.</p>\n<div id="riepilogo" style="margin-bottom:10px"></div>\n<div class="row"><label>Marca cuffie</label><input type="text" id="brand" value=""></div>\n<div class="row"><label>Modello</label><input type="text" id="model" value=""></div>\n<div class="row"><label>Note</label><input type="text" id="note" placeholder="es. Voltcraft SL-451, foam coupler"></div>\n<div id="salvato" class="status ok" style="display:none">Profilo salvato nel gestionale.</div></div>\n<div class="btn-row"><button onclick="go(2)">Indietro</button><button class="primary" onclick="salva()">Salva profilo globale</button></div>\n</div>\n<script>\nconst FREQS=[1000,2000,4000,6000,8000,500,250];\nlet cur=0,misure={};\nfunction go(n){document.querySelectorAll(\'.sec\').forEach((s,i)=>s.classList.toggle(\'on\',i===n));[0,1,2,3].forEach(i=>{const d=document.getElementById(\'d\'+i);d.classList.remove(\'active\',\'done\');if(i<n)d.classList.add(\'done\');else if(i===n)d.classList.add(\'active\');});if(n===2)buildChips();if(n===3)buildRiep();}\nfunction chk(){const ok=[1,2,3,4].every(i=>document.getElementById(\'ck\'+i).checked);document.getElementById(\'b0\').disabled=!ok;document.getElementById(\'ckSt\').textContent=ok?\'Tutto pronto!\':\'Spunta tutti i requisiti.\';document.getElementById(\'ckSt\').className=\'status \'+(ok?\'ok\':\'warn\');}\nfunction buildChips(){const c=document.getElementById(\'fchips\');c.innerHTML=\'\';FREQS.forEach((f,i)=>{const d=document.createElement(\'div\');const done=misure[f]!==undefined;const isC=i===cur;d.style.cssText=\'padding:3px 8px;border-radius:9px;font-size:11px;cursor:pointer;border:1px solid \'+(isC?\'#1d9e75\':done?\'#1d9e75\':\'#d4cec5\')+\';background:\'+(isC?\'#1d9e75\':done?\'#e1f5ee\':\'#f8f7f4\')+\';color:\'+(isC?\'#fff\':done?\'#0f6e56\':\'#8a8a8a\');d.textContent=(f>=1000?f/1000+\'k\':f)+\'Hz\'+(done?\' v\':\'\');d.onclick=()=>{cur=i;document.getElementById(\'curFreq\').textContent=FREQS[i];buildChips();};c.appendChild(d);});document.getElementById(\'curFreq\').textContent=FREQS[cur];}\nfunction adj(id,d){const el=document.getElementById(id);el.value=parseInt(el.value)+d;}\nfunction confFreq(){const f=FREQS[cur];misure[f]={od:parseInt(document.getElementById(\'splOD\').value),os:parseInt(document.getElementById(\'splOS\').value)};document.getElementById(\'misStatus\').textContent=\'Confermato \'+f+\' Hz - OD:\'+misure[f].od+\' OS:\'+misure[f].os;document.getElementById(\'misStatus\').className=\'status ok\';buildChips();buildMisGrid();if(cur<FREQS.length-1){cur++;document.getElementById(\'curFreq\').textContent=FREQS[cur];buildChips();}}\nfunction nextFreq(){if(cur<FREQS.length-1){cur++;buildChips();}}\nfunction buildMisGrid(){const g=document.getElementById(\'misValues\');g.innerHTML=\'\';document.getElementById(\'misGrid\').style.display=Object.keys(misure).length?\'block\':\'none\';Object.entries(misure).forEach(([f,m])=>{const d=document.createElement(\'div\');d.className=\'metric\';const offOD=m.od-70,offOS=m.os-70;d.innerHTML=\'<div class="v" style="font-size:13px">\'+(f>=1000?f/1000+\'k\':f)+\'Hz</div><div style="font-size:11px;color:\'+(Math.abs(offOD)<3?\'#1d9e75\':\'#ba7517\')+\'">OD \'+(offOD>=0?\'+\':\'\')+offOD+\'</div><div style="font-size:11px;color:\'+(Math.abs(offOS)<3?\'#1d9e75\':\'#ba7517\')+\'">OS \'+(offOS>=0?\'+\':\'\')+offOS+\'</div>\';g.appendChild(d);});}\nfunction buildRiep(){const r=document.getElementById(\'riepilogo\');if(!Object.keys(misure).length){r.innerHTML=\'<div class="status warn">Nessuna misura. Torna al passo precedente.</div>\';return;}const avgOD=Math.round(Object.values(misure).reduce((a,m)=>a+m.od,0)/Object.keys(misure).length);const avgOS=Math.round(Object.values(misure).reduce((a,m)=>a+m.os,0)/Object.keys(misure).length);r.innerHTML=\'<div class="grid3"><div class="metric"><div class="v">\'+avgOD+\'</div><div class="l">Media OD dB</div></div><div class="metric"><div class="v">\'+avgOS+\'</div><div class="l">Media OS dB</div></div><div class="metric"><div class="v">\'+Object.keys(misure).length+\'/7</div><div class="l">Freq. misurate</div></div></div>\';}\nfunction salva(){const data={brand:document.getElementById(\'brand\').value,model:document.getElementById(\'model\').value,note:document.getElementById(\'note\').value,misure:misure};window.parent.postMessage({type:\'streamlit:setComponentValue\',value:JSON.stringify(data)},\'*\');document.getElementById(\'salvato\').style.display=\'block\';[0,1,2,3].forEach(i=>document.getElementById(\'d\'+i).classList.add(\'done\'));}\nbuildChips();\n</script></body></html>'
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        calib_freq = st.selectbox("Frequenza di calibrazione",
-                                  CALIB_FREQS,
-                                  format_func=lambda f: f"{f} Hz" if f<1000 else f"{f//1000} kHz",
-                                  key="diag_cal_freq_v3")
-    with col2:
-        calib_ear = st.radio("Orecchio", ["OD","OS","Entrambi"],
-                             horizontal=True, key="diag_cal_ear_v3")
-    with col3:
-        calib_dur = st.radio("Durata", ["1s","2s","3s"],
-                             horizontal=True, key="diag_cal_dur_v3",
-                             index=1)
-        dur_sec = int(calib_dur[0])
+    result = _stc_cal.html(_HTML, height=700, scrolling=True)
 
-    # Genera tono di riferimento a -20 dBFS
-    if st.button("▶ Invia tono di riferimento (-20 dBFS)",
-                 type="primary", key="diag_cal_play_v3", use_container_width=True):
-        ear_map = {"OD":"OD","OS":"OS","Entrambi":"OD"}
-        wav = _genera_tono_wav(calib_freq, 70.0,
-                               ear_map[calib_ear], float(dur_sec))
-        st.audio(wav, format="audio/wav")
+    if result:
+        try:
+            data = _json_cal.loads(result) if isinstance(result, str) else result
+            if data and data.get("misure"):
+                misure = data["misure"]
+                vals_od = [m["od"] for m in misure.values()]
+                vals_os = [m["os"] for m in misure.values()]
+                avg_od = round(sum(vals_od)/len(vals_od)) if vals_od else 70
+                avg_os = round(sum(vals_os)/len(vals_os)) if vals_os else 70
+                st.session_state["cal_profilo_globale"] = {
+                    "brand": data.get("brand",""),
+                    "model": data.get("model",""),
+                    "offset_od": avg_od - 70,
+                    "offset_os": avg_os - 70,
+                    "misure": misure,
+                }
+                st.success(
+                    f"Profilo salvato: {data.get('brand','')} {data.get('model','')} — "
+                    f"OD: {avg_od-70:+d} dB · OS: {avg_os-70:+d} dB"
+                )
+        except Exception:
+            pass
 
-    st.divider()
-    st.markdown("**Inserisci il valore letto sul fonometro:**")
-
-    c1, c2 = st.columns(2)
-    with c1:
-        spl_od = st.number_input("dB(A) misurato OD",
-                                  min_value=30, max_value=120,
-                                  value=75, step=1, key="diag_cal_spl_od_v3")
-    with c2:
-        spl_os = st.number_input("dB(A) misurato OS",
-                                  min_value=30, max_value=120,
-                                  value=75, step=1, key="diag_cal_spl_os_v3")
-
-    offset_od = spl_od - 70
-    offset_os = spl_os - 70
-    st.info(
-        f"Offset calibrazione → OD: {offset_od:+d} dB - OS: {offset_os:+d} dB  "
-        f"(verranno applicati automaticamente al test tonale)"
-    )
-
-    if st.button("Salva calibrazione", key="diag_cal_save_v3"):
-        st.session_state["cal_offset_od"] = offset_od
-        st.session_state["cal_offset_os"] = offset_os
-        st.success(
-            f"Calibrazione salvata — OD: {offset_od:+d} dB - OS: {offset_os:+d} dB")
-
-
+    profilo = st.session_state.get("cal_profilo_globale")
+    if profilo:
+        st.info(
+            f"Profilo attivo: **{profilo.get('brand','')} {profilo.get('model','')}** — "
+            f"Offset OD: {profilo.get('offset_od',0):+d} dB · "
+            f"OS: {profilo.get('offset_os',0):+d} dB"
+        )
 
 
 def ui_test_tonale(conn, paz_id, operatore=""):
