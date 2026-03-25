@@ -1,18 +1,34 @@
 # -*- coding: utf-8 -*-
 """
-Modulo: Lenti a Contatto (livello clinico completo)
+Modulo: Lenti a Contatto (clinico completo + import topografo CSO)
 Gestionale The Organism – PNEV
+
+Note importanti:
+- supporto reale a import CSV
+- supporto pratico a import CSO .xyz
+- supporto esplorativo a .zcs (contenitore TAR CSO/Phoenix)
+- i file .xyz/.zcs NON vengono convertiti automaticamente in K clinici certi:
+  il modulo propone estrazione / preview / compilazione assistita, lasciando il
+  controllo clinico finale all'operatore.
 """
 
 from __future__ import annotations
 
+import io
 import json
+import tarfile
 from datetime import date, datetime
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
+
+# =============================================================================
+# Helpers DB
+# =============================================================================
 
 def _is_postgres(conn) -> bool:
     t = type(conn).__name__
@@ -68,6 +84,10 @@ def _parse_date(s: str) -> str:
             pass
     return date.today().isoformat()
 
+
+# =============================================================================
+# Schema DB
+# =============================================================================
 
 _SQL_PG = """
 CREATE TABLE IF NOT EXISTS lenti_contatto (
@@ -164,6 +184,10 @@ def init_lenti_contatto_db(conn) -> None:
             pass
 
 
+# =============================================================================
+# Pazienti
+# =============================================================================
+
 def _detect_patient_table_and_cols(conn):
     try:
         from modules.app_core import _detect_patient_table_and_cols
@@ -202,6 +226,10 @@ def _select_paziente(conn):
     return sel[0], sel[1]
 
 
+# =============================================================================
+# Config
+# =============================================================================
+
 CATEGORIE = [
     "Morbida sferica",
     "Torica",
@@ -233,6 +261,10 @@ ALGORITMI = [
 
 STATI = ["Calcolata", "Provata", "Ordinata", "Consegnata"]
 
+
+# =============================================================================
+# Motore clinico
+# =============================================================================
 
 def _vertex_comp(power: float) -> float:
     try:
@@ -401,6 +433,240 @@ def _calcola_lente_clinica(
     }
 
 
+# =============================================================================
+# Import topografo CSO / CSV
+# =============================================================================
+
+def _infer_grid_side(n: int) -> Optional[int]:
+    candidates = [101, 102, 111, 121, 122, 123]
+    for c in candidates:
+        rem = n % c
+        if rem <= 40 or (c - rem) <= 40:
+            return c
+    return None
+
+
+def _parse_xyz_file(file_obj) -> Dict[str, Any]:
+    raw = file_obj.getvalue()
+    txt = raw.decode("utf-8", errors="ignore")
+    vals = []
+    for line in txt.replace(",", ".").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        try:
+            vals.append(float(s))
+        except Exception:
+            pass
+
+    arr = np.array(vals, dtype=float) if vals else np.array([], dtype=float)
+    side = _infer_grid_side(len(arr))
+    rem = None
+    grid = None
+
+    if side:
+        rem = len(arr) % side
+        if rem <= 40:
+            usable = arr[rem:]
+        else:
+            usable = arr[: len(arr) - rem]
+        if len(usable) >= side * side:
+            usable = usable[: side * side]
+            try:
+                grid = usable.reshape(side, side)
+            except Exception:
+                grid = None
+
+    nz = arr[arr != 0] if len(arr) else np.array([])
+    summary = {
+        "filename": getattr(file_obj, "name", "topografo.xyz"),
+        "n_values": int(len(arr)),
+        "grid_side_guess": side,
+        "non_zero_values": int(len(nz)),
+        "min": float(np.min(arr)) if len(arr) else None,
+        "max": float(np.max(arr)) if len(arr) else None,
+        "mean_non_zero": float(np.mean(nz)) if len(nz) else None,
+    }
+
+    return {
+        "kind": "xyz",
+        "summary": summary,
+        "grid": grid,
+        "vector": arr[:500].tolist() if len(arr) else [],
+    }
+
+
+def _parse_csv_topographer(file_obj) -> Dict[str, Any]:
+    try:
+        df = pd.read_csv(file_obj)
+    except Exception:
+        file_obj.seek(0)
+        df = pd.read_csv(file_obj, sep=";")
+
+    cols = [str(c).strip() for c in df.columns]
+    cmap = {str(c).strip().lower(): c for c in df.columns}
+
+    def pick(*names):
+        for n in names:
+            if n in cmap:
+                return cmap[n]
+        return None
+
+    k1_col = pick("k1", "simk1", "sim k1", "flat k")
+    k2_col = pick("k2", "simk2", "sim k2", "steep k")
+    axis_col = pick("asse", "axis", "steep axis", "simk axis")
+    hvid_col = pick("hvid", "wtw", "white to white")
+    pup_col = pick("pupilla", "pupil", "pupil size")
+
+    values = {}
+    if len(df) > 0:
+        row = df.iloc[0]
+        values = {
+            "k1": float(row[k1_col]) if k1_col and pd.notna(row[k1_col]) else None,
+            "k2": float(row[k2_col]) if k2_col and pd.notna(row[k2_col]) else None,
+            "asse_k": int(float(row[axis_col])) if axis_col and pd.notna(row[axis_col]) else None,
+            "hvid": float(row[hvid_col]) if hvid_col and pd.notna(row[hvid_col]) else None,
+            "pupilla": float(row[pup_col]) if pup_col and pd.notna(row[pup_col]) else None,
+        }
+
+    return {
+        "kind": "csv",
+        "summary": {
+            "filename": getattr(file_obj, "name", "topografo.csv"),
+            "rows": int(len(df)),
+            "columns": cols,
+        },
+        "values": values,
+        "preview": df.head(10),
+    }
+
+
+def _parse_zcs_file(file_obj) -> Dict[str, Any]:
+    raw = file_obj.getvalue()
+    names = []
+    xyz_members = []
+    top_members = []
+
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:*") as tf:
+        members = tf.getmembers()
+        for m in members:
+            names.append(m.name)
+            lname = m.name.lower()
+            if lname.endswith(".xyz"):
+                xyz_members.append(m.name)
+            if lname.endswith(".top") or lname.endswith(".cso") or lname.endswith(".rng"):
+                top_members.append(m.name)
+
+    return {
+        "kind": "zcs",
+        "summary": {
+            "filename": getattr(file_obj, "name", "exam.zcs"),
+            "members": len(names),
+            "xyz_members": xyz_members,
+            "top_members": top_members[:20],
+        },
+        "members": names[:50],
+    }
+
+
+def _import_topographer_section():
+    st.markdown("### Import topografo")
+    st.caption("Supporto pratico per CSV e CSO (.xyz / .zcs). Per i file CSO proprietari il modulo mostra preview e compilazione assistita.")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        od_file = st.file_uploader("OD - CSV / XYZ / ZCS", type=["csv", "xyz", "zcs"], key="lac_topo_od")
+    with c2:
+        os_file = st.file_uploader("OS - CSV / XYZ / ZCS", type=["csv", "xyz", "zcs"], key="lac_topo_os")
+
+    def parse_any(f):
+        if not f:
+            return None
+        name = f.name.lower()
+        try:
+            if name.endswith(".csv"):
+                return _parse_csv_topographer(f)
+            if name.endswith(".xyz"):
+                return _parse_xyz_file(f)
+            if name.endswith(".zcs"):
+                return _parse_zcs_file(f)
+        except Exception as e:
+            return {"kind": "error", "summary": {"error": str(e)}}
+        return None
+
+    od_parsed = parse_any(od_file)
+    os_parsed = parse_any(os_file)
+
+    if od_parsed:
+        st.session_state["lac_topo_od_parsed"] = od_parsed
+    if os_parsed:
+        st.session_state["lac_topo_os_parsed"] = os_parsed
+
+    p1, p2 = st.columns(2)
+
+    with p1:
+        st.markdown("#### Preview OD")
+        parsed = st.session_state.get("lac_topo_od_parsed")
+        if parsed:
+            st.json(parsed["summary"])
+            if parsed["kind"] == "csv" and "preview" in parsed:
+                st.dataframe(parsed["preview"], use_container_width=True)
+            elif parsed["kind"] == "xyz" and parsed.get("grid") is not None:
+                st.caption("Mappa numerica OD (preview)")
+                st.dataframe(pd.DataFrame(parsed["grid"]).iloc[:15, :15], use_container_width=True)
+            elif parsed["kind"] == "zcs":
+                st.caption("Contenuto archivio ZCS (preview)")
+                st.write(parsed["members"])
+
+    with p2:
+        st.markdown("#### Preview OS")
+        parsed = st.session_state.get("lac_topo_os_parsed")
+        if parsed:
+            st.json(parsed["summary"])
+            if parsed["kind"] == "csv" and "preview" in parsed:
+                st.dataframe(parsed["preview"], use_container_width=True)
+            elif parsed["kind"] == "xyz" and parsed.get("grid") is not None:
+                st.caption("Mappa numerica OS (preview)")
+                st.dataframe(pd.DataFrame(parsed["grid"]).iloc[:15, :15], use_container_width=True)
+            elif parsed["kind"] == "zcs":
+                st.caption("Contenuto archivio ZCS (preview)")
+                st.write(parsed["members"])
+
+    with st.expander("Compilazione assistita da topografo", expanded=False):
+        st.caption("Per CSV con colonne riconosciute il sistema propone valori automatici. Per .xyz / .zcs puoi annotare i valori letti dal software CSO e trasferirli al calcolo.")
+
+        a1, a2, a3, a4, a5 = st.columns(5)
+        with a1:
+            od_k1 = st.number_input("OD K1 topografo", value=7.80, step=0.01, format="%.2f", key="assist_od_k1")
+            os_k1 = st.number_input("OS K1 topografo", value=7.80, step=0.01, format="%.2f", key="assist_os_k1")
+        with a2:
+            od_k2 = st.number_input("OD K2 topografo", value=7.90, step=0.01, format="%.2f", key="assist_od_k2")
+            os_k2 = st.number_input("OS K2 topografo", value=7.90, step=0.01, format="%.2f", key="assist_os_k2")
+        with a3:
+            od_ax = st.number_input("OD Asse topografo", min_value=0, max_value=180, value=90, key="assist_od_ax")
+            os_ax = st.number_input("OS Asse topografo", min_value=0, max_value=180, value=90, key="assist_os_ax")
+        with a4:
+            od_hv = st.number_input("OD HVID topografo", value=11.8, step=0.10, format="%.2f", key="assist_od_hv")
+            os_hv = st.number_input("OS HVID topografo", value=11.8, step=0.10, format="%.2f", key="assist_os_hv")
+        with a5:
+            od_pu = st.number_input("OD Pupilla topografo", value=3.5, step=0.10, format="%.2f", key="assist_od_pu")
+            os_pu = st.number_input("OS Pupilla topografo", value=3.5, step=0.10, format="%.2f", key="assist_os_pu")
+
+        # Auto-fill from CSV if available
+        od_parsed = st.session_state.get("lac_topo_od_parsed")
+        os_parsed = st.session_state.get("lac_topo_os_parsed")
+        if od_parsed and od_parsed.get("kind") == "csv":
+            vals = od_parsed.get("values", {})
+            st.info(f"OD CSV riconosciuto: {vals}")
+        if os_parsed and os_parsed.get("kind") == "csv":
+            vals = os_parsed.get("values", {})
+            st.info(f"OS CSV riconosciuto: {vals}")
+
+
+# =============================================================================
+# CRUD
+# =============================================================================
+
 def salva_lente_contatto(conn, payload: Dict[str, Any]) -> int:
     keys = [
         "paziente_id", "data_scheda", "occhio", "categoria", "sottotipo", "difetto", "algoritmo",
@@ -450,6 +716,10 @@ def load_storico_paziente(conn, paziente_id: int):
             pass
 
 
+# =============================================================================
+# UI helpers
+# =============================================================================
+
 def _ui_eye_form(prefix: str, label: str, category_default: str, algorithm_default: str):
     st.markdown(f"### {label}")
 
@@ -472,28 +742,34 @@ def _ui_eye_form(prefix: str, label: str, category_default: str, algorithm_defau
     with r4:
         rx_add = st.number_input("ADD", step=0.25, value=0.00, format="%.2f", key=f"{prefix}_add")
 
+    st.markdown("#### Dati corneali / topografici")
+    k1c, k2c, akc, hvc = st.columns(4)
+    with k1c:
+        default_k1 = float(st.session_state.get(f"{prefix}_topo_k1", 7.80))
+        k1 = st.number_input("K1 (mm)", step=0.01, value=default_k1, format="%.2f", key=f"{prefix}_k1")
+    with k2c:
+        default_k2 = float(st.session_state.get(f"{prefix}_topo_k2", 7.90))
+        k2 = st.number_input("K2 (mm)", step=0.01, value=default_k2, format="%.2f", key=f"{prefix}_k2")
+    with akc:
+        default_ax = int(st.session_state.get(f"{prefix}_topo_assek", 90))
+        asse_k = st.number_input("Asse K", min_value=0, max_value=180, value=default_ax, key=f"{prefix}_assek")
+    with hvc:
+        default_hv = float(st.session_state.get(f"{prefix}_topo_hvid", 11.8))
+        hvid = st.number_input("HVID / diametro corneale", step=0.10, value=default_hv, format="%.2f", key=f"{prefix}_hvid")
+
+    p1, p2 = st.columns(2)
+    with p1:
+        default_pu = float(st.session_state.get(f"{prefix}_topo_pup", 3.5))
+        pupilla = st.number_input("Diametro pupilla (mm)", step=0.10, value=default_pu, format="%.2f", key=f"{prefix}_pup")
+    with p2:
+        target_orthok = st.number_input("Target Ortho-K (D)", step=0.25, value=0.0, format="%.2f", key=f"{prefix}_target")
+
+    st.markdown("#### Acuità e note")
     r5, r6 = st.columns(2)
     with r5:
         av_lontano = st.text_input("AV lontano", value="", key=f"{prefix}_avl")
     with r6:
         av_vicino = st.text_input("AV vicino", value="", key=f"{prefix}_avv")
-
-    st.markdown("#### Dati corneali / topografici")
-    k1c, k2c, akc, hvc = st.columns(4)
-    with k1c:
-        k1 = st.number_input("K1 (mm)", step=0.01, value=7.80, format="%.2f", key=f"{prefix}_k1")
-    with k2c:
-        k2 = st.number_input("K2 (mm)", step=0.01, value=7.90, format="%.2f", key=f"{prefix}_k2")
-    with akc:
-        asse_k = st.number_input("Asse K", min_value=0, max_value=180, value=90, key=f"{prefix}_assek")
-    with hvc:
-        hvid = st.number_input("HVID / diametro corneale", step=0.10, value=11.8, format="%.2f", key=f"{prefix}_hvid")
-
-    p1, p2 = st.columns(2)
-    with p1:
-        pupilla = st.number_input("Diametro pupilla (mm)", step=0.10, value=3.5, format="%.2f", key=f"{prefix}_pup")
-    with p2:
-        target_orthok = st.number_input("Target Ortho-K (D)", step=0.25, value=0.0, format="%.2f", key=f"{prefix}_target")
 
     st.markdown("#### Note cliniche / PNEV")
     n1, n2 = st.columns(2)
@@ -504,8 +780,17 @@ def _ui_eye_form(prefix: str, label: str, category_default: str, algorithm_defau
         ricambio = st.text_input("Ricambio", value="Da definire", key=f"{prefix}_ric")
         stato = st.selectbox("Stato", STATI, key=f"{prefix}_stato")
 
-    fitting = st.text_area("Fitting / fluoresceina / appoggio", value="", height=90, key=f"{prefix}_fitting")
-    note = st.text_area("Note lente / note PNEV", value="", height=110, key=f"{prefix}_note")
+    st.markdown("#### Fitting fluoresceinico")
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        fit_centrale = st.selectbox("Centro", ["Neutro", "Touch", "Pooling"], key=f"{prefix}_fit_c")
+    with f2:
+        fit_media = st.selectbox("Media periferia", ["Uniforme", "Stretto", "Largo"], key=f"{prefix}_fit_m")
+    with f3:
+        fit_bordo = st.selectbox("Bordo / edge lift", ["Adeguato", "Stretto", "Eccessivo"], key=f"{prefix}_fit_b")
+
+    fitting = st.text_area("Fitting / fluoresceina / appoggio", value="", height=80, key=f"{prefix}_fitting")
+    note = st.text_area("Note lente / note PNEV", value="", height=100, key=f"{prefix}_note")
 
     return {
         "categoria": categoria,
@@ -527,6 +812,9 @@ def _ui_eye_form(prefix: str, label: str, category_default: str, algorithm_defau
         "materiale": materiale,
         "ricambio": ricambio,
         "stato": stato,
+        "fit_centrale": fit_centrale,
+        "fit_media": fit_media,
+        "fit_bordo": fit_bordo,
         "fitting": fitting,
         "note": note,
     }
@@ -590,7 +878,15 @@ def _build_payload(
         "lente_materiale": eye_input["materiale"],
         "lente_ricambio": eye_input["ricambio"],
         "lente_note": eye_input["note"],
-        "fitting_json": json.dumps({"fitting": eye_input["fitting"]}, ensure_ascii=False),
+        "fitting_json": json.dumps(
+            {
+                "centrale": eye_input["fit_centrale"],
+                "media": eye_input["fit_media"],
+                "bordo": eye_input["fit_bordo"],
+                "note": eye_input["fitting"],
+            },
+            ensure_ascii=False,
+        ),
         "followup_json": json.dumps([], ensure_ascii=False),
         "stato": eye_input["stato"],
         "operatore": operatore,
@@ -599,9 +895,13 @@ def _build_payload(
     }
 
 
+# =============================================================================
+# UI principale
+# =============================================================================
+
 def ui_lenti_contatto():
     st.title("👁️ Lenti a contatto")
-    st.caption("Modulo clinico completo – The Organism / PNEV")
+    st.caption("Modulo clinico completo – The Organism / PNEV + import topografo CSO")
 
     try:
         conn = _get_conn()
@@ -626,15 +926,34 @@ def ui_lenti_contatto():
         st.info("Seleziona un paziente per iniziare.")
         return
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab0, tab1, tab2, tab3, tab4 = st.tabs([
+        "Import topografo",
         "Nuova lente",
         "Risultato",
         "Salvataggio",
         "Storico",
     ])
 
+    with tab0:
+        _import_topographer_section()
+
+        if st.button("Applica valori topografo assistiti ai campi", use_container_width=True):
+            st.session_state["lac_od_topo_k1"] = st.session_state.get("assist_od_k1", 7.80)
+            st.session_state["lac_od_topo_k2"] = st.session_state.get("assist_od_k2", 7.90)
+            st.session_state["lac_od_topo_assek"] = st.session_state.get("assist_od_ax", 90)
+            st.session_state["lac_od_topo_hvid"] = st.session_state.get("assist_od_hv", 11.8)
+            st.session_state["lac_od_topo_pup"] = st.session_state.get("assist_od_pu", 3.5)
+
+            st.session_state["lac_os_topo_k1"] = st.session_state.get("assist_os_k1", 7.80)
+            st.session_state["lac_os_topo_k2"] = st.session_state.get("assist_os_k2", 7.90)
+            st.session_state["lac_os_topo_assek"] = st.session_state.get("assist_os_ax", 90)
+            st.session_state["lac_os_topo_hvid"] = st.session_state.get("assist_os_hv", 11.8)
+            st.session_state["lac_os_topo_pup"] = st.session_state.get("assist_os_pu", 3.5)
+
+            st.success("Valori topografici assistiti applicati a OD/OS.")
+
     with tab1:
-        st.subheader("1. Dati clinici")
+        st.subheader("Dati clinici")
         od_tab, os_tab = st.tabs(["OD", "OS"])
         with od_tab:
             od_input = _ui_eye_form("lac_od", "Occhio destro", "Morbida sferica", "Standard")
@@ -687,7 +1006,7 @@ def ui_lenti_contatto():
             st.success("Proposta calcolata. Vai nella tab 'Risultato'.")
 
     with tab2:
-        st.subheader("2. Risultato lente")
+        st.subheader("Risultato lente")
         props = st.session_state.get("lac_complete_prop")
         if not props:
             st.info("Calcola prima una proposta lente.")
@@ -699,7 +1018,7 @@ def ui_lenti_contatto():
                 _render_result_box("OS", props["os"])
 
     with tab3:
-        st.subheader("3. Salvataggio")
+        st.subheader("Salvataggio")
         data_in = st.session_state.get("lac_complete_input")
         props = st.session_state.get("lac_complete_prop")
 
@@ -740,7 +1059,7 @@ def ui_lenti_contatto():
                     st.exception(e)
 
     with tab4:
-        st.subheader("4. Storico paziente")
+        st.subheader("Storico paziente")
         try:
             rows = load_storico_paziente(conn, paziente_id)
             if not rows:
