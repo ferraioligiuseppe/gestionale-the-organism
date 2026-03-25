@@ -14,10 +14,6 @@ from datetime import timedelta, timezone
 
 import streamlit as st
 from modules.app_menu import build_sections
-try:
-    from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
-except Exception:
-    _ui_diag_uditiva = None
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
@@ -2624,12 +2620,33 @@ def parse_data_it(data_str: str, campo: str = "Data"):
     - gg-mm-aaaa
     - gg.mm.aaaa
     - gg mm aaaa
+    - yyyy-mm-dd
 
     Ritorna:
       - oggetto date se va bene
       - None se non riesce a interpretarla
     """
     if not data_str:
+        return None
+
+    s = str(data_str).strip()
+    if not s:
+        return None
+
+    # Prova formato ISO diretto
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        pass
+
+    # unifichiamo i separatori a "/"
+    for sep in ["-", ".", " "]:
+        s = s.replace(sep, "/")
+
+    # ora ci aspettiamo gg/mm/aaaa
+    try:
+        return datetime.strptime(s, "%d/%m/%Y").date()
+    except ValueError:
         return None
 
     s = data_str.strip()
@@ -4658,16 +4675,15 @@ def ui_pazienti():
             conn.close()
             return
 
-        # Gestione data di nascita (formato gg/mm/aaaa)
+        # Gestione data di nascita (accetta gg/mm/aaaa e yyyy-mm-dd)
         data_iso = None
         if data_nascita_str.strip():
-            try:
-                d = datetime.strptime(data_nascita_str.strip(), "%d/%m/%Y").date()
-                data_iso = d.isoformat()
-            except ValueError:
-                st.error("Data di nascita non valida. Usa il formato gg/mm/aaaa (es. 19/01/1975).")
+            d = parse_data_it(data_nascita_str.strip(), "Data di nascita")
+            if d is None:
+                st.error("Data di nascita non valida. Formati accettati: gg/mm/aaaa oppure yyyy-mm-dd.")
                 conn.close()
                 return
+            data_iso = d.isoformat()
 
         # Codice fiscale (opzionale) con controllo
         cf_clean = (codice_fiscale or "").strip().upper()
@@ -4903,13 +4919,12 @@ def ui_pazienti():
         else:
             data_iso_m = None
             if data_nascita_m.strip():
-                try:
-                    d = datetime.strptime(data_nascita_m.strip(), "%d/%m/%Y").date()
-                    data_iso_m = d.isoformat()
-                except ValueError:
-                    st.error("Data di nascita non valida. Usa il formato gg/mm/aaaa.")
+                d = parse_data_it(data_nascita_m.strip(), "Data di nascita")
+                if d is None:
+                    st.error("Data di nascita non valida. Formati accettati: gg/mm/aaaa oppure yyyy-mm-dd.")
                     conn.close()
                     return
+                data_iso_m = d.isoformat()
 
             cf_clean_m = (cf_m or "").strip().upper()
             if cf_clean_m and not valida_codice_fiscale(cf_clean_m):
@@ -9818,11 +9833,6 @@ def main():
             st.session_state[nav_key] = target
 
     sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
-
-    if sezione == "🔉 Diagnostica Uditiva":
-        if _ui_diag_uditiva:
-            _ui_diag_uditiva(conn=get_connection())
-        return
 
     # routing moduli uditivi (estratti)
     try:
