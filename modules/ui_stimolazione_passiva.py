@@ -865,6 +865,15 @@ def _init_stim_db(conn):
         pass
 
 
+try:
+    from modules.ui_processore_offline import ui_processore_offline as _ui_proc
+except Exception:
+    try:
+        from ui_processore_offline import ui_processore_offline as _ui_proc
+    except Exception:
+        _ui_proc = None
+
+
 def ui_stimolazione_passiva(conn=None):
     """UI principale del modulo stimolazione passiva."""
     st.header("Stimolazione Uditiva Passiva")
@@ -926,8 +935,17 @@ window._eqOS = {json.dumps(eq_os)};
 """
     full_html = STIM_HTML.replace('</body></html>', eq_inject + '</body></html>')
 
-    import streamlit.components.v1 as components
-    components.html(full_html, height=1600, scrolling=True)
+    tab_live, tab_proc = st.tabs(["🎵 Seduta Live", "⚙️ Processore offline"])
+
+    with tab_live:
+        import streamlit.components.v1 as components
+        components.html(full_html, height=1600, scrolling=True)
+
+    with tab_proc:
+        if _ui_proc:
+            _ui_proc(eq_od_default=eq_od, eq_os_default=eq_os)
+        else:
+            st.warning("Modulo processore offline non disponibile.")
 
     st.divider()
 
