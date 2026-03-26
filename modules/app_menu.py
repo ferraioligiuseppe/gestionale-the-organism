@@ -48,6 +48,7 @@ ADMIN_SECTIONS = [
 ]
 
 SECTION_DIAGNOSTICA_UDITIVA = "🔉 Diagnostica Uditiva"
+SECTION_STIMOLAZIONE_PASSIVA = "🎵 Stimolazione Passiva"
 
 
 def build_sections(is_admin: bool, app_mode: str) -> list[str]:

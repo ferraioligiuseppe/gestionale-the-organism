@@ -18,6 +18,10 @@ try:
     from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
 except Exception:
     _ui_diag_uditiva = None
+try:
+    from modules.ui_stimolazione_passiva import ui_stimolazione_passiva as _ui_stim_passiva
+except Exception:
+    _ui_stim_passiva = None
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
@@ -9841,6 +9845,11 @@ def main():
     if sezione == "🔉 Diagnostica Uditiva":
         if _ui_diag_uditiva:
             _ui_diag_uditiva(conn=get_connection())
+        return
+
+    if sezione == "🎵 Stimolazione Passiva":
+        if _ui_stim_passiva:
+            _ui_stim_passiva(conn=get_connection())
         return
 
     # routing moduli uditivi (estratti)
