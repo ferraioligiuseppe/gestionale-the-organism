@@ -58,5 +58,6 @@ def build_sections(is_admin: bool, app_mode: str) -> list[str]:
 
     # ⚠️ UDITO RESTA INALTERATO
     sections.append(SECTION_DIAGNOSTICA_UDITIVA)
+    sections.append(SECTION_STIMOLAZIONE_PASSIVA)
 
     return sections
