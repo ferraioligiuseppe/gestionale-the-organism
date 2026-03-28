@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageDraw
 import numpy as np
 
 
@@ -52,7 +52,9 @@ def _detect_face_and_eyes_with_mediapipe(img_rgb):
             "eyes_detected": False,
         }
 
-    annotated = img_rgb.copy()
+    annotated_pil = Image.fromarray(img_rgb.copy())
+    draw = ImageDraw.Draw(annotated_pil)
+
     face_landmarks = results.multi_face_landmarks[0]
     pts = [(lm.x, lm.y) for lm in face_landmarks.landmark]
 
@@ -65,7 +67,7 @@ def _detect_face_and_eyes_with_mediapipe(img_rgb):
         x2 = min(max(xs) + pad, w)
         y2 = min(max(ys) + pad, h)
 
-        return annotated[y1:y2, x1:x2].copy(), (x1, y1, x2, y2)
+        return img_rgb[y1:y2, x1:x2].copy(), (x1, y1, x2, y2)
 
     left_points = [pts[i] for i in left_eye_idx]
     right_points = [pts[i] for i in right_eye_idx]
@@ -73,18 +75,17 @@ def _detect_face_and_eyes_with_mediapipe(img_rgb):
     left_eye, left_box = crop_from_points(left_points)
     right_eye, right_box = crop_from_points(right_points)
 
-    try:
-        import cv2
-        cv2.rectangle(annotated, (left_box[0], left_box[1]), (left_box[2], left_box[3]), (0, 255, 0), 2)
-        cv2.rectangle(annotated, (right_box[0], right_box[1]), (right_box[2], right_box[3]), (255, 0, 0), 2)
-    except Exception:
-        pass
+    draw.rectangle(left_box, outline=(0, 255, 0), width=3)
+    draw.rectangle(right_box, outline=(255, 0, 0), width=3)
 
-    eyes_detected = left_eye is not None and right_eye is not None and left_eye.size > 0 and right_eye.size > 0
+    eyes_detected = (
+        left_eye is not None and right_eye is not None
+        and left_eye.size > 0 and right_eye.size > 0
+    )
 
     return {
         "success": True,
-        "annotated": annotated,
+        "annotated": np.array(annotated_pil),
         "left_eye": left_eye,
         "right_eye": right_eye,
         "face_detected": True,
@@ -92,43 +93,199 @@ def _detect_face_and_eyes_with_mediapipe(img_rgb):
     }
 
 
-def _evaluate_photoref_guidance(img_pil, face_detected: bool, eyes_detected: bool):
+def _segment_pupil_numpy(eye_rgb):
+    """
+    Segmentazione robusta senza dipendere da cv2.
+    Cerca la regione più scura in zona centrale dell'occhio.
+    """
+    gray = np.mean(eye_rgb.astype(np.float32), axis=2)
+
+    h, w = gray.shape
+    if h < 10 or w < 10:
+        return {
+            "mask": np.zeros((h, w), dtype=np.uint8),
+            "overlay": eye_rgb,
+            "area": 0,
+            "center": None,
+            "confidence": 0.0,
+        }
+
+    # focus sul centro per evitare ciglia e bordi
+    y1 = int(h * 0.18)
+    y2 = int(h * 0.82)
+    x1 = int(w * 0.18)
+    x2 = int(w * 0.82)
+
+    core = gray[y1:y2, x1:x2]
+    if core.size == 0:
+        return {
+            "mask": np.zeros((h, w), dtype=np.uint8),
+            "overlay": eye_rgb,
+            "area": 0,
+            "center": None,
+            "confidence": 0.0,
+        }
+
+    threshold = np.percentile(core, 18)
+    raw_mask = (gray <= threshold).astype(np.uint8)
+
+    # penalizza zone periferiche, mantieni area centrale
+    central_mask = np.zeros_like(raw_mask)
+    central_mask[y1:y2, x1:x2] = 1
+    raw_mask = raw_mask * central_mask
+
+    ys, xs = np.where(raw_mask > 0)
+    if len(xs) == 0:
+        return {
+            "mask": np.zeros((h, w), dtype=np.uint8),
+            "overlay": eye_rgb,
+            "area": 0,
+            "center": None,
+            "confidence": 0.0,
+        }
+
+    cx = int(np.mean(xs))
+    cy = int(np.mean(ys))
+
+    # selezione dei pixel vicini al centro stimato
+    dist = np.sqrt((xs - cx) ** 2 + (ys - cy) ** 2)
+    keep = dist <= max(6, min(h, w) * 0.18)
+
+    xs2 = xs[keep]
+    ys2 = ys[keep]
+
+    mask = np.zeros_like(raw_mask, dtype=np.uint8)
+    mask[ys2, xs2] = 1
+    area = int(mask.sum())
+
+    overlay = eye_rgb.copy()
+    overlay[mask > 0] = [0, 255, 0]
+
+    # confidenza semplice
+    darkness = float(np.mean(gray[mask > 0])) if area > 0 else 255.0
+    global_mean = float(np.mean(gray))
+    confidence = 0.0
+    if area > 20:
+        confidence = max(0.0, min(1.0, (global_mean - darkness) / 90.0))
+
+    return {
+        "mask": mask,
+        "overlay": overlay,
+        "area": area,
+        "center": (cx, cy) if area > 0 else None,
+        "confidence": confidence,
+    }
+
+
+def _compute_gradients(eye_rgb, mask):
+    gray = np.mean(eye_rgb.astype(np.float32), axis=2)
+
+    valid = mask > 0
+    if np.sum(valid) == 0:
+        return {
+            "mean_intensity": 0.0,
+            "horizontal_gradient": 0.0,
+            "vertical_gradient": 0.0,
+            "nasal_temporal_asymmetry": 0.0,
+            "superior_inferior_asymmetry": 0.0,
+        }
+
+    ys, xs = np.where(valid)
+    x_min, x_max = xs.min(), xs.max()
+    y_min, y_max = ys.min(), ys.max()
+
+    pupil = gray[y_min:y_max + 1, x_min:x_max + 1]
+    pupil_mask = valid[y_min:y_max + 1, x_min:x_max + 1]
+
+    values = pupil[pupil_mask]
+    mean_intensity = float(np.mean(values)) if values.size else 0.0
+
+    h, w = pupil.shape
+    mid_x = max(1, w // 2)
+    mid_y = max(1, h // 2)
+
+    left_vals = pupil[:, :mid_x][pupil_mask[:, :mid_x]]
+    right_vals = pupil[:, mid_x:][pupil_mask[:, mid_x:]]
+    top_vals = pupil[:mid_y, :][pupil_mask[:mid_y, :]]
+    bottom_vals = pupil[mid_y:, :][pupil_mask[mid_y:, :]]
+
+    l_mean = float(np.mean(left_vals)) if left_vals.size else 0.0
+    r_mean = float(np.mean(right_vals)) if right_vals.size else 0.0
+    t_mean = float(np.mean(top_vals)) if top_vals.size else 0.0
+    b_mean = float(np.mean(bottom_vals)) if bottom_vals.size else 0.0
+
+    return {
+        "mean_intensity": mean_intensity,
+        "horizontal_gradient": r_mean - l_mean,
+        "vertical_gradient": b_mean - t_mean,
+        "nasal_temporal_asymmetry": r_mean - l_mean,
+        "superior_inferior_asymmetry": b_mean - t_mean,
+    }
+
+
+def _evaluate_photoref_guidance(img_pil, face_detected, eyes_detected, reflex_useful):
     basic = _basic_image_checks(img_pil)
 
     score = 0
     if basic["resolution_ok"]:
-        score += 35
-    if face_detected:
         score += 30
+    if face_detected:
+        score += 25
     if eyes_detected:
         score += 25
+    if reflex_useful:
+        score += 20
 
-    # placeholder clinici: finché non analizziamo riflesso e illuminazione vera
-    frontal_warning = True
-    useful_reflex = False
-
-    if not frontal_warning:
-        score += 5
-    if useful_reflex:
-        score += 5
-
-    light_icon, light_label = _traffic_light(score)
+    quality_icon, quality_label = _traffic_light(score)
 
     return {
         **basic,
         "face_detected": face_detected,
         "eyes_detected": eyes_detected,
-        "frontal_warning": frontal_warning,
-        "useful_reflex": useful_reflex,
+        "reflex_useful": reflex_useful,
         "score": score,
-        "quality_icon": light_icon,
-        "quality_label": light_label,
+        "quality_icon": quality_icon,
+        "quality_label": quality_label,
+    }
+
+
+def _analyze_eye(label, eye_rgb, color_box="green"):
+    if eye_rgb is None or eye_rgb.size == 0:
+        return {
+            "ok": False,
+            "eye_rgb": None,
+            "overlay": None,
+            "mask": None,
+            "area": 0,
+            "confidence": 0.0,
+            "features": None,
+            "useful_reflex": False,
+            "message": f"{label}: ROI non disponibile",
+        }
+
+    seg = _segment_pupil_numpy(eye_rgb)
+    feats = _compute_gradients(eye_rgb, seg["mask"])
+
+    useful_reflex = seg["area"] > 40 and seg["confidence"] >= 0.18
+
+    msg = "Riflesso/pupilla utili" if useful_reflex else "Riflesso non sufficientemente utile"
+
+    return {
+        "ok": True,
+        "eye_rgb": eye_rgb,
+        "overlay": seg["overlay"],
+        "mask": seg["mask"],
+        "area": seg["area"],
+        "confidence": seg["confidence"],
+        "features": feats,
+        "useful_reflex": useful_reflex,
+        "message": msg,
     }
 
 
 def ui_photoref():
-    st.title("📸 Photoref AI – Acquisizione Guidata")
-    st.caption("Semaforo qualità + rilevazione occhi con MediaPipe")
+    st.title("📸 Photoref AI – Acquisizione Guidata + Analisi Base")
+    st.caption("Semaforo qualità, crop occhi, segmentazione pupilla e gradienti")
 
     st.markdown(
         """
@@ -144,7 +301,7 @@ def ui_photoref():
     uploaded = st.file_uploader(
         "Carica immagine",
         type=["jpg", "jpeg", "png"],
-        key="photoref_guided_mp_upload",
+        key="photoref_guided_analysis_upload",
     )
 
     if uploaded is None:
@@ -174,10 +331,16 @@ def ui_photoref():
         with st.expander("Dettagli errore MediaPipe"):
             st.exception(e)
 
+    left_analysis = _analyze_eye("Occhio sinistro", result["left_eye"])
+    right_analysis = _analyze_eye("Occhio destro", result["right_eye"])
+
+    reflex_useful = left_analysis["useful_reflex"] or right_analysis["useful_reflex"]
+
     quality = _evaluate_photoref_guidance(
         img_pil,
         face_detected=result["face_detected"],
         eyes_detected=result["eyes_detected"],
+        reflex_useful=reflex_useful,
     )
 
     st.subheader("Semaforo qualità")
@@ -187,54 +350,78 @@ def ui_photoref():
     c3.metric("Risoluzione", f"{quality['width']}×{quality['height']}")
 
     st.subheader("Controlli")
-    if quality["resolution_ok"]:
-        st.success("✔ Risoluzione adeguata")
-    else:
-        st.error("✘ Risoluzione troppo bassa")
-
-    if quality["face_detected"]:
-        st.success("✔ Volto rilevato")
-    else:
-        st.error("✘ Volto non rilevato")
-
-    if quality["eyes_detected"]:
-        st.success("✔ Occhi rilevati")
-    else:
-        st.warning("⚠ Occhi non rilevati correttamente")
-
-    if quality["frontal_warning"]:
-        st.warning("⚠ La foto sembra compatibile con luce frontale/non eccentrica")
-    else:
-        st.success("✔ Illuminazione compatibile")
-
-    if quality["useful_reflex"]:
-        st.success("✔ Riflesso photoret utile")
-    else:
-        st.warning("⚠ Riflesso photoret non ancora validato in questa versione")
-
-    st.subheader("Feedback operativo")
-    if not quality["resolution_ok"]:
-        st.error("Avvicinati un po' di più o usa una foto più nitida.")
-    if not quality["face_detected"]:
-        st.error("Centra meglio il volto.")
-    if quality["face_detected"] and not quality["eyes_detected"]:
-        st.error("Assicurati che entrambi gli occhi siano ben visibili e non coperti.")
-    if quality["frontal_warning"]:
-        st.info(
-            "Per uno scatto più utile: riduci la luce frontale e usa una sorgente leggermente laterale."
-        )
+    st.success("✔ Risoluzione adeguata" if quality["resolution_ok"] else "✘ Risoluzione non adeguata")
+    st.success("✔ Volto rilevato" if quality["face_detected"] else "✘ Volto non rilevato")
+    st.success("✔ Occhi rilevati" if quality["eyes_detected"] else "⚠ Occhi non rilevati correttamente")
+    st.success("✔ Almeno un riflesso/pupilla utile" if quality["reflex_useful"] else "⚠ Riflesso/pupilla non ancora sufficientemente utili")
 
     st.subheader("Rilevazione")
     st.image(result["annotated"], caption="Volto / ROI occhi", use_container_width=True)
 
     if result["eyes_detected"]:
         col1, col2 = st.columns(2)
+
         with col1:
             st.markdown("### Occhio sinistro")
-            st.image(result["left_eye"], use_container_width=True)
+            st.image(left_analysis["eye_rgb"], use_container_width=True)
+            st.image(left_analysis["overlay"], caption="Segmentazione pupilla", use_container_width=True)
+            st.caption(left_analysis["message"])
+
+            if left_analysis["features"] is not None:
+                st.json({
+                    "pupil_area_px": int(left_analysis["area"]),
+                    "confidence": round(left_analysis["confidence"], 3),
+                    "mean_intensity": round(left_analysis["features"]["mean_intensity"], 3),
+                    "horizontal_gradient": round(left_analysis["features"]["horizontal_gradient"], 3),
+                    "vertical_gradient": round(left_analysis["features"]["vertical_gradient"], 3),
+                })
+
         with col2:
             st.markdown("### Occhio destro")
-            st.image(result["right_eye"], use_container_width=True)
+            st.image(right_analysis["eye_rgb"], use_container_width=True)
+            st.image(right_analysis["overlay"], caption="Segmentazione pupilla", use_container_width=True)
+            st.caption(right_analysis["message"])
+
+            if right_analysis["features"] is not None:
+                st.json({
+                    "pupil_area_px": int(right_analysis["area"]),
+                    "confidence": round(right_analysis["confidence"], 3),
+                    "mean_intensity": round(right_analysis["features"]["mean_intensity"], 3),
+                    "horizontal_gradient": round(right_analysis["features"]["horizontal_gradient"], 3),
+                    "vertical_gradient": round(right_analysis["features"]["vertical_gradient"], 3),
+                })
+
+    st.subheader("Confronto OD-OS")
+    if left_analysis["features"] is not None and right_analysis["features"] is not None:
+        delta_h = abs(
+            left_analysis["features"]["horizontal_gradient"]
+            - right_analysis["features"]["horizontal_gradient"]
+        )
+        delta_v = abs(
+            left_analysis["features"]["vertical_gradient"]
+            - right_analysis["features"]["vertical_gradient"]
+        )
+
+        c1, c2 = st.columns(2)
+        c1.metric("Δ gradiente orizzontale", f"{delta_h:.3f}")
+        c2.metric("Δ gradiente verticale", f"{delta_v:.3f}")
+
+        if delta_h > 12 or delta_v > 12:
+            st.warning("Possibile asimmetria interoculare da approfondire.")
+        else:
+            st.success("Nessuna forte asimmetria rilevata in questa analisi preliminare.")
+    else:
+        st.info("Confronto non disponibile: segmentazione insufficiente in uno o entrambi gli occhi.")
+
+    st.subheader("Feedback operativo")
+    if not quality["resolution_ok"]:
+        st.error("Usa una foto più nitida o più ravvicinata.")
+    if quality["face_detected"] and not quality["eyes_detected"]:
+        st.error("Assicurati che entrambi gli occhi siano ben visibili.")
+    if not quality["reflex_useful"]:
+        st.info(
+            "Per una photoretinoscopy più utile: riduci la luce frontale, usa una sorgente leggermente laterale e prova in ambiente semi-buio."
+        )
 
     st.subheader("Stato finale")
     if quality["score"] >= 80:
@@ -245,4 +432,4 @@ def ui_photoref():
         st.error("Immagine non idonea per analisi affidabile.")
 
     if not mp_ok:
-        st.info("Il modulo resta utilizzabile anche senza MediaPipe, ma senza rilevazione occhi reale.")
+        st.info("Il modulo resta utilizzabile, ma senza MediaPipe non può fare la rilevazione occhi reale.")
