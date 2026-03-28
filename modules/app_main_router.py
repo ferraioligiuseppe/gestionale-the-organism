@@ -47,6 +47,7 @@ from .sections.ui_cliniche import (
 from .ui_lenti_contatto import ui_lenti_contatto
 
 SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
+SECTION_PHOTOREF = "📸 Photoref AI"
 
 
 def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -> bool:
@@ -64,6 +65,15 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
 
     if sezione == SECTION_LENTI_CONTATTO:
         ui_lenti_contatto()
+        return True
+
+    if sezione == SECTION_PHOTOREF:
+        try:
+            from modules.photoref_ai.ui_photoref import ui_photoref
+            ui_photoref()
+        except Exception as e:
+            st.error("Modulo Photoref AI non disponibile.")
+            st.exception(e)
         return True
 
     if sezione == SECTION_SEDUTE:
