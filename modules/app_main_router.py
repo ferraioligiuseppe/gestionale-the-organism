@@ -69,7 +69,7 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
 
     if sezione == SECTION_PHOTOREF:
         try:
-            from modules.photoref_ai.ui_photoref import ui_photoref
+            from .photoref_ai.ui_photoref import ui_photoref
             ui_photoref()
         except Exception as e:
             st.error("Modulo Photoref AI non disponibile.")
