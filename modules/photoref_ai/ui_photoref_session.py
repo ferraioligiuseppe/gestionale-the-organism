@@ -7,9 +7,7 @@ from .photoref_db import create_capture_session, list_recent_sessions
 BASE_DIR = str(Path(__file__).resolve().parent)
 
 def _base_url_guess() -> str:
-    qp = st.query_params
-    custom = qp.get("base_url", "")
-    return custom or ""
+    return st.query_params.get("base_url", "") or ""
 
 def _make_mobile_link(token: str) -> str:
     base_url = _base_url_guess()
@@ -30,43 +28,19 @@ def ui_photoref_session(patient_id: str = "", visit_id: str = "", operator_user:
         notes = st.text_area("Note sessione", value="")
         operator_user = st.text_input("Operatore", value=operator_user)
         submitted = st.form_submit_button("Genera sessione")
-
     if submitted:
         tok = create_capture_token(expire_minutes=30)
         link = _make_mobile_link(tok["token"])
-        record = {
-            "token": tok["token"],
-            "created_at": tok["created_at"],
-            "expires_at": tok["expires_at"],
-            "status": "created",
-            "patient_id": patient_id,
-            "visit_id": visit_id,
-            "eye_side": eye_side,
-            "capture_type": capture_type,
-            "operator_user": operator_user,
-            "notes": notes,
-            "mobile_link": link,
-        }
+        record = {"token": tok["token"], "created_at": tok["created_at"], "expires_at": tok["expires_at"], "status": "created", "patient_id": patient_id, "visit_id": visit_id, "eye_side": eye_side, "capture_type": capture_type, "operator_user": operator_user, "notes": notes, "mobile_link": link}
         create_capture_session(BASE_DIR, record)
-        st.success("Sessione creata")
-        st.code(link, language="text")
+        st.success("Sessione creata"); st.code(link, language="text")
         st.session_state["last_photoref_link"] = link
-
     if st.session_state.get("last_photoref_link"):
-        st.markdown("**Ultimo link generato**")
-        st.code(st.session_state["last_photoref_link"], language="text")
-
-    st.markdown("**Storico sessioni recenti**")
+        st.markdown("**Ultimo link generato**"); st.code(st.session_state["last_photoref_link"], language="text")
     rows = list_recent_sessions(BASE_DIR, limit=20)
-    if not rows:
-        st.info("Nessuna sessione registrata.")
-        return
-
-    for row in rows:
-        st.markdown(
-            f"**{row.get('patient_id','')}** | visita **{row.get('visit_id','')}** | "
-            f"{row.get('eye_side','')} | stato **{row.get('status','')}**"
-        )
-        if row.get("mobile_link"):
-            st.code(row["mobile_link"], language="text")
-        st.divider()
+    if rows:
+        st.markdown("**Storico sessioni recenti**")
+        for row in rows:
+            st.markdown(f"**{row.get('patient_id','')}** | visita **{row.get('visit_id','')}** | {row.get('eye_side','')} | stato **{row.get('status','')}**")
+            if row.get("mobile_link"): st.code(row["mobile_link"], language="text")
+            st.divider()
