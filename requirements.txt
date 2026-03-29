@@ -2,7 +2,7 @@
 # Dipendenze con versioni minime pinned per riproducibilità
 
 # Core UI
-streamlit>=1.35.0
+streamlit>=1.40.0,<1.46.0
 
 # Database
 psycopg2-binary>=2.9.9
@@ -37,10 +37,13 @@ Pillow>=10.3.0
 # AI
 openai>=1.30.0
 
+# Calcolo scientifico
+scipy>=1.11.0
+
 # Audio
 soundfile==0.12.1
 pydub==0.25.1
-streamlit-webrtc>=0.47.0
+streamlit-webrtc>=0.47.0,<0.65.0
 aiortc>=1.9.0
 
 streamlit-javascript
