@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageDraw
 import numpy as np
 
 
@@ -22,42 +22,28 @@ def _basic_image_checks(img_pil):
 
 
 def _fallback_eye_crop(img_rgb):
-    """
-    Fallback migliorato:
-    - stima zona occhi dinamica
-    - evita fronte e guance
-    - centra meglio i due occhi
-    """
     h, w = img_rgb.shape[:2]
 
-    # zona superiore del volto (dove stanno gli occhi)
     y_top = int(h * 0.22)
     y_bottom = int(h * 0.55)
-
-    # riduci lati per evitare orecchie e bordo scena
     x_left = int(w * 0.15)
     x_right = int(w * 0.85)
 
     face_upper = img_rgb[y_top:y_bottom, x_left:x_right]
     fh, fw = face_upper.shape[:2]
 
-    # divisione occhi più precisa
     mid_x = fw // 2
-
-    # margini per evitare naso e tempie
     eye_pad_x = int(fw * 0.08)
     eye_pad_y = int(fh * 0.12)
 
-    # occhio sinistro
     left_eye = face_upper[
         eye_pad_y:fh - eye_pad_y,
-        eye_pad_x:mid_x - eye_pad_x,
+        eye_pad_x:mid_x - eye_pad_x
     ]
 
-    # occhio destro
     right_eye = face_upper[
         eye_pad_y:fh - eye_pad_y,
-        mid_x + eye_pad_x:fw - eye_pad_x,
+        mid_x + eye_pad_x:fw - eye_pad_x
     ]
 
     return {
@@ -215,10 +201,105 @@ def _segment_pupil_numpy(eye_rgb):
     }
 
 
+def _detect_bright_spot_in_pupil(eye_rgb, mask):
+    gray = np.mean(eye_rgb.astype(np.float32), axis=2)
+    valid = mask > 0
+
+    if np.sum(valid) == 0:
+        return {
+            "spot_center": None,
+            "spot_intensity": 0.0,
+            "spot_pixels": 0,
+            "offset_x": None,
+            "offset_y": None,
+            "offset_norm": None,
+            "label": "riflesso poco utile",
+            "overlay": eye_rgb,
+        }
+
+    ys, xs = np.where(valid)
+    pupil_vals = gray[valid]
+
+    if pupil_vals.size == 0:
+        return {
+            "spot_center": None,
+            "spot_intensity": 0.0,
+            "spot_pixels": 0,
+            "offset_x": None,
+            "offset_y": None,
+            "offset_norm": None,
+            "label": "riflesso poco utile",
+            "overlay": eye_rgb,
+        }
+
+    thr = np.percentile(pupil_vals, 92)
+    bright_mask = ((gray >= thr) & valid)
+
+    bys, bxs = np.where(bright_mask)
+    overlay = eye_rgb.copy()
+
+    if len(bxs) == 0:
+        return {
+            "spot_center": None,
+            "spot_intensity": 0.0,
+            "spot_pixels": 0,
+            "offset_x": None,
+            "offset_y": None,
+            "offset_norm": None,
+            "label": "riflesso poco utile",
+            "overlay": overlay,
+        }
+
+    sx = float(np.mean(bxs))
+    sy = float(np.mean(bys))
+    spot_intensity = float(np.mean(gray[bright_mask]))
+    spot_pixels = int(np.sum(bright_mask))
+
+    cy = float(np.mean(ys))
+    cx = float(np.mean(xs))
+
+    pupil_w = max(1.0, float(xs.max() - xs.min()))
+    pupil_h = max(1.0, float(ys.max() - ys.min()))
+
+    offset_x = sx - cx
+    offset_y = sy - cy
+
+    offset_norm_x = offset_x / pupil_w
+    offset_norm_y = offset_y / pupil_h
+    offset_norm = float(np.sqrt(offset_norm_x ** 2 + offset_norm_y ** 2))
+
+    if offset_norm < 0.12:
+        label = "riflesso centrale"
+    elif offset_norm < 0.30:
+        label = "riflesso decentrato"
+    else:
+        label = "riflesso molto decentrato"
+
+    # overlay: pupilla verde, spot rosso
+    overlay[bright_mask] = [255, 0, 0]
+
+    x0 = max(0, int(round(sx)) - 2)
+    x1 = min(overlay.shape[1], int(round(sx)) + 3)
+    y0 = max(0, int(round(sy)) - 2)
+    y1 = min(overlay.shape[0], int(round(sy)) + 3)
+    overlay[y0:y1, x0:x1] = [255, 255, 0]
+
+    return {
+        "spot_center": (float(sx), float(sy)),
+        "spot_intensity": spot_intensity,
+        "spot_pixels": spot_pixels,
+        "offset_x": float(offset_x),
+        "offset_y": float(offset_y),
+        "offset_norm": offset_norm,
+        "label": label,
+        "overlay": overlay,
+    }
+
+
 def _compute_gradients(eye_rgb, mask):
     gray = np.mean(eye_rgb.astype(np.float32), axis=2)
-
     valid = mask > 0
+
     if np.sum(valid) == 0:
         return {
             "mean_intensity": 0.0,
@@ -299,30 +380,44 @@ def _analyze_eye(label, eye_rgb):
             "features": None,
             "useful_reflex": False,
             "message": f"{label}: ROI non disponibile",
+            "pupil_center": None,
+            "bright_spot": None,
         }
 
     seg = _segment_pupil_numpy(eye_rgb)
     feats = _compute_gradients(eye_rgb, seg["mask"])
+    bright = _detect_bright_spot_in_pupil(eye_rgb, seg["mask"])
 
-    useful_reflex = seg["area"] > 40 and seg["confidence"] >= 0.18
-    msg = "Riflesso/pupilla utili" if useful_reflex else "Riflesso non sufficientemente utile"
+    useful_reflex = (
+        seg["area"] > 40
+        and seg["confidence"] >= 0.18
+        and bright["spot_center"] is not None
+        and bright["spot_pixels"] > 5
+    )
+
+    if useful_reflex:
+        msg = bright["label"]
+    else:
+        msg = "riflesso poco utile"
 
     return {
         "ok": True,
         "eye_rgb": eye_rgb,
-        "overlay": seg["overlay"],
+        "overlay": bright["overlay"],
         "mask": seg["mask"],
         "area": seg["area"],
         "confidence": seg["confidence"],
         "features": feats,
         "useful_reflex": useful_reflex,
         "message": msg,
+        "pupil_center": seg["center"],
+        "bright_spot": bright,
     }
 
 
 def ui_photoref():
-    st.title("📸 Photoref AI – Acquisizione Guidata + Analisi Base")
-    st.caption("Semaforo qualità, crop occhi, segmentazione pupilla e gradienti")
+    st.title("📸 Photoref AI – Acquisizione Guidata + Analisi Riflesso")
+    st.caption("Centro pupilla, spot luminoso, offset del riflesso, gradienti")
 
     st.markdown(
         """
@@ -375,25 +470,10 @@ def ui_photoref():
     c3.metric("Risoluzione", f"{quality['width']}×{quality['height']}")
 
     st.subheader("Controlli")
-    if quality["resolution_ok"]:
-        st.success("✔ Risoluzione adeguata")
-    else:
-        st.error("✘ Risoluzione non adeguata")
-
-    if quality["face_detected"]:
-        st.success("✔ Volto rilevato")
-    else:
-        st.warning("⚠ Volto non rilevato con MediaPipe")
-
-    if quality["eyes_detected"]:
-        st.success("✔ Occhi rilevati / stimati")
-    else:
-        st.warning("⚠ Occhi non rilevati correttamente")
-
-    if quality["reflex_useful"]:
-        st.success("✔ Almeno un riflesso/pupilla utile")
-    else:
-        st.warning("⚠ Riflesso/pupilla non ancora sufficientemente utili")
+    st.success("✔ Risoluzione adeguata" if quality["resolution_ok"] else "✘ Risoluzione non adeguata")
+    st.success("✔ Volto rilevato" if quality["face_detected"] else "⚠ Volto non rilevato con MediaPipe")
+    st.success("✔ Occhi rilevati / stimati" if quality["eyes_detected"] else "⚠ Occhi non rilevati correttamente")
+    st.success("✔ Riflesso utile" if quality["reflex_useful"] else "⚠ Riflesso poco utile")
 
     st.subheader("Rilevazione")
     st.image(result["annotated"], caption="Volto / ROI occhi", use_container_width=True)
@@ -406,13 +486,20 @@ def ui_photoref():
             if left_analysis["eye_rgb"] is not None:
                 st.image(left_analysis["eye_rgb"], use_container_width=True)
             if left_analysis["overlay"] is not None:
-                st.image(left_analysis["overlay"], caption="Segmentazione pupilla", use_container_width=True)
+                st.image(left_analysis["overlay"], caption="Pupilla + spot luminoso", use_container_width=True)
             st.caption(left_analysis["message"])
 
             if left_analysis["features"] is not None:
                 st.json({
                     "pupil_area_px": int(left_analysis["area"]),
                     "confidence": round(left_analysis["confidence"], 3),
+                    "pupil_center": left_analysis["pupil_center"],
+                    "bright_spot_center": left_analysis["bright_spot"]["spot_center"] if left_analysis["bright_spot"] else None,
+                    "spot_pixels": int(left_analysis["bright_spot"]["spot_pixels"]) if left_analysis["bright_spot"] else 0,
+                    "offset_x": round(left_analysis["bright_spot"]["offset_x"], 3) if left_analysis["bright_spot"] and left_analysis["bright_spot"]["offset_x"] is not None else None,
+                    "offset_y": round(left_analysis["bright_spot"]["offset_y"], 3) if left_analysis["bright_spot"] and left_analysis["bright_spot"]["offset_y"] is not None else None,
+                    "offset_norm": round(left_analysis["bright_spot"]["offset_norm"], 3) if left_analysis["bright_spot"] and left_analysis["bright_spot"]["offset_norm"] is not None else None,
+                    "reflection_label": left_analysis["message"],
                     "mean_intensity": round(left_analysis["features"]["mean_intensity"], 3),
                     "horizontal_gradient": round(left_analysis["features"]["horizontal_gradient"], 3),
                     "vertical_gradient": round(left_analysis["features"]["vertical_gradient"], 3),
@@ -423,13 +510,20 @@ def ui_photoref():
             if right_analysis["eye_rgb"] is not None:
                 st.image(right_analysis["eye_rgb"], use_container_width=True)
             if right_analysis["overlay"] is not None:
-                st.image(right_analysis["overlay"], caption="Segmentazione pupilla", use_container_width=True)
+                st.image(right_analysis["overlay"], caption="Pupilla + spot luminoso", use_container_width=True)
             st.caption(right_analysis["message"])
 
             if right_analysis["features"] is not None:
                 st.json({
                     "pupil_area_px": int(right_analysis["area"]),
                     "confidence": round(right_analysis["confidence"], 3),
+                    "pupil_center": right_analysis["pupil_center"],
+                    "bright_spot_center": right_analysis["bright_spot"]["spot_center"] if right_analysis["bright_spot"] else None,
+                    "spot_pixels": int(right_analysis["bright_spot"]["spot_pixels"]) if right_analysis["bright_spot"] else 0,
+                    "offset_x": round(right_analysis["bright_spot"]["offset_x"], 3) if right_analysis["bright_spot"] and right_analysis["bright_spot"]["offset_x"] is not None else None,
+                    "offset_y": round(right_analysis["bright_spot"]["offset_y"], 3) if right_analysis["bright_spot"] and right_analysis["bright_spot"]["offset_y"] is not None else None,
+                    "offset_norm": round(right_analysis["bright_spot"]["offset_norm"], 3) if right_analysis["bright_spot"] and right_analysis["bright_spot"]["offset_norm"] is not None else None,
+                    "reflection_label": right_analysis["message"],
                     "mean_intensity": round(right_analysis["features"]["mean_intensity"], 3),
                     "horizontal_gradient": round(right_analysis["features"]["horizontal_gradient"], 3),
                     "vertical_gradient": round(right_analysis["features"]["vertical_gradient"], 3),
@@ -461,9 +555,7 @@ def ui_photoref():
     if not quality["resolution_ok"]:
         st.error("Usa una foto più nitida o più ravvicinata.")
     if not quality["reflex_useful"]:
-        st.info(
-            "Per una photoretinoscopy più utile: riduci la luce frontale, usa una sorgente leggermente laterale e prova in ambiente semi-buio."
-        )
+        st.info("Per migliorare il riflesso: luce leggermente laterale, ambiente semi-buio, sguardo diritto.")
 
     st.subheader("Stato finale")
     if quality["score"] >= 80:
