@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Menu principale del gestionale.
-
-Step 1-2 della modularizzazione: qui vivono le definizioni delle voci sidebar,
-riusando costanti condivise con il routing.
-"""
+"""Menu principale del gestionale."""
 
 from .app_sections import (
     SECTION_PAZIENTI,
@@ -23,11 +19,16 @@ from .app_sections import (
     SECTION_UTENTI,
 )
 
+SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
+SECTION_PHOTOREF = "📸 Photoref AI"
+
 BASE_SECTIONS = [
     SECTION_DASHBOARD,
     SECTION_PAZIENTI,
     SECTION_PNEV,
     SECTION_VISION,
+    SECTION_LENTI_CONTATTO,
+    SECTION_PHOTOREF,
     SECTION_READING_DOM,
     SECTION_SEDUTE,
     SECTION_OSTEOPATIA,
@@ -44,26 +45,16 @@ ADMIN_SECTIONS = [
     SECTION_UTENTI,
 ]
 
-UDITO_PROD_SECTIONS = [
-    "🎧 ORL + EQ (MODULO)",
-    "🎧 Genera stimolazione (JOB)",
-    "🎧 Stimolazione uditiva (TEST)",
-]
-
-UDITO_TEST_ONLY_SECTIONS = [
-    "🎧 Audiogramma funzionale (TEST)",
-    "🩺 Esami ORL – soglie tonali (TEST)",
-    "🎚️ EQ stimolazione uditiva (TEST)",
-    "🔧 Calibrazione cuffie (TEST)",
-    "🧹 Pulizia DB (TEST)",
-]
+SECTION_DIAGNOSTICA_UDITIVA = "🔉 Diagnostica Uditiva"
+SECTION_STIMOLAZIONE_PASSIVA = "🎵 Stimolazione Passiva"
 
 
 def build_sections(is_admin: bool, app_mode: str) -> list[str]:
     sections = list(BASE_SECTIONS)
     if is_admin:
         sections.extend(ADMIN_SECTIONS)
-    sections.extend(UDITO_PROD_SECTIONS)
-    if str(app_mode).lower().strip() == "test":
-        sections.extend(UDITO_TEST_ONLY_SECTIONS)
+
+    sections.append(SECTION_DIAGNOSTICA_UDITIVA)
+    sections.append(SECTION_STIMOLAZIONE_PASSIVA)
+
     return sections

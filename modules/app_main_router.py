@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Routing principale delle sezioni non uditive.
-
-Step 6 safe: il router richiama i moduli dedicati e non dipende più da una
-lunga lista di callback passati da app_core. Questo riduce il rischio di
-errori quando si modifica il file centrale.
-"""
+"""Routing principale delle sezioni non uditive."""
 
 from typing import Callable, Any
 
@@ -44,6 +39,10 @@ from .sections.ui_cliniche import (
     render_gaze_section,
     render_utenti_section,
 )
+from .ui_lenti_contatto import ui_lenti_contatto
+
+SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
+SECTION_PHOTOREF = "📸 Photoref AI"
 
 
 def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -> bool:
@@ -57,6 +56,19 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
 
     if sezione == SECTION_VISION:
         render_vision_section()
+        return True
+
+    if sezione == SECTION_LENTI_CONTATTO:
+        ui_lenti_contatto()
+        return True
+
+    if sezione == SECTION_PHOTOREF:
+        try:
+            from .photoref_ai.ui_photoref import ui_photoref
+            ui_photoref()
+        except Exception as e:
+            st.error("Modulo Photoref AI non disponibile.")
+            st.exception(e)
         return True
 
     if sezione == SECTION_SEDUTE:

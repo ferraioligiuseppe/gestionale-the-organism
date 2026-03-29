@@ -22,16 +22,11 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 
-# NEW LAC MODULES (STEP 2 SAFE FALLBACK)
-try:
-    from modules.lac.lac_engine import estimate_clearance
-    from modules.lac.lac_topography import parse_any_topo
-    from modules.lac.lac_fluoro import plot_fluorescein_simulation
-    from modules.lac.lac_storage import get_conn, init_db, build_payload
-    LAC_BRIDGE_OK = True
-except Exception:
-    LAC_BRIDGE_OK = False
-
+# NEW LAC MODULES (STEP 2)
+from modules.lac.lac_engine import estimate_clearance
+from modules.lac.lac_topography import parse_any_topo
+from modules.lac.lac_fluoro import plot_fluorescein_simulation
+from modules.lac.lac_storage import get_conn, init_db, build_payload
 
 try:
     from reportlab.lib.pagesizes import A4
@@ -255,9 +250,9 @@ def _import_topographer_section():
     with c2:
         os_file=st.file_uploader("OS - CSV / XYZ / ZCS", type=["csv","xyz","zcs"], key="topo_os")
     if od_file:
-        st.session_state["topo_od_parsed"] = parse_any_topo(od_file) if LAC_BRIDGE_OK else _parse_any_topo(od_file)
+        st.session_state["topo_od_parsed"] = parse_any_topo(od_file)
     if os_file:
-        st.session_state["topo_os_parsed"] = parse_any_topo(os_file) if LAC_BRIDGE_OK else _parse_any_topo(os_file)
+        st.session_state["topo_os_parsed"] = parse_any_topo(os_file)
     for side,key in [("OD","topo_od_parsed"),("OS","topo_os_parsed")]:
         parsed=st.session_state.get(key)
         if parsed:
@@ -608,8 +603,8 @@ def ui_lenti_contatto():
     st.title("👁️ Lenti a contatto")
     st.caption("Versione self-contained: clearance, fluoresceina, curve costruttive, export TXT/PDF")
     try:
-        conn = get_conn() if LAC_BRIDGE_OK else _get_conn()
-        (init_db(conn) if LAC_BRIDGE_OK else init_lenti_contatto_db(conn))
+        conn = get_conn()
+        init_db(conn)
     except Exception as e:
         st.error("Errore inizializzazione database.")
         st.exception(e)
@@ -659,11 +654,11 @@ def ui_lenti_contatto():
             c1,c2 = st.columns(2)
             with c1:
                 st.markdown("#### Simulazione OD")
-                fig = plot_fluorescein_simulation(props["od"], "OD") if LAC_BRIDGE_OK else _plot_fluorescein_simulation(props["od"], "OD")
+                fig = plot_fluorescein_simulation(props["od"], "OD")
                 st.pyplot(fig, use_container_width=False)
             with c2:
                 st.markdown("#### Simulazione OS")
-                fig = plot_fluorescein_simulation(props["os"], "OS") if LAC_BRIDGE_OK else _plot_fluorescein_simulation(props["os"], "OS")
+                fig = plot_fluorescein_simulation(props["os"], "OS")
                 st.pyplot(fig, use_container_width=False)
 
     with tab4:
@@ -696,9 +691,9 @@ def ui_lenti_contatto():
             if st.button("Salva lente/i nel database", type="primary", use_container_width=True):
                 try:
                     ids=[]
-                    ids.append(salva_lente_contatto(conn, (build_payload(data_in["paziente_id"], data_in["data_scheda"], "OD", data_in["operatore"], data_in["od"], props["od"]) if LAC_BRIDGE_OK else _build_payload(data_in["paziente_id"], data_in["data_scheda"], "OD", data_in["operatore"], data_in["od"], props["od"]))))
+                    ids.append(salva_lente_contatto(conn, build_payload(data_in["paziente_id"], data_in["data_scheda"], "OD", data_in["operatore"], data_in["od"], props["od"])))
                     if data_in.get("salva_bil", True):
-                        ids.append(salva_lente_contatto(conn, (build_payload(data_in["paziente_id"], data_in["data_scheda"], "OS", data_in["operatore"], data_in["os"], props["os"]) if LAC_BRIDGE_OK else _build_payload(data_in["paziente_id"], data_in["data_scheda"], "OS", data_in["operatore"], data_in["os"], props["os"]))))
+                        ids.append(salva_lente_contatto(conn, build_payload(data_in["paziente_id"], data_in["data_scheda"], "OS", data_in["operatore"], data_in["os"], props["os"])))
                     st.success(f"Lente/i salvate correttamente. ID: {', '.join(map(str, ids))}")
                 except Exception as e:
                     st.error("Errore durante il salvataggio.")

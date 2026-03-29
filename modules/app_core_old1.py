@@ -1,8 +1,65 @@
 # -*- coding: utf-8 -*-
+import os
+import io
+import csv
+import math
+import hmac
+import json
+import secrets
+import hashlib
+import textwrap
+import urllib.parse
+from functools import lru_cache
+from datetime import timedelta, timezone
+
 import streamlit as st
-from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
+from modules.app_menu import build_sections
+from modules.app_udito_router import dispatch_udito_section
+from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
-from modules.ui_lenti_inverse import ui_lenti_inverse
+from modules.ui_lenti_contatto import ui_lenti_contatto
+from modules.ui_esami_strumentali import ui_esami_strumentali
+from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
+from modules.ui_audiometria_funzionale import ui_audiometria_funzionale
+try:
+    from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
+except Exception:
+    _ui_calib_cuffie_ext = None
+from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
+
+from modules.app_sections import (
+    SECTION_DASHBOARD,
+    SECTION_PAZIENTI,
+    SECTION_PNEV,
+    SECTION_VISION,
+    SECTION_SEDUTE,
+    SECTION_OSTEOPATIA,
+    SECTION_RELAZIONI,
+)
+
+SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
+SECTION_BILANCIO_UDITIVO   = "🎧 Bilancio Uditivo"
+SECTION_AUDIOMETRIA_FUN    = "📊 Audiometria Funzionale"
+SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
+
+_build_sections_original = build_sections
+
+def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
+    sections = _build_sections_original(is_admin, app_mode)
+    if SECTION_LENTI_CONTATTO not in sections:
+        try:
+            from modules.app_sections import SECTION_VISION
+            idx = sections.index(SECTION_VISION) + 1
+        except Exception:
+            idx = 3
+        sections.insert(idx, SECTION_LENTI_CONTATTO)
+    if SECTION_ESAMI_STRUM not in sections:
+        try:
+            idx5 = sections.index(SECTION_LENTI_CONTATTO) + 1
+        except Exception:
+            idx5 = 4
+        sections.insert(idx5, SECTION_ESAMI_STRUM)
+    return sections
 
 import pnev_module as pnev
 
@@ -14,11 +71,7 @@ except Exception:
     pnev_ai = None
     PNEV_AI_AVAILABLE = False
 
-# --- Token/public links helpers ---
-import secrets
-import hmac
-import hashlib
-from datetime import timedelta, timezone
+
 
 # --- FIX: verifica disponibilità psycopg2 (deve esistere prima di usare _connect_cached) ---
 PSYCOPG2_AVAILABLE = False
@@ -538,9 +591,9 @@ def migrate_anamnesi_legacy_to_pnev(cur, paziente_id: int | None = None, limit: 
     stats = {"scanned": 0, "updated": 0, "skipped_has_pnev": 0, "skipped_no_content": 0}
 
     if paziente_id is None:
-        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi ORDER BY id DESC LIMIT ?", (int(limit),))
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi ORDER BY id DESC LIMIT %s", (int(limit),))
     else:
-        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY id DESC LIMIT ?", (int(paziente_id), int(limit)))
+        cur.execute("SELECT id, paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY id DESC LIMIT %s", (int(paziente_id), int(limit)))
 
     rows = cur.fetchall() or []
     for r in rows:
@@ -796,10 +849,6 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
     return result, summary
 
 
-if APP_MODE == "test":
-    debug_secrets_auth()
-if APP_MODE == "test":
-    st.warning("⚠️ MODALITÀ TEST — database separato (Neon TEST).")
 from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
@@ -808,13 +857,7 @@ from pdf_templates import build_pdf
 
 # A4 2×A5
 
-import os
-import io
-import urllib.parse
-import csv
-from functools import lru_cache
-import math  # <-- aggiungi questa riga se non c'è
-import textwrap  # per andare a capo nel referto
+
 
 # PDF (referti e prescrizioni A4/A5)
 
@@ -4332,7 +4375,7 @@ def _count_refs(cur, paziente_id: int) -> dict:
     counts = {}
     for tbl, col in _patient_child_tables():
         try:
-            cur.execute(f"SELECT COUNT(*) AS N FROM {tbl} WHERE {col} = ?", (paziente_id,))
+            cur.execute(f"SELECT COUNT(*) AS N FROM {tbl} WHERE {col} = %s", (paziente_id,))
             r = cur.fetchone()
             try:
                 n = int(r["N"]) if isinstance(r, dict) else int(r[0])
@@ -4353,7 +4396,7 @@ def db_merge_patients(cur, master_id: int, dup_ids: list):
             continue
         for tbl, col in _patient_child_tables():
             try:
-                cur.execute(f"UPDATE {tbl} SET {col} = ? WHERE {col} = ?", (master_id, dup_id))
+                cur.execute(f"UPDATE {tbl} SET {col} = %s WHERE {col} = %s", (master_id, dup_id))
                 moved = getattr(cur, "rowcount", None)
                 report["moved"].setdefault(tbl, 0)
                 if moved is not None and moved >= 0:
@@ -4361,7 +4404,7 @@ def db_merge_patients(cur, master_id: int, dup_ids: list):
             except Exception as e:
                 report["errors"].append(f"{tbl}: {e}")
         try:
-            cur.execute("DELETE FROM Pazienti WHERE id = ?", (dup_id,))
+            cur.execute("DELETE FROM Pazienti WHERE id = %s", (dup_id,))
             report["deleted"].append(dup_id)
         except Exception as e:
             report["errors"].append(f"DELETE Pazienti({dup_id}): {e}")
@@ -4779,23 +4822,23 @@ def ui_pazienti():
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         if st.button("Archivia paziente", key="archivia"):
-            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ARCHIVIATO' WHERE id = ?", (sel_id,))
+            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ARCHIVIATO' WHERE id = %s", (sel_id,))
             conn.commit()
             st.success("Paziente archiviato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_b:
         if st.button("Riattiva paziente", key="riattiva"):
-            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ATTIVO' WHERE id = ?", (sel_id,))
+            cur.execute("UPDATE Pazienti SET Stato_Paziente = 'ATTIVO' WHERE id = %s", (sel_id,))
             conn.commit()
             st.success("Paziente riattivato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_c:
         if st.button("Elimina definitivamente", key="elimina"):
-            cur.execute("DELETE anamnesi WHERE paziente_id = ?", (sel_id,))
-            cur.execute("DELETE FROM Valutazioni_Visive WHERE paziente_id = ?", (sel_id,))
-            cur.execute("DELETE FROM Sedute WHERE paziente_id = ?", (sel_id,))
-            cur.execute("DELETE FROM Coupons WHERE paziente_id = ?", (sel_id,))
-            cur.execute("DELETE FROM Pazienti WHERE id = ?", (sel_id,))
+            cur.execute("DELETE FROM anamnesi WHERE paziente_id = %s", (sel_id,))
+            cur.execute("DELETE FROM Valutazioni_Visive WHERE paziente_id = %s", (sel_id,))
+            cur.execute("DELETE FROM Sedute WHERE paziente_id = %s", (sel_id,))
+            cur.execute("DELETE FROM Coupons WHERE paziente_id = %s", (sel_id,))
+            cur.execute("DELETE FROM Pazienti WHERE id = %s", (sel_id,))
             conn.commit()
             st.success("Paziente e dati associati eliminati.")
             conn.close()
@@ -5174,7 +5217,7 @@ def ui_anamnesi():
         st.rerun()
 
     if 'cancella' in locals() and cancella:
-        cur.execute("DELETE anamnesi WHERE id = ?", (an_id,))
+        cur.execute("DELETE FROM anamnesi WHERE id = %s", (an_id,))
         conn.commit()
         st.success("Valutazione PNEV eliminata.")
         st.rerun()
@@ -5204,9 +5247,55 @@ def ui_valutazioni_visive():
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
-    cur.execute("SELECT * FROM Pazienti WHERE id = ?", (paz_id,))
+    cur.execute("SELECT * FROM Pazienti WHERE id = %s", (paz_id,))
     paziente = cur.fetchone()
 
+
+    # ── Cheratometria (fuori dal form per on_change bidirezionale) ────────
+    CK_kera = 337.5
+    for _k,_v in [("k1_od_mm",7.80),("k1_od_D",round(CK_kera/7.80,2)),
+                  ("k2_od_mm",7.80),("k2_od_D",round(CK_kera/7.80,2)),
+                  ("k1_os_mm",7.80),("k1_os_D",round(CK_kera/7.80,2)),
+                  ("k2_os_mm",7.80),("k2_os_D",round(CK_kera/7.80,2))]:
+        if _k not in st.session_state: st.session_state[_k] = _v
+
+    def _mk1_od_r(): v=st.session_state.get("k1_od_mm",0); st.session_state["k1_od_D"]=round(CK_kera/v,2) if v>0 else 0
+    def _mk1_od_D(): v=st.session_state.get("k1_od_D",0); st.session_state["k1_od_mm"]=round(CK_kera/v,3) if v>0 else 0
+    def _mk2_od_r(): v=st.session_state.get("k2_od_mm",0); st.session_state["k2_od_D"]=round(CK_kera/v,2) if v>0 else 0
+    def _mk2_od_D(): v=st.session_state.get("k2_od_D",0); st.session_state["k2_od_mm"]=round(CK_kera/v,3) if v>0 else 0
+    def _mk1_os_r(): v=st.session_state.get("k1_os_mm",0); st.session_state["k1_os_D"]=round(CK_kera/v,2) if v>0 else 0
+    def _mk1_os_D(): v=st.session_state.get("k1_os_D",0); st.session_state["k1_os_mm"]=round(CK_kera/v,3) if v>0 else 0
+    def _mk2_os_r(): v=st.session_state.get("k2_os_mm",0); st.session_state["k2_os_D"]=round(CK_kera/v,2) if v>0 else 0
+    def _mk2_os_D(): v=st.session_state.get("k2_os_D",0); st.session_state["k2_os_mm"]=round(CK_kera/v,3) if v>0 else 0
+
+    st.markdown("### Cheratometria")
+    st.caption("Modifica mm → aggiorna D automaticamente e viceversa")
+    _kc = st.columns(4)
+    with _kc[0]: st.number_input("OD K1 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="k1_od_mm", on_change=_mk1_od_r)
+    with _kc[1]: st.number_input("OD K1 (D)",  35.0,50.0,step=0.25, format="%.2f", key="k1_od_D",  on_change=_mk1_od_D)
+    with _kc[2]: st.number_input("OD K2 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="k2_od_mm", on_change=_mk2_od_r)
+    with _kc[3]: st.number_input("OD K2 (D)",  35.0,50.0,step=0.25, format="%.2f", key="k2_od_D",  on_change=_mk2_od_D)
+    _kc2 = st.columns(4)
+    with _kc2[0]: st.number_input("OS K1 (mm)",6.0, 9.5, step=0.01, format="%.2f", key="k1_os_mm", on_change=_mk1_os_r)
+    with _kc2[1]: st.number_input("OS K1 (D)", 35.0,50.0,step=0.25, format="%.2f", key="k1_os_D",  on_change=_mk1_os_D)
+    with _kc2[2]: st.number_input("OS K2 (mm)",6.0, 9.5, step=0.01, format="%.2f", key="k2_os_mm", on_change=_mk2_os_r)
+    with _kc2[3]: st.number_input("OS K2 (D)", 35.0,50.0,step=0.25, format="%.2f", key="k2_os_D",  on_change=_mk2_os_D)
+
+    _ast_od = abs(st.session_state.get("k1_od_D",0) - st.session_state.get("k2_od_D",0))
+    _ast_os = abs(st.session_state.get("k1_os_D",0) - st.session_state.get("k2_os_D",0))
+    if _ast_od > 0.1 or _ast_os > 0.1:
+        st.caption(f"Astigmatismo corneale → OD: {_ast_od:.2f} D | OS: {_ast_os:.2f} D")
+
+    # Legge i valori K nel form dal session_state
+    k1_od_mm = st.session_state.get("k1_od_mm", 7.80)
+    k1_od_D  = st.session_state.get("k1_od_D",  43.25)
+    k2_od_mm = st.session_state.get("k2_od_mm", 7.80)
+    k2_od_D  = st.session_state.get("k2_od_D",  43.25)
+    k1_os_mm = st.session_state.get("k1_os_mm", 7.80)
+    k1_os_D  = st.session_state.get("k1_os_D",  43.25)
+    k2_os_mm = st.session_state.get("k2_os_mm", 7.80)
+    k2_os_D  = st.session_state.get("k2_os_D",  43.25)
+    st.divider()
 
     with st.form("nuova_val_visiva"):
         st.subheader("Nuova valutazione visiva / oculistica")
@@ -5270,26 +5359,7 @@ def ui_valutazioni_visive():
         with col_os6:
             ax_sogg_os = st.number_input("OS AX soggettiva (°)", 0, 180, 0, 1, key="ax_sogg_os")
 
-        st.markdown("### Cheratometria")
-        col_kod1, col_kod2, col_kod3, col_kod4 = st.columns(4)
-        with col_kod1:
-            k1_od_mm = st.number_input("OD K1 (mm)", 6.0, 9.5, 7.80, 0.01, key="k1_od_mm")
-        with col_kod2:
-            k1_od_D = st.number_input("OD K1 (D)", 35.0, 50.0, 43.00, 0.25, key="k1_od_D")
-        with col_kod3:
-            k2_od_mm = st.number_input("OD K2 (mm)", 6.0, 9.5, 7.80, 0.01, key="k2_od_mm")
-        with col_kod4:
-            k2_od_D = st.number_input("OD K2 (D)", 35.0, 50.0, 43.00, 0.25, key="k2_od_D")
-
-        col_kos1, col_kos2, col_kos3, col_kos4 = st.columns(4)
-        with col_kos1:
-            k1_os_mm = st.number_input("OS K1 (mm)", 6.0, 9.5, 7.80, 0.01, key="k1_os_mm")
-        with col_kos2:
-            k1_os_D = st.number_input("OS K1 (D)", 35.0, 50.0, 43.00, 0.25, key="k1_os_D")
-        with col_kos3:
-            k2_os_mm = st.number_input("OS K2 (mm)", 6.0, 9.5, 7.80, 0.01, key="k2_os_mm")
-        with col_kos4:
-            k2_os_D = st.number_input("OS K2 (D)", 35.0, 50.0, 43.00, 0.25, key="k2_os_D")
+        # Cheratometria gestita fuori dal form (vedi sopra)
 
         st.markdown("### Tonometria / Pressione oculare")
         col_t1, col_t2 = st.columns(2)
@@ -5311,6 +5381,17 @@ def ui_valutazioni_visive():
             pachim_od = st.number_input("Pachimetria OD (µm)", 400.0, 700.0, 540.0, 1.0, key="pachim_od")
         with col_p2:
             pachim_os = st.number_input("Pachimetria OS (µm)", 400.0, 700.0, 540.0, 1.0, key="pachim_os")
+
+        # ── IOP CORRETTA PER CCT ─────────────────────────────────────
+        try:
+            from modules.ui_iop_cct import ui_iop_cct_inline as _iop_fn
+        except ImportError:
+            try:
+                from ui_iop_cct import ui_iop_cct_inline as _iop_fn
+            except ImportError:
+                _iop_fn = None
+        if _iop_fn:
+            _iop_result = _iop_fn(tono_od, tono_os, pachim_od, pachim_os)
 
         fondo = st.text_area("Fondo oculare (descrizione)", "")
         campo_visivo = st.text_area("Campo visivo (descrizione / esito)", "")
@@ -5703,6 +5784,21 @@ ESAMI STRUTTURALI / FUNZIONALI
         conn.close()
         return
 
+    # ── Storico IOP e tabella Dresdner ───────────────────────────────
+    try:
+        from modules.ui_iop_cct import ui_iop_storico as _storico_fn, ui_dresdner_table as _dresdner_fn
+    except ImportError:
+        try:
+            from ui_iop_cct import ui_iop_storico as _storico_fn, ui_dresdner_table as _dresdner_fn
+        except ImportError:
+            _storico_fn = None; _dresdner_fn = None
+    if _storico_fn:
+        with st.expander("📈 Andamento IOP / Spessore corneale nel tempo", expanded=False):
+            _storico_fn(rows)
+    if _dresdner_fn:
+        with st.expander("📋 Tabella di correzione Dresdner (CCT → IOPc)", expanded=False):
+            _dresdner_fn()
+
     labels = [
         f"{r['id']} - {r['Data_Valutazione'] or ''} - { (r['Tipo_Visita'][:40] + '...') if r['Tipo_Visita'] and len(r['Tipo_Visita'])>40 else (r['Tipo_Visita'] or '') }"
         for r in rows
@@ -5855,7 +5951,7 @@ ESAMI STRUTTURALI / FUNZIONALI
         st.success("Valutazione aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Valutazioni_Visive WHERE id = ?", (val_id,))
+        cur.execute("DELETE FROM Valutazioni_Visive WHERE id = %s", (val_id,))
         conn.commit()
         st.success("Valutazione eliminata.")
     st.markdown("---")
@@ -6122,7 +6218,7 @@ def ui_sedute():
         st.success("Seduta aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Sedute WHERE id = ?", (sed_id,))
+        cur.execute("DELETE FROM Sedute WHERE id = %s", (sed_id,))
         conn.commit()
         st.success("Seduta eliminata.")
 
@@ -6251,7 +6347,7 @@ def ui_coupons():
                     st.rerun()
         with col4:
             if st.button("Elimina", key=f"c_del_{c['id']}"):
-                cur.execute("DELETE FROM Coupons WHERE id = ?", (c["id"],))
+                cur.execute("DELETE FROM Coupons WHERE id = %s", (c["id"],))
                 conn.commit()
                 st.rerun()
 
@@ -6264,21 +6360,62 @@ def ui_coupons():
 # -----------------------------
 
 def ui_dashboard():
-    st.header("Dashboard incassi")
+
+    # =========================
+    # HEADER
+    # =========================
+
+    st.markdown(
+        """
+        <div style="
+            background: linear-gradient(135deg,#2E7D32,#4CAF50);
+            padding:22px;
+            border-radius:18px;
+            color:white;
+            margin-bottom:20px;
+            box-shadow:0 10px 24px rgba(0,0,0,0.15);
+        ">
+            <div style="font-size:28px;font-weight:800;">
+                The Organism
+            </div>
+            <div style="font-size:16px;opacity:0.9">
+                Dashboard economica dello studio
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     conn = get_connection()
     cur = conn.cursor()
 
-    st.subheader("Filtri")
-
     oggi = date.today()
+
+    # =========================
+    # FILTRI
+    # =========================
+
+    st.markdown("### 🔎 Filtri")
+
     col1, col2, col3 = st.columns(3)
+
     with col1:
-        data_da_str = st.text_input("Dal (gg/mm/aaaa)", oggi.strftime("%d/%m/%Y"))
+        data_da_str = st.text_input(
+            "Dal (gg/mm/aaaa)",
+            oggi.strftime("%d/%m/%Y")
+        )
+
     with col2:
-        data_a_str = st.text_input("Al (gg/mm/aaaa)", oggi.strftime("%d/%m/%Y"))
+        data_a_str = st.text_input(
+            "Al (gg/mm/aaaa)",
+            oggi.strftime("%d/%m/%Y")
+        )
+
     with col3:
-        professionista_f = st.text_input("Filtra per professionista (facoltativo)", "")
+        professionista_f = st.text_input(
+            "Professionista (facoltativo)",
+            ""
+        )
 
     try:
         data_da = datetime.strptime(data_da_str.strip(), "%d/%m/%Y").date()
@@ -6296,15 +6433,18 @@ def ui_dashboard():
     data_da_iso = data_da.isoformat()
     data_a_iso = data_a.isoformat()
 
-    # --- Incassi da Valutazioni Visive ---
-    st.markdown("### Incassi da valutazioni visive / oculistiche")
+    # =========================
+    # VALUTAZIONI VISIVE
+    # =========================
 
     query_v = """
         SELECT Data_Valutazione AS Data, Professionista, Costo, Pagato
         FROM Valutazioni_Visive
         WHERE Data_Valutazione BETWEEN ? AND ?
     """
+
     params_v = [data_da_iso, data_a_iso]
+
     if professionista_f.strip():
         query_v += " AND Professionista LIKE ?"
         params_v.append(f"%{professionista_f.strip()}%")
@@ -6313,17 +6453,20 @@ def ui_dashboard():
     vis = cur.fetchall()
 
     incasso_vis = sum((r["Costo"] or 0.0) for r in vis if r["Pagato"])
-    st.write(f"**Totale incassi visite (periodo): € {incasso_vis:.2f}**")
+    n_visite = len(vis)
 
-    # --- Incassi da Sedute ---
-    st.markdown("### Incassi da sedute / terapie")
+    # =========================
+    # SEDUTE
+    # =========================
 
     query_s = """
         SELECT Data_Seduta AS Data, Professionista, Terapia, Costo, Pagato
         FROM Sedute
         WHERE Data_Seduta BETWEEN ? AND ?
     """
+
     params_s = [data_da_iso, data_a_iso]
+
     if professionista_f.strip():
         query_s += " AND Professionista LIKE ?"
         params_s.append(f"%{professionista_f.strip()}%")
@@ -6332,13 +6475,193 @@ def ui_dashboard():
     sed = cur.fetchall()
 
     incasso_sed = sum((r["Costo"] or 0.0) for r in sed if r["Pagato"])
-    st.write(f"**Totale incassi sedute (periodo): € {incasso_sed:.2f}**")
+    n_sedute = len(sed)
 
-    st.markdown("### Totale studio")
-    st.success(f"**Totale generale incassato: € {incasso_vis + incasso_sed:.2f}**")
+    totale_generale = incasso_vis + incasso_sed
+
+    # =========================
+    # KPI CARD
+    # =========================
+
+    st.markdown("### 📊 Panoramica")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        label="Totale incassato",
+        value=f"€ {totale_generale:.2f}"
+    )
+
+    c2.metric(
+        label="Valutazioni visive",
+        value=n_visite
+    )
+
+    c3.metric(
+        label="Sedute / terapie",
+        value=n_sedute
+    )
+
+    st.markdown("---")
+
+    st.markdown("### Accesso rapido")
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+
+    with m1:
+        if st.button("👤 Pazienti", use_container_width=True, key="dash_btn_pazienti"):
+            st.session_state["go_section"] = SECTION_PAZIENTI
+            st.rerun()
+
+    with m2:
+        if st.button("📅 Sedute", use_container_width=True, key="dash_btn_sedute"):
+            st.session_state["go_section"] = SECTION_SEDUTE
+            st.rerun()
+
+    with m3:
+        if st.button("🧠 PNEV", use_container_width=True, key="dash_btn_pnev"):
+            st.session_state["go_section"] = SECTION_PNEV
+            st.rerun()
+
+    with m4:
+        if st.button("👁 Vision", use_container_width=True, key="dash_btn_vision"):
+            st.session_state["go_section"] = SECTION_VISION
+            st.rerun()
+
+    with m5:
+        if st.button("🦴 Osteopatia", use_container_width=True, key="dash_btn_osteo"):
+            st.session_state["go_section"] = SECTION_OSTEOPATIA
+            st.rerun()
+
+    with m6:
+        if st.button("📄 Relazioni", use_container_width=True, key="dash_btn_relazioni"):
+            st.session_state["go_section"] = SECTION_RELAZIONI
+            st.rerun()
+
+    st.markdown("---")
+
+    # =========================
+    # DETTAGLIO INCASSI
+    # =========================
+
+    col_vis, col_sed = st.columns(2)
+
+    with col_vis:
+
+        st.markdown("#### 👁️ Valutazioni visive")
+
+        st.success(
+            f"Incasso nel periodo: € {incasso_vis:.2f}"
+        )
+
+        st.caption(f"Numero visite: {n_visite}")
+
+    with col_sed:
+
+        st.markdown("#### 🧠 Sedute / terapie")
+
+        st.success(
+            f"Incasso nel periodo: € {incasso_sed:.2f}"
+        )
+
+        st.caption(f"Numero sedute: {n_sedute}")
+
+    st.markdown("---")
+
+    # =========================
+    # TOTALE
+    # =========================
+
+    st.markdown("### 💰 Totale studio")
+
+    st.success(
+        f"Totale generale incassato nel periodo: € {totale_generale:.2f}"
+    )
 
     conn.close()
 
+
+# ==========================
+# Eye Tracking / Gaze Pointer
+# ==========================
+
+def ui_gaze_tracking_section():
+    import streamlit as st
+
+    st.markdown("## 👁️ Eye Tracking / Webcam AI")
+    st.caption(
+        "Modulo browser-based (MediaPipe JS) – compatibile con Streamlit Cloud. "
+        "Elaborazione lato browser, senza OpenCV o librerie native."
+    )
+
+    try:
+        from modules.gaze_tracking.ui_gaze_tracking import ui_gaze_tracking
+    except Exception as e:
+        st.error("Errore nel modulo Eye Tracking. Verifica la cartella modules/gaze_tracking.")
+        st.exception(e)
+        return
+
+    conn = get_connection()
+    paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
+    if not paz_list:
+        st.error("Nessun paziente trovato nel database.")
+        if paz_table or paz_colmap:
+            st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
+        return
+
+    st.caption(f"Pazienti rilevati: {len(paz_list)} • tabella: {paz_table or 'n/d'}")
+    search = st.text_input("Filtra paziente per nome, cognome o id", key="gaze_tracking_patient_filter").strip().lower()
+
+    def _label(p):
+        pid, cogn, nome, dn, scuola, eta = p
+        dn_s = dn or ""
+        extra = ""
+        if eta:
+            extra += f" • {eta} anni"
+        if scuola:
+            extra += f" • {scuola}"
+        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
+
+    filtered = []
+    for p in paz_list:
+        lbl = _label(p)
+        if not search or search in lbl.lower():
+            filtered.append(p)
+
+    if not filtered:
+        st.warning("Nessun paziente corrisponde al filtro inserito.")
+        return
+
+    sel = st.selectbox(
+        "Seleziona paziente",
+        filtered,
+        format_func=_label,
+        key="gaze_tracking_patient_select",
+    )
+
+    if isinstance(sel, dict):
+        paziente_id = sel.get("id") or sel.get("paziente_id")
+        cognome = sel.get("cognome") or ""
+        nome = sel.get("nome") or ""
+    else:
+        try:
+            paziente_id = sel[0]
+            cognome = sel[1] if len(sel) > 1 else ""
+            nome = sel[2] if len(sel) > 2 else ""
+        except Exception:
+            paziente_id = None
+            cognome = ""
+            nome = ""
+
+    if not paziente_id:
+        st.error("Errore: id paziente non determinabile.")
+        return
+
+    paziente_label = f"{cognome} {nome}".strip() or f"Paziente id {paziente_id}"
+    ui_gaze_tracking(
+        paziente_id=int(paziente_id),
+        paziente_label=paziente_label,
+        get_conn=get_connection,
+    )
 
 # ==========================
 # Osteopatia (AUTO) - sezione menu
@@ -6684,13 +7007,8 @@ def ui_import_pazienti():
 # ================================
 # PRIVACY PDF (Compilabili) + Cloud privato (Presigned 24h)
 # ================================
-import io
-import os
-import hashlib
 import datetime as _dt
 import urllib.parse as _urlparse
-import json
-import hmac
 
 try:
     import boto3
@@ -7173,7 +7491,6 @@ def ui_privacy_pdf():
 
 def ui_public_sign_page():
     """Pagina pubblica: compilazione + firma online (canvas) + invio PDF a clinica e paziente."""
-    st.set_page_config(page_title="The Organism – Consenso online", layout="centered")
     qp = st.query_params
     tok = qp.get("sign", "")
     payload = _parse_sign_token(tok) if tok else {}
@@ -7662,7 +7979,7 @@ def _seed_default_devices_if_empty(conn):
         try:
             cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
         except Exception:
-            cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (?,?,?,?)",
+            cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (%s,%s,%s,%s)",
                         (now, label, vol, notes))
     conn.commit()
     try: cur.close()
@@ -7707,7 +8024,7 @@ def ui_calibrazione_cuffie_test():
                 try:
                     cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
                 except Exception:
-                    cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (?,?,?,?)",
+                    cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (%s,%s,%s,%s)",
                                 (datetime.now().isoformat(timespec="seconds"), label, vol, notes))
                 conn.commit()
                 try: cur.close()
@@ -7742,7 +8059,7 @@ def ui_calibrazione_cuffie_test():
                     cur.execute("INSERT INTO audio_headphones (brand, model, hp_type, notes) VALUES (%s,%s,%s,%s)",
                                 (brand, model, hp_type, notes))
                 except Exception:
-                    cur.execute("INSERT INTO audio_headphones (created_at, brand, model, hp_type, notes) VALUES (?,?,?,?,?)",
+                    cur.execute("INSERT INTO audio_headphones (created_at, brand, model, hp_type, notes) VALUES (%s,%s,%s,%s,%s)",
                                 (datetime.now().isoformat(timespec="seconds"), brand, model, hp_type, notes))
                 conn.commit()
                 try: cur.close()
@@ -7870,7 +8187,7 @@ def ui_calibrazione_cuffie_test():
                     cur.execute("UPDATE audio_calibration_profiles2 SET is_active=FALSE WHERE device_id=%s AND headphones_id=%s",
                                 (int(dev[0]), int(hp[0])))
                 except Exception:
-                    cur.execute("UPDATE audio_calibration_profiles2 SET is_active=0 WHERE device_id=? AND headphones_id=?",
+                    cur.execute("UPDATE audio_calibration_profiles2 SET is_active=0 WHERE device_id=%s AND headphones_id=%s",
                                 (int(dev[0]), int(hp[0])))
 
                 payload = json.dumps(offsets)
@@ -9469,11 +9786,6 @@ def main():
     if maybe_handle_public_questionario(get_connection):
         return
 
-    st.set_page_config(
-        page_title="The Organism – Gestionale Studio",
-        layout="wide"
-    )
-
     # --- PUBLIC SIGN PAGE (no login) ---
     if st.query_params.get('sign'):
         ui_public_sign_page()
@@ -9490,72 +9802,69 @@ def main():
 
     # menu laterale
     st.sidebar.title("Navigazione")
-    sections = [
-        "Pazienti",
-        "Valutazione PNEV",
-        "Valutazioni visive / oculistiche",
-        "👁️ Lenti Inverse (Ortok)",
-        "Sedute / Terapie",
-        "Osteopatia",
-        "Coupon OF / SDS",
-        "Dashboard incassi",
-        "🗂️ Relazioni cliniche",
-        "📊 Dashboard evolutiva",
-        "📄 Privacy & Consensi (PDF)",
-        "🛠️ Debug DB",
-        "📥 Import Pazienti",
-    ]
-    if is_admin():
-        sections.append("👥 Utenti / Ruoli")
+    sections = build_sections(is_admin(), APP_MODE)
 
+    nav_key = "main_nav_sezione"
+    if nav_key not in st.session_state:
+        st.session_state[nav_key] = SECTION_DASHBOARD if SECTION_DASHBOARD in sections else sections[0]
 
-    sezione = st.sidebar.radio("Vai a", sections)
+    if "go_section" in st.session_state:
+        target = st.session_state.pop("go_section")
+        if target in sections:
+            st.session_state[nav_key] = target
 
-    # routing alle varie sezioni
-    if sezione == "Pazienti":
-        ui_pazienti()
-    elif sezione == "Valutazione PNEV":
-        ui_anamnesi()
-    elif sezione == "Valutazioni visive / oculistiche":
-        ui_valutazioni_visive()
-    elif sezione == "👁️ Lenti Inverse (Ortok)":
-        ui_lenti_inverse()
-    elif sezione == "Sedute / Terapie":
-        ui_sedute()
-    elif sezione == "Osteopatia":
-        ui_osteopatia_section()
-    elif sezione == "Coupon OF / SDS":
-        ui_coupons()
-    elif sezione == "Dashboard incassi":
-        ui_dashboard()
-    elif sezione == "🗂️ Relazioni cliniche":
-        ui_relazioni_cliniche()
-    elif sezione == "📊 Dashboard evolutiva":
-        ui_dashboard_evolutiva()
-    elif sezione == "📄 Privacy & Consensi (PDF)":
-        ui_privacy_pdf()
-    elif sezione == "🛠️ Debug DB":
-        ui_debug_db()
-    elif sezione == "📥 Import Pazienti":
-        ui_import_pazienti()
-    elif sezione == "👥 Utenti / Ruoli":
-        ui_gestione_utenti(get_connection)
-    elif sezione == "🔉 Diagnostica Uditiva":
-        _ui_diag_uditiva()
-    elif sezione == "🔧 Calibrazione cuffie (TEST)":
-        ui_calibrazione_cuffie_test()
-    elif sezione == "🎧 Audiogramma funzionale (TEST)":
-        ui_audiogramma_test()
-    elif sezione == "🩺 Esami ORL – soglie tonali (TEST)":
-        ui_esami_orl_tonali_test()
-    elif sezione == "🎧 ORL + EQ (MODULO)":
-        ui_orl_eq(get_connection, paziente_selector_fn=_select_paziente_minimal)
-    elif sezione == "🎚️ EQ stimolazione uditiva (TEST)":
-        ui_eq_stimolazione_uditiva_test()
-    elif sezione == "🎧 Stimolazione uditiva (TEST)":
-        ui_sessione_stimolazione_uditiva_test()
-    elif sezione == "🧹 Pulizia DB (TEST)":
-        ui_db_cleanup()
+    sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
+
+    # routing moduli uditivi (estratti)
+    try:
+        _udito_handled = dispatch_udito_section(
+            sezione=sezione,
+            app_mode=APP_MODE,
+            get_connection=get_connection,
+            paziente_selector_fn=_select_paziente_minimal,
+            ui_orl_eq=ui_orl_eq,
+            ui_generatore_stimolazione=ui_generatore_stimolazione,
+            ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
+            ui_audiogramma_test=ui_audiogramma_test,
+            ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
+            ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
+            ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
+            ui_db_cleanup=ui_db_cleanup,
+        )
+    except Exception as _udito_err:
+        import traceback
+        st.error(f"Errore sezione uditiva: {type(_udito_err).__name__}: {_udito_err}")
+        st.code(traceback.format_exc())
+        return
+    if _udito_handled:
+        return
+
+    # routing Lenti a contatto
+    if sezione == SECTION_LENTI_CONTATTO:
+        ui_lenti_contatto()
+        return
+
+    # routing Esami Strumentali
+    if sezione == SECTION_ESAMI_STRUM:
+        ui_esami_strumentali()
+        return
+
+    # routing Bilancio Uditivo
+    if sezione == SECTION_BILANCIO_UDITIVO:
+        ui_bilancio_uditivo()
+        return
+
+    # routing Audiometria Funzionale
+    if sezione == SECTION_AUDIOMETRIA_FUN:
+        ui_audiometria_funzionale()
+        return
+
+    # routing principale (estratto)
+    if dispatch_main_section(
+        sezione=sezione,
+        get_connection=get_connection,
+    ):
+        return
 
 
 # ================================
@@ -9883,8 +10192,4 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
                 st.download_button("⬇️ Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rel_key}_{pid}")
         else:
             st.info("PDF non disponibile in cloud: apri il Word e salva in PDF dal PC in studio.")
-
-if __name__ == "__main__":
-    main()
-
 

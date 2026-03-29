@@ -14,15 +14,25 @@ from datetime import timedelta, timezone
 
 import streamlit as st
 from modules.app_menu import build_sections
+try:
+    from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
+except Exception:
+    _ui_diag_uditiva = None
+try:
+    from modules.ui_stimolazione_passiva import ui_stimolazione_passiva as _ui_stim_passiva
+except Exception:
+    _ui_stim_passiva = None
 from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
-from modules.ui_lenti_inverse import ui_lenti_inverse
-from modules.ui_lac_ametropie import ui_lac_ametropie
-from modules.ui_calcolatore_lac import ui_calcolatore_lac
-from modules.ui_esa_ortho6 import ui_esa_ortho6
+from modules.ui_lenti_contatto import ui_lenti_contatto
 from modules.ui_esami_strumentali import ui_esami_strumentali
-from modules.ui_calcolatore_lac_plus import ui_calcolatore_lac_plus
+from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
+from modules.ui_audiometria_funzionale import ui_audiometria_funzionale
+try:
+    from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
+except Exception:
+    _ui_calib_cuffie_ext = None
 from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
 
 from modules.app_sections import (
@@ -35,55 +45,28 @@ from modules.app_sections import (
     SECTION_RELAZIONI,
 )
 
-SECTION_LENTI_INVERSE = "👁️ Lenti Inverse (Ortok)"
-SECTION_LAC_AMETROPIE = "🔵 LAC Ipermetropia / Astigmatismo / Presbiopia"
-SECTION_CALCOLATORE  = "🧮 Calcolatore LAC Inversa"
-SECTION_ESA          = "📋 ESA Ortho-6 Assortimento"
-SECTION_LAC_PLUS     = "🔴 LAC Inverse Ametropie Avanzate"
+SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
+SECTION_BILANCIO_UDITIVO   = "🎧 Bilancio Uditivo"
+SECTION_AUDIOMETRIA_FUN    = "📊 Audiometria Funzionale"
 SECTION_ESAMI_STRUM  = "🔬 Esami Strumentali (OCT/CV)"
 
 _build_sections_original = build_sections
 
 def build_sections(is_admin: bool, app_mode: str = "prod") -> list:
     sections = _build_sections_original(is_admin, app_mode)
-    if SECTION_LENTI_INVERSE not in sections:
+    if SECTION_LENTI_CONTATTO not in sections:
         try:
             from modules.app_sections import SECTION_VISION
             idx = sections.index(SECTION_VISION) + 1
         except Exception:
             idx = 3
-        sections.insert(idx, SECTION_LENTI_INVERSE)
-    if SECTION_LAC_AMETROPIE not in sections:
-        try:
-            idx2 = sections.index(SECTION_LENTI_INVERSE) + 1
-        except Exception:
-            idx2 = 4
-        sections.insert(idx2, SECTION_LAC_AMETROPIE)
-    if SECTION_CALCOLATORE not in sections:
-        try:
-            idx3 = sections.index(SECTION_LAC_AMETROPIE) + 1
-        except Exception:
-            idx3 = 5
-        sections.insert(idx3, SECTION_CALCOLATORE)
-    if SECTION_ESA not in sections:
-        try:
-            idx4 = sections.index(SECTION_CALCOLATORE) + 1
-        except Exception:
-            idx4 = 6
-        sections.insert(idx4, SECTION_ESA)
+        sections.insert(idx, SECTION_LENTI_CONTATTO)
     if SECTION_ESAMI_STRUM not in sections:
         try:
-            from modules.app_sections import SECTION_VISION
-            idx5 = sections.index(SECTION_VISION) + 1
+            idx5 = sections.index(SECTION_LENTI_CONTATTO) + 1
         except Exception:
             idx5 = 4
         sections.insert(idx5, SECTION_ESAMI_STRUM)
-    if SECTION_LAC_PLUS not in sections:
-        try:
-            idx6 = sections.index(SECTION_ESA) + 1
-        except Exception:
-            idx6 = 8
-        sections.insert(idx6, SECTION_LAC_PLUS)
     return sections
 
 import pnev_module as pnev
@@ -2645,12 +2628,33 @@ def parse_data_it(data_str: str, campo: str = "Data"):
     - gg-mm-aaaa
     - gg.mm.aaaa
     - gg mm aaaa
+    - yyyy-mm-dd
 
     Ritorna:
       - oggetto date se va bene
       - None se non riesce a interpretarla
     """
     if not data_str:
+        return None
+
+    s = str(data_str).strip()
+    if not s:
+        return None
+
+    # Prova formato ISO diretto
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        pass
+
+    # unifichiamo i separatori a "/"
+    for sep in ["-", ".", " "]:
+        s = s.replace(sep, "/")
+
+    # ora ci aspettiamo gg/mm/aaaa
+    try:
+        return datetime.strptime(s, "%d/%m/%Y").date()
+    except ValueError:
         return None
 
     s = data_str.strip()
@@ -4679,16 +4683,15 @@ def ui_pazienti():
             conn.close()
             return
 
-        # Gestione data di nascita (formato gg/mm/aaaa)
+        # Gestione data di nascita (accetta gg/mm/aaaa e yyyy-mm-dd)
         data_iso = None
         if data_nascita_str.strip():
-            try:
-                d = datetime.strptime(data_nascita_str.strip(), "%d/%m/%Y").date()
-                data_iso = d.isoformat()
-            except ValueError:
-                st.error("Data di nascita non valida. Usa il formato gg/mm/aaaa (es. 19/01/1975).")
+            d = parse_data_it(data_nascita_str.strip(), "Data di nascita")
+            if d is None:
+                st.error("Data di nascita non valida. Formati accettati: gg/mm/aaaa oppure yyyy-mm-dd.")
                 conn.close()
                 return
+            data_iso = d.isoformat()
 
         # Codice fiscale (opzionale) con controllo
         cf_clean = (codice_fiscale or "").strip().upper()
@@ -4924,13 +4927,12 @@ def ui_pazienti():
         else:
             data_iso_m = None
             if data_nascita_m.strip():
-                try:
-                    d = datetime.strptime(data_nascita_m.strip(), "%d/%m/%Y").date()
-                    data_iso_m = d.isoformat()
-                except ValueError:
-                    st.error("Data di nascita non valida. Usa il formato gg/mm/aaaa.")
+                d = parse_data_it(data_nascita_m.strip(), "Data di nascita")
+                if d is None:
+                    st.error("Data di nascita non valida. Formati accettati: gg/mm/aaaa oppure yyyy-mm-dd.")
                     conn.close()
                     return
+                data_iso_m = d.isoformat()
 
             cf_clean_m = (cf_m or "").strip().upper()
             if cf_clean_m and not valida_codice_fiscale(cf_clean_m):
@@ -9840,41 +9842,43 @@ def main():
 
     sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
 
+    if sezione == "🔉 Diagnostica Uditiva":
+        if _ui_diag_uditiva:
+            _ui_diag_uditiva(conn=get_connection())
+        return
+
+    if sezione == "🎵 Stimolazione Passiva":
+        if _ui_stim_passiva:
+            _ui_stim_passiva(conn=get_connection())
+        return
+
     # routing moduli uditivi (estratti)
-    if dispatch_udito_section(
-        sezione=sezione,
-        app_mode=APP_MODE,
-        get_connection=get_connection,
-        paziente_selector_fn=_select_paziente_minimal,
-        ui_orl_eq=ui_orl_eq,
-        ui_generatore_stimolazione=ui_generatore_stimolazione,
-        ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
-        ui_audiogramma_test=ui_audiogramma_test,
-        ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
-        ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
-        ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
-        ui_db_cleanup=ui_db_cleanup,
-    ):
+    try:
+        _udito_handled = dispatch_udito_section(
+            sezione=sezione,
+            app_mode=APP_MODE,
+            get_connection=get_connection,
+            paziente_selector_fn=_select_paziente_minimal,
+            ui_orl_eq=ui_orl_eq,
+            ui_generatore_stimolazione=ui_generatore_stimolazione,
+            ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
+            ui_audiogramma_test=ui_audiogramma_test,
+            ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
+            ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
+            ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
+            ui_db_cleanup=ui_db_cleanup,
+        )
+    except Exception as _udito_err:
+        import traceback
+        st.error(f"Errore sezione uditiva: {type(_udito_err).__name__}: {_udito_err}")
+        st.code(traceback.format_exc())
+        return
+    if _udito_handled:
         return
 
-    # routing lenti inverse
-    if sezione == SECTION_LENTI_INVERSE:
-        ui_lenti_inverse()
-        return
-
-    # routing LAC ametropie
-    if sezione == SECTION_LAC_AMETROPIE:
-        ui_lac_ametropie()
-        return
-
-    # routing Calcolatore LAC
-    if sezione == SECTION_CALCOLATORE:
-        ui_calcolatore_lac()
-        return
-
-    # routing ESA Ortho-6
-    if sezione == SECTION_ESA:
-        ui_esa_ortho6()
+    # routing Lenti a contatto
+    if sezione == SECTION_LENTI_CONTATTO:
+        ui_lenti_contatto()
         return
 
     # routing Esami Strumentali
@@ -9882,9 +9886,14 @@ def main():
         ui_esami_strumentali()
         return
 
-    # routing LAC Ametropie Avanzate
-    if sezione == SECTION_LAC_PLUS:
-        ui_calcolatore_lac_plus()
+    # routing Bilancio Uditivo
+    if sezione == SECTION_BILANCIO_UDITIVO:
+        ui_bilancio_uditivo()
+        return
+
+    # routing Audiometria Funzionale
+    if sezione == SECTION_AUDIOMETRIA_FUN:
+        ui_audiometria_funzionale()
         return
 
     # routing principale (estratto)
