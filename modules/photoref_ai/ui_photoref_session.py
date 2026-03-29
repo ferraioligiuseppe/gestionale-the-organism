@@ -1,6 +1,5 @@
 from __future__ import annotations
 from pathlib import Path
-from datetime import datetime, timezone
 import streamlit as st
 from .photoref_tokens import create_capture_token
 from .photoref_db import create_capture_session, list_recent_sessions
@@ -20,9 +19,7 @@ def _make_mobile_link(token: str) -> str:
     return f"?photoref_token={token}"
 
 def ui_photoref_session(patient_id: str = "", visit_id: str = "", operator_user: str = ""):
-    st.title("📱 Acquisizione smartphone — Photoref V1")
-    st.caption("Genera sessione, link mobile e storico acquisizioni")
-
+    st.subheader("📱 Sessioni smartphone")
     with st.form("photoref_session_form"):
         c1, c2 = st.columns(2)
         patient_id = c1.text_input("Patient ID", value=patient_id)
@@ -53,14 +50,13 @@ def ui_photoref_session(patient_id: str = "", visit_id: str = "", operator_user:
         create_capture_session(BASE_DIR, record)
         st.success("Sessione creata")
         st.code(link, language="text")
-        st.info("Apri questo link da smartphone oppure trasformalo in QR in un secondo step.")
         st.session_state["last_photoref_link"] = link
 
     if st.session_state.get("last_photoref_link"):
-        st.subheader("Ultimo link generato")
+        st.markdown("**Ultimo link generato**")
         st.code(st.session_state["last_photoref_link"], language="text")
 
-    st.subheader("Storico sessioni recenti")
+    st.markdown("**Storico sessioni recenti**")
     rows = list_recent_sessions(BASE_DIR, limit=20)
     if not rows:
         st.info("Nessuna sessione registrata.")
@@ -70,10 +66,6 @@ def ui_photoref_session(patient_id: str = "", visit_id: str = "", operator_user:
         st.markdown(
             f"**{row.get('patient_id','')}** | visita **{row.get('visit_id','')}** | "
             f"{row.get('eye_side','')} | stato **{row.get('status','')}**"
-        )
-        st.caption(
-            f"Creata: {row.get('created_at','')} | Scade: {row.get('expires_at','')} | "
-            f"Tipo: {row.get('capture_type','')}"
         )
         if row.get("mobile_link"):
             st.code(row["mobile_link"], language="text")

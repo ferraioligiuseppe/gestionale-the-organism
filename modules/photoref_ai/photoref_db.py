@@ -32,7 +32,7 @@ def create_capture_session(base_dir: str, record: dict[str, Any]) -> dict[str, A
     _write_json(paths["sessions"], rows)
     return record
 
-def get_session_by_token(base_dir: str, token: str) -> dict[str, Any] | None:
+def get_session_by_token(base_dir: str, token: str):
     paths = _data_paths(base_dir)
     rows = _read_json(paths["sessions"])
     for row in reversed(rows):
@@ -40,7 +40,7 @@ def get_session_by_token(base_dir: str, token: str) -> dict[str, Any] | None:
             return row
     return None
 
-def update_session_status(base_dir: str, token: str, **updates) -> dict[str, Any] | None:
+def update_session_status(base_dir: str, token: str, **updates):
     paths = _data_paths(base_dir)
     rows = _read_json(paths["sessions"])
     updated = None
@@ -52,14 +52,14 @@ def update_session_status(base_dir: str, token: str, **updates) -> dict[str, Any
     _write_json(paths["sessions"], rows)
     return updated
 
-def save_capture_record(base_dir: str, record: dict[str, Any]) -> dict[str, Any]:
+def save_capture_record(base_dir: str, record: dict[str, Any]):
     paths = _data_paths(base_dir)
     rows = _read_json(paths["captures"])
     rows.append(record)
     _write_json(paths["captures"], rows)
     return record
 
-def list_recent_sessions(base_dir: str, limit: int = 20) -> list[dict[str, Any]]:
+def list_recent_sessions(base_dir: str, limit: int = 20):
     paths = _data_paths(base_dir)
     rows = _read_json(paths["sessions"])
     return list(reversed(rows))[:limit]

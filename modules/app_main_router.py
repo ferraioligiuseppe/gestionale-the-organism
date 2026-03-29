@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Routing principale delle sezioni non uditive.
-
-Step 6 safe: il router richiama i moduli dedicati e non dipende più da una
-lunga lista di callback passati da app_core. Questo riduce il rischio di
-errori quando si modifica il file centrale.
-"""
+"""Routing principale delle sezioni non uditive."""
 
 from typing import Callable, Any
 

@@ -14,8 +14,6 @@ def _utc_now() -> str:
 
 def ui_photoref_mobile():
     st.title("📱 Photoref Mobile Upload")
-    st.caption("Pagina mobile per acquisizione immagine collegata al gestionale")
-
     token = st.query_params.get("photoref_token", "")
     if not token:
         token = st.text_input("Token sessione")
@@ -40,18 +38,6 @@ def ui_photoref_mobile():
     st.write(f"Paziente: **{session.get('patient_id','')}**")
     st.write(f"Visita: **{session.get('visit_id','')}**")
     st.write(f"Lato: **{session.get('eye_side','')}**")
-    st.write(f"Tipo: **{session.get('capture_type','')}**")
-
-    st.markdown(
-        '''
-### Istruzioni rapide
-- distanza: **50–100 cm**
-- ambiente: **semi-buio**
-- sguardo: **diritto**
-- evita luce frontale forte
-- prova luce leggermente laterale
-'''
-    )
 
     photo = st.camera_input("Scatta una foto")
     upload = st.file_uploader("Oppure carica immagine", type=["jpg", "jpeg", "png"])
@@ -86,25 +72,7 @@ def ui_photoref_mobile():
             "image_width": img.size[0],
             "image_height": img.size[1],
             "source_device": "smartphone_browser",
-            "quality_score": None,
-            "quality_label": None,
-            "reflection_label": None,
-            "reflection_score": None,
-            "offset_x": None,
-            "offset_y": None,
-            "offset_norm": None,
-            "horizontal_gradient": None,
-            "vertical_gradient": None,
-            "analysis_json": None,
         }
         save_capture_record(BASE_DIR, capture_record)
-        update_session_status(
-            BASE_DIR,
-            token,
-            status="uploaded",
-            uploaded_at=_utc_now(),
-            last_storage_path=saved["storage_path"],
-        )
-
+        update_session_status(BASE_DIR, token, status="uploaded", uploaded_at=_utc_now(), last_storage_path=saved["storage_path"])
         st.success("Foto inviata al gestionale.")
-        st.caption("Nel prossimo step il desktop potrà leggere e analizzare automaticamente questa immagine.")
