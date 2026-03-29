@@ -1,0 +1,27 @@
+MIGRAZIONE GRADUALE CONSIGLIATA
+
+1) IMPORTA I BRIDGE NEL FILE ATTUALE
+   invece di chiamare direttamente le funzioni locali, inizia da:
+   from modules.lac.lac_engine import esa_lookup, toffoli_calc, hyperopia_calc, astig_calc, presbyopia_calc, estimate_clearance
+   from modules.lac.lac_decision import build_curves
+   from modules.lac.lac_topography import parse_any_topo
+   from modules.lac.lac_fluoro import plot_fluorescein_simulation
+   from modules.lac.lac_storage import get_conn, init_db, build_payload, load_storico_paziente
+
+2) SOLO DOPO
+   sposta il codice vero dal monolite ai moduli nuovi.
+   Ordine migliore:
+   - lac_engine
+   - lac_topography
+   - lac_fluoro
+   - lac_storage
+   - lac_decision
+   - infine pulizia ui_lenti_contatto.py
+
+3) NON CAMBIARE SUBITO IL ROUTER
+   il router continua a puntare a modules.ui_lenti_contatto.ui_lenti_contatto
+
+4) OBIETTIVO
+   arrivare a:
+   modules/lac/ui_lenti_contatto.py
+   con modules/ui_lenti_contatto.py che diventa solo wrapper compatibile.
