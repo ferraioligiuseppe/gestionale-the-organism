@@ -9818,12 +9818,7 @@ def main():
         ui_public_sign_page()
         return
 
-    _sidebar_db_indicator()
-
-    # inizializza il database (se le tabelle non ci sono le crea)
-    init_db()
-
-    # Photoref mobile pubblico via token (bypass login/menu, non invasivo)
+    # --- PHOTOREF MOBILE ENTRY (no login) ---
     photoref_token = st.query_params.get('photoref_token', '')
     if isinstance(photoref_token, list):
         photoref_token = photoref_token[0] if photoref_token else ''
@@ -9831,6 +9826,11 @@ def main():
         from modules.photoref_ai.ui_photoref import ui_photoref
         ui_photoref(conn=get_connection())
         return
+
+    _sidebar_db_indicator()
+
+    # inizializza il database (se le tabelle non ci sono le crea)
+    init_db()
 
     # login obbligatorio
     if not login(get_connection):
