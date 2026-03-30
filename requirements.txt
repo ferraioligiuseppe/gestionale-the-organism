@@ -47,3 +47,4 @@ streamlit-webrtc>=0.47.0,<0.65.0
 aiortc>=1.9.0
 
 streamlit-javascript
+qrcode[pil]
