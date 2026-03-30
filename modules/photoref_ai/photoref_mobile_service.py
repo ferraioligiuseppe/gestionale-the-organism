@@ -9,10 +9,6 @@ def _safe_close(cur):
 
 
 def ensure_photoref_tables(conn):
-    """
-    Crea le tabelle base senza assumere colonne extra.
-    Versione safe: non crea indici su colonne che potrebbero non esistere.
-    """
     if conn is None:
         return
 
@@ -26,8 +22,7 @@ def ensure_photoref_tables(conn):
                 visit_id INTEGER,
                 mode TEXT,
                 status TEXT,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
+                created_at TIMESTAMP DEFAULT NOW()
             );
         """)
 
@@ -87,7 +82,6 @@ def get_photoref_session_by_token(conn, token):
         _safe_close(cur)
 
     if not row:
-        # Fallback test-safe: crea al volo la sessione se non esiste ancora
         cur = conn.cursor()
         try:
             cur.execute("""
@@ -122,10 +116,11 @@ def update_photoref_session_status(conn, token, status):
 
     cur = conn.cursor()
     try:
+        # Versione compatibile: aggiorna solo status.
+        # Non usa updated_at per evitare errori su schemi già creati senza quella colonna.
         cur.execute("""
             UPDATE photoref_sessions
-            SET status = %s,
-                updated_at = NOW()
+            SET status = %s
             WHERE token = %s
         """, (status, token))
         conn.commit()
