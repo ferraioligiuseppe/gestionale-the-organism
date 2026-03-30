@@ -59,10 +59,12 @@ def _ui_recent():
         for r in ans:
             st.write(f"**{r.get('patient_id','')}** | {r.get('eye_side','')} | simmetria: {r.get('comparison',{}).get('symmetry','')}")
 
-def ui_photoref():
-    if st.query_params.get("photoref_token", ""):
-        ui_photoref_mobile()
-        return
+def ui_photoref(conn=None):
+    photoref_token = st.query_params.get("photoref_token", "")
+    if isinstance(photoref_token, list):
+        photoref_token = photoref_token[0] if photoref_token else ""
+    if photoref_token:
+        return ui_photoref_mobile(conn=conn)
     st.title("📸 Photoref AI")
     t1, t2, t3 = st.tabs(["Analisi riflesso", "Sessioni smartphone", "Storico rapido"])
     with t1: _ui_analysis()
