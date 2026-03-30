@@ -5,65 +5,29 @@ def get_photoref_session_by_token(conn, token):
     if not token:
         return None
 
-    if conn is None:
-        return {
-            "id": None,
-            "token": token,
-            "patient_id": None,
-            "visit_id": None,
-            "mode": "BINOCULAR",
-            "status": "created",
-        }
-
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            SELECT id, token, patient_id, visit_id, mode, status
-            FROM photoref_sessions
-            WHERE token = %s
-            LIMIT 1
-        """, (token,))
-        row = cur.fetchone()
-    finally:
-        cur.close()
-
-    if not row:
-        return None
-
+    # TEST SAFE MODE: non usa il DB per recuperare la sessione.
+    # Così il flusso mobile parte anche se le tabelle non esistono ancora.
     return {
-        "id": row[0],
-        "token": row[1],
-        "patient_id": row[2],
-        "visit_id": row[3],
-        "mode": row[4],
-        "status": row[5],
+        "id": None,
+        "token": token,
+        "patient_id": None,
+        "visit_id": None,
+        "mode": "BINOCULAR",
+        "status": "created",
     }
 
 
 def update_photoref_session_status(conn, token, status):
-    if not token:
-        return
-
-    if conn is None:
-        print("STATUS:", token, status)
-        return
-
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            UPDATE photoref_sessions
-            SET status = %s
-            WHERE token = %s
-        """, (status, token))
-        conn.commit()
-    finally:
-        cur.close()
+    # TEST SAFE MODE: logga soltanto senza usare il DB.
+    print("STATUS MOCK:", token, status)
 
 
 def run_photoref_analysis(conn, image, image_bytes, session):
+    width, height = image.size
+    ratio = round(min(width, height) / max(width, height), 3) if max(width, height) else 0
     return {
         "ok": True,
-        "quality_score": 0.9,
+        "quality_score": ratio,
         "eye_detected": True,
         "reflex_detected": True,
         "anisometropia_suspect": False,
@@ -73,25 +37,9 @@ def run_photoref_analysis(conn, image, image_bytes, session):
 
 
 def save_photoref_capture(conn, session, image_bytes, annotated, result, source):
-    if conn is None:
-        print("SAVE:", result)
-        return
-
-    session_id = session.get("id")
-
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            INSERT INTO photoref_captures
-            (session_id, source, image_bytes, annotated_image_bytes, analysis_json)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (
-            session_id,
-            source,
-            image_bytes,
-            annotated,
-            json.dumps(result),
-        ))
-        conn.commit()
-    finally:
-        cur.close()
+    # TEST SAFE MODE: nessun salvataggio su DB per ora.
+    print("SAVE MOCK:", {
+        "token": session.get("token"),
+        "source": source,
+        "result": result,
+    })
