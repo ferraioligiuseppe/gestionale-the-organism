@@ -21,7 +21,6 @@ def ensure_photoref_tables(conn):
                 patient_id TEXT,
                 visit_id TEXT,
                 mode TEXT,
-                eye_side TEXT,
                 status TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
@@ -68,8 +67,9 @@ def get_photoref_session_by_token(conn, token):
 
     cur = conn.cursor()
     try:
+        # Query ultra-safe: usa solo colonne minime sicure.
         cur.execute("""
-            SELECT id, token, patient_id, visit_id, COALESCE(mode, eye_side), status
+            SELECT id, token, patient_id, visit_id, mode, status
             FROM photoref_sessions
             WHERE token = %s
             LIMIT 1
@@ -142,7 +142,6 @@ def save_photoref_capture(conn, session, image_bytes, annotated, result, source)
             "source": source,
             "image_bytes_len": len(image_bytes) if image_bytes else 0,
             "has_annotated": bool(annotated),
-            "result": result,
         })
         return
 
