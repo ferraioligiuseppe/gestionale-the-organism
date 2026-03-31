@@ -1,8 +1,8 @@
 from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlencode
-from datetime import datetime, timezone
 import io
+import json
 import streamlit as st
 
 try:
@@ -34,6 +34,13 @@ def _cursor(conn):
     return conn.cursor() if conn else None
 
 
+def _safe_close(cur):
+    try:
+        cur.close()
+    except Exception:
+        pass
+
+
 def _ensure_photoref_tables(conn) -> None:
     if not conn:
         return
@@ -53,15 +60,26 @@ def _ensure_photoref_tables(conn) -> None:
             mobile_link TEXT NULL,
             status TEXT DEFAULT 'created',
             created_at TIMESTAMPTZ DEFAULT NOW(),
-            expires_at TIMESTAMPTZ NULL,
-            updated_at TIMESTAMPTZ DEFAULT NOW()
+            expires_at TIMESTAMPTZ NULL
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS photoref_captures (
+            id BIGSERIAL PRIMARY KEY,
+            session_id BIGINT NULL,
+            source TEXT NULL,
+            image_bytes BYTEA NULL,
+            annotated_image_bytes BYTEA NULL,
+            analysis_json JSONB NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
         );
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_photoref_sessions_token ON photoref_sessions(token);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_photoref_sessions_created_at ON photoref_sessions(created_at DESC);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_photoref_captures_session_id ON photoref_captures(session_id);")
         conn.commit()
     finally:
-        cur.close()
+        _safe_close(cur)
 
 
 def _create_capture_session_db(conn, record: dict) -> dict:
@@ -73,9 +91,20 @@ def _create_capture_session_db(conn, record: dict) -> dict:
             INSERT INTO photoref_sessions (
                 token, patient_id, visit_id, eye_side, capture_type,
                 operator_user, notes, mode, mobile_link, status,
-                created_at, expires_at, updated_at
+                created_at, expires_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (token) DO UPDATE SET
+                patient_id = COALESCE(EXCLUDED.patient_id, photoref_sessions.patient_id),
+                visit_id = COALESCE(EXCLUDED.visit_id, photoref_sessions.visit_id),
+                eye_side = COALESCE(EXCLUDED.eye_side, photoref_sessions.eye_side),
+                capture_type = COALESCE(EXCLUDED.capture_type, photoref_sessions.capture_type),
+                operator_user = COALESCE(EXCLUDED.operator_user, photoref_sessions.operator_user),
+                notes = COALESCE(EXCLUDED.notes, photoref_sessions.notes),
+                mode = COALESCE(EXCLUDED.mode, photoref_sessions.mode),
+                mobile_link = COALESCE(EXCLUDED.mobile_link, photoref_sessions.mobile_link),
+                status = COALESCE(EXCLUDED.status, photoref_sessions.status),
+                expires_at = COALESCE(EXCLUDED.expires_at, photoref_sessions.expires_at)
             RETURNING id
             """,
             (
@@ -98,42 +127,70 @@ def _create_capture_session_db(conn, record: dict) -> dict:
         record["id"] = row[0] if row else None
         return record
     finally:
-        cur.close()
+        _safe_close(cur)
 
 
-def _list_recent_sessions_db(conn, limit: int = 20):
+def _load_recent_sessions_with_capture(conn, limit: int = 20):
     _ensure_photoref_tables(conn)
     cur = _cursor(conn)
     try:
         cur.execute(
             """
-            SELECT token, patient_id, visit_id, eye_side, capture_type,
-                   operator_user, notes, mobile_link, status,
-                   created_at, expires_at
-            FROM photoref_sessions
-            ORDER BY created_at DESC
+            SELECT
+                s.id,
+                s.token,
+                s.patient_id,
+                s.visit_id,
+                COALESCE(s.eye_side, s.mode) AS eye_side,
+                s.capture_type,
+                s.operator_user,
+                s.notes,
+                s.mobile_link,
+                s.status,
+                s.created_at,
+                s.expires_at,
+                c.analysis_json,
+                c.created_at AS capture_created_at
+            FROM photoref_sessions s
+            LEFT JOIN LATERAL (
+                SELECT analysis_json, created_at
+                FROM photoref_captures c
+                WHERE c.session_id = s.id
+                ORDER BY c.created_at DESC
+                LIMIT 1
+            ) c ON TRUE
+            ORDER BY s.created_at DESC
             LIMIT %s
             """,
             (limit,),
         )
         rows = cur.fetchall() or []
     finally:
-        cur.close()
+        _safe_close(cur)
 
     out = []
     for r in rows:
+        analysis = r[12]
+        if isinstance(analysis, str):
+            try:
+                analysis = json.loads(analysis)
+            except Exception:
+                pass
         out.append({
-            "token": r[0],
-            "patient_id": r[1],
-            "visit_id": r[2],
-            "eye_side": r[3],
-            "capture_type": r[4],
-            "operator_user": r[5],
-            "notes": r[6],
-            "mobile_link": r[7],
-            "status": r[8],
-            "created_at": r[9].isoformat() if r[9] else None,
-            "expires_at": r[10].isoformat() if r[10] else None,
+            "id": r[0],
+            "token": r[1],
+            "patient_id": r[2],
+            "visit_id": r[3],
+            "eye_side": r[4],
+            "capture_type": r[5],
+            "operator_user": r[6],
+            "notes": r[7],
+            "mobile_link": r[8],
+            "status": r[9],
+            "created_at": r[10].isoformat() if r[10] else None,
+            "expires_at": r[11].isoformat() if r[11] else None,
+            "analysis_json": analysis,
+            "capture_created_at": r[13].isoformat() if r[13] else None,
         })
     return out
 
@@ -155,6 +212,39 @@ def _render_qr(link: str) -> None:
         st.write("Scansiona il QR oppure apri il link:")
         st.code(link, language="text")
         st.link_button("Apri su smartphone", link)
+
+
+def _render_recent_sessions_db(conn, limit: int = 20):
+    rows = _load_recent_sessions_with_capture(conn, limit=limit)
+    if not rows:
+        st.info("Nessuna sessione trovata")
+        return
+
+    st.markdown("**Storico sessioni recenti**")
+    for row in rows:
+        st.markdown(
+            f"**{row.get('patient_id','')}** | visita **{row.get('visit_id','')}** | "
+            f"{row.get('eye_side','')} | stato **{row.get('status','')}**"
+        )
+        if row.get("mobile_link"):
+            st.code(row["mobile_link"], language="text")
+
+        analysis = row.get("analysis_json")
+        if analysis:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.write("Analisi presente:", "Sì")
+            with c2:
+                st.write("Quality score:", analysis.get("quality_score", "-"))
+            with c3:
+                st.write("Riflesso rilevato:", analysis.get("reflex_detected", False))
+            if analysis.get("notes"):
+                st.caption(f"Note: {analysis.get('notes')}")
+            if row.get("capture_created_at"):
+                st.caption(f"Ultima acquisizione: {row.get('capture_created_at')}")
+        else:
+            st.caption("Nessuna acquisizione ancora salvata per questa sessione.")
+        st.divider()
 
 
 def ui_photoref_session(conn=None, patient_id: str = "", visit_id: str = "", operator_user: str = ""):
@@ -205,14 +295,17 @@ def ui_photoref_session(conn=None, patient_id: str = "", visit_id: str = "", ope
         st.markdown("**Ultimo link generato**")
         st.code(st.session_state["last_photoref_link"], language="text")
 
-    rows = _list_recent_sessions_db(conn, limit=20) if conn else list_recent_sessions(BASE_DIR, limit=20)
-    if rows:
-        st.markdown("**Storico sessioni recenti**")
-        for row in rows:
-            st.markdown(
-                f"**{row.get('patient_id','')}** | visita **{row.get('visit_id','')}** | "
-                f"{row.get('eye_side','')} | stato **{row.get('status','')}**"
-            )
-            if row.get("mobile_link"):
-                st.code(row["mobile_link"], language="text")
-            st.divider()
+    if conn:
+        _render_recent_sessions_db(conn, limit=20)
+    else:
+        rows = list_recent_sessions(BASE_DIR, limit=20)
+        if rows:
+            st.markdown("**Storico sessioni recenti**")
+            for row in rows:
+                st.markdown(
+                    f"**{row.get('patient_id','')}** | visita **{row.get('visit_id','')}** | "
+                    f"{row.get('eye_side','')} | stato **{row.get('status','')}**"
+                )
+                if row.get("mobile_link"):
+                    st.code(row["mobile_link"], language="text")
+                st.divider()

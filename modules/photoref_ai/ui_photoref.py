@@ -70,7 +70,6 @@ def ui_photoref(conn=None):
         photoref_token = photoref_token[0] if photoref_token else ""
 
     if photoref_token:
-        from .ui_photoref_mobile import ui_photoref_mobile
         return ui_photoref_mobile(conn=conn)
 
     st.title("📸 Photoref AI")
