@@ -149,11 +149,13 @@ def _load_recent_sessions_with_capture(conn, limit: int = 20):
                 s.status,
                 s.created_at,
                 s.expires_at,
+                c.image_bytes,
+                c.annotated_image_bytes,
                 c.analysis_json,
                 c.created_at AS capture_created_at
             FROM photoref_sessions s
             LEFT JOIN LATERAL (
-                SELECT analysis_json, created_at
+                SELECT image_bytes, annotated_image_bytes, analysis_json, created_at
                 FROM photoref_captures c
                 WHERE c.session_id = s.id
                 ORDER BY c.created_at DESC
@@ -170,7 +172,7 @@ def _load_recent_sessions_with_capture(conn, limit: int = 20):
 
     out = []
     for r in rows:
-        analysis = r[12]
+        analysis = r[14]
         if isinstance(analysis, str):
             try:
                 analysis = json.loads(analysis)
@@ -189,8 +191,10 @@ def _load_recent_sessions_with_capture(conn, limit: int = 20):
             "status": r[9],
             "created_at": r[10].isoformat() if r[10] else None,
             "expires_at": r[11].isoformat() if r[11] else None,
+            "image_bytes": r[12],
+            "annotated_image_bytes": r[13],
             "analysis_json": analysis,
-            "capture_created_at": r[13].isoformat() if r[13] else None,
+            "capture_created_at": r[15].isoformat() if r[15] else None,
         })
     return out
 
@@ -226,10 +230,20 @@ def _render_recent_sessions_db(conn, limit: int = 20):
             f"**{row.get('patient_id','')}** | visita **{row.get('visit_id','')}** | "
             f"{row.get('eye_side','')} | stato **{row.get('status','')}**"
         )
+
         if row.get("mobile_link"):
             st.code(row["mobile_link"], language="text")
 
+        img = row.get("image_bytes")
+        ann = row.get("annotated_image_bytes")
         analysis = row.get("analysis_json")
+
+        if img:
+            st.image(img, caption="Ultima foto acquisita", use_container_width=True)
+
+        if ann:
+            st.image(ann, caption="Immagine annotata", use_container_width=True)
+
         if analysis:
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -240,10 +254,13 @@ def _render_recent_sessions_db(conn, limit: int = 20):
                 st.write("Riflesso rilevato:", analysis.get("reflex_detected", False))
             if analysis.get("notes"):
                 st.caption(f"Note: {analysis.get('notes')}")
-            if row.get("capture_created_at"):
-                st.caption(f"Ultima acquisizione: {row.get('capture_created_at')}")
+            st.json(analysis)
+
+        if row.get("capture_created_at"):
+            st.caption(f"Ultima acquisizione: {row.get('capture_created_at')}")
         else:
             st.caption("Nessuna acquisizione ancora salvata per questa sessione.")
+
         st.divider()
 
 
@@ -304,7 +321,7 @@ def ui_photoref_session(conn=None, patient_id: str = "", visit_id: str = "", ope
             for row in rows:
                 st.markdown(
                     f"**{row.get('patient_id','')}** | visita **{row.get('visit_id','')}** | "
-                    f"{row.get('eye_side','')} | stato **{row.get('status','')}**"
+                    f"{row.get('eye_side','')} | stato **{row.get('status','')}"
                 )
                 if row.get("mobile_link"):
                     st.code(row["mobile_link"], language="text")
