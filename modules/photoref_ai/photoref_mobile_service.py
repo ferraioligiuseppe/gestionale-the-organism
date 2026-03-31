@@ -22,7 +22,6 @@ def ensure_photoref_tables(conn):
                 visit_id TEXT NULL,
                 mode TEXT NULL,
                 status TEXT DEFAULT 'created',
-                mobile_link TEXT NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
         """)
@@ -56,15 +55,15 @@ def get_photoref_session_by_token(conn, token):
             "visit_id": None,
             "mode": "BINOCULAR",
             "status": "created",
-            "mobile_link": None,
         }
 
     ensure_photoref_tables(conn)
 
     cur = conn.cursor()
     try:
+        # Query minima: usa solo colonne sicuramente necessarie.
         cur.execute("""
-            SELECT id, token, patient_id, visit_id, mode, status, mobile_link
+            SELECT id, token, patient_id, visit_id, mode, status
             FROM photoref_sessions
             WHERE token = %s
             LIMIT 1
@@ -83,7 +82,6 @@ def get_photoref_session_by_token(conn, token):
         "visit_id": row[3],
         "mode": row[4],
         "status": row[5],
-        "mobile_link": row[6],
     }
 
 
