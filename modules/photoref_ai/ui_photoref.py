@@ -52,15 +52,15 @@ def _ui_recent():
     ans = list_recent_analyses(BASE_DIR, limit=10)
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("#### Catture")
+        st.markdown("#### Catture locali")
         if not caps:
-            st.info("Nessuna cattura.")
+            st.info("Nessuna cattura locale.")
         for r in caps:
             st.write(f"**{r.get('patient_id','')}** | {r.get('eye_side','')} | checklist {r.get('checklist_score','-')} | guida {r.get('guidance_score','-')}")
     with c2:
-        st.markdown("#### Analisi")
+        st.markdown("#### Analisi locali")
         if not ans:
-            st.info("Nessuna analisi.")
+            st.info("Nessuna analisi locale.")
         for r in ans:
             st.write(f"**{r.get('patient_id','')}** | {r.get('eye_side','')} | simmetria: {r.get('comparison',{}).get('symmetry','')}")
 
