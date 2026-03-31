@@ -36,8 +36,14 @@ def ensure_photoref_tables(conn):
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
         """)
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_photoref_sessions_token ON photoref_sessions(token);")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_photoref_captures_session_id ON photoref_captures(session_id);")
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_photoref_sessions_token
+            ON photoref_sessions(token);
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_photoref_captures_session_id
+            ON photoref_captures(session_id);
+        """)
         conn.commit()
     finally:
         _safe_close(cur)
@@ -61,7 +67,6 @@ def get_photoref_session_by_token(conn, token):
 
     cur = conn.cursor()
     try:
-        # Query minima: usa solo colonne sicuramente necessarie.
         cur.execute("""
             SELECT id, token, patient_id, visit_id, mode, status
             FROM photoref_sessions
@@ -72,8 +77,19 @@ def get_photoref_session_by_token(conn, token):
     finally:
         _safe_close(cur)
 
+    # Se non esiste, la crea al volo
     if not row:
-        return None
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                INSERT INTO photoref_sessions (token, mode, status)
+                VALUES (%s, %s, %s)
+                RETURNING id, token, patient_id, visit_id, mode, status
+            """, (token, "BINOCULAR", "created"))
+            row = cur.fetchone()
+            conn.commit()
+        finally:
+            _safe_close(cur)
 
     return {
         "id": row[0],
@@ -137,6 +153,7 @@ def save_photoref_capture(conn, session, image_bytes, annotated, result, source)
         raise ValueError("Sessione Photoref senza id: impossibile salvare la cattura.")
 
     annotated_bytes = annotated if isinstance(annotated, (bytes, bytearray, memoryview)) else None
+
     clean_result = dict(result or {})
     if "annotated_image_bytes" in clean_result:
         clean_result["annotated_image_bytes"] = None
