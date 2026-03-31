@@ -28,15 +28,6 @@ def ui_photoref_mobile(conn=None):
 
     st.success("Sessione attiva")
 
-    st.markdown("### Checklist rapida")
-    ok_light = st.checkbox("Buona illuminazione", value=True)
-    ok_distance = st.checkbox("Distanza corretta", value=True)
-    ok_eyes = st.checkbox("Occhi ben visibili", value=True)
-
-    if not (ok_light and ok_distance and ok_eyes):
-        st.warning("Controlla la checklist prima di acquisire la foto.")
-
-    st.markdown("### Acquisizione immagine")
     photo = st.camera_input("Scatta foto")
 
     uploaded = None
@@ -54,26 +45,17 @@ def ui_photoref_mobile(conn=None):
     if uploaded is None:
         return
 
-    image_bytes = uploaded.read()
+    image_bytes = uploaded.getvalue()
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    st.image(image, use_container_width=True)
 
-    if "photoref_mobile_done" not in st.session_state:
-        st.session_state["photoref_mobile_done"] = False
-    if "photoref_mobile_result" not in st.session_state:
-        st.session_state["photoref_mobile_result"] = None
+    st.image(image, caption="Anteprima foto", use_container_width=True)
 
-    if st.button("Analizza", type="primary") and not st.session_state["photoref_mobile_done"]:
-        with st.spinner("Analisi..."):
+    if st.button("Analizza e salva", type="primary"):
+        with st.spinner("Analisi in corso..."):
             try:
                 update_photoref_session_status(conn, photoref_token, "captured")
 
-                result = run_photoref_analysis(
-                    conn=conn,
-                    image=image,
-                    image_bytes=image_bytes,
-                    session=session_data,
-                )
+                result = run_photoref_analysis(conn, image, image_bytes, session_data)
 
                 save_photoref_capture(
                     conn=conn,
@@ -90,15 +72,8 @@ def ui_photoref_mobile(conn=None):
                     "completed" if result.get("ok") else "error"
                 )
 
-                st.session_state["photoref_mobile_result"] = result
-                st.session_state["photoref_mobile_done"] = True
-                st.success("Salvato!")
+                st.success("Foto e analisi salvate correttamente")
+                st.write(result)
             except Exception as e:
                 update_photoref_session_status(conn, photoref_token, "error")
-                st.error(f"Errore durante analisi/salvataggio: {e}")
-                st.stop()
-
-    result = st.session_state.get("photoref_mobile_result")
-    if result:
-        st.markdown("### Esito")
-        st.write(result)
+                st.error(f"Errore durante il salvataggio: {e}")
