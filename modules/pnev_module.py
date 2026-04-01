@@ -157,16 +157,16 @@ def pnev_collect_ui(prefix: str, visita: Dict[str, Any], existing: Optional[Dict
         mp["equilibrio"] = st.text_area("Equilibrio / sicurezza gravitazionale", _norm(mp.get("equilibrio")), key=f"{prefix}_equil", height=70)
         mp["coordinazione"] = st.text_area("Coordinazione bilaterale / ritmo", _norm(mp.get("coordinazione")), key=f"{prefix}_coord", height=70)
         mp["prassie"] = st.text_area("Prassie / pianificazione motoria", _norm(mp.get("prassie")), key=f"{prefix}_prassie", height=70)
-        mp["respirazione"] = st.text_area("Respirazione / pattern (se rilevante)", _norm(mp.get("respirazione")), key=f"{prefix}_resp", height=60)
+        mp["respirazione"] = st.text_area("Respirazione / pattern (se rilevante)", _norm(mp.get("respirazione")), key=f"{prefix}_resp", height=70)
         mp["note"] = st.text_area("Note aggiuntive", _norm(mp.get("note")), key=f"{prefix}_mp_note", height=70)
 
     with st.expander("6) Neurocognitivo (osservazione clinica)", expanded=False):
         nc = data["neurocognitivo"]
         nc["attenzione"] = st.text_area("Attenzione (sostenuta/selettiva/shifting)", _norm(nc.get("attenzione")), key=f"{prefix}_att", height=70)
-        nc["memoria_lavoro"] = st.text_area("Memoria di lavoro", _norm(nc.get("memoria_lavoro")), key=f"{prefix}_ml", height=60)
-        nc["pianificazione"] = st.text_area("Pianificazione/organizzazione", _norm(nc.get("pianificazione")), key=f"{prefix}_plan", height=60)
-        nc["flessibilita"] = st.text_area("Flessibilità", _norm(nc.get("flessibilita")), key=f"{prefix}_flex", height=60)
-        nc["inibizione"] = st.text_area("Inibizione", _norm(nc.get("inibizione")), key=f"{prefix}_inh", height=60)
+        nc["memoria_lavoro"] = st.text_area("Memoria di lavoro", _norm(nc.get("memoria_lavoro")), key=f"{prefix}_ml", height=70)
+        nc["pianificazione"] = st.text_area("Pianificazione/organizzazione", _norm(nc.get("pianificazione")), key=f"{prefix}_plan", height=70)
+        nc["flessibilita"] = st.text_area("Flessibilità", _norm(nc.get("flessibilita")), key=f"{prefix}_flex", height=70)
+        nc["inibizione"] = st.text_area("Inibizione", _norm(nc.get("inibizione")), key=f"{prefix}_inh", height=70)
         nc["note"] = st.text_area("Note", _norm(nc.get("note")), key=f"{prefix}_nc_note", height=70)
 
     with st.expander("7) Partecipazione / contesto (ICF‑like)", expanded=False):
@@ -174,7 +174,7 @@ def pnev_collect_ui(prefix: str, visita: Dict[str, Any], existing: Optional[Dict
         p["scuola"] = st.text_area("Scuola (lettura/scrittura/compiti/attenzione)", _norm(p.get("scuola")), key=f"{prefix}_scuola", height=80)
         p["relazioni"] = st.text_area("Relazioni (pari/adulti)", _norm(p.get("relazioni")), key=f"{prefix}_rel", height=70)
         p["famiglia"] = st.text_area("Famiglia / routine / risorse", _norm(p.get("famiglia")), key=f"{prefix}_fam", height=70)
-        p["interessi"] = st.text_area("Interessi / partecipazione (sport, hobby…)", _norm(p.get("interessi")), key=f"{prefix}_int", height=60)
+        p["interessi"] = st.text_area("Interessi / partecipazione (sport, hobby…)", _norm(p.get("interessi")), key=f"{prefix}_int", height=70)
         p["note"] = st.text_area("Note", _norm(p.get("note")), key=f"{prefix}_p_note", height=70)
 
     with st.expander("8) Ipotesi PNEV integrata (pattern)", expanded=True):
