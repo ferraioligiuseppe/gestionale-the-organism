@@ -811,8 +811,349 @@ def _clinical_attention(iop_od, iop_os, cct_od, cct_os):
 # UI PRINCIPALE
 # =========================================================
 
+
+# =========================================================
+# CSS — TEMA CLINICO
+# =========================================================
+
+def _inject_css():
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+    /* Reset globale */
+    html, body, [data-testid="stAppViewContainer"] {
+        background: #f0f4f8 !important;
+        font-family: 'DM Sans', sans-serif !important;
+    }
+    [data-testid="stHeader"] { background: transparent !important; }
+
+    /* Sidebar — lista pazienti */
+    [data-testid="stSidebar"] {
+        background: #0f1923 !important;
+        border-right: 1px solid #1e2d3d;
+    }
+    [data-testid="stSidebar"] * {
+        color: #c8d6e5 !important;
+        font-family: 'DM Sans', sans-serif !important;
+    }
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        color: #ffffff !important;
+        font-size: 1rem !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    [data-testid="stSidebar"] input {
+        background: #1a2a3a !important;
+        border: 1px solid #2a3d52 !important;
+        color: #e2eaf2 !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        background: transparent !important;
+        border: none !important;
+        text-align: left !important;
+        width: 100% !important;
+        padding: 8px 12px !important;
+        border-radius: 8px !important;
+        color: #c8d6e5 !important;
+        font-size: 0.88rem !important;
+        transition: background 0.15s;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: #1a2d40 !important;
+        color: #ffffff !important;
+    }
+
+    /* Card principale */
+    .vm-card {
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+        padding: 24px 28px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    /* Header paziente */
+    .vm-patient-header {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%);
+        border-radius: 16px;
+        padding: 20px 28px;
+        margin-bottom: 20px;
+        color: #ffffff !important;
+    }
+    .vm-patient-name {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #ffffff !important;
+        margin: 0;
+        letter-spacing: -0.01em;
+    }
+    .vm-patient-meta {
+        font-size: 0.85rem;
+        color: #a8c4e0 !important;
+        margin-top: 4px;
+        font-family: 'DM Mono', monospace;
+    }
+
+    /* Badge stato visita */
+    .vm-badge-bozza {
+        display: inline-block;
+        background: #fef3c7;
+        color: #92400e !important;
+        border-radius: 20px;
+        padding: 3px 12px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+    }
+    .vm-badge-completa {
+        display: inline-block;
+        background: #d1fae5;
+        color: #065f46 !important;
+        border-radius: 20px;
+        padding: 3px 12px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+    }
+    .vm-badge-new {
+        display: inline-block;
+        background: #dbeafe;
+        color: #1e40af !important;
+        border-radius: 20px;
+        padding: 3px 12px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+    }
+
+    /* Sezione fase */
+    .vm-section-title {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #64748b !important;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    /* Alert dilatazione */
+    .vm-dilation-alert {
+        background: linear-gradient(135deg, #fffbeb, #fef3c7);
+        border: 1.5px solid #f59e0b;
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 16px;
+        font-size: 0.92rem;
+        color: #78350f !important;
+    }
+
+    /* Input fields */
+    .stTextInput input, .stTextArea textarea, .stNumberInput input {
+        background: #f8fafc !important;
+        border: 1.5px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+        color: #1e293b !important;
+        font-family: 'DM Sans', sans-serif !important;
+        transition: border-color 0.15s;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus, .stNumberInput input:focus {
+        border-color: #2563a8 !important;
+        box-shadow: 0 0 0 3px rgba(37,99,168,0.1) !important;
+    }
+
+    /* Bottone primario */
+    .stButton > button[kind="primary"] {
+        background: #2563a8 !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-weight: 500 !important;
+        font-size: 0.9rem !important;
+        padding: 10px 20px !important;
+        transition: all 0.15s;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: #1d4ed8 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(37,99,168,0.3) !important;
+    }
+
+    /* Bottone secondario */
+    .stButton > button[kind="secondary"] {
+        background: #f1f5f9 !important;
+        color: #334155 !important;
+        border: 1.5px solid #e2e8f0 !important;
+        border-radius: 10px !important;
+        font-weight: 500 !important;
+    }
+
+    /* Divider */
+    hr { border-color: #e2e8f0 !important; margin: 20px 0 !important; }
+
+    /* Metriche */
+    [data-testid="stMetric"] {
+        background: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        padding: 12px 16px !important;
+    }
+    [data-testid="stMetricLabel"] { color: #64748b !important; font-size: 0.8rem !important; }
+    [data-testid="stMetricValue"] { color: #1e293b !important; font-weight: 600 !important; }
+
+    /* Expander */
+    [data-testid="stExpander"] {
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        background: #ffffff !important;
+    }
+
+    /* Titolo app */
+    .vm-app-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #ffffff !important;
+        letter-spacing: 0.02em;
+        padding: 0 4px;
+    }
+    .vm-app-subtitle {
+        font-size: 0.75rem;
+        color: #7a9bb5 !important;
+        padding: 0 4px;
+    }
+
+    /* Paziente sidebar item */
+    .vm-paz-item {
+        padding: 10px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        margin-bottom: 4px;
+        border: 1px solid transparent;
+        transition: all 0.15s;
+    }
+    .vm-paz-item.selected {
+        background: #1a2d40 !important;
+        border-color: #2563a8;
+    }
+    .vm-paz-item:hover {
+        background: #162333 !important;
+    }
+    .vm-paz-name {
+        font-size: 0.88rem;
+        font-weight: 500;
+        color: #e2eaf2 !important;
+    }
+    .vm-paz-dob {
+        font-size: 0.75rem;
+        color: #6b87a0 !important;
+        font-family: 'DM Mono', monospace;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def _sidebar_lista_pazienti(conn, paziente_id_corrente):
+    """
+    Sidebar con lista pazienti scrollabile, ricerca e selezione.
+    Restituisce il paziente_id selezionato (o quello corrente).
+    """
+    st.sidebar.markdown('<div class="vm-app-title">Vision Manager</div>', unsafe_allow_html=True)
+    st.sidebar.markdown('<div class="vm-app-subtitle">Dr. Ferraioli Giuseppe</div>', unsafe_allow_html=True)
+    st.sidebar.markdown("---")
+
+    # Ricerca
+    ricerca = st.sidebar.text_input("Cerca paziente", key="vm_sidebar_search",
+                                     placeholder="Nome o cognome...")
+
+    pazienti = list_pazienti(conn)
+
+    # Filtra per ricerca
+    if ricerca.strip():
+        q = ricerca.strip().lower()
+        pazienti = [
+            r for r in pazienti
+            if q in (_row_get(r,"cognome",1,"") or "").lower()
+            or q in (_row_get(r,"nome",2,"") or "").lower()
+        ]
+
+    if not pazienti:
+        st.sidebar.caption("Nessun paziente trovato.")
+        return paziente_id_corrente
+
+    # Controlla bozze attive per ogni paziente (indicatore visivo)
+    bozze_pids = set()
+    try:
+        cur = conn.cursor()
+        ph = _ph(conn)
+        cur.execute(
+            "SELECT DISTINCT paziente_id FROM visite_visive "
+            "WHERE COALESCE(is_deleted,0)=0"
+        )
+        tutti_pids_visite = {_row_get(r,"paziente_id",0) for r in cur.fetchall()}
+        cur.close()
+        # Trova quelli con bozza: controlliamo le ultime visite
+        for row in pazienti:
+            pid = _row_get(row,"id",0)
+            if pid not in tutti_pids_visite:
+                continue
+            try:
+                b = _find_bozza(conn, pid)
+                if b is not None:
+                    bozze_pids.add(pid)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    st.sidebar.markdown(f"<div style='font-size:0.75rem;color:#6b87a0;padding:0 4px 8px;'>{len(pazienti)} pazienti</div>", unsafe_allow_html=True)
+
+    selected_pid = paziente_id_corrente
+    for row in pazienti:
+        pid     = _row_get(row, "id", 0)
+        cognome = _row_get(row, "cognome", 1, "") or ""
+        nome    = _row_get(row, "nome", 2, "") or ""
+        dn      = _row_get(row, "data_nascita", 3, "") or ""
+
+        try:
+            dn_fmt = datetime.strptime(str(dn)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception:
+            dn_fmt = str(dn)[:10] if dn else ""
+
+        is_selected = (pid == paziente_id_corrente)
+        has_bozza   = pid in bozze_pids
+
+        nome_display = f"{cognome.title()} {nome.title()}".strip()
+        badge = " 🟡" if has_bozza else ""
+
+        btn_label = f"{'▶ ' if is_selected else '   '}{nome_display}{badge}\n{dn_fmt}"
+        if st.sidebar.button(
+            f"{'▶ ' if is_selected else ''}{nome_display}{badge}  {dn_fmt}",
+            key=f"vm_sb_paz_{pid}",
+            use_container_width=True,
+        ):
+            selected_pid = pid
+
+    st.sidebar.markdown("---")
+    with st.sidebar.expander("➕ Nuovo paziente", expanded=False):
+        st.info("Usa il form principale →")
+
+    return selected_pid
+
+
+# =========================================================
+# UI PRINCIPALE
+# =========================================================
+
 def ui_visita_visiva_v2(conn):
     ensure_visit_state()
+    _inject_css()
 
     if st.session_state.get("vm_pending_form_reset"):
         _apply_form_reset()
@@ -820,9 +1161,19 @@ def ui_visita_visiva_v2(conn):
 
     apply_pending_visit_load()
 
-    st.title("Vision Manager")
+    # ── SIDEBAR — lista pazienti ─────────────────────────────
+    sid_pid = _sidebar_lista_pazienti(conn, st.session_state.get("vm_current_patient_id"))
 
-    # Flash
+    # Gestione selezione dalla sidebar
+    if sid_pid is not None and sid_pid != st.session_state.get("vm_current_patient_id"):
+        if st.session_state.get("vm_form_dirty") and st.session_state.get("vm_autosave_enabled"):
+            maybe_autosave(conn, st.session_state.get("vm_current_patient_id"), reason="cambio da sidebar")
+        clear_visit_form()
+        st.session_state["vm_current_patient_id"] = sid_pid
+        st.session_state["vision_last_pid"] = sid_pid
+        st.rerun()
+
+    # Flash messages
     flash = st.session_state.pop("vm_flash_message", None)
     if flash:
         getattr(st, flash[0], st.info)(flash[1])
@@ -830,35 +1181,7 @@ def ui_visita_visiva_v2(conn):
     if autosave_status:
         getattr(st, autosave_status[0], st.info)(autosave_status[1])
 
-    # ── NUOVO PAZIENTE ────────────────────────────────────────
-    with st.expander("Registra nuovo paziente", expanded=False):
-        np1, np2, np3 = st.columns(3)
-        nome_nuovo    = np1.text_input("Nome *",    key="vm_new_nome")
-        cognome_nuovo = np2.text_input("Cognome *", key="vm_new_cognome")
-        with np3:
-            dn_new = _render_dmy_input("Data di nascita *", "vm_new_dn",
-                                       st.session_state.get("vm_new_dn_default", date(2000,1,1)))
-        eta_n = _calculate_age(dn_new)
-        if eta_n is not None:
-            st.caption(f"Eta: {eta_n} anni")
-        np4, np5 = st.columns(2)
-        tel_nuovo  = np4.text_input("Telefono", key="vm_new_tel")
-        mail_nuovo = np5.text_input("Email",    key="vm_new_mail")
-        note_nuovo = st.text_area("Note", key="vm_new_note", height=60)
-        if st.button("Salva nuovo paziente", key="vm_save_new_patient"):
-            try:
-                pid = insert_paziente(conn, nome_nuovo, cognome_nuovo,
-                                      dn_new.isoformat() if dn_new else "",
-                                      telefono=tel_nuovo, email=mail_nuovo, note=note_nuovo)
-                st.session_state["vision_last_pid"] = int(pid) if pid is not None else None
-                st.success(f"Paziente registrato (ID: {pid})")
-                st.rerun()
-            except ValueError as ve:
-                st.error(str(ve))
-            except Exception as e:
-                st.error(f"Errore: {e}")
-
-    # ── STRUMENTO PULIZIA DUPLICATI ───────────────────────────
+    # ── PULIZIA DUPLICATI ────────────────────────────────────
     try:
         gruppi_dup = find_duplicati_pazienti(conn)
     except Exception:
@@ -867,170 +1190,141 @@ def ui_visita_visiva_v2(conn):
     if gruppi_dup:
         n_dup = sum(len(g) - 1 for g in gruppi_dup)
         with st.expander(
-            f"⚠️ Trovati {len(gruppi_dup)} gruppi di pazienti duplicati ({n_dup} record in eccesso) — clicca per pulire",
+            f"⚠️ {len(gruppi_dup)} gruppi duplicati ({n_dup} record in eccesso) — clicca per pulire",
             expanded=True
         ):
-            st.caption(
-                "Per ogni gruppo viene mostrato il paziente da conservare (quello con più visite) "
-                "e quelli da archiviare. L'archiviazione non cancella i dati, li nasconde solo dalla lista."
-            )
+            st.caption("Viene conservato il paziente con più visite. L'archiviazione non cancella i dati.")
             for idx_g, gruppo in enumerate(gruppi_dup):
                 gruppo_sorted = sorted(gruppo, key=lambda r: (-(r.get("n_visite") or 0), -r["id"]))
                 principale = gruppo_sorted[0]
                 duplicati  = gruppo_sorted[1:]
-
                 dn_fmt = ""
                 if principale.get("data_nascita"):
                     try:
                         dn_fmt = datetime.strptime(str(principale["data_nascita"])[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
                     except Exception:
                         dn_fmt = str(principale["data_nascita"])[:10]
-
-                st.markdown(
-                    f"**{str(principale.get('cognome','')).title()} "
-                    f"{str(principale.get('nome','')).title()}**"
-                    + (f"  ·  {dn_fmt}" if dn_fmt else "")
-                )
-
+                st.markdown(f"**{str(principale.get('cognome','')).title()} {str(principale.get('nome','')).title()}** · {dn_fmt}")
                 for dup in duplicati:
-                    d1, d2 = st.columns([3, 1])
+                    d1, d2 = st.columns([4, 1])
                     with d1:
-                        st.success(f"Conserva — ID {principale['id']} ({principale.get('n_visite', 0)} visite)")
-                        st.warning(f"Archivia — ID {dup['id']} ({dup.get('n_visite', 0)} visite)")
+                        st.success(f"Conserva — ID {principale['id']} ({principale.get('n_visite',0)} visite)")
+                        st.warning(f"Archivia — ID {dup['id']} ({dup.get('n_visite',0)} visite)")
                     with d2:
-                        btn_key = f"vm_archivia_dup_{dup['id']}_{idx_g}"
-                        if st.button(
-                            f"Archivia ID {dup['id']}",
-                            key=btn_key,
-                            help=f"Archivia il duplicato ID {dup['id']} ({dup.get('n_visite',0)} visite)"
-                        ):
+                        if st.button(f"Archivia", key=f"vm_dup_{dup['id']}_{idx_g}"):
                             try:
                                 archivia_paziente_duplicato(conn, dup["id"])
                                 st.success(f"ID {dup['id']} archiviato.")
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Errore: {e}")
+                                st.error(str(e))
                 st.markdown("---")
 
-    st.divider()
+    # ── REGISTRA NUOVO PAZIENTE ──────────────────────────────
+    with st.expander("➕ Registra nuovo paziente", expanded=False):
+        st.markdown('<div class="vm-card">', unsafe_allow_html=True)
+        np1, np2, np3 = st.columns(3)
+        nome_nuovo    = np1.text_input("Nome *",    key="vm_new_nome")
+        cognome_nuovo = np2.text_input("Cognome *", key="vm_new_cognome")
+        with np3:
+            dn_new = _render_dmy_input("Data di nascita *", "vm_new_dn",
+                                       st.session_state.get("vm_new_dn_default", date(2000,1,1)))
+        eta_n = _calculate_age(dn_new)
+        if eta_n is not None:
+            st.caption(f"Età: {eta_n} anni")
+        np4, np5 = st.columns(2)
+        tel_nuovo  = np4.text_input("Telefono", key="vm_new_tel")
+        mail_nuovo = np5.text_input("Email",    key="vm_new_mail")
+        note_nuovo = st.text_area("Note", key="vm_new_note", height=60)
+        if st.button("Salva paziente", key="vm_save_new_patient", type="primary"):
+            try:
+                pid = insert_paziente(conn, nome_nuovo, cognome_nuovo,
+                                      dn_new.isoformat() if dn_new else "",
+                                      telefono=tel_nuovo, email=mail_nuovo, note=note_nuovo)
+                st.session_state["vision_last_pid"] = int(pid) if pid is not None else None
+                st.session_state["vm_current_patient_id"] = int(pid) if pid is not None else None
+                st.success(f"Paziente registrato (ID: {pid})")
+                st.rerun()
+            except ValueError as ve:
+                st.error(str(ve))
+            except Exception as e:
+                st.error(f"Errore: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── SELETTORE PAZIENTE ────────────────────────────────────
-    pazienti = list_pazienti(conn)
-    if not pazienti:
-        st.warning("Nessun paziente attivo. Registra prima un paziente.")
+    # ── PAZIENTE NON SELEZIONATO ─────────────────────────────
+    paziente_id = st.session_state.get("vm_current_patient_id")
+    if paziente_id is None:
+        st.markdown("""
+        <div style="text-align:center;padding:60px 20px;color:#94a3b8;">
+            <div style="font-size:3rem;margin-bottom:16px;">👁️</div>
+            <div style="font-size:1.1rem;font-weight:500;color:#64748b;">Seleziona un paziente dalla lista a sinistra</div>
+            <div style="font-size:0.85rem;margin-top:8px;">o registra un nuovo paziente</div>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
-    pazienti_options, pazienti_map = [], {}
-    for row in pazienti:
-        label = _label_paziente(row)
-        pid   = _row_get(row, "id", 0)
-        pazienti_options.append(label)
-        pazienti_map[label] = pid
-
-    # Ricorda ultimo paziente
-    default_idx = 0
-    last_pid = st.session_state.get("vision_last_pid")
-    if last_pid is not None:
-        for i, row in enumerate(pazienti):
-            try:
-                if int(_row_get(row, "id", 0)) == int(last_pid):
-                    default_idx = i; break
-            except Exception:
-                pass
-
-    forced = st.session_state.pop("vm_force_selected_paziente_label", None)
-    if forced and forced in pazienti_map:
-        st.session_state["vm_selected_paziente_label"] = forced
-    elif (not st.session_state.get("vm_selected_paziente_label")
-          or st.session_state.get("vm_selected_paziente_label") not in pazienti_map):
-        st.session_state["vm_selected_paziente_label"] = pazienti_options[default_idx]
-
-    selected_label = st.selectbox("Seleziona paziente", pazienti_options,
-                                  key="vm_selected_paziente_label")
-    requested_pid = pazienti_map[selected_label]
-
-    if st.session_state.get("vm_current_patient_id") is None:
-        st.session_state["vm_current_patient_id"] = requested_pid
-        st.session_state["vision_last_pid"] = requested_pid
-
-    paziente_id   = st.session_state["vm_current_patient_id"]
-    current_label = _label_for_pid(pazienti_map, paziente_id) or selected_label
-
-    # Gestione cambio paziente
-    if requested_pid != paziente_id:
-        if st.session_state.get("vm_form_dirty") and st.session_state.get("vm_autosave_enabled"):
-            maybe_autosave(conn, paziente_id, reason="prima cambio paziente")
-            clear_visit_form()
-            st.session_state.update({"vm_current_patient_id": requested_pid,
-                                     "vision_last_pid": requested_pid,
-                                     "vm_flash_message": ("success", "Bozza autosalvata.")})
-            st.rerun()
-        elif st.session_state.get("vm_form_dirty"):
-            st.warning("Modifiche non salvate. Come vuoi procedere?")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                if st.button("Autosalva e cambia", key="vm_force_switch"):
-                    persist_current_visit(conn, paziente_id, reason="prima cambio paziente")
-                    clear_visit_form()
-                    st.session_state.update({"vm_current_patient_id": requested_pid,
-                                             "vision_last_pid": requested_pid,
-                                             "vm_force_selected_paziente_label": selected_label})
-                    st.rerun()
-            with c2:
-                if st.button("Cambia senza salvare", key="vm_discard_switch"):
-                    clear_visit_form()
-                    st.session_state.update({"vm_current_patient_id": requested_pid,
-                                             "vision_last_pid": requested_pid,
-                                             "vm_force_selected_paziente_label": selected_label})
-                    st.rerun()
-            with c3:
-                if st.button("Rimani qui", key="vm_cancel_switch"):
-                    cl = _label_for_pid(pazienti_map, paziente_id)
-                    if cl:
-                        st.session_state["vm_force_selected_paziente_label"] = cl
-                    st.rerun()
-            st.stop()
-        else:
-            clear_visit_form()
-            st.session_state.update({"vm_current_patient_id": requested_pid,
-                                     "vision_last_pid": requested_pid})
-            st.rerun()
-
-    # Recupera anagrafica paziente corrente
+    # Recupera anagrafica
+    pazienti_tutti = list_pazienti(conn)
     selected_row = None
-    for row in pazienti:
+    for row in pazienti_tutti:
         try:
-            if int(_row_get(row, "id", 0)) == int(paziente_id):
+            if int(_row_get(row,"id",0)) == int(paziente_id):
                 selected_row = row; break
         except Exception:
-            if _row_get(row, "id", 0) == paziente_id:
+            if _row_get(row,"id",0) == paziente_id:
                 selected_row = row; break
 
-    cognome_paz  = _row_get(selected_row, "cognome", 1, "") if selected_row else ""
-    nome_paz     = _row_get(selected_row, "nome", 2, "") if selected_row else ""
-    dn_paz       = _row_get(selected_row, "data_nascita", 3, "") if selected_row else ""
-    eta_paz = _calculate_age(dn_paz)
+    if selected_row is None:
+        st.error("Paziente non trovato. Selezionane un altro dalla lista.")
+        return
 
-    ci1, ci2 = st.columns([3, 1])
-    with ci1:
-        st.markdown(f"### {cognome_paz} {nome_paz}")
-    with ci2:
-        if eta_paz is not None:
-            st.metric("Eta", f"{eta_paz} anni")
+    cognome_paz  = _row_get(selected_row, "cognome", 1, "") or ""
+    nome_paz     = _row_get(selected_row, "nome", 2, "") or ""
+    dn_paz       = _row_get(selected_row, "data_nascita", 3, "") or ""
+    eta_paz      = _calculate_age(dn_paz)
+    try:
+        dn_paz_fmt = datetime.strptime(str(dn_paz)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+    except Exception:
+        dn_paz_fmt = str(dn_paz)[:10] if dn_paz else ""
 
-    # Modifica anagrafica
-    with st.expander("Modifica anagrafica", expanded=False):
+    current_label = f"{cognome_paz.title()} {nome_paz.title()}".strip()
+
+    # ── HEADER PAZIENTE ──────────────────────────────────────
+    mode = st.session_state.get("vm_mode","new")
+    loaded_id = st.session_state.get("vm_loaded_visit_id")
+    stato_v = st.session_state.get("vm_stato_visita", STATO_BOZZA)
+
+    if mode == "edit" and loaded_id:
+        if stato_v == STATO_BOZZA:
+            badge_html = f'<span class="vm-badge-bozza">🟡 Bozza #{loaded_id}</span>'
+        else:
+            badge_html = f'<span class="vm-badge-completa">🟢 Completa #{loaded_id}</span>'
+    else:
+        badge_html = '<span class="vm-badge-new">✏️ Nuova visita</span>'
+
+    st.markdown(f"""
+    <div class="vm-patient-header">
+        <div class="vm-patient-name">{cognome_paz.title()} {nome_paz.title()}</div>
+        <div class="vm-patient-meta">
+            {'Nato/a il ' + dn_paz_fmt if dn_paz_fmt else ''}
+            {'&nbsp;·&nbsp;' + str(eta_paz) + ' anni' if eta_paz else ''}
+        </div>
+        <div style="margin-top:10px;">{badge_html}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── MODIFICA ANAGRAFICA ───────────────────────────────────
+    with st.expander("✏️ Modifica anagrafica", expanded=False):
         ea1, ea2, ea3 = st.columns(3)
         nome_e    = ea1.text_input("Nome",    value=nome_paz,    key=f"vm_en_{paziente_id}")
         cognome_e = ea2.text_input("Cognome", value=cognome_paz, key=f"vm_ec_{paziente_id}")
         with ea3:
-            dn_e = _render_dmy_input("Data di nascita", f"vm_edn_{paziente_id}",
-                                     _parse_date_safe(dn_paz))
+            dn_e = _render_dmy_input("Data di nascita", f"vm_edn_{paziente_id}", _parse_date_safe(dn_paz))
         ea4, ea5 = st.columns(2)
         tel_e  = ea4.text_input("Telefono", key=f"vm_etel_{paziente_id}")
         mail_e = ea5.text_input("Email",    key=f"vm_eml_{paziente_id}")
         note_e = st.text_area("Note", key=f"vm_enote_{paziente_id}", height=60)
-        if st.button("Salva", key=f"vm_esave_{paziente_id}"):
+        if st.button("Salva modifiche", key=f"vm_esave_{paziente_id}"):
             try:
                 update_paziente(conn, paziente_id, nome_e, cognome_e,
                                 dn_e.isoformat() if dn_e else "",
@@ -1041,47 +1335,41 @@ def ui_visita_visiva_v2(conn):
             except (ValueError, Exception) as ex:
                 st.error(str(ex))
 
-    st.divider()
-
-    # ── PULSANTI AZIONE VISITA ────────────────────────────────
+    # ── AZIONI VISITA ─────────────────────────────────────────
     bozza_row = _find_bozza(conn, paziente_id)
-    loaded_id = st.session_state.get("vm_loaded_visit_id")
 
-    tc1, tc2, tc3, tc4, tc5 = st.columns([1, 1.6, 1.6, 0.8, 1])
-
+    tc1, tc2, tc3, tc4 = st.columns([1, 2, 2, 1])
     with tc1:
-        if st.button("Nuova visita", key="vm_btn_new"):
+        if st.button("🆕 Nuova visita", key="vm_btn_new"):
             if st.session_state.get("vm_form_dirty") and st.session_state.get("vm_autosave_enabled"):
                 maybe_autosave(conn, paziente_id, reason="prima di nuova visita")
             clear_visit_form()
             st.rerun()
 
     with tc2:
-        if (bozza_row is not None
-                and (_row_get(bozza_row, "id", 0) != loaded_id
-                     or not st.session_state.get("vm_in_dilatazione"))):
+        if (bozza_row is not None and
+                (_row_get(bozza_row,"id",0) != loaded_id or not st.session_state.get("vm_in_dilatazione"))):
             bozza_id   = _row_get(bozza_row, "id", 0)
             bozza_data = str(_row_get(bozza_row, "data_visita", 1, ""))[:10]
-            if st.button(f"Riprendi dopo dilatazione  (bozza #{bozza_id}  {bozza_data})",
+            if st.button(f"🔄 Riprendi dopo dilatazione  (#{bozza_id} · {bozza_data})",
                          key="vm_btn_riprendi", type="primary"):
                 raw = _row_get(bozza_row, "dati_json", 2)
                 try:
-                    load_visit_payload(json.loads(raw) if isinstance(raw, str) else raw,
-                                       visit_id=bozza_id)
+                    load_visit_payload(json.loads(raw) if isinstance(raw, str) else raw, visit_id=bozza_id)
                     st.session_state["vm_flash_message"] = ("success",
-                        f"Visita #{bozza_id} riaperta. Compila il fondo oculare e l'esame obiettivo.")
+                        f"Visita #{bozza_id} riaperta. Compila il fondo oculare.")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Errore riapertura bozza: {e}")
+                    st.error(f"Errore riapertura: {e}")
 
     with tc3:
-        if st.button("Carica ultima visita completa", key="vm_btn_last"):
+        if st.button("📂 Carica ultima visita completa", key="vm_btn_last"):
             for v in list_visite(conn, paziente_id):
                 raw = _row_get(v, "dati_json", 2)
                 try:
                     p = json.loads(raw) if isinstance(raw, str) else raw
                     if isinstance(p, dict) and p.get("stato_visita") == STATO_COMPLETA:
-                        load_visit_payload(p, visit_id=_row_get(v, "id", 0))
+                        load_visit_payload(p, visit_id=_row_get(v,"id",0))
                         st.rerun()
                         break
                 except Exception:
@@ -1090,30 +1378,24 @@ def ui_visita_visiva_v2(conn):
                 st.info("Nessuna visita completa trovata.")
 
     with tc4:
-        st.checkbox("Autosave", key="vm_autosave_enabled")
+        st.checkbox("Autosave", key="vm_autosave_enabled",
+                    help="Salva automaticamente prima di cambiare paziente")
 
-    with tc5:
-        mode = st.session_state.get("vm_mode", "new")
-        stato_v = st.session_state.get("vm_stato_visita", STATO_BOZZA)
-        if mode == "edit" and loaded_id:
-            badge = "Bozza" if stato_v == STATO_BOZZA else "Completa"
-            col   = "warning" if stato_v == STATO_BOZZA else "success"
-            getattr(st, col)(f"Visita #{loaded_id} - {badge}")
-        else:
-            st.info("Nuova visita")
-
+    # Alert dilatazione attiva
     if st.session_state.get("vm_in_dilatazione") and loaded_id:
-        st.warning(
-            f"Paziente in dilatazione — Visita #{loaded_id} aperta. "
-            "Compila fondo oculare ed esame obiettivo, poi salva come COMPLETA."
-        )
+        st.markdown(f"""
+        <div class="vm-dilation-alert">
+            ⏳ <strong>Paziente in dilatazione</strong> — Visita #{loaded_id} aperta.
+            Compila il fondo oculare e l'esame obiettivo, poi salva come COMPLETA.
+        </div>
+        """, unsafe_allow_html=True)
 
     st.divider()
 
     # =========================================================
     # FASE 1 — ANAMNESI E VISUS
     # =========================================================
-    st.subheader("Fase 1 — Anamnesi e Visus")
+    st.markdown('<div class="vm-section-title">Fase 1 — Anamnesi e Visus</div>', unsafe_allow_html=True)
 
     f1a, f1b = st.columns(2)
     with f1a:
@@ -1126,7 +1408,7 @@ def ui_visita_visiva_v2(conn):
     st.text_area("Anamnesi (motivo visita, storia, farmaci)",
                  key="vm_anamnesi", height=100, on_change=mark_visit_dirty)
 
-    st.markdown("**Acuita visiva**")
+    st.markdown("**Acuità visiva**")
     av1, av2, av3, av4 = st.columns(4)
     with av1: st.text_input("AVN OD", key="vm_acuita_naturale_od", on_change=mark_visit_dirty, help="Es. 10/10")
     with av2: st.text_input("AVN OS", key="vm_acuita_naturale_os", on_change=mark_visit_dirty)
@@ -1145,33 +1427,29 @@ def ui_visita_visiva_v2(conn):
         st.number_input("OD AX", key="vm_ca_od_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
         st.number_input("OS AX", key="vm_ca_os_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
 
-    st.divider()
-    bz1, bz2 = st.columns([1.5, 3])
+    bz1, bz2 = st.columns([2, 3])
     with bz1:
-        if st.button("Salva BOZZA — paziente va a dilatarsi", key="vm_save_bozza",
-                     type="primary",
-                     help="Salva anamnesi + visus. Il paziente esce. Poi clicca Riprendi dopo dilatazione."):
+        if st.button("💾 Salva BOZZA — paziente va a dilatarsi", key="vm_save_bozza", type="primary"):
             st.session_state["vm_stato_visita"] = STATO_BOZZA
-            vid, act = persist_current_visit(conn, paziente_id, reason="bozza fase 1")
+            vid, _ = persist_current_visit(conn, paziente_id, reason="bozza fase 1")
             st.session_state["vm_in_dilatazione"] = True
             st.session_state["vm_flash_message"] = ("success",
-                f"Bozza salvata (ID: {vid}). Puoi visitare un altro paziente.")
+                f"Bozza salvata (ID: {vid}). Puoi visitare un altro paziente dalla sidebar.")
             st.rerun()
     with bz2:
-        st.caption("Dopo aver salvato la bozza, seleziona un altro paziente. "
-                   "Al ritorno del paziente usa 'Riprendi dopo dilatazione'.")
+        st.caption("Salva e seleziona un altro paziente dalla lista a sinistra. Al ritorno usa 'Riprendi dopo dilatazione'.")
 
     st.divider()
 
     # =========================================================
     # FASE 2 — ESAME OBIETTIVO E FONDO OCULARE
     # =========================================================
-    st.subheader("Fase 2 — Esame obiettivo e Fondo oculare")
+    st.markdown('<div class="vm-section-title">Fase 2 — Esame obiettivo e Fondo oculare</div>', unsafe_allow_html=True)
 
     if (st.session_state.get("vm_stato_visita") == STATO_BOZZA
             and not st.session_state.get("vm_in_dilatazione")
             and not loaded_id):
-        st.info("Questa sezione si compila dopo il ritorno del paziente dalla dilatazione.")
+        st.info("Compilare dopo il ritorno del paziente dalla dilatazione.")
 
     eo1, eo2 = st.columns(2)
     with eo1:
@@ -1181,12 +1459,11 @@ def ui_visita_visiva_v2(conn):
         st.text_input("Cristallino",      key="vm_cristallino",      on_change=mark_visit_dirty)
         st.text_input("Vitreo",           key="vm_vitreo",           on_change=mark_visit_dirty)
     with eo2:
-        st.text_input("Fondo oculare (dopo dilatazione)", key="vm_fondo_oculare",
-                      on_change=mark_visit_dirty)
-        st.text_input("IOP OD (mmHg)",      key="vm_iop_od",       on_change=mark_visit_dirty)
-        st.text_input("IOP OS (mmHg)",      key="vm_iop_os",       on_change=mark_visit_dirty)
-        st.text_input("Pachimetria OD (um)", key="vm_pachimetria_od", on_change=mark_visit_dirty)
-        st.text_input("Pachimetria OS (um)", key="vm_pachimetria_os", on_change=mark_visit_dirty)
+        st.text_input("Fondo oculare (dopo dilatazione)", key="vm_fondo_oculare", on_change=mark_visit_dirty)
+        st.text_input("IOP OD (mmHg)",       key="vm_iop_od",        on_change=mark_visit_dirty)
+        st.text_input("IOP OS (mmHg)",       key="vm_iop_os",        on_change=mark_visit_dirty)
+        st.text_input("Pachimetria OD (µm)", key="vm_pachimetria_od", on_change=mark_visit_dirty)
+        st.text_input("Pachimetria OS (µm)", key="vm_pachimetria_os", on_change=mark_visit_dirty)
 
     iop_od = _safe_float(st.session_state.get("vm_iop_od"), None)
     iop_os = _safe_float(st.session_state.get("vm_iop_os"), None)
@@ -1195,10 +1472,10 @@ def ui_visita_visiva_v2(conn):
     att = _clinical_attention(iop_od, iop_os, cct_od, cct_os)
 
     if any(v is not None for v in [iop_od, iop_os, cct_od, cct_os]):
-        with st.expander("Rapporto IOP / Pachimetria (CCT)", expanded=False):
+        with st.expander("🔎 Rapporto IOP / Pachimetria", expanded=False):
             st.caption("Indicatore orientativo. Non sostituisce la valutazione specialistica.")
             r1, r2 = st.columns(2)
-            for col, eye in [(r1, "od"), (r2, "os")]:
+            for col, eye in [(r1,"od"), (r2,"os")]:
                 with col:
                     st.write(f"**{eye.upper()}**")
                     if att[eye]["adj"] is not None:
@@ -1213,18 +1490,18 @@ def ui_visita_visiva_v2(conn):
     # =========================================================
     # FASE 3 — REFRAZIONE FINALE E PRESCRIZIONE
     # =========================================================
-    st.subheader("Fase 3 — Refrazione finale e Prescrizione")
+    st.markdown('<div class="vm-section-title">Fase 3 — Refrazione finale e Prescrizione</div>', unsafe_allow_html=True)
 
     cf1, cf2, cf3 = st.columns(3)
     with cf1:
-        st.number_input("OD SF finale", key="vm_cf_od_sf", step=0.25, format="%.2f", on_change=mark_visit_dirty)
-        st.number_input("OS SF finale", key="vm_cf_os_sf", step=0.25, format="%.2f", on_change=mark_visit_dirty)
+        st.number_input("OD SF finale",  key="vm_cf_od_sf",  step=0.25, format="%.2f", on_change=mark_visit_dirty)
+        st.number_input("OS SF finale",  key="vm_cf_os_sf",  step=0.25, format="%.2f", on_change=mark_visit_dirty)
     with cf2:
         st.number_input("OD CIL finale", key="vm_cf_od_cyl", step=0.25, format="%.2f", on_change=mark_visit_dirty)
         st.number_input("OS CIL finale", key="vm_cf_os_cyl", step=0.25, format="%.2f", on_change=mark_visit_dirty)
     with cf3:
-        st.number_input("OD AX finale", key="vm_cf_od_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
-        st.number_input("OS AX finale", key="vm_cf_os_ax", step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
+        st.number_input("OD AX finale",  key="vm_cf_od_ax",  step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
+        st.number_input("OS AX finale",  key="vm_cf_os_ax",  step=1, min_value=0, max_value=180, on_change=mark_visit_dirty)
 
     st.markdown("**Addizioni**")
     ad1, ad2 = st.columns(2)
@@ -1247,53 +1524,51 @@ def ui_visita_visiva_v2(conn):
 
     st.divider()
 
-    # ── PULSANTI SALVATAGGIO E PDF ────────────────────────────
-    sv1, sv2, sv3, sv4 = st.columns([1.5, 1, 1, 1])
+    # ── SALVATAGGIO E PDF ─────────────────────────────────────
     payload_now = build_visit_payload()
-    mode = st.session_state.get("vm_mode", "new")
+    sv1, sv2, sv3, sv4 = st.columns([2, 1, 1, 1])
 
     with sv1:
-        lbl = f"Salva COMPLETA (#{loaded_id})" if (mode == "edit" and loaded_id) else "Salva visita COMPLETA"
+        lbl = f"✅ Salva COMPLETA (#{loaded_id})" if (mode == "edit" and loaded_id) else "✅ Salva visita COMPLETA"
         if st.button(lbl, key="vm_save_completa", type="primary"):
             st.session_state["vm_stato_visita"] = STATO_COMPLETA
             payload_fin = build_visit_payload()
-            vid, act = persist_current_visit(conn, paziente_id, payload=payload_fin,
-                                             reason="salvataggio completo")
+            vid, act = persist_current_visit(conn, paziente_id, payload=payload_fin, reason="salvataggio completo")
             st.session_state["vm_in_dilatazione"] = False
             st.session_state["vm_flash_message"] = ("success", f"Visita {act} come COMPLETA (ID: {vid}).")
             st.rerun()
 
     with sv2:
         if st.session_state.get("vm_autosave_enabled") and st.session_state.get("vm_form_dirty"):
-            if st.button("Autosalva ora", key="vm_autosave_now"):
-                vid, act = persist_current_visit(conn, paziente_id, reason="autosalvataggio manuale")
+            if st.button("⚡ Autosalva", key="vm_autosave_now"):
+                vid, _ = persist_current_visit(conn, paziente_id, reason="autosalvataggio manuale")
                 st.success(f"Salvato (ID: {vid}).")
                 st.rerun()
 
     with sv3:
         try:
             pdf_r = _build_referto_pdf(payload_now, patient_label=current_label, visit_id=loaded_id)
-            st.download_button("PDF Referto", data=pdf_r,
+            st.download_button("📄 PDF Referto", data=pdf_r,
                                file_name=f"referto_{current_label.replace(' ','_')}.pdf",
                                mime="application/pdf", key="vm_dl_ref")
         except Exception as e:
-            st.caption(f"PDF non disponibile: {e}")
+            st.caption(f"PDF: {e}")
 
     with sv4:
         try:
             pdf_p = _build_prescrizione_pdf(payload_now, patient_label=current_label)
-            st.download_button("PDF Prescrizione", data=pdf_p,
+            st.download_button("🔖 PDF Prescrizione", data=pdf_p,
                                file_name=f"prescrizione_{current_label.replace(' ','_')}.pdf",
                                mime="application/pdf", key="vm_dl_pr")
         except Exception as e:
-            st.caption(f"PDF non disponibile: {e}")
+            st.caption(f"PDF: {e}")
 
     st.divider()
 
     # =========================================================
     # STORICO VISITE
     # =========================================================
-    st.subheader("Storico visite")
+    st.markdown('<div class="vm-section-title">Storico visite</div>', unsafe_allow_html=True)
 
     visite = list_visite(conn, paziente_id)
     if not visite:
@@ -1311,7 +1586,7 @@ def ui_visita_visiva_v2(conn):
             iop_od0 = _safe_float(eo0.get("pressione_endoculare_od"), None)
             iop_os0 = _safe_float(eo0.get("pressione_endoculare_os"), None)
             if iop_od0 is None and iop_os0 is None: continue
-            d0 = dt.date.fromisoformat(str(_row_get(row0, "data_visita", 1, ""))[:10])
+            d0 = dt.date.fromisoformat(str(_row_get(row0,"data_visita",1,""))[:10])
             trend.append((d0, iop_od0, iop_os0))
         except Exception:
             continue
@@ -1319,14 +1594,18 @@ def ui_visita_visiva_v2(conn):
     if len(trend) > 1:
         trend.sort(key=lambda x: x[0])
         fig, ax = plt.subplots(figsize=(8, 3))
-        ax.plot([t[0] for t in trend], [t[1] for t in trend], marker="o", label="IOP OD")
-        ax.plot([t[0] for t in trend], [t[2] for t in trend], marker="o", label="IOP OS")
-        ax.axhline(21, linestyle="--", linewidth=1, color="red", alpha=0.5, label="Soglia 21 mmHg")
-        ax.set_ylabel("mmHg"); ax.legend(); ax.grid(True, alpha=0.2)
+        fig.patch.set_facecolor("#f8fafc")
+        ax.set_facecolor("#f8fafc")
+        ax.plot([t[0] for t in trend], [t[1] for t in trend], marker="o", color="#2563a8", label="IOP OD", linewidth=2)
+        ax.plot([t[0] for t in trend], [t[2] for t in trend], marker="o", color="#0ea5e9", label="IOP OS", linewidth=2)
+        ax.axhline(21, linestyle="--", linewidth=1, color="#ef4444", alpha=0.6, label="Soglia 21 mmHg")
+        ax.set_ylabel("mmHg"); ax.legend(fontsize=9); ax.grid(True, alpha=0.15, color="#cbd5e1")
+        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#e2e8f0"); ax.spines["bottom"].set_color("#e2e8f0")
         fig.autofmt_xdate()
         st.pyplot(fig, clear_figure=True)
 
-    # Lista navigabile
+    # Lista visite
     visit_choices, visit_lookup = [], {}
     for row in visite:
         vid = _row_get(row, "id", 0)
@@ -1345,7 +1624,7 @@ def ui_visita_visiva_v2(conn):
 
     cur_hist_id = st.session_state.get("vm_history_selected_visit_id")
     if cur_hist_id is None or all(_row_get(r,"id",0) != cur_hist_id for r in visite):
-        st.session_state["vm_history_selected_visit_id"] = _row_get(visite[0], "id", 0)
+        st.session_state["vm_history_selected_visit_id"] = _row_get(visite[0],"id",0)
 
     cur_hist_label = next(
         (lbl for lbl, row in visit_lookup.items()
@@ -1355,61 +1634,63 @@ def ui_visita_visiva_v2(conn):
 
     hn1, hn2, hn3 = st.columns([1, 3, 1])
     with hn1:
-        if st.button("Prec.", key="vm_hist_prev"):
+        if st.button("⬅️", key="vm_hist_prev"):
             idx = visit_choices.index(cur_hist_label)
             if idx < len(visit_choices)-1:
                 new_l = visit_choices[idx+1]
                 st.session_state["vm_history_selected_visit_id"] = _row_get(visit_lookup[new_l],"id",0)
                 st.rerun()
     with hn2:
-        chosen = st.selectbox("Naviga storico", visit_choices,
+        chosen = st.selectbox("Seleziona visita", visit_choices,
                               index=visit_choices.index(cur_hist_label),
                               key="vm_history_selected_label")
         st.session_state["vm_history_selected_visit_id"] = _row_get(visit_lookup[chosen],"id",0)
     with hn3:
-        if st.button("Succ.", key="vm_hist_next"):
+        if st.button("➡️", key="vm_hist_next"):
             idx = visit_choices.index(chosen)
             if idx > 0:
                 new_l = visit_choices[idx-1]
                 st.session_state["vm_history_selected_visit_id"] = _row_get(visit_lookup[new_l],"id",0)
                 st.rerun()
 
-    sel_row  = visit_lookup[chosen]
-    sel_vid  = _row_get(sel_row, "id", 0)
-    sel_dv   = _row_get(sel_row, "data_visita", 1, "")
-    sel_raw  = _row_get(sel_row, "dati_json", 2)
+    sel_row = visit_lookup[chosen]
+    sel_vid = _row_get(sel_row, "id", 0)
+    sel_dv  = _row_get(sel_row, "data_visita", 1, "")
+    sel_raw = _row_get(sel_row, "dati_json", 2)
     try:
         sel_preview = json.loads(sel_raw) if isinstance(sel_raw, str) else sel_raw
     except Exception:
         sel_preview = None
 
     if sel_preview:
-        with st.expander(f"Dettaglio visita #{sel_vid}  {sel_dv}", expanded=True):
+        with st.expander(f"Dettaglio visita #{sel_vid} — {sel_dv}", expanded=True):
             dp1, dp2, dp3 = st.columns(3)
             with dp1:
-                st.write("**Tipo:**",  sel_preview.get("tipo_visita", "-"))
-                st.write("**Stato:**", sel_preview.get("stato_visita", STATO_COMPLETA))
+                stato_sel = sel_preview.get("stato_visita", STATO_COMPLETA)
+                badge_sel = f'<span class="vm-badge-bozza">BOZZA</span>' if stato_sel == STATO_BOZZA else f'<span class="vm-badge-completa">COMPLETA</span>'
+                st.markdown(badge_sel, unsafe_allow_html=True)
+                st.write("**Tipo:**", sel_preview.get("tipo_visita","-"))
                 st.write("**Anamnesi:**", _fmt_value(sel_preview.get("anamnesi")))
             with dp2:
-                acuita = sel_preview.get("acuita", {}) or {}
-                nat = acuita.get("naturale", {}) or {}
-                cor = acuita.get("corretta", {}) or {}
+                acuita = sel_preview.get("acuita",{}) or {}
+                nat = acuita.get("naturale",{}) or {}
+                cor = acuita.get("corretta",{}) or {}
                 st.write("**AVN OD:**", _fmt_value(nat.get("od")))
                 st.write("**AVN OS:**", _fmt_value(nat.get("os")))
                 st.write("**AVC OD:**", _fmt_value(cor.get("od")))
                 st.write("**AVC OS:**", _fmt_value(cor.get("os")))
             with dp3:
-                eo = sel_preview.get("esame_obiettivo", {}) or {}
+                eo = sel_preview.get("esame_obiettivo",{}) or {}
                 st.write("**IOP OD:**",  _fmt_value(eo.get("pressione_endoculare_od")))
                 st.write("**IOP OS:**",  _fmt_value(eo.get("pressione_endoculare_os")))
                 st.write("**Fondo:**",   _fmt_value(eo.get("fondo_oculare")))
-                cf = sel_preview.get("correzione_finale", {}) or {}
+                cf = sel_preview.get("correzione_finale",{}) or {}
                 st.write("**RX OD:**", _fmt_rx(cf.get("od")))
                 st.write("**RX OS:**", _fmt_rx(cf.get("os")))
 
-    ha1, ha2, ha3, ha4 = st.columns([1.2, 1, 1, 0.8])
+    ha1, ha2, ha3, ha4 = st.columns([1.5, 1, 1, 0.8])
     with ha1:
-        if st.button("Carica questa visita", key=f"vm_load_h_{sel_vid}"):
+        if st.button("📂 Carica questa visita", key=f"vm_load_h_{sel_vid}"):
             if st.session_state.get("vm_form_dirty"):
                 maybe_autosave(conn, paziente_id, reason="prima di caricare storico")
             payload_load = json.loads(sel_raw) if isinstance(sel_raw, str) else sel_raw
@@ -1419,7 +1700,7 @@ def ui_visita_visiva_v2(conn):
         if sel_preview is not None:
             try:
                 pdf_rh = _build_referto_pdf(sel_preview, patient_label=current_label, visit_id=sel_vid)
-                st.download_button("PDF Referto", data=pdf_rh,
+                st.download_button("📄 Referto", data=pdf_rh,
                                    file_name=f"referto_{sel_vid}_{current_label.replace(' ','_')}.pdf",
                                    mime="application/pdf", key=f"vm_pdf_h_{sel_vid}")
             except Exception: pass
@@ -1427,12 +1708,12 @@ def ui_visita_visiva_v2(conn):
         if sel_preview is not None:
             try:
                 pdf_ph = _build_prescrizione_pdf(sel_preview, patient_label=current_label)
-                st.download_button("PDF Prescrizione", data=pdf_ph,
+                st.download_button("🔖 Prescrizione", data=pdf_ph,
                                    file_name=f"prescrizione_{sel_vid}_{current_label.replace(' ','_')}.pdf",
                                    mime="application/pdf", key=f"vm_pr_h_{sel_vid}")
             except Exception: pass
     with ha4:
-        if st.button("Cancella", key=f"vm_del_{sel_vid}"):
+        if st.button("🗑️ Cancella", key=f"vm_del_{sel_vid}"):
             st.session_state["vm_delete_confirm"] = sel_vid
 
     delete_id = st.session_state.get("vm_delete_confirm")
@@ -1440,7 +1721,7 @@ def ui_visita_visiva_v2(conn):
         st.warning(f"Stai per cancellare la visita #{delete_id}. Confermi?")
         dc1, dc2 = st.columns(2)
         with dc1:
-            if st.button("Conferma", key="vm_del_yes", type="primary"):
+            if st.button("Conferma cancellazione", key="vm_del_yes", type="primary"):
                 delete_visit(conn, delete_id)
                 if st.session_state.get("vm_loaded_visit_id") == delete_id:
                     clear_visit_form()
