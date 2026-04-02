@@ -175,6 +175,7 @@ def _list_pazienti_dashboard(conn):
             """
             SELECT id, cognome, nome, data_nascita
             FROM pazienti
+            WHERE COALESCE(stato_paziente, 'ATTIVO') = 'ATTIVO'
             ORDER BY cognome, nome
             """
         )
