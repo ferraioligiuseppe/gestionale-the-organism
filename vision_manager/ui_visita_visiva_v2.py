@@ -1061,20 +1061,17 @@ def _inject_css():
 
 def _sidebar_lista_pazienti(conn, paziente_id_corrente):
     """
-    Sidebar con lista pazienti scrollabile, ricerca e selezione.
-    Restituisce il paziente_id selezionato (o quello corrente).
+    Sidebar con lista pazienti via radio button — leggibile su qualsiasi tema.
+    Restituisce il paziente_id selezionato.
     """
-    st.sidebar.markdown('<div class="vm-app-title">Vision Manager</div>', unsafe_allow_html=True)
-    st.sidebar.markdown('<div class="vm-app-subtitle">Dr. Ferraioli Giuseppe</div>', unsafe_allow_html=True)
-    st.sidebar.markdown("---")
+    st.sidebar.markdown("## 👁️ Vision Manager")
+    st.sidebar.caption("Dr. Ferraioli Giuseppe")
+    st.sidebar.divider()
 
-    # Ricerca
-    ricerca = st.sidebar.text_input("Cerca paziente", key="vm_sidebar_search",
-                                     placeholder="Nome o cognome...")
-
+    ricerca = st.sidebar.text_input("🔍 Cerca", key="vm_sidebar_search",
+                                    placeholder="Nome o cognome...")
     pazienti = list_pazienti(conn)
 
-    # Filtra per ricerca
     if ricerca.strip():
         q = ricerca.strip().lower()
         pazienti = [
@@ -1087,69 +1084,49 @@ def _sidebar_lista_pazienti(conn, paziente_id_corrente):
         st.sidebar.caption("Nessun paziente trovato.")
         return paziente_id_corrente
 
-    # Controlla bozze attive per ogni paziente (indicatore visivo)
+    # Bozze attive
     bozze_pids = set()
-    try:
-        cur = conn.cursor()
-        ph = _ph(conn)
-        cur.execute(
-            "SELECT DISTINCT paziente_id FROM visite_visive "
-            "WHERE COALESCE(is_deleted,0)=0"
-        )
-        tutti_pids_visite = {_row_get(r,"paziente_id",0) for r in cur.fetchall()}
-        cur.close()
-        # Trova quelli con bozza: controlliamo le ultime visite
-        for row in pazienti:
-            pid = _row_get(row,"id",0)
-            if pid not in tutti_pids_visite:
-                continue
-            try:
-                b = _find_bozza(conn, pid)
-                if b is not None:
-                    bozze_pids.add(pid)
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    st.sidebar.markdown(f"<div style='font-size:0.75rem;color:#6b87a0;padding:0 4px 8px;'>{len(pazienti)} pazienti</div>", unsafe_allow_html=True)
-
-    selected_pid = paziente_id_corrente
     for row in pazienti:
-        pid     = _row_get(row, "id", 0)
-        cognome = _row_get(row, "cognome", 1, "") or ""
-        nome    = _row_get(row, "nome", 2, "") or ""
-        dn      = _row_get(row, "data_nascita", 3, "") or ""
+        pid = _row_get(row,"id",0)
+        try:
+            if _find_bozza(conn, pid) is not None:
+                bozze_pids.add(pid)
+        except Exception:
+            pass
 
+    st.sidebar.caption(f"{len(pazienti)} pazienti attivi")
+
+    labels = []
+    pid_map = {}
+    default_idx = 0
+    for i, row in enumerate(pazienti):
+        pid     = _row_get(row, "id", 0)
+        cognome = (_row_get(row, "cognome", 1, "") or "").title()
+        nome    = (_row_get(row, "nome", 2, "") or "").title()
+        dn      = _row_get(row, "data_nascita", 3, "") or ""
         try:
             dn_fmt = datetime.strptime(str(dn)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
         except Exception:
             dn_fmt = str(dn)[:10] if dn else ""
+        badge = " 🟡" if pid in bozze_pids else ""
+        label = f"{cognome} {nome}{badge} — {dn_fmt}" if dn_fmt else f"{cognome} {nome}{badge}"
+        labels.append(label)
+        pid_map[label] = pid
+        if pid == paziente_id_corrente:
+            default_idx = i
 
-        is_selected = (pid == paziente_id_corrente)
-        has_bozza   = pid in bozze_pids
+    chosen_label = st.sidebar.radio(
+        "Pazienti",
+        labels,
+        index=default_idx,
+        key="vm_sidebar_radio",
+        label_visibility="collapsed",
+    )
 
-        nome_display = f"{cognome.title()} {nome.title()}".strip()
-        badge = " 🟡" if has_bozza else ""
+    st.sidebar.divider()
+    st.sidebar.caption("🟡 = bozza aperta (in dilatazione)")
 
-        btn_label = f"{'▶ ' if is_selected else '   '}{nome_display}{badge}\n{dn_fmt}"
-        if st.sidebar.button(
-            f"{'▶ ' if is_selected else ''}{nome_display}{badge}  {dn_fmt}",
-            key=f"vm_sb_paz_{pid}",
-            use_container_width=True,
-        ):
-            selected_pid = pid
-
-    st.sidebar.markdown("---")
-    with st.sidebar.expander("➕ Nuovo paziente", expanded=False):
-        st.info("Usa il form principale →")
-
-    return selected_pid
-
-
-# =========================================================
-# UI PRINCIPALE
-# =========================================================
+    return pid_map.get(chosen_label, paziente_id_corrente)
 
 def ui_visita_visiva_v2(conn):
     ensure_visit_state()

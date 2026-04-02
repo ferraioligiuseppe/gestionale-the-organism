@@ -251,151 +251,246 @@ def _make_line_chart(df, xcol, ycols, title, ylabel, threshold=None):
     return fig
 
 
+
+def _fmt_val(v, fallback="-"):
+    if v is None or (isinstance(v, float) and __import__("math").isnan(v)):
+        return fallback
+    s = str(v).strip()
+    return s if s else fallback
+
+
 def ui_dashboard_paziente():
-    _inject_dashboard_css()
+    # ── CSS stesso tema di ui_visita_visiva_v2 ────────────────
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+    html, body, [data-testid="stAppViewContainer"] {
+        background: #f0f4f8 !important;
+        font-family: 'DM Sans', sans-serif !important;
+    }
+    [data-testid="stHeader"] { background: transparent !important; }
+    [data-testid="stSidebar"] {
+        background: #0f1923 !important;
+        border-right: 1px solid #1e2d3d;
+    }
+    [data-testid="stSidebar"] * { color: #c8d6e5 !important; }
+    [data-testid="stSidebar"] h2 { color: #ffffff !important; font-size:1rem !important; }
+
+    .vm-patient-header {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%);
+        border-radius: 16px;
+        padding: 20px 28px;
+        margin-bottom: 20px;
+    }
+    .vm-patient-name { font-size:1.5rem; font-weight:600; color:#ffffff !important; }
+    .vm-patient-meta { font-size:0.85rem; color:#a8c4e0 !important; margin-top:4px; font-family:'DM Mono',monospace; }
+    .vm-section-title {
+        font-size:0.72rem; font-weight:600; letter-spacing:0.08em;
+        text-transform:uppercase; color:#64748b !important;
+        margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #e2e8f0;
+    }
+    .vm-card {
+        background:#ffffff; border-radius:14px; border:1px solid #e2e8f0;
+        padding:18px 22px; margin-bottom:14px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    div[data-testid="stMetric"] {
+        background:#ffffff !important; border:1px solid #e2e8f0 !important;
+        border-radius:12px !important; padding:14px 16px !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.04) !important;
+    }
+    [data-testid="stMetricLabel"] { color:#64748b !important; font-size:0.8rem !important; }
+    [data-testid="stMetricValue"] { color:#1e293b !important; font-weight:600 !important; }
+    hr { border-color:#e2e8f0 !important; margin:20px 0 !important; }
+
+    div[data-baseweb="select"] > div {
+        background:#ffffff !important; color:#1e293b !important;
+        border:1.5px solid #e2e8f0 !important; border-radius:10px !important;
+    }
+    div[data-baseweb="select"] span { color:#1e293b !important; }
+    div[role="listbox"] { background:#ffffff !important; color:#1e293b !important; }
+    div[role="option"] { background:#ffffff !important; color:#1e293b !important; }
+    div[role="option"]:hover { background:#eef4fb !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
     conn = get_conn()
 
-    st.title("© Vision Manager The Organism by Dr. Ferraioli Giuseppe")
-    st.header("📊 Dashboard Paziente")
-
     pazienti = _list_pazienti_dashboard(conn)
-
     if not pazienti:
         st.warning("Nessun paziente nel database.")
         return
 
     pazienti_df = pd.DataFrame(pazienti)
-    pazienti_df["cognome"] = pazienti_df["cognome"].fillna("").astype(str)
-    pazienti_df["nome"] = pazienti_df["nome"].fillna("").astype(str)
-    pazienti_df["label"] = (pazienti_df["cognome"] + " " + pazienti_df["nome"]).str.strip()
+    pazienti_df["cognome"] = pazienti_df["cognome"].fillna("").astype(str).str.title()
+    pazienti_df["nome"]    = pazienti_df["nome"].fillna("").astype(str).str.title()
+    pazienti_df["label"]   = (pazienti_df["cognome"] + " " + pazienti_df["nome"]).str.strip()
 
-    st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+    # ── Titolo ────────────────────────────────────────────────
+    st.markdown("## 📊 Dashboard Paziente")
+
+    # ── Selettore paziente ────────────────────────────────────
     paziente_label = st.selectbox("Seleziona paziente", pazienti_df["label"].tolist())
-    st.markdown('</div>', unsafe_allow_html=True)
-
     paziente = pazienti_df[pazienti_df["label"] == paziente_label].iloc[0]
     eta = calcola_eta(paziente["data_nascita"])
 
-    st.markdown(
-        f"""
-        <div class="dashboard-card">
-            <div class="dashboard-patient">👤 {paziente['label']}</div>
-            <div class="dashboard-muted">
-                Data nascita: {paziente['data_nascita']} &nbsp;&nbsp;|&nbsp;&nbsp; Età: {eta if eta is not None else "-"}
-            </div>
+    dn_fmt = ""
+    if paziente["data_nascita"]:
+        try:
+            dn_fmt = pd.to_datetime(paziente["data_nascita"]).strftime("%d/%m/%Y")
+        except Exception:
+            dn_fmt = str(paziente["data_nascita"])
+
+    # ── Header paziente ───────────────────────────────────────
+    st.markdown(f"""
+    <div class="vm-patient-header">
+        <div class="vm-patient-name">👤 {paziente['label']}</div>
+        <div class="vm-patient-meta">
+            {'Nato/a il ' + dn_fmt if dn_fmt else ''}
+            {'&nbsp;·&nbsp;' + str(eta) + ' anni' if eta is not None else ''}
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    </div>
+    """, unsafe_allow_html=True)
 
     visite = _list_visite_dashboard(conn, int(paziente["id"]))
-
     if not visite:
-        st.info("Nessuna visita disponibile.")
+        st.info("Nessuna visita registrata per questo paziente.")
         return
 
     records = []
     latest_payload = None
-
     for r in visite:
         data_json = _safe_json(r.get("dati_json"))
         if not isinstance(data_json, dict):
             continue
-
         latest_payload = data_json
-        eo = data_json.get("esame_obiettivo", {}) or {}
-        corr = data_json.get("correzione_finale", {}) or {}
+        eo      = data_json.get("esame_obiettivo", {}) or {}
+        corr    = data_json.get("correzione_finale", {}) or {}
         corr_od = corr.get("od", {}) or {}
         corr_os = corr.get("os", {}) or {}
-
-        records.append(
-            {
-                "data": pd.to_datetime(r.get("data_visita"), errors="coerce"),
-                "iop_od": _to_float(eo.get("pressione_endoculare_od")),
-                "iop_os": _to_float(eo.get("pressione_endoculare_os")),
-                "pach_od": _to_float(eo.get("pachimetria_od")),
-                "pach_os": _to_float(eo.get("pachimetria_os")),
-                "sf_od": _to_float(corr_od.get("sf")),
-                "sf_os": _to_float(corr_os.get("sf")),
-            }
-        )
+        records.append({
+            "data":    pd.to_datetime(r.get("data_visita"), errors="coerce"),
+            "iop_od":  _to_float(eo.get("pressione_endoculare_od")),
+            "iop_os":  _to_float(eo.get("pressione_endoculare_os")),
+            "pach_od": _to_float(eo.get("pachimetria_od")),
+            "pach_os": _to_float(eo.get("pachimetria_os")),
+            "sf_od":   _to_float(corr_od.get("sf")),
+            "sf_os":   _to_float(corr_os.get("sf")),
+        })
 
     df = pd.DataFrame(records)
-
     if df.empty:
-        st.info("Nessun dato clinico leggibile nelle visite.")
+        st.info("Nessun dato clinico leggibile.")
         return
 
     df = df.sort_values("data").reset_index(drop=True)
     ultima = df.iloc[-1]
 
-    st.subheader("📌 Ultimi valori")
+    # ── Ultimi valori ─────────────────────────────────────────
+    st.markdown('<div class="vm-section-title">Ultimi valori</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("IOP OD", "-" if pd.isna(ultima["iop_od"]) else f'{ultima["iop_od"]:.1f} mmHg')
-    c2.metric("IOP OS", "-" if pd.isna(ultima["iop_os"]) else f'{ultima["iop_os"]:.1f} mmHg')
+    c1.metric("IOP OD",         "-" if pd.isna(ultima["iop_od"])  else f'{ultima["iop_od"]:.1f} mmHg')
+    c2.metric("IOP OS",         "-" if pd.isna(ultima["iop_os"])  else f'{ultima["iop_os"]:.1f} mmHg')
     c3.metric("Pachimetria OD", "-" if pd.isna(ultima["pach_od"]) else f'{ultima["pach_od"]:.0f} µm')
     c4.metric("Pachimetria OS", "-" if pd.isna(ultima["pach_os"]) else f'{ultima["pach_os"]:.0f} µm')
 
     st.divider()
 
-    st.subheader("📈 Andamento IOP")
-    fig_iop = _make_line_chart(df, "data", ["iop_od", "iop_os"], "Andamento IOP", "mmHg", threshold=21)
-    st.pyplot(fig_iop, clear_figure=True)
+    # ── Grafici ───────────────────────────────────────────────
+    def _chart(df, ycols, title, ylabel, threshold=None):
+        fig, ax = plt.subplots(figsize=(8, 3))
+        fig.patch.set_facecolor("#f8fafc")
+        ax.set_facecolor("#f8fafc")
+        colors = ["#2563a8", "#0ea5e9", "#7c3aed", "#0d9488"]
+        for i, col in enumerate(ycols):
+            if col in df.columns:
+                ax.plot(df["data"], df[col], marker="o", label=col.upper().replace("_"," "),
+                        color=colors[i % len(colors)], linewidth=2)
+        if threshold is not None:
+            ax.axhline(threshold, linestyle="--", linewidth=1, color="#ef4444", alpha=0.6,
+                       label=f"Soglia {threshold}")
+        ax.set_ylabel(ylabel); ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.15, color="#cbd5e1")
+        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#e2e8f0"); ax.spines["bottom"].set_color("#e2e8f0")
+        fig.autofmt_xdate()
+        return fig
 
-    st.subheader("📈 Andamento pachimetria")
-    fig_pach = _make_line_chart(df, "data", ["pach_od", "pach_os"], "Andamento pachimetria", "µm")
-    st.pyplot(fig_pach, clear_figure=True)
+    st.markdown('<div class="vm-section-title">Andamento IOP</div>', unsafe_allow_html=True)
+    if df[["iop_od","iop_os"]].notna().any().any():
+        st.pyplot(_chart(df, ["iop_od","iop_os"], "IOP", "mmHg", threshold=21), clear_figure=True)
+    else:
+        st.caption("Nessun dato IOP disponibile.")
 
-    st.subheader("📈 Refrazione finale")
-    fig_ref = _make_line_chart(df, "data", ["sf_od", "sf_os"], "Refrazione finale", "Diottrie")
-    st.pyplot(fig_ref, clear_figure=True)
+    st.markdown('<div class="vm-section-title">Andamento Pachimetria</div>', unsafe_allow_html=True)
+    if df[["pach_od","pach_os"]].notna().any().any():
+        st.pyplot(_chart(df, ["pach_od","pach_os"], "Pachimetria", "µm"), clear_figure=True)
+    else:
+        st.caption("Nessun dato pachimetria disponibile.")
 
-    if isinstance(latest_payload, dict):
-        st.divider()
-        c_left, c_right = st.columns(2)
-
-        with c_left:
-            st.subheader("🩺 Ultima visita")
-            st.write("**Anamnesi:**", latest_payload.get("anamnesi", "") or "-")
-            eo = latest_payload.get("esame_obiettivo", {}) or {}
-            fields = {
-                "Congiuntiva": eo.get("congiuntiva"),
-                "Cornea": eo.get("cornea"),
-                "Camera anteriore": eo.get("camera_anteriore"),
-                "Cristallino": eo.get("cristallino"),
-                "Vitreo": eo.get("vitreo"),
-                "Fondo oculare": eo.get("fondo_oculare"),
-            }
-            shown = False
-            for k, v in fields.items():
-                if v not in (None, ""):
-                    shown = True
-                    st.write(f"**{k}:** {v}")
-            if not shown:
-                st.write("-")
-
-        with c_right:
-            st.subheader("👓 Ultima prescrizione")
-            prescr = latest_payload.get("prescrizione", {}) or {}
-            if prescr:
-                for dist in ["lontano", "intermedio", "vicino"]:
-                    blocco = prescr.get(dist, {}) or {}
-                    if blocco:
-                        st.write(f"**{dist.capitalize()}**")
-                        st.write(
-                            f"OD: {blocco.get('od', {})}  |  OS: {blocco.get('os', {})}"
-                        )
-                lenti = prescr.get("lenti", []) or []
-                if lenti:
-                    st.write("**Lenti:**", ", ".join(map(str, lenti)))
-            else:
-                st.write("-")
+    st.markdown('<div class="vm-section-title">Refrazione finale (SF)</div>', unsafe_allow_html=True)
+    if df[["sf_od","sf_os"]].notna().any().any():
+        st.pyplot(_chart(df, ["sf_od","sf_os"], "Refrazione", "Diottrie"), clear_figure=True)
+    else:
+        st.caption("Nessun dato refrazione disponibile.")
 
     st.divider()
 
-    with st.expander("📚 Storico visite"):
+    # ── Dettaglio ultima visita ───────────────────────────────
+    if isinstance(latest_payload, dict):
+        st.markdown('<div class="vm-section-title">Dettaglio ultima visita</div>', unsafe_allow_html=True)
+        cl, cr = st.columns(2)
+
+        with cl:
+            st.markdown('<div class="vm-card">', unsafe_allow_html=True)
+            st.markdown("**🩺 Esame obiettivo**")
+            st.write("**Anamnesi:**", _fmt_val(latest_payload.get("anamnesi")))
+            eo = latest_payload.get("esame_obiettivo", {}) or {}
+            for label, key in [
+                ("Congiuntiva", "congiuntiva"), ("Cornea", "cornea"),
+                ("Camera anteriore", "camera_anteriore"), ("Cristallino", "cristallino"),
+                ("Vitreo", "vitreo"), ("Fondo oculare", "fondo_oculare"),
+            ]:
+                v = eo.get(key)
+                if v not in (None, ""):
+                    st.write(f"**{label}:** {v}")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with cr:
+            st.markdown('<div class="vm-card">', unsafe_allow_html=True)
+            st.markdown("**👓 Correzione finale**")
+            cf = latest_payload.get("correzione_finale", {}) or {}
+            od  = cf.get("od", {}) or {}
+            os_ = cf.get("os", {}) or {}
+            if od or os_:
+                sf_od  = _to_float(od.get("sf"));  cyl_od = _to_float(od.get("cyl"));  ax_od = od.get("ax",0)
+                sf_os  = _to_float(os_.get("sf")); cyl_os = _to_float(os_.get("cyl")); ax_os = os_.get("ax",0)
+                if sf_od is not None:
+                    st.write(f"**OD:** {sf_od:+.2f} ({cyl_od:+.2f} × {ax_od}°)")
+                if sf_os is not None:
+                    st.write(f"**OS:** {sf_os:+.2f} ({cyl_os:+.2f} × {ax_os}°)")
+                add_v = _to_float(cf.get("add_vicino"))
+                add_i = _to_float(cf.get("add_intermedio"))
+                if add_v and cf.get("enable_add_vicino"):
+                    st.write(f"**ADD vicino:** +{add_v:.2f}")
+                if add_i and cf.get("enable_add_intermedio"):
+                    st.write(f"**ADD intermedio:** +{add_i:.2f}")
+            else:
+                st.write("-")
+            acuita = latest_payload.get("acuita", {}) or {}
+            nat = acuita.get("naturale", {}) or {}
+            cor = acuita.get("corretta", {}) or {}
+            st.markdown("**Acuità visiva**")
+            st.write(f"AVN: OD {_fmt_val(nat.get('od'))} | OS {_fmt_val(nat.get('os'))}")
+            st.write(f"AVC: OD {_fmt_val(cor.get('od'))} | OS {_fmt_val(cor.get('os'))}")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    st.divider()
+
+    # ── Storico ───────────────────────────────────────────────
+    with st.expander("📚 Storico completo visite"):
         show_df = df.copy()
         if "data" in show_df.columns:
-            show_df["data"] = show_df["data"].dt.strftime("%Y-%m-%d")
-        st.dataframe(show_df, use_container_width=True)
+            show_df["data"] = show_df["data"].dt.strftime("%d/%m/%Y")
+        st.dataframe(show_df, use_container_width=True, hide_index=True)
