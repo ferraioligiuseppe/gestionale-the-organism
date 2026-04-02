@@ -342,21 +342,150 @@ def apply_pending_visit_load():
 # =========================================================
 
 def list_pazienti(conn):
-    """Solo pazienti ATTIVI, con data nascita per distinguere omonimi."""
+    """
+    Solo pazienti ATTIVI, deduplicati per (cognome, nome, data_nascita).
+    In caso di duplicati viene tenuto solo il record con id più alto (più recente).
+    """
+    cur = conn.cursor()
+    try:
+        if _is_pg(conn):
+            cur.execute(
+                """
+                SELECT DISTINCT ON (LOWER(TRIM(cognome)), LOWER(TRIM(nome)), COALESCE(TRIM(data_nascita),''))
+                    id, cognome, nome, data_nascita
+                FROM pazienti
+                WHERE COALESCE(stato_paziente,'ATTIVO') = 'ATTIVO'
+                ORDER BY LOWER(TRIM(cognome)), LOWER(TRIM(nome)), COALESCE(TRIM(data_nascita),''), id DESC
+                """
+            )
+        else:
+            # SQLite: subquery con MAX(id) per gruppo
+            cur.execute(
+                """
+                SELECT id, Cognome AS cognome, Nome AS nome, Data_Nascita AS data_nascita
+                FROM Pazienti
+                WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO'
+                  AND id IN (
+                      SELECT MAX(id)
+                      FROM Pazienti
+                      WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO'
+                      GROUP BY LOWER(TRIM(Cognome)), LOWER(TRIM(Nome)), COALESCE(TRIM(Data_Nascita),'')
+                  )
+                ORDER BY LOWER(TRIM(Cognome)), LOWER(TRIM(Nome))
+                """
+            )
+        return cur.fetchall()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def find_duplicati_pazienti(conn):
+    """
+    Restituisce i gruppi di pazienti duplicati (stesso cognome+nome+data_nascita, id diversi).
+    Ogni gruppo è una lista di dict con id, cognome, nome, data_nascita, n_visite.
+    """
+    cur = conn.cursor()
+    try:
+        if _is_pg(conn):
+            cur.execute(
+                """
+                SELECT
+                    LOWER(TRIM(cognome)) AS cog,
+                    LOWER(TRIM(nome))    AS nom,
+                    COALESCE(TRIM(data_nascita),'') AS dn,
+                    COUNT(*) AS n
+                FROM pazienti
+                WHERE COALESCE(stato_paziente,'ATTIVO') = 'ATTIVO'
+                GROUP BY LOWER(TRIM(cognome)), LOWER(TRIM(nome)), COALESCE(TRIM(data_nascita),'')
+                HAVING COUNT(*) > 1
+                ORDER BY cog, nom, dn
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT
+                    LOWER(TRIM(Cognome)) AS cog,
+                    LOWER(TRIM(Nome))    AS nom,
+                    COALESCE(TRIM(Data_Nascita),'') AS dn,
+                    COUNT(*) AS n
+                FROM Pazienti
+                WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO'
+                GROUP BY LOWER(TRIM(Cognome)), LOWER(TRIM(Nome)), COALESCE(TRIM(Data_Nascita),'')
+                HAVING COUNT(*) > 1
+                ORDER BY cog, nom, dn
+                """
+            )
+        groups_meta = cur.fetchall()
+        groups = []
+        for gm in groups_meta:
+            cog = _row_get(gm, "cog", 0, "")
+            nom = _row_get(gm, "nom", 1, "")
+            dn  = _row_get(gm, "dn",  2, "")
+            ph  = _ph(conn)
+            if _is_pg(conn):
+                cur.execute(
+                    f"""
+                    SELECT p.id, p.cognome, p.nome, p.data_nascita,
+                           COUNT(v.id) AS n_visite
+                    FROM pazienti p
+                    LEFT JOIN visite_visive v ON v.paziente_id = p.id AND COALESCE(v.is_deleted,0)=0
+                    WHERE LOWER(TRIM(p.cognome)) = {ph}
+                      AND LOWER(TRIM(p.nome))    = {ph}
+                      AND COALESCE(TRIM(p.data_nascita),'') = {ph}
+                      AND COALESCE(p.stato_paziente,'ATTIVO') = 'ATTIVO'
+                    GROUP BY p.id, p.cognome, p.nome, p.data_nascita
+                    ORDER BY p.id DESC
+                    """,
+                    (cog, nom, dn)
+                )
+            else:
+                cur.execute(
+                    f"""
+                    SELECT p.ID AS id, p.Cognome AS cognome, p.Nome AS nome,
+                           p.Data_Nascita AS data_nascita,
+                           COUNT(v.id) AS n_visite
+                    FROM Pazienti p
+                    LEFT JOIN visite_visive v ON v.paziente_id = p.ID AND COALESCE(v.is_deleted,0)=0
+                    WHERE LOWER(TRIM(p.Cognome)) = {ph}
+                      AND LOWER(TRIM(p.Nome))    = {ph}
+                      AND COALESCE(TRIM(p.Data_Nascita),'') = {ph}
+                      AND COALESCE(p.Stato_Paziente,'ATTIVO') = 'ATTIVO'
+                    GROUP BY p.ID, p.Cognome, p.Nome, p.Data_Nascita
+                    ORDER BY p.ID DESC
+                    """,
+                    (cog, nom, dn)
+                )
+            rows = cur.fetchall()
+            groups.append([
+                {"id": _row_get(r,"id",0), "cognome": _row_get(r,"cognome",1,""),
+                 "nome": _row_get(r,"nome",2,""), "data_nascita": _row_get(r,"data_nascita",3,""),
+                 "n_visite": _row_get(r,"n_visite",4,0)}
+                for r in rows
+            ])
+        return groups
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def archivia_paziente_duplicato(conn, paziente_id):
+    """Archivia il paziente (stato = ARCHIVIATO). Non cancella i dati."""
     ph = _ph(conn)
     cur = conn.cursor()
     try:
         if _is_pg(conn):
             cur.execute(
-                "SELECT id, cognome, nome, data_nascita FROM pazienti "
-                "WHERE COALESCE(stato_paziente,'ATTIVO')='ATTIVO' ORDER BY cognome, nome"
+                f"UPDATE pazienti SET stato_paziente='ARCHIVIATO' WHERE id={ph}",
+                (paziente_id,)
             )
         else:
             cur.execute(
-                "SELECT ID AS id, Cognome AS cognome, Nome AS nome, Data_Nascita AS data_nascita "
-                "FROM Pazienti WHERE COALESCE(Stato_Paziente,'ATTIVO')='ATTIVO' ORDER BY Cognome, Nome"
+                f"UPDATE Pazienti SET Stato_Paziente='ARCHIVIATO' WHERE ID={ph}",
+                (paziente_id,)
             )
-        return cur.fetchall()
+        conn.commit()
     finally:
         try: cur.close()
         except Exception: pass
@@ -728,6 +857,60 @@ def ui_visita_visiva_v2(conn):
                 st.error(str(ve))
             except Exception as e:
                 st.error(f"Errore: {e}")
+
+    # ── STRUMENTO PULIZIA DUPLICATI ───────────────────────────
+    try:
+        gruppi_dup = find_duplicati_pazienti(conn)
+    except Exception:
+        gruppi_dup = []
+
+    if gruppi_dup:
+        n_dup = sum(len(g) - 1 for g in gruppi_dup)
+        with st.expander(
+            f"⚠️ Trovati {len(gruppi_dup)} gruppi di pazienti duplicati ({n_dup} record in eccesso) — clicca per pulire",
+            expanded=True
+        ):
+            st.caption(
+                "Per ogni gruppo viene mostrato il paziente da conservare (quello con più visite) "
+                "e quelli da archiviare. L'archiviazione non cancella i dati, li nasconde solo dalla lista."
+            )
+            for idx_g, gruppo in enumerate(gruppi_dup):
+                gruppo_sorted = sorted(gruppo, key=lambda r: (-(r.get("n_visite") or 0), -r["id"]))
+                principale = gruppo_sorted[0]
+                duplicati  = gruppo_sorted[1:]
+
+                dn_fmt = ""
+                if principale.get("data_nascita"):
+                    try:
+                        dn_fmt = datetime.strptime(str(principale["data_nascita"])[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+                    except Exception:
+                        dn_fmt = str(principale["data_nascita"])[:10]
+
+                st.markdown(
+                    f"**{str(principale.get('cognome','')).title()} "
+                    f"{str(principale.get('nome','')).title()}**"
+                    + (f"  ·  {dn_fmt}" if dn_fmt else "")
+                )
+
+                for dup in duplicati:
+                    d1, d2 = st.columns([3, 1])
+                    with d1:
+                        st.success(f"Conserva — ID {principale['id']} ({principale.get('n_visite', 0)} visite)")
+                        st.warning(f"Archivia — ID {dup['id']} ({dup.get('n_visite', 0)} visite)")
+                    with d2:
+                        btn_key = f"vm_archivia_dup_{dup['id']}_{idx_g}"
+                        if st.button(
+                            f"Archivia ID {dup['id']}",
+                            key=btn_key,
+                            help=f"Archivia il duplicato ID {dup['id']} ({dup.get('n_visite',0)} visite)"
+                        ):
+                            try:
+                                archivia_paziente_duplicato(conn, dup["id"])
+                                st.success(f"ID {dup['id']} archiviato.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Errore: {e}")
+                st.markdown("---")
 
     st.divider()
 
