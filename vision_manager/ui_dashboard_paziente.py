@@ -444,7 +444,21 @@ def ui_dashboard_paziente():
     pazienti_df = pd.DataFrame(pazienti)
     pazienti_df["cognome"] = pazienti_df["cognome"].fillna("").astype(str).str.title()
     pazienti_df["nome"]    = pazienti_df["nome"].fillna("").astype(str).str.title()
-    pazienti_df["label"]   = (pazienti_df["cognome"] + " " + pazienti_df["nome"]).str.strip()
+
+    def _fmt_dn(dn):
+        if not dn or pd.isna(dn):
+            return ""
+        try:
+            return pd.to_datetime(str(dn)).strftime("%d/%m/%Y")
+        except Exception:
+            return str(dn)[:10]
+
+    pazienti_df["dn_fmt"] = pazienti_df["data_nascita"].apply(_fmt_dn)
+    pazienti_df["label"]  = pazienti_df.apply(
+        lambda r: f"{r['cognome']} {r['nome']} ({r['dn_fmt']})" if r["dn_fmt"]
+                  else f"{r['cognome']} {r['nome']}",
+        axis=1
+    )
 
     st.markdown("## 📊 Dashboard Paziente")
 
