@@ -1035,6 +1035,36 @@ hr { border-color: #e2e8f0 !important; margin: 20px 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
+def _render_nuovo_paziente_form(conn):
+    """Form registrazione nuovo paziente — usato sia nella sidebar che nella pagina principale."""
+    np1, np2, np3 = st.columns(3)
+    nome_nuovo    = np1.text_input("Nome *",    key="vm_new_nome")
+    cognome_nuovo = np2.text_input("Cognome *", key="vm_new_cognome")
+    with np3:
+        dn_new = _render_dmy_input("Data di nascita *", "vm_new_dn",
+                                   st.session_state.get("vm_new_dn_default", date(2000, 1, 1)))
+    eta_n = _calculate_age(dn_new)
+    if eta_n is not None:
+        st.caption(f"Età: {eta_n} anni")
+    np4, np5 = st.columns(2)
+    tel_nuovo  = np4.text_input("Telefono", key="vm_new_tel")
+    mail_nuovo = np5.text_input("Email",    key="vm_new_mail")
+    note_nuovo = st.text_area("Note", key="vm_new_note", height=60)
+    if st.button("Salva paziente", key="vm_save_new_patient", type="primary"):
+        try:
+            pid = insert_paziente(conn, nome_nuovo, cognome_nuovo,
+                                  dn_new.isoformat() if dn_new else "",
+                                  telefono=tel_nuovo, email=mail_nuovo, note=note_nuovo)
+            st.session_state["vision_last_pid"] = int(pid) if pid is not None else None
+            st.session_state["vm_current_patient_id"] = int(pid) if pid is not None else None
+            st.success(f"Paziente registrato (ID: {pid})")
+            st.rerun()
+        except ValueError as ve:
+            st.error(str(ve))
+        except Exception as e:
+            st.error(f"Errore: {e}")
+
+
 def _sidebar_lista_pazienti(conn, paziente_id_corrente):
     """
     Sidebar con lista pazienti via radio button — leggibile su qualsiasi tema.
@@ -1101,6 +1131,9 @@ def _sidebar_lista_pazienti(conn, paziente_id_corrente):
 
     st.sidebar.divider()
     st.sidebar.caption("🟡 = bozza aperta (in dilatazione)")
+    st.sidebar.divider()
+    with st.sidebar.expander("➕ Nuovo paziente", expanded=False):
+        _render_nuovo_paziente_form(conn)
 
     return pid_map.get(chosen_label, paziente_id_corrente)
 
@@ -1174,46 +1207,20 @@ def ui_visita_visiva_v2(conn):
                 st.markdown("---")
 
     # ── REGISTRA NUOVO PAZIENTE ──────────────────────────────
-    with st.expander("➕ Registra nuovo paziente", expanded=False):
-        st.markdown('<div class="vm-card">', unsafe_allow_html=True)
-        np1, np2, np3 = st.columns(3)
-        nome_nuovo    = np1.text_input("Nome *",    key="vm_new_nome")
-        cognome_nuovo = np2.text_input("Cognome *", key="vm_new_cognome")
-        with np3:
-            dn_new = _render_dmy_input("Data di nascita *", "vm_new_dn",
-                                       st.session_state.get("vm_new_dn_default", date(2000,1,1)))
-        eta_n = _calculate_age(dn_new)
-        if eta_n is not None:
-            st.caption(f"Età: {eta_n} anni")
-        np4, np5 = st.columns(2)
-        tel_nuovo  = np4.text_input("Telefono", key="vm_new_tel")
-        mail_nuovo = np5.text_input("Email",    key="vm_new_mail")
-        note_nuovo = st.text_area("Note", key="vm_new_note", height=60)
-        if st.button("Salva paziente", key="vm_save_new_patient", type="primary"):
-            try:
-                pid = insert_paziente(conn, nome_nuovo, cognome_nuovo,
-                                      dn_new.isoformat() if dn_new else "",
-                                      telefono=tel_nuovo, email=mail_nuovo, note=note_nuovo)
-                st.session_state["vision_last_pid"] = int(pid) if pid is not None else None
-                st.session_state["vm_current_patient_id"] = int(pid) if pid is not None else None
-                st.success(f"Paziente registrato (ID: {pid})")
-                st.rerun()
-            except ValueError as ve:
-                st.error(str(ve))
-            except Exception as e:
-                st.error(f"Errore: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
     # ── PAZIENTE NON SELEZIONATO ─────────────────────────────
     paziente_id = st.session_state.get("vm_current_patient_id")
     if paziente_id is None:
         st.markdown("""
-        <div style="text-align:center;padding:60px 20px;color:#94a3b8;">
+        <div style="text-align:center;padding:80px 20px;">
             <div style="font-size:3rem;margin-bottom:16px;">👁️</div>
-            <div style="font-size:1.1rem;font-weight:500;color:#64748b;">Seleziona un paziente dalla lista a sinistra</div>
-            <div style="font-size:0.85rem;margin-top:8px;">o registra un nuovo paziente</div>
+            <div style="font-size:1.1rem;font-weight:500;color:#64748b;">
+                Seleziona un paziente dalla lista a sinistra
+            </div>
         </div>
         """, unsafe_allow_html=True)
+        st.divider()
+        with st.expander("➕ Registra nuovo paziente", expanded=False):
+            _render_nuovo_paziente_form(conn)
         return
 
     # Recupera anagrafica
@@ -1231,10 +1238,10 @@ def ui_visita_visiva_v2(conn):
         st.error("Paziente non trovato. Selezionane un altro dalla lista.")
         return
 
-    cognome_paz  = _row_get(selected_row, "cognome", 1, "") or ""
-    nome_paz     = _row_get(selected_row, "nome", 2, "") or ""
-    dn_paz       = _row_get(selected_row, "data_nascita", 3, "") or ""
-    eta_paz      = _calculate_age(dn_paz)
+    cognome_paz = _row_get(selected_row, "cognome", 1, "") or ""
+    nome_paz    = _row_get(selected_row, "nome", 2, "") or ""
+    dn_paz      = _row_get(selected_row, "data_nascita", 3, "") or ""
+    eta_paz     = _calculate_age(dn_paz)
     try:
         dn_paz_fmt = datetime.strptime(str(dn_paz)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
     except Exception:
@@ -1243,15 +1250,14 @@ def ui_visita_visiva_v2(conn):
     current_label = f"{cognome_paz.title()} {nome_paz.title()}".strip()
 
     # ── HEADER PAZIENTE ──────────────────────────────────────
-    mode = st.session_state.get("vm_mode","new")
+    mode      = st.session_state.get("vm_mode", "new")
     loaded_id = st.session_state.get("vm_loaded_visit_id")
-    stato_v = st.session_state.get("vm_stato_visita", STATO_BOZZA)
+    stato_v   = st.session_state.get("vm_stato_visita", STATO_BOZZA)
 
     if mode == "edit" and loaded_id:
-        if stato_v == STATO_BOZZA:
-            badge_html = f'<span class="vm-badge-bozza">🟡 Bozza #{loaded_id}</span>'
-        else:
-            badge_html = f'<span class="vm-badge-completa">🟢 Completa #{loaded_id}</span>'
+        badge_html = (f'<span class="vm-badge-bozza">🟡 Bozza #{loaded_id}</span>'
+                      if stato_v == STATO_BOZZA
+                      else f'<span class="vm-badge-completa">🟢 Completa #{loaded_id}</span>')
     else:
         badge_html = '<span class="vm-badge-new">✏️ Nuova visita</span>'
 
@@ -1259,47 +1265,25 @@ def ui_visita_visiva_v2(conn):
     <div class="vm-patient-header">
         <div class="vm-patient-name">{cognome_paz.title()} {nome_paz.title()}</div>
         <div class="vm-patient-meta">
-            {'Nato/a il ' + dn_paz_fmt if dn_paz_fmt else ''}
-            {'&nbsp;·&nbsp;' + str(eta_paz) + ' anni' if eta_paz else ''}
+            {"Nato/a il " + dn_paz_fmt if dn_paz_fmt else ""}
+            {"&nbsp;·&nbsp;" + str(eta_paz) + " anni" if eta_paz else ""}
         </div>
-        <div style="margin-top:10px;">{badge_html}</div>
+        <div style="margin-top:12px;">{badge_html}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── MODIFICA ANAGRAFICA ───────────────────────────────────
-    with st.expander("✏️ Modifica anagrafica", expanded=False):
-        ea1, ea2, ea3 = st.columns(3)
-        nome_e    = ea1.text_input("Nome",    value=nome_paz,    key=f"vm_en_{paziente_id}")
-        cognome_e = ea2.text_input("Cognome", value=cognome_paz, key=f"vm_ec_{paziente_id}")
-        with ea3:
-            dn_e = _render_dmy_input("Data di nascita", f"vm_edn_{paziente_id}", _parse_date_safe(dn_paz))
-        ea4, ea5 = st.columns(2)
-        tel_e  = ea4.text_input("Telefono", key=f"vm_etel_{paziente_id}")
-        mail_e = ea5.text_input("Email",    key=f"vm_eml_{paziente_id}")
-        note_e = st.text_area("Note", key=f"vm_enote_{paziente_id}", height=60)
-        if st.button("Salva modifiche", key=f"vm_esave_{paziente_id}"):
-            try:
-                update_paziente(conn, paziente_id, nome_e, cognome_e,
-                                dn_e.isoformat() if dn_e else "",
-                                telefono=tel_e, email=mail_e, note=note_e)
-                st.session_state["vision_last_pid"] = int(paziente_id)
-                st.success("Anagrafica aggiornata.")
-                st.rerun()
-            except (ValueError, Exception) as ex:
-                st.error(str(ex))
-
-    # ── AZIONI VISITA ─────────────────────────────────────────
+    # ── AZIONI VISITA (sotto l'header, chiare) ───────────────
     bozza_row = _find_bozza(conn, paziente_id)
 
-    tc1, tc2, tc3, tc4 = st.columns([1, 2, 2, 1])
-    with tc1:
+    ac1, ac2, ac3, ac4 = st.columns([1, 2, 2, 1])
+    with ac1:
         if st.button("🆕 Nuova visita", key="vm_btn_new"):
             if st.session_state.get("vm_form_dirty") and st.session_state.get("vm_autosave_enabled"):
                 maybe_autosave(conn, paziente_id, reason="prima di nuova visita")
             clear_visit_form()
             st.rerun()
 
-    with tc2:
+    with ac2:
         if (bozza_row is not None and
                 (_row_get(bozza_row,"id",0) != loaded_id or not st.session_state.get("vm_in_dilatazione"))):
             bozza_id   = _row_get(bozza_row, "id", 0)
@@ -1315,7 +1299,7 @@ def ui_visita_visiva_v2(conn):
                 except Exception as e:
                     st.error(f"Errore riapertura: {e}")
 
-    with tc3:
+    with ac3:
         if st.button("📂 Carica ultima visita completa", key="vm_btn_last"):
             for v in list_visite(conn, paziente_id):
                 raw = _row_get(v, "dati_json", 2)
@@ -1330,9 +1314,31 @@ def ui_visita_visiva_v2(conn):
             else:
                 st.info("Nessuna visita completa trovata.")
 
-    with tc4:
+    with ac4:
         st.checkbox("Autosave", key="vm_autosave_enabled",
                     help="Salva automaticamente prima di cambiare paziente")
+
+    # ── MODIFICA ANAGRAFICA (nascosta, in fondo) ──────────────
+    with st.expander("✏️ Modifica dati anagrafici", expanded=False):
+        ea1, ea2, ea3 = st.columns(3)
+        nome_e    = ea1.text_input("Nome",    value=nome_paz,    key=f"vm_en_{paziente_id}")
+        cognome_e = ea2.text_input("Cognome", value=cognome_paz, key=f"vm_ec_{paziente_id}")
+        with ea3:
+            dn_e = _render_dmy_input("Data di nascita", f"vm_edn_{paziente_id}", _parse_date_safe(dn_paz))
+        ea4, ea5 = st.columns(2)
+        tel_e  = ea4.text_input("Telefono", key=f"vm_etel_{paziente_id}")
+        mail_e = ea5.text_input("Email",    key=f"vm_eml_{paziente_id}")
+        note_e = st.text_area("Note anagrafiche", key=f"vm_enote_{paziente_id}", height=60)
+        if st.button("Salva modifiche anagrafiche", key=f"vm_esave_{paziente_id}"):
+            try:
+                update_paziente(conn, paziente_id, nome_e, cognome_e,
+                                dn_e.isoformat() if dn_e else "",
+                                telefono=tel_e, email=mail_e, note=note_e)
+                st.session_state["vision_last_pid"] = int(paziente_id)
+                st.success("Anagrafica aggiornata.")
+                st.rerun()
+            except (ValueError, Exception) as ex:
+                st.error(str(ex))
 
     # Alert dilatazione attiva
     if st.session_state.get("vm_in_dilatazione") and loaded_id:
