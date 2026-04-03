@@ -9,98 +9,238 @@ import streamlit as st
 from vision_manager.db import get_conn
 
 
-def _inject_dashboard_css():
+
+def _css():
+    """
+    CSS unico e definitivo — usa :root e * per battere qualsiasi override di Streamlit.
+    -webkit-text-fill-color è la chiave su Chrome/Windows.
+    """
     st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
 
-    html, body,
-    [data-testid="stAppViewContainer"],
-    [data-testid="stMain"],
-    .main, .block-container {
-        background: #f0f4f8 !important;
-        font-family: 'DM Sans', sans-serif !important;
-    }
-    [data-testid="stHeader"] { background: transparent !important; }
+/* 1. SFONDO GLOBALE */
+html, body { background: #f0f4f8 !important; }
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+.main, .block-container, section.main {
+    background: #f0f4f8 !important;
+    font-family: 'DM Sans', sans-serif !important;
+}
+[data-testid="stHeader"] { background: transparent !important; }
 
-    /* Tutti i testi area principale */
-    [data-testid="stMain"] p,
-    [data-testid="stMain"] span,
-    [data-testid="stMain"] label,
-    [data-testid="stMain"] div,
-    [data-testid="stMain"] h1,
-    [data-testid="stMain"] h2,
-    [data-testid="stMain"] h3,
-    [data-testid="stMain"] h4,
-    [data-testid="stMain"] small {
-        color: #1e293b !important;
-        -webkit-text-fill-color: #1e293b !important;
-    }
+/* 2. TESTO — regola base su tutto il documento */
+* {
+    font-family: 'DM Sans', sans-serif !important;
+    box-sizing: border-box;
+}
 
-    /* Input, textarea */
-    input, textarea,
-    [data-testid="stTextInput"] input,
-    [data-baseweb="input"] input,
-    [data-baseweb="textarea"] textarea {
-        background: #ffffff !important;
-        color: #1e293b !important;
-        -webkit-text-fill-color: #1e293b !important;
-        border: 1.5px solid #cbd5e1 !important;
-        border-radius: 8px !important;
-    }
+/* 3. TUTTI I TESTI VISIBILI — selettori molto specifici */
+p, span, div, label, li, td, th, h1, h2, h3, h4, h5, h6, small, strong, em, a {
+    color: #1e293b;
+    -webkit-text-fill-color: #1e293b;
+}
 
-    /* Selectbox */
-    [data-baseweb="select"] > div { background:#ffffff !important; border:1.5px solid #cbd5e1 !important; border-radius:8px !important; }
-    [data-baseweb="select"] span,
-    [data-baseweb="select"] div,
-    [data-baseweb="select"] p { color:#1e293b !important; -webkit-text-fill-color:#1e293b !important; }
-    [data-baseweb="popover"] *, [role="listbox"] * { background:#ffffff !important; color:#1e293b !important; -webkit-text-fill-color:#1e293b !important; }
-    [role="option"]:hover { background:#eff6ff !important; }
+/* 4. INPUT / TEXTAREA / NUMBER INPUT */
+input, textarea, select {
+    background: #ffffff !important;
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    font-size: 0.93rem !important;
+}
+input:focus, textarea:focus {
+    border-color: #2563a8 !important;
+    box-shadow: 0 0 0 3px rgba(37,99,168,0.12) !important;
+    outline: none !important;
+}
+input::placeholder, textarea::placeholder {
+    color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+}
 
-    /* Labels */
-    .stSelectbox label, [data-testid="stWidgetLabel"] {
-        color: #475569 !important; -webkit-text-fill-color: #475569 !important;
-        font-size: 0.85rem !important; font-weight: 500 !important;
-    }
+/* 5. SELECTBOX STREAMLIT */
+[data-baseweb="select"] > div,
+[data-baseweb="select"] > div > div {
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+}
+[data-baseweb="select"] *,
+[data-baseweb="popover"] *,
+[role="listbox"],
+[role="listbox"] *,
+[role="option"] {
+    background: #ffffff !important;
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
+}
+[role="option"]:hover,
+[role="option"][aria-selected="true"] {
+    background: #eff6ff !important;
+}
 
-    /* Caption */
-    .stCaption, small, [data-testid="stCaptionContainer"] p {
-        color: #64748b !important; -webkit-text-fill-color: #64748b !important;
-    }
+/* 6. METRICHE — selettori specifici v1.x e v2.x */
+[data-testid="stMetric"] {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    padding: 16px 18px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+}
+[data-testid="stMetric"] * {
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
+}
+[data-testid="stMetricLabel"],
+[data-testid="stMetricLabel"] * {
+    color: #64748b !important;
+    -webkit-text-fill-color: #64748b !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+}
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] * {
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a !important;
+    font-size: 1.4rem !important;
+    font-weight: 700 !important;
+}
+[data-testid="stMetricDelta"] * {
+    font-size: 0.8rem !important;
+}
 
-    /* Metriche */
-    [data-testid="stMetric"] { background:#ffffff !important; border:1px solid #e2e8f0 !important; border-radius:12px !important; padding:14px 16px !important; }
-    [data-testid="stMetricLabel"] div, [data-testid="stMetricLabel"] p { color:#64748b !important; -webkit-text-fill-color:#64748b !important; font-size:0.8rem !important; }
-    [data-testid="stMetricValue"] div, [data-testid="stMetricValue"] p { color:#1e293b !important; -webkit-text-fill-color:#1e293b !important; font-weight:600 !important; }
+/* 7. LABELS WIDGET */
+[data-testid="stWidgetLabel"],
+[data-testid="stWidgetLabel"] * {
+    color: #475569 !important;
+    -webkit-text-fill-color: #475569 !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+}
 
-    /* Expander */
-    [data-testid="stExpander"] { background:#ffffff !important; border:1px solid #e2e8f0 !important; border-radius:12px !important; }
-    [data-testid="stExpander"] summary span, [data-testid="stExpander"] summary p { color:#334155 !important; -webkit-text-fill-color:#334155 !important; }
+/* 8. CAPTION */
+[data-testid="stCaptionContainer"],
+[data-testid="stCaptionContainer"] * {
+    color: #64748b !important;
+    -webkit-text-fill-color: #64748b !important;
+    font-size: 0.82rem !important;
+}
 
-    hr { border-color:#e2e8f0 !important; margin:20px 0 !important; }
+/* 9. EXPANDER */
+[data-testid="stExpander"] {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+}
+[data-testid="stExpander"] summary *,
+[data-testid="stExpander"] details summary * {
+    color: #334155 !important;
+    -webkit-text-fill-color: #334155 !important;
+}
 
-    /* Sidebar */
-    [data-testid="stSidebar"] { background:#0f1923 !important; border-right:1px solid #1e2d3d; }
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] label { color:#c8d6e5 !important; -webkit-text-fill-color:#c8d6e5 !important; }
-    [data-testid="stSidebar"] h2 { color:#ffffff !important; -webkit-text-fill-color:#ffffff !important; font-size:1rem !important; }
+/* 10. BOTTONI */
+.stButton > button {
+    background: #f1f5f9 !important;
+    color: #334155 !important;
+    -webkit-text-fill-color: #334155 !important;
+    border: 1.5px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+    transition: all 0.15s;
+}
+.stButton > button:hover { background: #e2e8f0 !important; }
+.stButton > button[kind="primary"] {
+    background: #2563a8 !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border: none !important;
+}
+.stButton > button[kind="primary"]:hover { background: #1d4ed8 !important; }
 
-    /* Componenti custom */
-    .vm-patient-header { background:linear-gradient(135deg,#1e3a5f 0%,#2563a8 100%); border-radius:16px; padding:20px 28px; margin-bottom:20px; }
-    .vm-patient-name   { font-size:1.5rem; font-weight:600; color:#ffffff !important; -webkit-text-fill-color:#ffffff !important; }
-    .vm-patient-meta   { font-size:0.85rem; color:#a8c4e0 !important; -webkit-text-fill-color:#a8c4e0 !important; margin-top:4px; font-family:'DM Mono',monospace; }
-    .vm-section-title  { font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#64748b !important; -webkit-text-fill-color:#64748b !important; margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #e2e8f0; }
-    .vm-card           { background:#ffffff; border-radius:14px; border:1px solid #e2e8f0; padding:18px 22px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
-    </style>
-    """, unsafe_allow_html=True)
+/* 11. ALERT / INFO / WARNING */
+[data-testid="stAlert"] * {
+    -webkit-text-fill-color: inherit !important;
+}
+
+/* 12. DIVIDER */
+hr { border-color: #e2e8f0 !important; margin: 20px 0 !important; }
+
+/* 13. SIDEBAR */
+[data-testid="stSidebar"] {
+    background: #0f1923 !important;
+    border-right: 1px solid #1e2d3d;
+}
+[data-testid="stSidebar"] * {
+    color: #c8d6e5 !important;
+    -webkit-text-fill-color: #c8d6e5 !important;
+    font-family: 'DM Sans', sans-serif !important;
+}
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    font-size: 1rem !important;
+}
+[data-testid="stSidebar"] input {
+    background: #1a2a3a !important;
+    border: 1px solid #2a3d52 !important;
+    color: #e2eaf2 !important;
+    -webkit-text-fill-color: #e2eaf2 !important;
+    border-radius: 8px !important;
+}
+
+/* 14. CLASSI CUSTOM */
+.vm-patient-header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%);
+    border-radius: 16px;
+    padding: 20px 28px;
+    margin-bottom: 20px;
+}
+.vm-patient-header * {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+.vm-patient-name { font-size: 1.5rem !important; font-weight: 600 !important; }
+.vm-patient-meta {
+    font-size: 0.85rem !important;
+    color: #a8c4e0 !important;
+    -webkit-text-fill-color: #a8c4e0 !important;
+    margin-top: 4px;
+    font-family: 'DM Mono', monospace !important;
+}
+.vm-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: #64748b !important;
+    -webkit-text-fill-color: #64748b !important;
+    margin: 20px 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e2e8f0;
+}
+.vm-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    padding: 18px 22px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.vm-card * {
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 def calcola_eta(data_nascita):
     if pd.isna(data_nascita) or not data_nascita:
         return None
-
     if isinstance(data_nascita, str):
         try:
             data_nascita = pd.to_datetime(data_nascita).date()
@@ -111,10 +251,8 @@ def calcola_eta(data_nascita):
             data_nascita = data_nascita.date()
         except Exception:
             pass
-
     if not isinstance(data_nascita, date):
         return None
-
     oggi = date.today()
     return oggi.year - data_nascita.year - (
         (oggi.month, oggi.day) < (data_nascita.month, data_nascita.day)
@@ -139,6 +277,7 @@ def _ph(conn) -> str:
 
 
 def _dict_row(cur, row):
+    from collections.abc import Mapping
     if isinstance(row, Mapping):
         return dict(row)
     cols = [d[0] for d in cur.description]
@@ -146,21 +285,33 @@ def _dict_row(cur, row):
 
 
 def _list_pazienti_dashboard(conn):
+    """Pazienti ATTIVI, deduplicati."""
     try:
         conn.rollback()
     except Exception:
         pass
-
     cur = conn.cursor()
     try:
-        cur.execute(
-            """
-            SELECT id, cognome, nome, data_nascita
-            FROM pazienti
-            WHERE COALESCE(stato_paziente, 'ATTIVO') = 'ATTIVO'
-            ORDER BY cognome, nome
-            """
-        )
+        if _is_pg(conn):
+            cur.execute("""
+                SELECT DISTINCT ON (LOWER(TRIM(cognome)), LOWER(TRIM(nome)), COALESCE(TRIM(data_nascita),''))
+                    id, cognome, nome, data_nascita
+                FROM pazienti
+                WHERE COALESCE(stato_paziente,'ATTIVO') = 'ATTIVO'
+                ORDER BY LOWER(TRIM(cognome)), LOWER(TRIM(nome)), COALESCE(TRIM(data_nascita),''), id DESC
+            """)
+        else:
+            cur.execute("""
+                SELECT ID AS id, Cognome AS cognome, Nome AS nome, Data_Nascita AS data_nascita
+                FROM Pazienti
+                WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO'
+                  AND ID IN (
+                      SELECT MAX(ID) FROM Pazienti
+                      WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO'
+                      GROUP BY LOWER(TRIM(Cognome)), LOWER(TRIM(Nome)), COALESCE(TRIM(Data_Nascita),'')
+                  )
+                ORDER BY LOWER(TRIM(Cognome)), LOWER(TRIM(Nome))
+            """)
         rows = cur.fetchall()
         return [_dict_row(cur, r) for r in rows]
     finally:
@@ -174,35 +325,30 @@ def _list_visite_dashboard(conn, paziente_id: int):
     cur = conn.cursor()
     ph = _ph(conn)
     try:
-        try:
-            cur.execute(
-                f"""
-                SELECT id, data_visita, dati_json, is_deleted, deleted_at
-                FROM visite_visive
-                WHERE paziente_id={ph} AND COALESCE(is_deleted,0)=0
-                ORDER BY data_visita ASC, id ASC
-                """,
-                (paziente_id,),
-            )
-        except Exception:
-            if _is_pg(conn):
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-
-            cur.execute(
-                f"""
-                SELECT id, data_visita, dati_json
-                FROM visite_visive
-                WHERE paziente_id={ph}
-                ORDER BY data_visita ASC, id ASC
-                """,
-                (paziente_id,),
-            )
-
+        cur.execute(
+            f"""
+            SELECT id, data_visita, dati_json, is_deleted
+            FROM visite_visive
+            WHERE paziente_id={ph} AND COALESCE(is_deleted,0)=0
+            ORDER BY data_visita ASC, id ASC
+            """,
+            (paziente_id,),
+        )
         rows = cur.fetchall()
         return [_dict_row(cur, r) for r in rows]
+    except Exception:
+        try:
+            if _is_pg(conn):
+                conn.rollback()
+        except Exception:
+            pass
+        cur2 = conn.cursor()
+        cur2.execute(
+            f"SELECT id, data_visita, dati_json FROM visite_visive WHERE paziente_id={ph} ORDER BY data_visita ASC, id ASC",
+            (paziente_id,),
+        )
+        rows = cur2.fetchall()
+        return [_dict_row(cur2, r) for r in rows]
     finally:
         try:
             cur.close()
@@ -217,85 +363,76 @@ def _safe_json(raw):
         return None
 
 
-def _make_line_chart(df, xcol, ycols, title, ylabel, threshold=None):
-    fig, ax = plt.subplots(figsize=(8, 3.8))
-    for col in ycols:
-        if col in df.columns:
-            ax.plot(df[xcol], df[col], marker="o", label=col.replace("_", " ").upper())
-    if threshold is not None:
-        ax.axhline(threshold, linestyle="--", linewidth=1)
-    ax.set_title(title)
-    ax.set_xlabel("Data visita")
-    ax.set_ylabel(ylabel)
-    ax.legend()
-    ax.grid(True, alpha=0.25)
-    fig.autofmt_xdate()
-    return fig
-
-
-
 def _fmt_val(v, fallback="-"):
-    if v is None or (isinstance(v, float) and __import__("math").isnan(v)):
+    if v is None:
         return fallback
+    try:
+        import math
+        if isinstance(v, float) and math.isnan(v):
+            return fallback
+    except Exception:
+        pass
     s = str(v).strip()
     return s if s else fallback
 
 
+def _chart(df, ycols, ylabel, threshold=None):
+    """Grafico matplotlib con tema chiaro e date pulite."""
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+
+    # Filtra solo righe con almeno un valore non-NaN tra le colonne richieste
+    df_plot = df[df[ycols].notna().any(axis=1)].copy()
+    if df_plot.empty:
+        return None
+
+    # Filtra date anomale: solo tra 2000 e oggi+1anno
+    import datetime
+    today = datetime.date.today()
+    cutoff_min = pd.Timestamp("2000-01-01")
+    cutoff_max = pd.Timestamp(today.replace(year=today.year + 1))
+    df_plot = df_plot[(df_plot["data"] >= cutoff_min) & (df_plot["data"] <= cutoff_max)]
+    if df_plot.empty:
+        return None
+
+    colors = ["#2563a8", "#0ea5e9", "#7c3aed", "#0d9488"]
+    fig, ax = plt.subplots(figsize=(9, 3.2))
+    fig.patch.set_facecolor("#ffffff")
+    ax.set_facecolor("#ffffff")
+
+    for i, col in enumerate(ycols):
+        mask = df_plot[col].notna()
+        if mask.sum() == 0:
+            continue
+        ax.plot(
+            df_plot.loc[mask, "data"],
+            df_plot.loc[mask, col],
+            marker="o", markersize=5,
+            label=col.replace("_", " ").upper(),
+            color=colors[i % len(colors)],
+            linewidth=2,
+        )
+
+    if threshold is not None:
+        ax.axhline(threshold, linestyle="--", linewidth=1,
+                   color="#ef4444", alpha=0.7, label=f"Soglia {threshold}")
+
+    ax.set_ylabel(ylabel, color="#475569", fontsize=9)
+    ax.tick_params(colors="#64748b", labelsize=8)
+    ax.legend(fontsize=8, framealpha=0)
+    ax.grid(True, alpha=0.12, color="#94a3b8")
+    for spine in ax.spines.values():
+        spine.set_color("#e2e8f0")
+
+    # Formato date asse X leggibile
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%Y"))
+    fig.autofmt_xdate(rotation=30, ha="right")
+    fig.tight_layout()
+    return fig
+
+
 def ui_dashboard_paziente():
-    # ── CSS stesso tema di ui_visita_visiva_v2 ────────────────
-    st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
-
-    html, body, [data-testid="stAppViewContainer"] {
-        background: #f0f4f8 !important;
-        font-family: 'DM Sans', sans-serif !important;
-    }
-    [data-testid="stHeader"] { background: transparent !important; }
-    [data-testid="stSidebar"] {
-        background: #0f1923 !important;
-        border-right: 1px solid #1e2d3d;
-    }
-    [data-testid="stSidebar"] * { color: #c8d6e5 !important; }
-    [data-testid="stSidebar"] h2 { color: #ffffff !important; font-size:1rem !important; }
-
-    .vm-patient-header {
-        background: linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%);
-        border-radius: 16px;
-        padding: 20px 28px;
-        margin-bottom: 20px;
-    }
-    .vm-patient-name { font-size:1.5rem; font-weight:600; color:#ffffff !important; }
-    .vm-patient-meta { font-size:0.85rem; color:#a8c4e0 !important; margin-top:4px; font-family:'DM Mono',monospace; }
-    .vm-section-title {
-        font-size:0.72rem; font-weight:600; letter-spacing:0.08em;
-        text-transform:uppercase; color:#64748b !important;
-        margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #e2e8f0;
-    }
-    .vm-card {
-        background:#ffffff; border-radius:14px; border:1px solid #e2e8f0;
-        padding:18px 22px; margin-bottom:14px;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-    }
-    div[data-testid="stMetric"] {
-        background:#ffffff !important; border:1px solid #e2e8f0 !important;
-        border-radius:12px !important; padding:14px 16px !important;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.04) !important;
-    }
-    [data-testid="stMetricLabel"] { color:#64748b !important; font-size:0.8rem !important; }
-    [data-testid="stMetricValue"] { color:#1e293b !important; font-weight:600 !important; }
-    hr { border-color:#e2e8f0 !important; margin:20px 0 !important; }
-
-    div[data-baseweb="select"] > div {
-        background:#ffffff !important; color:#1e293b !important;
-        border:1.5px solid #e2e8f0 !important; border-radius:10px !important;
-    }
-    div[data-baseweb="select"] span { color:#1e293b !important; }
-    div[role="listbox"] { background:#ffffff !important; color:#1e293b !important; }
-    div[role="option"] { background:#ffffff !important; color:#1e293b !important; }
-    div[role="option"]:hover { background:#eef4fb !important; }
-    </style>
-    """, unsafe_allow_html=True)
+    _css()
 
     conn = get_conn()
 
@@ -309,11 +446,13 @@ def ui_dashboard_paziente():
     pazienti_df["nome"]    = pazienti_df["nome"].fillna("").astype(str).str.title()
     pazienti_df["label"]   = (pazienti_df["cognome"] + " " + pazienti_df["nome"]).str.strip()
 
-    # ── Titolo ────────────────────────────────────────────────
     st.markdown("## 📊 Dashboard Paziente")
 
-    # ── Selettore paziente ────────────────────────────────────
-    paziente_label = st.selectbox("Seleziona paziente", pazienti_df["label"].tolist())
+    col_sel, _ = st.columns([2, 1])
+    with col_sel:
+        paziente_label = st.selectbox("Seleziona paziente", pazienti_df["label"].tolist(),
+                                      label_visibility="collapsed")
+
     paziente = pazienti_df[pazienti_df["label"] == paziente_label].iloc[0]
     eta = calcola_eta(paziente["data_nascita"])
 
@@ -324,20 +463,20 @@ def ui_dashboard_paziente():
         except Exception:
             dn_fmt = str(paziente["data_nascita"])
 
-    # ── Header paziente ───────────────────────────────────────
+    # Header paziente
     st.markdown(f"""
     <div class="vm-patient-header">
-        <div class="vm-patient-name">👤 {paziente['label']}</div>
+        <div class="vm-patient-name">{paziente['label']}</div>
         <div class="vm-patient-meta">
-            {'Nato/a il ' + dn_fmt if dn_fmt else ''}
-            {'&nbsp;·&nbsp;' + str(eta) + ' anni' if eta is not None else ''}
+            {"Nato/a il " + dn_fmt if dn_fmt else ""}
+            {"&nbsp;&nbsp;·&nbsp;&nbsp;" + str(eta) + " anni" if eta is not None else ""}
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     visite = _list_visite_dashboard(conn, int(paziente["id"]))
     if not visite:
-        st.info("Nessuna visita registrata per questo paziente.")
+        st.info("Nessuna visita registrata.")
         return
 
     records = []
@@ -369,53 +508,29 @@ def ui_dashboard_paziente():
     df = df.sort_values("data").reset_index(drop=True)
     ultima = df.iloc[-1]
 
-    # ── Ultimi valori ─────────────────────────────────────────
-    st.markdown('<div class="vm-section-title">Ultimi valori</div>', unsafe_allow_html=True)
+    # ── Metriche ──────────────────────────────────────────────
+    st.markdown('<div class="vm-section-title">Ultimi valori misurati</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("IOP OD",         "-" if pd.isna(ultima["iop_od"])  else f'{ultima["iop_od"]:.1f} mmHg')
-    c2.metric("IOP OS",         "-" if pd.isna(ultima["iop_os"])  else f'{ultima["iop_os"]:.1f} mmHg')
-    c3.metric("Pachimetria OD", "-" if pd.isna(ultima["pach_od"]) else f'{ultima["pach_od"]:.0f} µm')
-    c4.metric("Pachimetria OS", "-" if pd.isna(ultima["pach_os"]) else f'{ultima["pach_os"]:.0f} µm')
+    c1.metric("IOP OD",         _fmt_val(ultima["iop_od"],  "-") if pd.isna(ultima["iop_od"])  else f'{ultima["iop_od"]:.1f} mmHg')
+    c2.metric("IOP OS",         _fmt_val(ultima["iop_os"],  "-") if pd.isna(ultima["iop_os"])  else f'{ultima["iop_os"]:.1f} mmHg')
+    c3.metric("Pachimetria OD", _fmt_val(ultima["pach_od"], "-") if pd.isna(ultima["pach_od"]) else f'{ultima["pach_od"]:.0f} µm')
+    c4.metric("Pachimetria OS", _fmt_val(ultima["pach_os"], "-") if pd.isna(ultima["pach_os"]) else f'{ultima["pach_os"]:.0f} µm')
 
     st.divider()
 
     # ── Grafici ───────────────────────────────────────────────
-    def _chart(df, ycols, title, ylabel, threshold=None):
-        fig, ax = plt.subplots(figsize=(8, 3))
-        fig.patch.set_facecolor("#f8fafc")
-        ax.set_facecolor("#f8fafc")
-        colors = ["#2563a8", "#0ea5e9", "#7c3aed", "#0d9488"]
-        for i, col in enumerate(ycols):
-            if col in df.columns:
-                ax.plot(df["data"], df[col], marker="o", label=col.upper().replace("_"," "),
-                        color=colors[i % len(colors)], linewidth=2)
-        if threshold is not None:
-            ax.axhline(threshold, linestyle="--", linewidth=1, color="#ef4444", alpha=0.6,
-                       label=f"Soglia {threshold}")
-        ax.set_ylabel(ylabel); ax.legend(fontsize=9)
-        ax.grid(True, alpha=0.15, color="#cbd5e1")
-        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_color("#e2e8f0"); ax.spines["bottom"].set_color("#e2e8f0")
-        fig.autofmt_xdate()
-        return fig
-
-    st.markdown('<div class="vm-section-title">Andamento IOP</div>', unsafe_allow_html=True)
-    if df[["iop_od","iop_os"]].notna().any().any():
-        st.pyplot(_chart(df, ["iop_od","iop_os"], "IOP", "mmHg", threshold=21), clear_figure=True)
-    else:
-        st.caption("Nessun dato IOP disponibile.")
-
-    st.markdown('<div class="vm-section-title">Andamento Pachimetria</div>', unsafe_allow_html=True)
-    if df[["pach_od","pach_os"]].notna().any().any():
-        st.pyplot(_chart(df, ["pach_od","pach_os"], "Pachimetria", "µm"), clear_figure=True)
-    else:
-        st.caption("Nessun dato pachimetria disponibile.")
-
-    st.markdown('<div class="vm-section-title">Refrazione finale (SF)</div>', unsafe_allow_html=True)
-    if df[["sf_od","sf_os"]].notna().any().any():
-        st.pyplot(_chart(df, ["sf_od","sf_os"], "Refrazione", "Diottrie"), clear_figure=True)
-    else:
-        st.caption("Nessun dato refrazione disponibile.")
+    for title, cols, ylabel, threshold in [
+        ("Andamento IOP",         ["iop_od",  "iop_os"],  "mmHg",     21),
+        ("Andamento Pachimetria", ["pach_od", "pach_os"], "µm",       None),
+        ("Refrazione finale SF",  ["sf_od",   "sf_os"],   "Diottrie", None),
+    ]:
+        if df[cols].notna().any().any():
+            st.markdown(f'<div class="vm-section-title">{title}</div>', unsafe_allow_html=True)
+            fig = _chart(df, cols, ylabel, threshold)
+            if fig:
+                st.pyplot(fig, clear_figure=True)
+            else:
+                st.caption("Dati non sufficienti per il grafico.")
 
     st.divider()
 
@@ -425,52 +540,56 @@ def ui_dashboard_paziente():
         cl, cr = st.columns(2)
 
         with cl:
-            st.markdown('<div class="vm-card">', unsafe_allow_html=True)
             st.markdown("**🩺 Esame obiettivo**")
-            st.write("**Anamnesi:**", _fmt_val(latest_payload.get("anamnesi")))
+            anamnesi = latest_payload.get("anamnesi","")
+            if anamnesi:
+                st.write("**Anamnesi:**", anamnesi)
             eo = latest_payload.get("esame_obiettivo", {}) or {}
-            for label, key in [
-                ("Congiuntiva", "congiuntiva"), ("Cornea", "cornea"),
-                ("Camera anteriore", "camera_anteriore"), ("Cristallino", "cristallino"),
-                ("Vitreo", "vitreo"), ("Fondo oculare", "fondo_oculare"),
-            ]:
+            campi = [
+                ("Congiuntiva",      "congiuntiva"),
+                ("Cornea",           "cornea"),
+                ("Camera anteriore", "camera_anteriore"),
+                ("Cristallino",      "cristallino"),
+                ("Vitreo",           "vitreo"),
+                ("Fondo oculare",    "fondo_oculare"),
+            ]
+            shown = False
+            for label, key in campi:
                 v = eo.get(key)
                 if v not in (None, ""):
                     st.write(f"**{label}:** {v}")
-            st.markdown('</div>', unsafe_allow_html=True)
+                    shown = True
+            if not shown:
+                st.caption("Nessun dato esame obiettivo.")
 
-        with cr:
-            st.markdown('<div class="vm-card">', unsafe_allow_html=True)
-            st.markdown("**👓 Correzione finale**")
-            cf = latest_payload.get("correzione_finale", {}) or {}
-            od  = cf.get("od", {}) or {}
-            os_ = cf.get("os", {}) or {}
-            if od or os_:
-                sf_od  = _to_float(od.get("sf"));  cyl_od = _to_float(od.get("cyl"));  ax_od = od.get("ax",0)
-                sf_os  = _to_float(os_.get("sf")); cyl_os = _to_float(os_.get("cyl")); ax_os = os_.get("ax",0)
-                if sf_od is not None:
-                    st.write(f"**OD:** {sf_od:+.2f} ({cyl_od:+.2f} × {ax_od}°)")
-                if sf_os is not None:
-                    st.write(f"**OS:** {sf_os:+.2f} ({cyl_os:+.2f} × {ax_os}°)")
-                add_v = _to_float(cf.get("add_vicino"))
-                add_i = _to_float(cf.get("add_intermedio"))
-                if add_v and cf.get("enable_add_vicino"):
-                    st.write(f"**ADD vicino:** +{add_v:.2f}")
-                if add_i and cf.get("enable_add_intermedio"):
-                    st.write(f"**ADD intermedio:** +{add_i:.2f}")
-            else:
-                st.write("-")
             acuita = latest_payload.get("acuita", {}) or {}
             nat = acuita.get("naturale", {}) or {}
             cor = acuita.get("corretta", {}) or {}
-            st.markdown("**Acuità visiva**")
-            st.write(f"AVN: OD {_fmt_val(nat.get('od'))} | OS {_fmt_val(nat.get('os'))}")
-            st.write(f"AVC: OD {_fmt_val(cor.get('od'))} | OS {_fmt_val(cor.get('os'))}")
-            st.markdown('</div>', unsafe_allow_html=True)
+            if any(v for v in [nat.get("od"), nat.get("os"), cor.get("od"), cor.get("os")]):
+                st.markdown("**Acuità visiva**")
+                st.write(f"Naturale — OD: {_fmt_val(nat.get('od'))} | OS: {_fmt_val(nat.get('os'))}")
+                st.write(f"Corretta — OD: {_fmt_val(cor.get('od'))} | OS: {_fmt_val(cor.get('os'))}")
+
+        with cr:
+            st.markdown("**👓 Correzione finale**")
+            cf = latest_payload.get("correzione_finale", {}) or {}
+            od  = cf.get("od",  {}) or {}
+            os_ = cf.get("os",  {}) or {}
+            sf_od  = _to_float(od.get("sf"));  cyl_od = _to_float(od.get("cyl")); ax_od  = od.get("ax", 0)
+            sf_os  = _to_float(os_.get("sf")); cyl_os = _to_float(os_.get("cyl")); ax_os = os_.get("ax", 0)
+            if sf_od is not None:
+                st.write(f"**OD:** {sf_od:+.2f} ({cyl_od:+.2f} × {ax_od}°)")
+            if sf_os is not None:
+                st.write(f"**OS:** {sf_os:+.2f} ({cyl_os:+.2f} × {ax_os}°)")
+            add_v = _to_float(cf.get("add_vicino"))
+            add_i = _to_float(cf.get("add_intermedio"))
+            if add_v and cf.get("enable_add_vicino"):
+                st.write(f"**ADD vicino:** +{add_v:.2f} D")
+            if add_i and cf.get("enable_add_intermedio"):
+                st.write(f"**ADD intermedio:** +{add_i:.2f} D")
 
     st.divider()
 
-    # ── Storico ───────────────────────────────────────────────
     with st.expander("📚 Storico completo visite"):
         show_df = df.copy()
         if "data" in show_df.columns:
