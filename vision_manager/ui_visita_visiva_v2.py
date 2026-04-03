@@ -1183,7 +1183,8 @@ def _sidebar_lista_pazienti(conn, paziente_id_corrente):
     st.sidebar.divider()
     st.sidebar.caption("● = bozza aperta (in dilatazione)")
     st.sidebar.divider()
-    with st.sidebar.expander("➕ Nuovo paziente", expanded=False):
+    mostra_np = st.sidebar.checkbox("Nuovo paziente", key="vm_sb_nuovo_paz", value=False)
+    if mostra_np:
         _render_nuovo_paziente_form(conn)
 
     return pid_map.get(chosen_label, paziente_id_corrente)
@@ -1226,10 +1227,8 @@ def ui_visita_visiva_v2(conn):
 
     if gruppi_dup:
         n_dup = sum(len(g) - 1 for g in gruppi_dup)
-        with st.expander(
-            f"{len(gruppi_dup)} gruppi duplicati ({n_dup} record in eccesso) — clicca per pulire",
-            expanded=True
-        ):
+        st.markdown(f'<div style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 16px;margin-bottom:8px;font-weight:600;color:#78350f;">{len(gruppi_dup)} gruppi duplicati ({n_dup} record in eccesso)</div>', unsafe_allow_html=True)
+        if True:
             st.caption("Viene conservato il paziente con più visite. L'archiviazione non cancella i dati.")
             for idx_g, gruppo in enumerate(gruppi_dup):
                 gruppo_sorted = sorted(gruppo, key=lambda r: (-(r.get("n_visite") or 0), -r["id"]))
@@ -1270,7 +1269,9 @@ def ui_visita_visiva_v2(conn):
         </div>
         """, unsafe_allow_html=True)
         st.divider()
-        with st.expander("Registra nuovo paziente", expanded=False):
+        mostra_rnp = st.checkbox("Registra nuovo paziente", key="vm_show_rnp", value=False)
+    if mostra_rnp:
+        if True:
             _render_nuovo_paziente_form(conn)
         return
 
@@ -1386,8 +1387,10 @@ def ui_visita_visiva_v2(conn):
         st.checkbox("Autosave", key="vm_autosave_enabled",
                     help="Salva automaticamente prima di cambiare paziente")
 
-    # ── MODIFICA ANAGRAFICA (nascosta, in fondo) ──────────────
-    with st.expander("Modifica dati anagrafici", expanded=False):
+    # ── MODIFICA ANAGRAFICA — checkbox invece di expander ─────
+    mostra_ana = st.checkbox("Modifica dati anagrafici", key=f"vm_show_ana_{paziente_id}", value=False)
+    if mostra_ana:
+        st.markdown('<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px;margin-bottom:12px;">', unsafe_allow_html=True)
         ea1, ea2, ea3 = st.columns(3)
         nome_e    = ea1.text_input("Nome",    value=nome_paz,    key=f"vm_en_{paziente_id}")
         cognome_e = ea2.text_input("Cognome", value=cognome_paz, key=f"vm_ec_{paziente_id}")
@@ -1407,6 +1410,7 @@ def ui_visita_visiva_v2(conn):
                 st.rerun()
             except (ValueError, Exception) as ex:
                 st.error(str(ex))
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Alert dilatazione attiva
     if st.session_state.get("vm_in_dilatazione") and loaded_id:
@@ -1499,7 +1503,8 @@ def ui_visita_visiva_v2(conn):
     att = _clinical_attention(iop_od, iop_os, cct_od, cct_os)
 
     if any(v is not None for v in [iop_od, iop_os, cct_od, cct_os]):
-        with st.expander("Rapporto IOP / Pachimetria", expanded=False):
+        mostra_iop = st.checkbox("Mostra rapporto IOP / Pachimetria", key="vm_iop_detail", value=False)
+        if mostra_iop:
             st.caption("Indicatore orientativo. Non sostituisce la valutazione specialistica.")
             r1, r2 = st.columns(2)
             for col, eye in [(r1,"od"), (r2,"os")]:
@@ -1690,7 +1695,8 @@ def ui_visita_visiva_v2(conn):
         sel_preview = None
 
     if sel_preview:
-        with st.expander(f"Visita #{sel_vid} — {sel_dv}", expanded=True):
+        st.markdown(f'<div style="font-weight:600;color:#334155;margin:8px 0 4px;">Visita #{sel_vid} — {sel_dv}</div>', unsafe_allow_html=True)
+        if True:
             dp1, dp2, dp3 = st.columns(3)
             with dp1:
                 stato_sel = sel_preview.get("stato_visita", STATO_COMPLETA)
