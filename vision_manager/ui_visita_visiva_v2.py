@@ -1228,35 +1228,33 @@ def ui_visita_visiva_v2(conn):
     if gruppi_dup:
         n_dup = sum(len(g) - 1 for g in gruppi_dup)
         st.markdown(f'<div style="background:#fffbeb;border:1.5px solid #f59e0b;border-radius:10px;padding:10px 16px;margin-bottom:8px;font-weight:600;color:#78350f;">{len(gruppi_dup)} gruppi duplicati ({n_dup} record in eccesso)</div>', unsafe_allow_html=True)
-        if True:
-            st.caption("Viene conservato il paziente con più visite. L'archiviazione non cancella i dati.")
-            for idx_g, gruppo in enumerate(gruppi_dup):
-                gruppo_sorted = sorted(gruppo, key=lambda r: (-(r.get("n_visite") or 0), -r["id"]))
-                principale = gruppo_sorted[0]
-                duplicati  = gruppo_sorted[1:]
-                dn_fmt = ""
-                if principale.get("data_nascita"):
-                    try:
-                        dn_fmt = datetime.strptime(str(principale["data_nascita"])[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
-                    except Exception:
-                        dn_fmt = str(principale["data_nascita"])[:10]
-                st.markdown(f"**{str(principale.get('cognome','')).title()} {str(principale.get('nome','')).title()}** · {dn_fmt}")
-                for dup in duplicati:
-                    d1, d2 = st.columns([4, 1])
-                    with d1:
-                        st.success(f"Conserva — ID {principale['id']} ({principale.get('n_visite',0)} visite)")
-                        st.warning(f"Archivia — ID {dup['id']} ({dup.get('n_visite',0)} visite)")
-                    with d2:
-                        if st.button(f"Archivia", key=f"vm_dup_{dup['id']}_{idx_g}"):
-                            try:
-                                archivia_paziente_duplicato(conn, dup["id"])
-                                st.success(f"ID {dup['id']} archiviato.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(str(e))
-                st.markdown("---")
+        st.caption("Viene conservato il paziente con più visite. L'archiviazione non cancella i dati.")
+        for idx_g, gruppo in enumerate(gruppi_dup):
+            gruppo_sorted = sorted(gruppo, key=lambda r: (-(r.get("n_visite") or 0), -r["id"]))
+            principale = gruppo_sorted[0]
+            duplicati  = gruppo_sorted[1:]
+            dn_fmt = ""
+            if principale.get("data_nascita"):
+                try:
+                    dn_fmt = datetime.strptime(str(principale["data_nascita"])[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+                except Exception:
+                    dn_fmt = str(principale["data_nascita"])[:10]
+            st.markdown(f"**{str(principale.get('cognome','')).title()} {str(principale.get('nome','')).title()}** · {dn_fmt}")
+            for dup in duplicati:
+                d1, d2 = st.columns([4, 1])
+                with d1:
+                    st.success(f"Conserva — ID {principale['id']} ({principale.get('n_visite',0)} visite)")
+                    st.warning(f"Archivia — ID {dup['id']} ({dup.get('n_visite',0)} visite)")
+                with d2:
+                    if st.button(f"Archivia", key=f"vm_dup_{dup['id']}_{idx_g}"):
+                        try:
+                            archivia_paziente_duplicato(conn, dup["id"])
+                            st.success(f"ID {dup['id']} archiviato.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(str(e))
+            st.markdown("---")
 
-    # ── REGISTRA NUOVO PAZIENTE ──────────────────────────────
     # ── PAZIENTE NON SELEZIONATO ─────────────────────────────
     paziente_id = st.session_state.get("vm_current_patient_id")
     if paziente_id is None:
@@ -1270,8 +1268,7 @@ def ui_visita_visiva_v2(conn):
         """, unsafe_allow_html=True)
         st.divider()
         mostra_rnp = st.checkbox("Registra nuovo paziente", key="vm_show_rnp", value=False)
-    if mostra_rnp:
-        if True:
+        if mostra_rnp:
             _render_nuovo_paziente_form(conn)
         return
 
@@ -1696,30 +1693,29 @@ def ui_visita_visiva_v2(conn):
 
     if sel_preview:
         st.markdown(f'<div style="font-weight:600;color:#334155;margin:8px 0 4px;">Visita #{sel_vid} — {sel_dv}</div>', unsafe_allow_html=True)
-        if True:
-            dp1, dp2, dp3 = st.columns(3)
-            with dp1:
-                stato_sel = sel_preview.get("stato_visita", STATO_COMPLETA)
-                badge_sel = f'<span class="vm-badge-bozza">BOZZA</span>' if stato_sel == STATO_BOZZA else f'<span class="vm-badge-completa">COMPLETA</span>'
-                st.markdown(badge_sel, unsafe_allow_html=True)
-                st.write("**Tipo:**", sel_preview.get("tipo_visita","-"))
-                st.write("**Anamnesi:**", _fmt_value(sel_preview.get("anamnesi")))
-            with dp2:
-                acuita = sel_preview.get("acuita",{}) or {}
-                nat = acuita.get("naturale",{}) or {}
-                cor = acuita.get("corretta",{}) or {}
-                st.write("**AVN OD:**", _fmt_value(nat.get("od")))
-                st.write("**AVN OS:**", _fmt_value(nat.get("os")))
-                st.write("**AVC OD:**", _fmt_value(cor.get("od")))
-                st.write("**AVC OS:**", _fmt_value(cor.get("os")))
-            with dp3:
-                eo = sel_preview.get("esame_obiettivo",{}) or {}
-                st.write("**IOP OD:**",  _fmt_value(eo.get("pressione_endoculare_od")))
-                st.write("**IOP OS:**",  _fmt_value(eo.get("pressione_endoculare_os")))
-                st.write("**Fondo:**",   _fmt_value(eo.get("fondo_oculare")))
-                cf = sel_preview.get("correzione_finale",{}) or {}
-                st.write("**RX OD:**", _fmt_rx(cf.get("od")))
-                st.write("**RX OS:**", _fmt_rx(cf.get("os")))
+        dp1, dp2, dp3 = st.columns(3)
+        with dp1:
+            stato_sel = sel_preview.get("stato_visita", STATO_COMPLETA)
+            badge_sel = f'<span class="vm-badge-bozza">BOZZA</span>' if stato_sel == STATO_BOZZA else f'<span class="vm-badge-completa">COMPLETA</span>'
+            st.markdown(badge_sel, unsafe_allow_html=True)
+            st.write("**Tipo:**", sel_preview.get("tipo_visita","-"))
+            st.write("**Anamnesi:**", _fmt_value(sel_preview.get("anamnesi")))
+        with dp2:
+            acuita = sel_preview.get("acuita",{}) or {}
+            nat = acuita.get("naturale",{}) or {}
+            cor = acuita.get("corretta",{}) or {}
+            st.write("**AVN OD:**", _fmt_value(nat.get("od")))
+            st.write("**AVN OS:**", _fmt_value(nat.get("os")))
+            st.write("**AVC OD:**", _fmt_value(cor.get("od")))
+            st.write("**AVC OS:**", _fmt_value(cor.get("os")))
+        with dp3:
+            eo = sel_preview.get("esame_obiettivo",{}) or {}
+            st.write("**IOP OD:**",  _fmt_value(eo.get("pressione_endoculare_od")))
+            st.write("**IOP OS:**",  _fmt_value(eo.get("pressione_endoculare_os")))
+            st.write("**Fondo:**",   _fmt_value(eo.get("fondo_oculare")))
+            cf = sel_preview.get("correzione_finale",{}) or {}
+            st.write("**RX OD:**", _fmt_rx(cf.get("od")))
+            st.write("**RX OS:**", _fmt_rx(cf.get("os")))
 
     ha1, ha2, ha3, ha4 = st.columns([1.5, 1, 1, 0.8])
     with ha1:
