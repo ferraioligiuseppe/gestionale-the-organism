@@ -821,243 +821,260 @@ def _inject_css():
     <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
-    /* Reset globale */
-    html, body, [data-testid="stAppViewContainer"] {
+    /* ── GLOBALS ─────────────────────────────────────────── */
+    html, body,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    .main, .block-container {
         background: #f0f4f8 !important;
         font-family: 'DM Sans', sans-serif !important;
     }
     [data-testid="stHeader"] { background: transparent !important; }
 
-    /* Sidebar — lista pazienti */
+    /* ── TUTTI I TESTI DELL'AREA PRINCIPALE ─────────────── */
+    /* Questo blocco risolve bianco-su-bianco */
+    [data-testid="stMain"] p,
+    [data-testid="stMain"] span,
+    [data-testid="stMain"] label,
+    [data-testid="stMain"] div,
+    [data-testid="stMain"] li,
+    [data-testid="stMain"] small,
+    [data-testid="stMain"] .stMarkdown,
+    [data-testid="stMain"] .stText,
+    [data-testid="stMain"] h1,
+    [data-testid="stMain"] h2,
+    [data-testid="stMain"] h3,
+    [data-testid="stMain"] h4 {
+        color: #1e293b !important;
+    }
+
+    /* ── INPUT TESTO ─────────────────────────────────────── */
+    input,
+    textarea,
+    [data-testid="stTextInput"] input,
+    [data-testid="stTextArea"] textarea,
+    [data-baseweb="textarea"] textarea,
+    [data-baseweb="input"] input {
+        background: #ffffff !important;
+        color: #1e293b !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        font-family: 'DM Sans', sans-serif !important;
+        font-size: 0.93rem !important;
+        -webkit-text-fill-color: #1e293b !important;
+    }
+    input:focus,
+    textarea:focus,
+    [data-testid="stTextInput"] input:focus,
+    [data-testid="stTextArea"] textarea:focus {
+        border-color: #2563a8 !important;
+        box-shadow: 0 0 0 3px rgba(37,99,168,0.12) !important;
+        outline: none !important;
+    }
+    input::placeholder,
+    textarea::placeholder {
+        color: #94a3b8 !important;
+        -webkit-text-fill-color: #94a3b8 !important;
+    }
+
+    /* ── NUMBER INPUT ────────────────────────────────────── */
+    [data-testid="stNumberInput"] input,
+    [data-baseweb="input"] input[type="number"] {
+        background: #ffffff !important;
+        color: #1e293b !important;
+        -webkit-text-fill-color: #1e293b !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+    }
+
+    /* ── DATE INPUT ──────────────────────────────────────── */
+    [data-testid="stDateInput"] input,
+    [data-baseweb="input"] input[type="text"] {
+        background: #ffffff !important;
+        color: #1e293b !important;
+        -webkit-text-fill-color: #1e293b !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+    }
+
+    /* ── SELECTBOX ───────────────────────────────────────── */
+    [data-baseweb="select"] > div,
+    [data-baseweb="select"] [data-baseweb="select"] {
+        background: #ffffff !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+    }
+    [data-baseweb="select"] span,
+    [data-baseweb="select"] div,
+    [data-baseweb="select"] p {
+        color: #1e293b !important;
+        -webkit-text-fill-color: #1e293b !important;
+    }
+    [data-baseweb="popover"],
+    [data-baseweb="popover"] *,
+    [role="listbox"],
+    [role="listbox"] * {
+        background: #ffffff !important;
+        color: #1e293b !important;
+        -webkit-text-fill-color: #1e293b !important;
+    }
+    [role="option"]:hover,
+    [role="option"][aria-selected="true"] {
+        background: #eff6ff !important;
+        color: #1e293b !important;
+    }
+
+    /* ── LABELS DEI WIDGET ───────────────────────────────── */
+    .stTextInput label,
+    .stTextArea label,
+    .stNumberInput label,
+    .stDateInput label,
+    .stSelectbox label,
+    .stCheckbox label,
+    [data-testid="stWidgetLabel"] {
+        color: #475569 !important;
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        -webkit-text-fill-color: #475569 !important;
+    }
+
+    /* ── CAPTION E TESTI SECONDARI ───────────────────────── */
+    .stCaption, [data-testid="stCaptionContainer"],
+    small, .stCaption p {
+        color: #64748b !important;
+        -webkit-text-fill-color: #64748b !important;
+    }
+
+    /* ── EXPANDER ────────────────────────────────────────── */
+    [data-testid="stExpander"] {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+    }
+    [data-testid="stExpander"] summary span,
+    [data-testid="stExpander"] summary p {
+        color: #334155 !important;
+        -webkit-text-fill-color: #334155 !important;
+    }
+
+    /* ── BOTTONI ─────────────────────────────────────────── */
+    .stButton > button {
+        background: #f1f5f9 !important;
+        color: #334155 !important;
+        -webkit-text-fill-color: #334155 !important;
+        border: 1.5px solid #e2e8f0 !important;
+        border-radius: 10px !important;
+        font-weight: 500 !important;
+        font-family: 'DM Sans', sans-serif !important;
+        transition: all 0.15s;
+    }
+    .stButton > button:hover {
+        background: #e2e8f0 !important;
+        border-color: #cbd5e1 !important;
+    }
+    .stButton > button[kind="primary"] {
+        background: #2563a8 !important;
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        border: none !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: #1d4ed8 !important;
+        box-shadow: 0 4px 12px rgba(37,99,168,0.25) !important;
+    }
+
+    /* ── METRICHE ────────────────────────────────────────── */
+    [data-testid="stMetric"] {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        padding: 14px 16px !important;
+    }
+    [data-testid="stMetricLabel"] div,
+    [data-testid="stMetricLabel"] p {
+        color: #64748b !important;
+        font-size: 0.8rem !important;
+        -webkit-text-fill-color: #64748b !important;
+    }
+    [data-testid="stMetricValue"] div,
+    [data-testid="stMetricValue"] p {
+        color: #1e293b !important;
+        font-weight: 600 !important;
+        -webkit-text-fill-color: #1e293b !important;
+    }
+
+    /* ── DIVIDER ─────────────────────────────────────────── */
+    hr { border-color: #e2e8f0 !important; margin: 20px 0 !important; }
+
+    /* ── ALERT / INFO / WARNING / SUCCESS ────────────────── */
+    [data-testid="stAlert"] p,
+    [data-testid="stAlert"] div {
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
+    }
+
+    /* ── SIDEBAR ─────────────────────────────────────────── */
     [data-testid="stSidebar"] {
         background: #0f1923 !important;
         border-right: 1px solid #1e2d3d;
     }
-    [data-testid="stSidebar"] * {
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] small {
         color: #c8d6e5 !important;
+        -webkit-text-fill-color: #c8d6e5 !important;
         font-family: 'DM Sans', sans-serif !important;
     }
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 {
         color: #ffffff !important;
-        font-size: 1rem !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        -webkit-text-fill-color: #ffffff !important;
     }
     [data-testid="stSidebar"] input {
         background: #1a2a3a !important;
         border: 1px solid #2a3d52 !important;
         color: #e2eaf2 !important;
+        -webkit-text-fill-color: #e2eaf2 !important;
         border-radius: 8px !important;
     }
-    [data-testid="stSidebar"] .stButton > button {
-        background: transparent !important;
-        border: none !important;
-        text-align: left !important;
-        width: 100% !important;
-        padding: 8px 12px !important;
-        border-radius: 8px !important;
+    /* Radio button sidebar */
+    [data-testid="stSidebar"] [data-testid="stRadio"] label span,
+    [data-testid="stSidebar"] [data-testid="stRadio"] label div,
+    [data-testid="stSidebar"] [data-testid="stRadio"] label p {
         color: #c8d6e5 !important;
-        font-size: 0.88rem !important;
-        transition: background 0.15s;
-    }
-    [data-testid="stSidebar"] .stButton > button:hover {
-        background: #1a2d40 !important;
-        color: #ffffff !important;
+        -webkit-text-fill-color: #c8d6e5 !important;
+        font-size: 0.87rem !important;
+        line-height: 1.4 !important;
     }
 
-    /* Card principale */
-    .vm-card {
-        background: #ffffff;
-        border-radius: 16px;
-        border: 1px solid #e2e8f0;
-        padding: 24px 28px;
-        margin-bottom: 16px;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    }
-
-    /* Header paziente */
+    /* ── COMPONENTI CUSTOM ───────────────────────────────── */
     .vm-patient-header {
         background: linear-gradient(135deg, #1e3a5f 0%, #2563a8 100%);
         border-radius: 16px;
         padding: 20px 28px;
         margin-bottom: 20px;
-        color: #ffffff !important;
     }
-    .vm-patient-name {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: #ffffff !important;
-        margin: 0;
-        letter-spacing: -0.01em;
-    }
-    .vm-patient-meta {
-        font-size: 0.85rem;
-        color: #a8c4e0 !important;
-        margin-top: 4px;
-        font-family: 'DM Mono', monospace;
-    }
-
-    /* Badge stato visita */
-    .vm-badge-bozza {
-        display: inline-block;
-        background: #fef3c7;
-        color: #92400e !important;
-        border-radius: 20px;
-        padding: 3px 12px;
-        font-size: 0.78rem;
-        font-weight: 600;
-        letter-spacing: 0.03em;
-    }
-    .vm-badge-completa {
-        display: inline-block;
-        background: #d1fae5;
-        color: #065f46 !important;
-        border-radius: 20px;
-        padding: 3px 12px;
-        font-size: 0.78rem;
-        font-weight: 600;
-        letter-spacing: 0.03em;
-    }
-    .vm-badge-new {
-        display: inline-block;
-        background: #dbeafe;
-        color: #1e40af !important;
-        border-radius: 20px;
-        padding: 3px 12px;
-        font-size: 0.78rem;
-        font-weight: 600;
-        letter-spacing: 0.03em;
-    }
-
-    /* Sezione fase */
+    .vm-patient-name  { font-size:1.5rem; font-weight:600; color:#ffffff !important; -webkit-text-fill-color:#ffffff !important; }
+    .vm-patient-meta  { font-size:0.85rem; color:#a8c4e0 !important; -webkit-text-fill-color:#a8c4e0 !important; margin-top:4px; }
     .vm-section-title {
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #64748b !important;
-        margin-bottom: 12px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #e2e8f0;
+        font-size:0.72rem; font-weight:600; letter-spacing:0.08em;
+        text-transform:uppercase; color:#64748b !important;
+        -webkit-text-fill-color:#64748b !important;
+        margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #e2e8f0;
     }
-
-    /* Alert dilatazione */
+    .vm-badge-bozza    { display:inline-block; background:#fef3c7; color:#92400e !important; -webkit-text-fill-color:#92400e !important; border-radius:20px; padding:3px 12px; font-size:0.78rem; font-weight:600; }
+    .vm-badge-completa { display:inline-block; background:#d1fae5; color:#065f46 !important; -webkit-text-fill-color:#065f46 !important; border-radius:20px; padding:3px 12px; font-size:0.78rem; font-weight:600; }
+    .vm-badge-new      { display:inline-block; background:#dbeafe; color:#1e40af !important; -webkit-text-fill-color:#1e40af !important; border-radius:20px; padding:3px 12px; font-size:0.78rem; font-weight:600; }
     .vm-dilation-alert {
-        background: linear-gradient(135deg, #fffbeb, #fef3c7);
-        border: 1.5px solid #f59e0b;
-        border-radius: 12px;
-        padding: 14px 18px;
-        margin-bottom: 16px;
-        font-size: 0.92rem;
-        color: #78350f !important;
-    }
-
-    /* Input fields */
-    .stTextInput input, .stTextArea textarea, .stNumberInput input {
-        background: #f8fafc !important;
-        border: 1.5px solid #e2e8f0 !important;
-        border-radius: 8px !important;
-        color: #1e293b !important;
-        font-family: 'DM Sans', sans-serif !important;
-        transition: border-color 0.15s;
-    }
-    .stTextInput input:focus, .stTextArea textarea:focus, .stNumberInput input:focus {
-        border-color: #2563a8 !important;
-        box-shadow: 0 0 0 3px rgba(37,99,168,0.1) !important;
-    }
-
-    /* Bottone primario */
-    .stButton > button[kind="primary"] {
-        background: #2563a8 !important;
-        color: #ffffff !important;
-        border: none !important;
-        border-radius: 10px !important;
-        font-weight: 500 !important;
-        font-size: 0.9rem !important;
-        padding: 10px 20px !important;
-        transition: all 0.15s;
-    }
-    .stButton > button[kind="primary"]:hover {
-        background: #1d4ed8 !important;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(37,99,168,0.3) !important;
-    }
-
-    /* Bottone secondario */
-    .stButton > button[kind="secondary"] {
-        background: #f1f5f9 !important;
-        color: #334155 !important;
-        border: 1.5px solid #e2e8f0 !important;
-        border-radius: 10px !important;
-        font-weight: 500 !important;
-    }
-
-    /* Divider */
-    hr { border-color: #e2e8f0 !important; margin: 20px 0 !important; }
-
-    /* Metriche */
-    [data-testid="stMetric"] {
-        background: #f8fafc !important;
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 12px !important;
-        padding: 12px 16px !important;
-    }
-    [data-testid="stMetricLabel"] { color: #64748b !important; font-size: 0.8rem !important; }
-    [data-testid="stMetricValue"] { color: #1e293b !important; font-weight: 600 !important; }
-
-    /* Expander */
-    [data-testid="stExpander"] {
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 12px !important;
-        background: #ffffff !important;
-    }
-
-    /* Titolo app */
-    .vm-app-title {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #ffffff !important;
-        letter-spacing: 0.02em;
-        padding: 0 4px;
-    }
-    .vm-app-subtitle {
-        font-size: 0.75rem;
-        color: #7a9bb5 !important;
-        padding: 0 4px;
-    }
-
-    /* Paziente sidebar item */
-    .vm-paz-item {
-        padding: 10px 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        margin-bottom: 4px;
-        border: 1px solid transparent;
-        transition: all 0.15s;
-    }
-    .vm-paz-item.selected {
-        background: #1a2d40 !important;
-        border-color: #2563a8;
-    }
-    .vm-paz-item:hover {
-        background: #162333 !important;
-    }
-    .vm-paz-name {
-        font-size: 0.88rem;
-        font-weight: 500;
-        color: #e2eaf2 !important;
-    }
-    .vm-paz-dob {
-        font-size: 0.75rem;
-        color: #6b87a0 !important;
-        font-family: 'DM Mono', monospace;
+        background:#fffbeb; border:1.5px solid #f59e0b;
+        border-radius:12px; padding:14px 18px; margin-bottom:16px;
+        font-size:0.92rem; color:#78350f !important; -webkit-text-fill-color:#78350f !important;
     }
     </style>
     """, unsafe_allow_html=True)
-
 
 def _sidebar_lista_pazienti(conn, paziente_id_corrente):
     """

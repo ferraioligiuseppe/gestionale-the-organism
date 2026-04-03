@@ -12,105 +12,87 @@ from vision_manager.db import get_conn
 def _inject_dashboard_css():
     st.markdown("""
     <style>
-    [data-testid="stAppViewContainer"] {
-        background: #f6f8fb;
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+    html, body,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    .main, .block-container {
+        background: #f0f4f8 !important;
+        font-family: 'DM Sans', sans-serif !important;
+    }
+    [data-testid="stHeader"] { background: transparent !important; }
+
+    /* Tutti i testi area principale */
+    [data-testid="stMain"] p,
+    [data-testid="stMain"] span,
+    [data-testid="stMain"] label,
+    [data-testid="stMain"] div,
+    [data-testid="stMain"] h1,
+    [data-testid="stMain"] h2,
+    [data-testid="stMain"] h3,
+    [data-testid="stMain"] h4,
+    [data-testid="stMain"] small {
+        color: #1e293b !important;
+        -webkit-text-fill-color: #1e293b !important;
     }
 
-    [data-testid="stHeader"] {
-        background: rgba(0, 0, 0, 0);
+    /* Input, textarea */
+    input, textarea,
+    [data-testid="stTextInput"] input,
+    [data-baseweb="input"] input,
+    [data-baseweb="textarea"] textarea {
+        background: #ffffff !important;
+        color: #1e293b !important;
+        -webkit-text-fill-color: #1e293b !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 8px !important;
     }
 
-    [data-testid="stSidebar"] {
-        background: #ffffff;
+    /* Selectbox */
+    [data-baseweb="select"] > div { background:#ffffff !important; border:1.5px solid #cbd5e1 !important; border-radius:8px !important; }
+    [data-baseweb="select"] span,
+    [data-baseweb="select"] div,
+    [data-baseweb="select"] p { color:#1e293b !important; -webkit-text-fill-color:#1e293b !important; }
+    [data-baseweb="popover"] *, [role="listbox"] * { background:#ffffff !important; color:#1e293b !important; -webkit-text-fill-color:#1e293b !important; }
+    [role="option"]:hover { background:#eff6ff !important; }
+
+    /* Labels */
+    .stSelectbox label, [data-testid="stWidgetLabel"] {
+        color: #475569 !important; -webkit-text-fill-color: #475569 !important;
+        font-size: 0.85rem !important; font-weight: 500 !important;
     }
 
-    .block-container {
-        padding-top: 1.2rem;
-        padding-bottom: 2rem;
+    /* Caption */
+    .stCaption, small, [data-testid="stCaptionContainer"] p {
+        color: #64748b !important; -webkit-text-fill-color: #64748b !important;
     }
 
-    div[data-testid="stMetric"] {
-        background: white;
-        border: 1px solid #e6ebf2;
-        border-radius: 16px;
-        padding: 14px 16px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
-    }
+    /* Metriche */
+    [data-testid="stMetric"] { background:#ffffff !important; border:1px solid #e2e8f0 !important; border-radius:12px !important; padding:14px 16px !important; }
+    [data-testid="stMetricLabel"] div, [data-testid="stMetricLabel"] p { color:#64748b !important; -webkit-text-fill-color:#64748b !important; font-size:0.8rem !important; }
+    [data-testid="stMetricValue"] div, [data-testid="stMetricValue"] p { color:#1e293b !important; -webkit-text-fill-color:#1e293b !important; font-weight:600 !important; }
 
-    h1, h2, h3 {
-        color: #1f2937 !important;
-    }
+    /* Expander */
+    [data-testid="stExpander"] { background:#ffffff !important; border:1px solid #e2e8f0 !important; border-radius:12px !important; }
+    [data-testid="stExpander"] summary span, [data-testid="stExpander"] summary p { color:#334155 !important; -webkit-text-fill-color:#334155 !important; }
 
-    p, div, label, span {
-        color: #111827 !important;
-    }
+    hr { border-color:#e2e8f0 !important; margin:20px 0 !important; }
 
-    .dashboard-card {
-        background: white;
-        border: 1px solid #e6ebf2;
-        border-radius: 18px;
-        padding: 18px 20px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-        margin-bottom: 14px;
-    }
+    /* Sidebar */
+    [data-testid="stSidebar"] { background:#0f1923 !important; border-right:1px solid #1e2d3d; }
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] label { color:#c8d6e5 !important; -webkit-text-fill-color:#c8d6e5 !important; }
+    [data-testid="stSidebar"] h2 { color:#ffffff !important; -webkit-text-fill-color:#ffffff !important; font-size:1rem !important; }
 
-    .dashboard-muted {
-        color: #6b7280 !important;
-        font-size: 0.95rem;
-    }
-
-    .dashboard-patient {
-        font-size: 1.35rem;
-        font-weight: 700;
-        color: #0f172a !important;
-        margin-bottom: 4px;
-    }
-
-    /* Selectbox chiaro */
-    div[data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-        border: 1px solid #dbe3ee !important;
-        border-radius: 12px !important;
-    }
-
-    div[data-baseweb="select"] span {
-        color: #111827 !important;
-    }
-
-    div[data-baseweb="popover"] {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-    }
-
-    div[role="listbox"] {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-        border: 1px solid #dbe3ee !important;
-    }
-
-    div[role="option"] {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-    }
-
-    div[role="option"]:hover {
-        background-color: #eef4fb !important;
-        color: #111827 !important;
-    }
-
-    /* Input chiari */
-    input, textarea {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-    }
-
-    .stTextInput > div > div > input,
-    .stDateInput input,
-    .stNumberInput input {
-        background-color: #ffffff !important;
-        color: #111827 !important;
-    }
+    /* Componenti custom */
+    .vm-patient-header { background:linear-gradient(135deg,#1e3a5f 0%,#2563a8 100%); border-radius:16px; padding:20px 28px; margin-bottom:20px; }
+    .vm-patient-name   { font-size:1.5rem; font-weight:600; color:#ffffff !important; -webkit-text-fill-color:#ffffff !important; }
+    .vm-patient-meta   { font-size:0.85rem; color:#a8c4e0 !important; -webkit-text-fill-color:#a8c4e0 !important; margin-top:4px; font-family:'DM Mono',monospace; }
+    .vm-section-title  { font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#64748b !important; -webkit-text-fill-color:#64748b !important; margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #e2e8f0; }
+    .vm-card           { background:#ffffff; border-radius:14px; border:1px solid #e2e8f0; padding:18px 22px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
     </style>
     """, unsafe_allow_html=True)
 
