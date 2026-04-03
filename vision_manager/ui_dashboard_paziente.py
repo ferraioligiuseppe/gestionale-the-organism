@@ -17,7 +17,7 @@ def _css():
     """
     st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
+/* Font di sistema */
 
 /* 1. SFONDO GLOBALE */
 html, body { background: #f0f4f8 !important; }
@@ -25,13 +25,13 @@ html, body { background: #f0f4f8 !important; }
 [data-testid="stMain"],
 .main, .block-container, section.main {
     background: #f0f4f8 !important;
-    font-family: 'DM Sans', sans-serif !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
 }
 [data-testid="stHeader"] { background: transparent !important; }
 
 /* 2. TESTO — regola base su tutto il documento */
 * {
-    font-family: 'DM Sans', sans-serif !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
     box-sizing: border-box;
 }
 
@@ -175,7 +175,7 @@ hr { border-color: #e2e8f0 !important; margin: 20px 0 !important; }
 [data-testid="stSidebar"] * {
     color: #c8d6e5 !important;
     -webkit-text-fill-color: #c8d6e5 !important;
-    font-family: 'DM Sans', sans-serif !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
 }
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
@@ -209,7 +209,7 @@ hr { border-color: #e2e8f0 !important; margin: 20px 0 !important; }
     color: #a8c4e0 !important;
     -webkit-text-fill-color: #a8c4e0 !important;
     margin-top: 4px;
-    font-family: 'DM Mono', monospace !important;
+    font-family: 'Consolas', 'Courier New', monospace !important;
 }
 .vm-section-title {
     font-size: 0.72rem;

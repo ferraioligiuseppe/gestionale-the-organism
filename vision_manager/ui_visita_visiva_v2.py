@@ -819,7 +819,7 @@ def _clinical_attention(iop_od, iop_os, cct_od, cct_os):
 def _inject_css():
     st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
+/* Font di sistema — nessuna richiesta di rete, caricamento istantaneo */
 
 /* 1. SFONDO */
 html, body { background: #f0f4f8 !important; }
@@ -827,12 +827,12 @@ html, body { background: #f0f4f8 !important; }
 [data-testid="stMain"],
 .main, .block-container, section.main {
     background: #f0f4f8 !important;
-    font-family: 'DM Sans', sans-serif !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
 }
 [data-testid="stHeader"] { background: transparent !important; }
 
 /* 2. FONT GLOBALE */
-* { font-family: 'DM Sans', sans-serif !important; box-sizing: border-box; }
+* { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important; box-sizing: border-box; }
 
 /* 3. TESTO GLOBALE — risolve bianco su bianco su Chrome/Windows */
 p, span, div, label, li, td, th, h1, h2, h3, h4, h5, h6, small, strong, em, a {
@@ -1003,7 +1003,7 @@ hr { border-color: #e2e8f0 !important; margin: 20px 0 !important; }
     font-size: 0.85rem !important;
     color: #a8c4e0 !important;
     -webkit-text-fill-color: #a8c4e0 !important;
-    margin-top: 4px; font-family: 'DM Mono', monospace !important;
+    margin-top: 4px; font-family: 'Consolas', 'Courier New', monospace !important;
 }
 .vm-section-title {
     font-size: 0.72rem; font-weight: 700; letter-spacing: 0.09em;
@@ -1090,15 +1090,53 @@ def _sidebar_lista_pazienti(conn, paziente_id_corrente):
         st.sidebar.caption("Nessun paziente trovato.")
         return paziente_id_corrente
 
-    # Bozze attive
+    # Bozze attive — UNA query sola per tutti i pazienti (molto più veloce)
     bozze_pids = set()
-    for row in pazienti:
-        pid = _row_get(row,"id",0)
-        try:
-            if _find_bozza(conn, pid) is not None:
-                bozze_pids.add(pid)
-        except Exception:
-            pass
+    try:
+        cur_b = conn.cursor()
+        cur_b.execute(
+            """
+            SELECT DISTINCT paziente_id
+            FROM visite_visive
+            WHERE COALESCE(is_deleted,0)=0
+            """
+        )
+        pids_con_visite = {_row_get(r,"paziente_id",0) for r in cur_b.fetchall()}
+        cur_b.close()
+        # Controlla bozze solo per chi ha visite — query singola con JSON check
+        if pids_con_visite:
+            ph = _ph(conn)
+            pids_list = list(pids_con_visite)
+            if _is_pg(conn):
+                placeholders = ",".join([ph]*len(pids_list))
+                cur_b2 = conn.cursor()
+                cur_b2.execute(
+                    f"""
+                    SELECT DISTINCT paziente_id
+                    FROM visite_visive
+                    WHERE paziente_id IN ({placeholders})
+                      AND COALESCE(is_deleted,0)=0
+                      AND dati_json::text LIKE '%"stato_visita": "BOZZA"%'
+                    """,
+                    pids_list,
+                )
+            else:
+                placeholders = ",".join(["?"]*len(pids_list))
+                cur_b2 = conn.cursor()
+                cur_b2.execute(
+                    f"""
+                    SELECT DISTINCT paziente_id
+                    FROM visite_visive
+                    WHERE paziente_id IN ({placeholders})
+                      AND COALESCE(is_deleted,0)=0
+                      AND dati_json LIKE '%"stato_visita": "BOZZA"%'
+                    """,
+                    pids_list,
+                )
+            bozze_pids = {_row_get(r,"paziente_id",0) for r in cur_b2.fetchall()}
+            cur_b2.close()
+    except Exception:
+        pass
 
     st.sidebar.caption(f"{len(pazienti)} pazienti attivi")
 
