@@ -1255,11 +1255,13 @@ def ui_visita_visiva_v2(conn):
     stato_v   = st.session_state.get("vm_stato_visita", STATO_BOZZA)
 
     if mode == "edit" and loaded_id:
-        badge_html = (f'<span class="vm-badge-bozza">🟡 Bozza #{loaded_id}</span>'
-                      if stato_v == STATO_BOZZA
-                      else f'<span class="vm-badge-completa">🟢 Completa #{loaded_id}</span>')
+        stato_str = f"🟡 Bozza — Visita #{loaded_id}" if stato_v == STATO_BOZZA else f"🟢 Completa — Visita #{loaded_id}"
+        stato_color = "#fef3c7" if stato_v == STATO_BOZZA else "#d1fae5"
+        stato_text_color = "#92400e" if stato_v == STATO_BOZZA else "#065f46"
     else:
-        badge_html = '<span class="vm-badge-new">✏️ Nuova visita</span>'
+        stato_str = "✏️ Nuova visita"
+        stato_color = "#dbeafe"
+        stato_text_color = "#1e40af"
 
     st.markdown(f"""
     <div class="vm-patient-header">
@@ -1268,7 +1270,12 @@ def ui_visita_visiva_v2(conn):
             {"Nato/a il " + dn_paz_fmt if dn_paz_fmt else ""}
             {"&nbsp;·&nbsp;" + str(eta_paz) + " anni" if eta_paz else ""}
         </div>
-        <div style="margin-top:12px;">{badge_html}</div>
+        <div style="margin-top:10px;">
+            <span style="display:inline-block;background:{stato_color};color:{stato_text_color};
+                         border-radius:20px;padding:3px 14px;font-size:0.78rem;font-weight:600;">
+                {stato_str}
+            </span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
