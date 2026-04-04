@@ -3182,7 +3182,14 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 # -----------------------------
 
 def _now_iso_dt() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """Ora corrente nel fuso orario italiano (Europe/Rome)."""
+    try:
+        import zoneinfo
+        tz_it = zoneinfo.ZoneInfo("Europe/Rome")
+    except ImportError:
+        from datetime import timezone, timedelta
+        tz_it = timezone(timedelta(hours=2))  # UTC+2 ora legale
+    return datetime.now(tz_it).strftime("%Y-%m-%d %H:%M:%S")
 
 def _bool_i(v) -> int:
     try:
@@ -7539,8 +7546,14 @@ def _prefill_pdf(template_path: str, fields: dict) -> bytes:
         c.setFont("Helvetica", 9)
         c.setFillColorRGB(0.4, 0.4, 0.4)
         import datetime as _dt2
-        ts = _dt2.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        c.drawString(20*_mm, y - 2*_mm, f"Data e ora compilazione: {ts} (UTC+1)")
+        try:
+            import zoneinfo as _zi2
+            _tz_it2 = _zi2.ZoneInfo("Europe/Rome")
+        except ImportError:
+            from datetime import timezone as _tz2, timedelta as _td2
+            _tz_it2 = _tz2(timedelta(hours=2))
+        ts = _dt2.datetime.now(_tz_it2).strftime("%d/%m/%Y %H:%M:%S")
+        c.drawString(20*_mm, y - 2*_mm, f"Data e ora compilazione (IT): {ts}")
         c.setFillColorRGB(0, 0, 0)
 
         c.showPage()
@@ -8261,7 +8274,14 @@ def ui_public_sign_page():
         c.drawString(20*_mm, 285*_mm, "Firma elettronica (grafometrica) – Allegato")
         c.setFont("Helvetica", 10)
         c.drawString(20*_mm, 275*_mm, f"Paziente id: {pid} – Tipo: {doc_type}")
-        c.drawString(20*_mm, 268*_mm, f"Data/ora (UTC): {_dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+        try:
+            import zoneinfo as _zi
+            _tz_it = _zi.ZoneInfo("Europe/Rome")
+        except ImportError:
+            from datetime import timezone as _tz, timedelta as _td
+            _tz_it = _tz(timedelta(hours=2))
+        _ts_it = _dt.datetime.now(_tz_it).strftime('%Y-%m-%d %H:%M:%S')
+        c.drawString(20*_mm, 268*_mm, f"Data/ora (IT): {_ts_it}")
         c.drawString(20*_mm, 261*_mm, f"Email: {email.strip()}")
         otp_ts_str = st.session_state.get("otp_ts", "")
         c.drawString(20*_mm, 254*_mm, f"OTP verificato: {otp_ts_str or 'si'}")
@@ -8317,7 +8337,11 @@ def ui_public_sign_page():
         if not final_pdf or len(final_pdf) < 1000:
             final_pdf = base_pdf
         digest = _sha256_bytes(final_pdf)
-        ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        try:
+            import zoneinfo as _zi3
+            ts = _dt.datetime.now(_zi3.ZoneInfo("Europe/Rome")).strftime("%Y%m%d_%H%M%S")
+        except ImportError:
+            ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
         filename_pdf = f"Consenso_{doc_type}_firmato_{ts}.pdf"
 
