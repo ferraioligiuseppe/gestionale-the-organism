@@ -7229,10 +7229,16 @@ def _ensure_documenti_table(conn):
                 filename TEXT,
                 sha256 TEXT NOT NULL,
                 mime TEXT DEFAULT 'application/pdf',
-                created_at TEXT DEFAULT (datetime('now'))
+                created_at TEXT DEFAULT (datetime('now')),
+                blob BLOB
             )
             """
         )
+        # Migrazione: aggiungi colonna blob se manca
+        try:
+            cur.execute("ALTER TABLE documenti ADD COLUMN blob BLOB")
+        except Exception:
+            pass
         conn.commit()
         return
     # postgres
@@ -7246,10 +7252,16 @@ def _ensure_documenti_table(conn):
           filename TEXT,
           sha256 TEXT NOT NULL,
           mime TEXT DEFAULT 'application/pdf',
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          blob BYTEA
         );
         """
     )
+    # Migrazione: aggiungi colonna blob se manca
+    try:
+        cur.execute("ALTER TABLE public.documenti ADD COLUMN IF NOT EXISTS blob BYTEA;")
+    except Exception:
+        pass
     try:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documenti_paziente ON public.documenti(paziente_id);")
     except Exception:
@@ -7370,19 +7382,19 @@ def _s3_presign_get(key: str) -> str:
         ExpiresIn=_presign_expires(),
     )
 
-def _db_insert_documento(conn, paziente_id: int, tipo: str, s3_key: str, sha256: str, filename: str):
+def _db_insert_documento(conn, paziente_id: int, tipo: str, s3_key: str, sha256: str, filename: str, blob: bytes | None = None):
     cur = conn.cursor()
     if _DB_BACKEND == "sqlite":
         cur.execute(
-            """INSERT INTO documenti (paziente_id, tipo, s3_key, filename, sha256, mime)
-                 VALUES (?, ?, ?, ?, ?, 'application/pdf')""",
-            (paziente_id, tipo, s3_key, filename, sha256),
+            """INSERT INTO documenti (paziente_id, tipo, s3_key, filename, sha256, mime, blob)
+                 VALUES (?, ?, ?, ?, ?, 'application/pdf', ?)""",
+            (paziente_id, tipo, s3_key, filename, sha256, blob),
         )
     else:
         cur.execute(
-            """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime)
-                 VALUES (%s, %s, %s, %s, %s, 'application/pdf')""",
-            (paziente_id, tipo, s3_key, filename, sha256),
+            """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime, blob)
+                 VALUES (%s, %s, %s, %s, %s, 'application/pdf', %s)""",
+            (paziente_id, tipo, s3_key, filename, sha256, blob),
         )
     conn.commit()
 
@@ -7577,25 +7589,20 @@ def _clinic_email() -> str:
     return st.secrets.get("privacy", {}).get("CLINIC_EMAIL") or st.secrets.get("smtp", {}).get("FROM") or st.secrets.get("smtp", {}).get("USERNAME") or ""
 
 def ui_privacy_pdf():
-    st.subheader("📄 Privacy & Consensi (PDF)")
+    st.subheader("Privacy e Consensi (PDF)")
 
-    # diagnostica rapida file template (non blocca la UI)
     try:
         _check_privacy_templates_ui()
     except Exception:
         pass
 
-
-    # Sezione dedicata alla generazione/stampa dei PDF (cartaceo) e al salvataggio su cloud privato (se S3 configurato)
     conn = get_connection()
-
-    # (facoltativo) assicurati che esista la tabella documenti se la usi
     try:
         _ensure_documenti_table(conn)
     except Exception:
         pass
 
-    # Selezione paziente
+    # Selezione paziente (solo ATTIVI)
     paz, _ptab, _pcolmap = fetch_pazienti_for_select(conn)
     if not paz:
         st.info("Nessun paziente presente.")
@@ -7608,70 +7615,197 @@ def ui_privacy_pdf():
     doc_type = st.radio("Tipo consenso", ["adulto", "minore"], horizontal=True)
     template = PDF_PRIVACY_ADULTO_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_TEMPLATE
 
-    st.markdown("### ✍️ Firma online (link pubblico)")
-    st.caption("Genera un link pubblico per la firma (senza login). Il link scade secondo PRESIGN_EXPIRE_SECONDS o un valore dedicato.")
-    # scadenza token: usa privacy.TOKEN_EXPIRE_SECONDS se presente, altrimenti 48h
-    exp = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
-    if st.button("🔗 Genera link firma online", key=f"gen_sign_{pid}_{doc_type}"):
-        try:
-            token = _make_sign_token(int(pid), doc_type, exp)
-            url = _public_sign_url(token)
-            st.success("Link generato ✅")
-            st.code(url)
-            # Link rapidi
-            mail_body = "Apri questo link per firmare online:\n" + url
-            st.markdown(f"- 📩 Email: {_mailto_link('Firma consenso privacy – Studio The Organism', mail_body)}")
-            st.markdown(f"- 💬 WhatsApp: {_whatsapp_link('Apri questo link per firmare online: ' + url)}")
-        except Exception as e:
-            st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
+    st.markdown("---")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### 🖨️ Stampa / Scarica (cartaceo)")
+    # ── COLONNA 1: Scarica da stampare ───────────────────────────────────
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Passo 1 — Stampa il consenso**")
+        st.caption("Scarica il PDF, stampalo e fallo firmare al paziente.")
         try:
             with open(_privacy_abs_path(template), "rb") as f:
                 pdf_bytes = f.read()
             st.download_button(
-                "⬇️ Scarica PDF da stampare",
+                "Scarica PDF da stampare",
                 data=pdf_bytes,
                 file_name=f"privacy_{doc_type}_stampabile.pdf",
                 mime="application/pdf",
+                key=f"dl_template_{pid}_{doc_type}",
             )
         except Exception as e:
             st.error(f"Impossibile leggere il template PDF: {e}")
             return
 
-    with col2:
-        st.markdown("### ☁️ Archivia su Cloud (opzionale)")
-        st.caption("Usa questa funzione solo se hai configurato S3 nei Secrets.")
-        if st.button("📤 Carica su cloud il PDF (template) per questo paziente"):
-            # Key univoca (template associato al paziente)
-            digest = _sha256_bytes(pdf_bytes)
-            key = f"consensi/{pid}/template/privacy_{doc_type}_{digest[:10]}.pdf"
+    # ── COLONNA 2: Carica scansione firmata ──────────────────────────────
+    with c2:
+        st.markdown("**Passo 2 — Carica la scansione firmata**")
+        st.caption("Scansiona il modulo firmato (PDF o immagine JPG/PNG) e caricalo qui.")
 
-            ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
-            if not ok_s3:
-                st.error(f"Upload S3 disabilitato: {msg_s3}")
-                return
+        uploaded = st.file_uploader(
+            "Carica scansione firmata",
+            type=["pdf", "jpg", "jpeg", "png"],
+            key=f"upload_firma_{pid}_{doc_type}",
+        )
 
-            # salva su DB SOLO se upload ok
-            try:
-                _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_template", key, digest, f"privacy_{doc_type}_template.pdf")
-                st.success("Caricato e registrato nel DB ✅")
-            except Exception as e:
-                st.warning(f"Caricato su S3, ma DB non aggiornato: {e}")
+        if uploaded is not None:
+            file_bytes = uploaded.read()
+            filename   = uploaded.name
+            mime_type  = uploaded.type
 
-            # link presigned (se disponibile)
-            try:
-                url = _s3_presign_get(key)
-                st.write("Link (24h):")
-                st.code(url)
-            except Exception:
-                pass
+            st.caption(f"File caricato: {filename} ({len(file_bytes)//1024} KB)")
+
+            # Se è immagine, converti in PDF
+            if mime_type in ("image/jpeg", "image/png", "image/jpg"):
+                try:
+                    from pypdf import PdfWriter
+                    from reportlab.lib.pagesizes import A4
+                    from reportlab.pdfgen import canvas as rl_canvas
+                    import io as _io
+
+                    img_buf = _io.BytesIO(file_bytes)
+                    pdf_buf = _io.BytesIO()
+                    c_rl = rl_canvas.Canvas(pdf_buf, pagesize=A4)
+                    w, h = A4
+                    c_rl.drawImage(img_buf, 0, 0, width=w, height=h, preserveAspectRatio=True)
+                    c_rl.save()
+                    file_bytes = pdf_buf.getvalue()
+                    filename   = filename.rsplit(".", 1)[0] + "_firmato.pdf"
+                    st.caption("Immagine convertita in PDF.")
+                except Exception as e:
+                    st.warning(f"Conversione immagine in PDF non riuscita ({e}). Il file verrà salvato come immagine.")
+
+            if st.button("Salva consenso firmato nel DB", key=f"save_firma_{pid}_{doc_type}", type="primary"):
+                try:
+                    digest = _sha256_bytes(file_bytes)
+                    doc_tipo = f"privacy_{doc_type}_firmato"
+
+                    # Inserisce nella tabella documenti
+                    _db_insert_documento(
+                        conn, int(pid),
+                        doc_tipo,
+                        f"locale/{doc_tipo}_{digest[:10]}.pdf",
+                        digest,
+                        filename,
+                        blob=file_bytes,
+                    )
+                    conn.commit()
+                    st.success(f"Consenso firmato salvato correttamente per questo paziente.")
+
+                    # Offre anche il download immediato
+                    st.download_button(
+                        "Scarica copia del consenso firmato",
+                        data=file_bytes,
+                        file_name=filename,
+                        mime="application/pdf",
+                        key=f"dl_firma_{pid}_{doc_type}",
+                    )
+                except Exception as e:
+                    st.error(f"Errore salvataggio: {e}")
+
+    st.markdown("---")
+
+    # ── STORICO CONSENSI FIRMATI ─────────────────────────────────────────
+    st.markdown("**Consensi firmati archiviati**")
+    try:
+        cur = conn.cursor()
+        ph = "%" + "s" if _DB_BACKEND == "postgres" else "?"
+        cur.execute(
+            f"SELECT id, tipo, filename, sha256, created_at FROM documenti "
+            f"WHERE paziente_id = {'%s' if _DB_BACKEND == 'postgres' else '?'} "
+            f"AND tipo LIKE {'%s' if _DB_BACKEND == 'postgres' else '?'} "
+            f"ORDER BY id DESC",
+            (int(pid), "privacy_%_firmato"),
+        )
+        docs = cur.fetchall()
+        if not docs:
+            st.caption("Nessun consenso firmato archiviato per questo paziente.")
+        else:
+            for doc in docs:
+                doc_id       = doc["id"]       if isinstance(doc, dict) else doc[0]
+                doc_tipo     = doc["tipo"]      if isinstance(doc, dict) else doc[1]
+                doc_filename = doc["filename"]  if isinstance(doc, dict) else doc[2]
+                doc_sha      = doc["sha256"]    if isinstance(doc, dict) else doc[3]
+                doc_date     = doc["created_at"] if isinstance(doc, dict) else doc[4]
+
+                col_a, col_b, col_c = st.columns([3, 1, 1])
+                with col_a:
+                    st.write(f"**{doc_filename}** — {str(doc_date)[:10] if doc_date else ''}")
+                    st.caption(f"Tipo: {doc_tipo}")
+                with col_b:
+                    # Recupera il blob per il download
+                    try:
+                        cur2 = conn.cursor()
+                        cur2.execute(
+                            f"SELECT blob FROM documenti WHERE id = {'%s' if _DB_BACKEND == 'postgres' else '?'}",
+                            (doc_id,),
+                        )
+                        row2 = cur2.fetchone()
+                        if row2:
+                            blob = row2["blob"] if isinstance(row2, dict) else row2[0]
+                            if blob:
+                                st.download_button(
+                                    "Scarica",
+                                    data=bytes(blob),
+                                    file_name=doc_filename or f"consenso_{doc_id}.pdf",
+                                    mime="application/pdf",
+                                    key=f"dl_doc_{doc_id}",
+                                )
+                        cur2.close()
+                    except Exception:
+                        st.caption("—")
+                with col_c:
+                    if st.button("Elimina", key=f"del_doc_{doc_id}"):
+                        st.session_state[f"confirm_del_doc_{doc_id}"] = True
+                    if st.session_state.get(f"confirm_del_doc_{doc_id}"):
+                        st.warning("Confermi l'eliminazione?")
+                        cd1, cd2 = st.columns(2)
+                        with cd1:
+                            if st.button("Sì, elimina", key=f"del_doc_yes_{doc_id}", type="primary"):
+                                cur.execute(
+                                    f"DELETE FROM documenti WHERE id = {'%s' if _DB_BACKEND == 'postgres' else '?'}",
+                                    (doc_id,),
+                                )
+                                conn.commit()
+                                st.session_state[f"confirm_del_doc_{doc_id}"] = False
+                                st.success("Eliminato.")
+                                st.rerun()
+                        with cd2:
+                            if st.button("Annulla", key=f"del_doc_no_{doc_id}"):
+                                st.session_state[f"confirm_del_doc_{doc_id}"] = False
+                                st.rerun()
+        cur.close()
+    except Exception as e:
+        st.caption(f"Storico non disponibile: {e}")
+
+    # Firma online (link pubblico) — funzione già esistente, la manteniamo
+    st.markdown("---")
+    st.markdown("**Firma online (link pubblico)**")
+    st.caption("Genera un link da inviare al paziente per la firma online (alternativa al cartaceo).")
+    exp = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
+    if st.button("Genera link firma online", key=f"gen_sign_{pid}_{doc_type}"):
+        try:
+            token = _make_sign_token(int(pid), doc_type, exp)
+            url   = _public_sign_url(token)
+            st.success("Link generato")
+            st.code(url)
+            mail_body = "Apri questo link per firmare online:\n" + url
+            st.markdown(f"- Email: {_mailto_link('Firma consenso privacy', mail_body)}")
+            st.markdown(f"- WhatsApp: {_whatsapp_link('Apri questo link per firmare online: ' + url)}")
+        except Exception as e:
+            st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
 
 def ui_public_sign_page():
-    """Pagina pubblica: compilazione + firma online (canvas) + invio PDF a clinica e paziente."""
+    """Pagina pubblica ottimizzata per cellulare: PDF scaricabile, firma con dito, salvataggio DB."""
+
+    # CSS ottimizzato per mobile
+    st.markdown("""
+    <style>
+    .block-container { max-width: 600px !important; padding: 1rem !important; }
+    input, textarea { font-size: 16px !important; }
+    .stButton > button { width: 100%; padding: 14px !important; font-size: 1rem !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
     qp = st.query_params
     tok = qp.get("sign", "")
     payload = _parse_sign_token(tok) if tok else {}
@@ -7679,13 +7813,13 @@ def ui_public_sign_page():
         st.error("Link non valido o scaduto. Richiedi un nuovo link allo studio.")
         return
 
-    pid = int(payload["pid"])
+    pid      = int(payload["pid"])
     doc_type = payload["doc"]  # 'adulto' / 'minore'
-    # connessione DB
+
     conn = get_connection()
     _ensure_documenti_table(conn)
 
-    # recupera paziente per prefill (se disponibile)
+    # Recupera paziente
     paz_list, _, _ = fetch_pazienti_for_select(conn)
     paz_row = None
     for r in paz_list:
@@ -7697,7 +7831,6 @@ def ui_public_sign_page():
 
     template_path = _privacy_abs_path(PDF_PRIVACY_ADULTO_SIGN_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_SIGN_TEMPLATE)
 
-    # diagnostica template (utile se manca il file in cloud)
     try:
         _check_privacy_templates_ui()
     except Exception:
@@ -7707,7 +7840,23 @@ def ui_public_sign_page():
         return
 
     st.title("Consenso informato e privacy")
-    st.caption("Compila i dati e firma. Alla conferma, riceverai una copia via email.")
+    st.caption("Leggi il documento, compila i campi e firma con il dito.")
+
+    # Scarica PDF da leggere
+    try:
+        with open(template_path, "rb") as f:
+            template_bytes = f.read()
+        st.download_button(
+            "Leggi / scarica il consenso informato (PDF)",
+            data=template_bytes,
+            file_name=f"consenso_informato_{doc_type}.pdf",
+            mime="application/pdf",
+            key="dl_consenso_lettura",
+        )
+    except Exception:
+        pass
+
+    st.markdown("---")
 
     # campi base
     if doc_type == "adulto":
@@ -7868,13 +8017,18 @@ def ui_public_sign_page():
         digest = _sha256_bytes(final_pdf)
         ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
-        ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
-        ok_upload = ok_s3
-        if not ok_upload:
-            st.error(f"Upload S3 disabilitato: {msg_s3}")
-            st.warning("Documento archiviato su Neon. (S3 disabilitato). Il PDF verrà comunque inviato via email se configurata.")
-        else:
-            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
+        filename_pdf = f"Consenso_{doc_type}_firmato_{ts}.pdf"
+
+        # Salva SEMPRE il PDF firmato nel DB (blob), indipendentemente da S3
+        try:
+            _db_insert_documento(
+                conn, int(pid),
+                f"privacy_{doc_type}_online",
+                key, digest, filename_pdf,
+                blob=final_pdf,
+            )
+        except Exception as e:
+            st.warning(f"Archiviazione documento: {e}")
 
         
         # --- SALVATAGGIO CONSENSO SU DB (Consensi_Privacy) ---
