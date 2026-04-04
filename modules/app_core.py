@@ -7859,11 +7859,11 @@ def ui_privacy_pdf():
         )
         docs = cur.fetchall()
 
-        # 2. Consensi con firma grafometrica online (Consensi_Privacy con Firma_Blob)
+        # 2. Tutti i consensi Privacy (con O senza firma grafica)
         cur.execute(
             f"SELECT id, Data_Ora, Tipo, Firma_Blob, Pdf_Blob, Firma_Source, Consenso_Trattamento "
             f"FROM Consensi_Privacy "
-            f"WHERE paziente_id = {ph} AND Firma_Blob IS NOT NULL "
+            f"WHERE paziente_id = {ph} "
             f"ORDER BY id DESC",
             (int(pid),),
         )
@@ -7872,39 +7872,61 @@ def ui_privacy_pdf():
 
         totale = len(docs) + len(consensi_firmati)
         if totale == 0:
-            st.info("Nessun consenso firmato archiviato per questo paziente.")
+            st.info("Nessun consenso archiviato per questo paziente.")
         else:
             st.caption(f"{totale} documento/i trovato/i")
 
-            # Mostra consensi con firma online (da Consensi_Privacy)
+            # Mostra consensi da Consensi_Privacy (firme online + OTP)
             for row in consensi_firmati:
-                r_id       = row["id"]          if isinstance(row, dict) else row[0]
-                r_data     = row["Data_Ora"]     if isinstance(row, dict) else row[1]
-                r_tipo     = row["Tipo"]         if isinstance(row, dict) else row[2]
-                r_firma    = row["Firma_Blob"]   if isinstance(row, dict) else row[3]
-                r_pdf      = row["Pdf_Blob"]     if isinstance(row, dict) else row[4]
-                r_source   = row["Firma_Source"] if isinstance(row, dict) else row[5]
+                r_id     = row["id"]           if isinstance(row, dict) else row[0]
+                r_data   = row["Data_Ora"]      if isinstance(row, dict) else row[1]
+                r_tipo   = row["Tipo"]          if isinstance(row, dict) else row[2]
+                r_firma  = row["Firma_Blob"]    if isinstance(row, dict) else row[3]
+                r_pdf    = row["Pdf_Blob"]      if isinstance(row, dict) else row[4]
+                r_source = row["Firma_Source"]  if isinstance(row, dict) else row[5]
+
+                ha_firma = bool(_blob_to_bytes(r_firma))
+                etichetta = "Firma online + OTP" if ha_firma else "Consenso via OTP"
 
                 with st.container():
                     ca, cb, cc = st.columns([3, 1, 1])
                     with ca:
-                        st.write(f"**Firma online** — {str(r_data)[:16] if r_data else '—'}")
+                        st.write(f"**{etichetta}** — {str(r_data)[:16] if r_data else '—'}")
                         st.caption(f"Tipo: {r_tipo or '—'} · Fonte: {r_source or 'online'}")
                     with cb:
-                        # Scarica PDF firmato se disponibile, altrimenti solo la firma
                         blob_to_dl = _blob_to_bytes(r_pdf) or _blob_to_bytes(r_firma)
                         if blob_to_dl:
                             st.download_button(
                                 "Scarica PDF",
                                 data=blob_to_dl,
-                                file_name=f"consenso_firmato_{r_tipo}_{r_id}.pdf",
+                                file_name=f"consenso_{r_tipo}_{r_id}.pdf",
                                 mime="application/pdf",
                                 key=f"dl_cons_{r_id}",
                             )
                         else:
-                            st.caption("PDF non disponibile")
+                            st.caption("PDF non disp.")
                     with cc:
-                        st.caption(f"ID {r_id}")
+                        if st.button("Elimina", key=f"del_cons_{r_id}"):
+                            st.session_state[f"confirm_del_cons_{r_id}"] = True
+                        if st.session_state.get(f"confirm_del_cons_{r_id}"):
+                            st.warning("Eliminare definitivamente?")
+                            cd1, cd2 = st.columns(2)
+                            with cd1:
+                                if st.button("Sì", key=f"del_cons_yes_{r_id}", type="primary"):
+                                    cur2 = conn.cursor()
+                                    cur2.execute(
+                                        f"DELETE FROM Consensi_Privacy WHERE id = {ph}",
+                                        (r_id,),
+                                    )
+                                    conn.commit()
+                                    cur2.close()
+                                    st.session_state[f"confirm_del_cons_{r_id}"] = False
+                                    st.success("Eliminato.")
+                                    st.rerun()
+                            with cd2:
+                                if st.button("No", key=f"del_cons_no_{r_id}"):
+                                    st.session_state[f"confirm_del_cons_{r_id}"] = False
+                                    st.rerun()
                     st.markdown("---")
 
             # Mostra documenti (scansioni PDF caricate)
