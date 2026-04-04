@@ -8135,123 +8135,92 @@ def ui_public_sign_page():
         nome_cognome = st.text_input("Nome e Cognome del minore", value=f"{nome} {cogn}".strip(), key="pub_nc")
 
     st.subheader("Firma")
-    st.caption("Firma qui sotto con il dito (o il mouse). Usa il pulsante Cancella per ricominciare.")
+    st.caption("Firma qui sotto con il dito (o il mouse). Poi clicca **Conferma firma**.")
 
-    # Chiave univoca per questa sessione di firma
+    # Componente firma con protocollo Streamlit corretto
     sig_key = f"firma_png_data_{pid}_{doc_type}"
 
-    # Canvas HTML5 che scrive il risultato in un campo Streamlit tramite query param trick
-    canvas_html = f"""
-    <div style="border:2px solid #2563a8;border-radius:10px;background:#fff;
-                touch-action:none;margin-bottom:8px;user-select:none;">
-        <canvas id="sigCanvas" width="700" height="220"
-            style="width:100%;height:220px;border-radius:8px;cursor:crosshair;display:block;
-                   touch-action:none;"></canvas>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <button id="btnClear" onclick="clearSig()"
-            style="background:#f1f5f9;border:1.5px solid #cbd5e1;border-radius:8px;
-                   padding:10px 24px;font-size:15px;cursor:pointer;">
-            Cancella firma
-        </button>
-        <button id="btnSave" onclick="saveSigToField()"
-            style="background:#2563a8;color:#fff;border:none;border-radius:8px;
-                   padding:10px 24px;font-size:15px;cursor:pointer;">
-            Conferma firma
-        </button>
-    </div>
-    <div id="saveMsg" style="display:none;color:#15803d;font-size:14px;margin-bottom:8px;">
-        Firma salvata. Procedi con i consensi qui sotto.
-    </div>
-    <script>
-    (function() {{
-        const canvas = document.getElementById('sigCanvas');
-        const ctx = canvas.getContext('2d');
-        ctx.strokeStyle = '#1a1a1a';
-        ctx.lineWidth = 2.8;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        let drawing = false;
+    sig_component_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body {{ margin:0; padding:0; font-family: sans-serif; background: transparent; }}
+  #wrap {{ background: #fff; border: 2px solid #2563a8; border-radius: 10px; overflow: hidden; }}
+  canvas {{ display: block; width: 100%; height: 200px; cursor: crosshair; touch-action: none; }}
+  .btns {{ display: flex; gap: 8px; padding: 8px; background: #f8fafc; }}
+  button {{ padding: 10px 20px; border-radius: 8px; font-size: 15px; cursor: pointer; border: 1.5px solid #cbd5e1; }}
+  #btnConfirm {{ background: #2563a8; color: #fff; border-color: #2563a8; }}
+  #btnClear   {{ background: #f1f5f9; color: #334155; }}
+  #msg {{ padding: 6px 10px; font-size: 13px; min-height: 24px; }}
+  .ok  {{ color: #15803d; }} .wait {{ color: #92400e; }}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="800" height="200"></canvas>
+  <div class="btns">
+    <button id="btnClear"   onclick="clearSig()">Cancella</button>
+    <button id="btnConfirm" onclick="confirmSig()">Conferma firma</button>
+  </div>
+</div>
+<div id="msg" class="wait">Firma nel riquadro, poi clicca Conferma firma.</div>
 
-        function getPos(e) {{
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            if (e.touches && e.touches.length > 0) {{
-                return {{
-                    x: (e.touches[0].clientX - rect.left) * scaleX,
-                    y: (e.touches[0].clientY - rect.top) * scaleY
-                }};
-            }}
-            return {{
-                x: (e.clientX - rect.left) * scaleX,
-                y: (e.clientY - rect.top) * scaleY
-            }};
-        }}
+<script>
+const c   = document.getElementById('c');
+const ctx = c.getContext('2d');
+ctx.strokeStyle = '#111'; ctx.lineWidth = 2.8;
+ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+let drawing = false, hasMark = false;
 
-        canvas.addEventListener('mousedown',  e => {{ drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }});
-        canvas.addEventListener('mousemove',  e => {{ if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); }});
-        canvas.addEventListener('mouseup',    () => {{ drawing=false; }});
-        canvas.addEventListener('mouseleave', () => {{ drawing=false; }});
+function pos(e) {{
+  const r = c.getBoundingClientRect();
+  const sx = c.width / r.width, sy = c.height / r.height;
+  if (e.touches) return {{ x:(e.touches[0].clientX-r.left)*sx, y:(e.touches[0].clientY-r.top)*sy }};
+  return {{ x:(e.clientX-r.left)*sx, y:(e.clientY-r.top)*sy }};
+}}
 
-        canvas.addEventListener('touchstart', e => {{ e.preventDefault(); drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }}, {{passive:false}});
-        canvas.addEventListener('touchmove',  e => {{ e.preventDefault(); if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); }}, {{passive:false}});
-        canvas.addEventListener('touchend',   e => {{ e.preventDefault(); drawing=false; }}, {{passive:false}});
+c.onmousedown  = e => {{ drawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }};
+c.onmousemove  = e => {{ if(!drawing) return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasMark=true; }};
+c.onmouseup    = () => drawing=false;
+c.onmouseleave = () => drawing=false;
 
-        function saveSigToField() {{
-            const data = canvas.toDataURL('image/png');
-            // Trova il textarea di Streamlit con il data-testid corrispondente
-            // e scrivi il valore della firma
-            const textareas = window.parent.document.querySelectorAll('textarea');
-            let found = false;
-            textareas.forEach(ta => {{
-                if (ta.getAttribute('aria-label') === '{sig_key}' ||
-                    (ta.placeholder && ta.placeholder.includes('{sig_key}'))) {{
-                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                        window.parent.HTMLTextAreaElement.prototype, 'value').set;
-                    nativeInputValueSetter.call(ta, data);
-                    ta.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    found = true;
-                }}
-            }});
-            // Fallback: cerca per label testuale
-            if (!found) {{
-                const allTA = window.parent.document.querySelectorAll('textarea');
-                allTA.forEach(ta => {{
-                    if (ta.value === '' && ta.style.display !== 'none') {{
-                        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                            window.parent.HTMLTextAreaElement.prototype, 'value').set;
-                        nativeInputValueSetter.call(ta, data);
-                        ta.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    }}
-                }});
-            }}
-            document.getElementById('saveMsg').style.display = 'block';
-        }}
+c.addEventListener('touchstart', e=>{{ e.preventDefault(); drawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }}, {{passive:false}});
+c.addEventListener('touchmove',  e=>{{ e.preventDefault(); if(!drawing) return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasMark=true; }}, {{passive:false}});
+c.addEventListener('touchend',   e=>{{ e.preventDefault(); drawing=false; }}, {{passive:false}});
 
-        function clearSig() {{
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            document.getElementById('saveMsg').style.display = 'none';
-        }}
-    }})();
-    </script>
-    """
+function clearSig() {{
+  ctx.clearRect(0,0,c.width,c.height); hasMark=false;
+  document.getElementById('msg').innerHTML = '<span class="wait">Firma nel riquadro, poi clicca Conferma firma.</span>';
+  Streamlit.setComponentValue('');
+}}
 
-    st.components.v1.html(canvas_html, height=340, scrolling=False)
+function confirmSig() {{
+  if (!hasMark) {{
+    document.getElementById('msg').innerHTML = '<span class="wait">Disegna prima la firma.</span>';
+    return;
+  }}
+  const data = c.toDataURL('image/png');
+  Streamlit.setComponentValue(data);
+  document.getElementById('msg').innerHTML = '<span class="ok">Firma confermata. Puoi procedere.</span>';
+}}
 
-    # Campo dove il JavaScript scrive il data URL della firma
-    sig_input = st.text_area(
-        sig_key,
-        value=st.session_state.get(sig_key, ""),
-        key=sig_key,
-        height=68,
-        label_visibility="collapsed",
-        placeholder=f"(campo tecnico firma — {sig_key})",
-        help="Questo campo viene compilato automaticamente quando clicchi 'Conferma firma'",
-    )
+// Inizializza componente Streamlit
+window.addEventListener('load', () => {{
+  Streamlit.setFrameHeight(280);
+  Streamlit.setComponentValue('');
+}});
+</script>
+<script src="https://unpkg.com/streamlit-component-lib/dist/StreamlitLib.bundle.js"></script>
+</body>
+</html>
+"""
 
-    # Mostra stato firma
-    if sig_input and sig_input.strip().startswith("data:image"):
+    sig_input = st.components.v1.html(sig_component_html, height=290)
+
+    # Controlla stato firma
+    firma_ok = sig_input and str(sig_input).startswith("data:image")
+    if firma_ok:
         st.success("Firma acquisita correttamente.")
     else:
         st.info("Firma nel riquadro, poi clicca **Conferma firma** per salvare.")
@@ -8278,11 +8247,11 @@ def ui_public_sign_page():
             st.error("Inserisci un'email valida per ricevere la copia.")
             st.stop()
 
-        # Recupera firma dal text_area compilato dal JS
+        # Recupera firma dal componente
         sig_png = b""
         has_sig = False
 
-        raw_sig = (sig_input or "").strip()
+        raw_sig = str(sig_input or "").strip()
 
         if raw_sig and raw_sig.startswith("data:image"):
             try:
