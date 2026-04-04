@@ -8134,130 +8134,41 @@ def ui_public_sign_page():
         tel          = st.text_input("Telefono Genitore/Tutore", value="", key="pub_tel")
         nome_cognome = st.text_input("Nome e Cognome del minore", value=f"{nome} {cogn}".strip(), key="pub_nc")
 
-    st.subheader("Firma")
-    st.caption("Firma qui sotto con il dito (o il mouse). Poi clicca **Conferma firma**.")
+    st.subheader("Firma (facoltativa)")
+    st.caption("Firma qui sotto con il dito. La firma è opzionale — l'OTP è già la prova di identità.")
 
-    sig_component_html = """
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: transparent; font-family: sans-serif; }
-  #wrap { border: 2px solid #2563a8; border-radius: 10px; overflow: hidden; background: #fff; }
-  canvas { display: block; width: 100%; height: 200px; cursor: crosshair; touch-action: none; background: #fff; }
-  .btns { display: flex; gap: 8px; padding: 8px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
-  button { padding: 10px 20px; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: 500; }
-  #btnConfirm { background: #2563a8; color: #fff; border: none; flex: 1; }
-  #btnClear { background: #f1f5f9; color: #334155; border: 1.5px solid #cbd5e1; }
-  #msg { padding: 8px 10px; font-size: 14px; min-height: 30px; text-align: center; }
-</style>
-</head>
-<body>
-<div id="wrap">
-  <canvas id="c" width="800" height="200"></canvas>
-  <div class="btns">
-    <button id="btnClear" onclick="clearSig()">Cancella</button>
-    <button id="btnConfirm" onclick="confirmSig()">Conferma firma</button>
-  </div>
-</div>
-<div id="msg" style="color:#92400e;">Firma nel riquadro poi clicca Conferma firma</div>
-
-<script>
-// Implementazione manuale del protocollo Streamlit component
-// Basata su: https://docs.streamlit.io/develop/concepts/custom-components/create
-(function() {
-  var RENDER_EVENT = "streamlit:render";
-  var SET_FRAME_HEIGHT_EVENT = "streamlit:setFrameHeight";
-  var COMPONENT_READY_EVENT = "streamlit:componentReady";
-  var SET_COMPONENT_VALUE = "streamlit:setComponentValue";
-
-  function sendMsg(type, data) {
-    window.parent.postMessage(Object.assign({ type: type }, data), "*");
-  }
-
-  // Annuncia che il componente è pronto
-  sendMsg(COMPONENT_READY_EVENT, { apiVersion: 1 });
-
-  // Imposta altezza frame
-  function setHeight(h) {
-    sendMsg(SET_FRAME_HEIGHT_EVENT, { height: h });
-  }
-
-  // Invia valore a Streamlit
-  window.setStreamlitValue = function(val) {
-    sendMsg(SET_COMPONENT_VALUE, { value: val, dataType: "json" });
-  };
-
-  setHeight(290);
-
-  // Canvas setup
-  var c   = document.getElementById('c');
-  var ctx = c.getContext('2d');
-  ctx.strokeStyle = '#111';
-  ctx.lineWidth   = 2.8;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  var drawing = false, hasMark = false;
-
-  function getPos(e) {
-    var r  = c.getBoundingClientRect();
-    var sx = c.width  / r.width;
-    var sy = c.height / r.height;
-    if (e.touches && e.touches.length > 0) {
-      return { x: (e.touches[0].clientX - r.left) * sx,
-               y: (e.touches[0].clientY - r.top)  * sy };
-    }
-    return { x: (e.clientX - r.left) * sx,
-             y: (e.clientY - r.top)  * sy };
-  }
-
-  c.addEventListener('mousedown',  function(e) { drawing=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
-  c.addEventListener('mousemove',  function(e) { if(!drawing) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasMark=true; });
-  c.addEventListener('mouseup',    function()  { drawing=false; });
-  c.addEventListener('mouseleave', function()  { drawing=false; });
-
-  c.addEventListener('touchstart', function(e) { e.preventDefault(); drawing=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }, {passive:false});
-  c.addEventListener('touchmove',  function(e) { e.preventDefault(); if(!drawing) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasMark=true; }, {passive:false});
-  c.addEventListener('touchend',   function(e) { e.preventDefault(); drawing=false; }, {passive:false});
-
-  window.clearSig = function() {
-    ctx.clearRect(0,0,c.width,c.height);
-    hasMark = false;
-    document.getElementById('msg').innerHTML = '<span style="color:#92400e;">Firma nel riquadro poi clicca Conferma firma</span>';
-    window.setStreamlitValue('');
-  };
-
-  window.confirmSig = function() {
-    if (!hasMark) {
-      document.getElementById('msg').innerHTML = '<span style="color:#b91c1c;">Disegna prima la firma nel riquadro.</span>';
-      return;
-    }
-    var data = c.toDataURL('image/png');
-    window.setStreamlitValue(data);
-    document.getElementById('msg').innerHTML = '<span style="color:#15803d;font-weight:600;">Firma confermata. Procedi con i consensi qui sotto.</span>';
-  };
-
-  // Ascolta messaggi da Streamlit (render)
-  window.addEventListener('message', function(e) {
-    if (e.data.type === RENDER_EVENT) {
-      setHeight(290);
-    }
-  });
-})();
-</script>
-</body>
-</html>
-"""
-
-    sig_input = st.components.v1.html(sig_component_html, height=295)
-
-    firma_ok = sig_input and str(sig_input).startswith("data:image")
-    if firma_ok:
-        st.success("Firma acquisita. Procedi con i consensi.")
-    else:
-        st.info("Firma nel riquadro, poi clicca **Conferma firma**.")
-
+    # Firma opzionale via streamlit-drawable-canvas (se disponibile)
+    sig_png = b""
+    try:
+        from streamlit_drawable_canvas import st_canvas as _st_canvas
+        _canvas_result = _st_canvas(
+            fill_color="rgba(0,0,0,0)",
+            stroke_width=3,
+            stroke_color="#111111",
+            background_color="#ffffff",
+            height=160,
+            width=None,
+            drawing_mode="freedraw",
+            key="sig_canvas_pub",
+        )
+        if _canvas_result is not None and _canvas_result.image_data is not None:
+            try:
+                import numpy as np
+                import PIL.Image
+                arr = _canvas_result.image_data
+                img = PIL.Image.fromarray(arr.astype("uint8"), "RGBA")
+                bg  = PIL.Image.new("RGBA", img.size, (255,255,255,255))
+                bg.alpha_composite(img)
+                rgb = bg.convert("RGB")
+                if rgb.getbbox():  # c'è davvero qualcosa disegnato
+                    buf = io.BytesIO()
+                    rgb.save(buf, format="PNG")
+                    sig_png = buf.getvalue()
+                    st.success("Firma acquisita.")
+            except Exception:
+                pass
+    except ImportError:
+        st.info("Firma grafica non disponibile su questo dispositivo — procedi comunque.")
     st.subheader("Consensi (Sì/No)")
     if doc_type == "adulto":
         gdpr_letto    = st.radio("Ho letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
@@ -8280,32 +8191,11 @@ def ui_public_sign_page():
             st.error("Inserisci un'email valida per ricevere la copia.")
             st.stop()
 
-        # Recupera firma dal componente
-        sig_png = b""
-        has_sig = False
-
-        raw_sig = str(sig_input or "").strip()
-
-        if raw_sig and raw_sig.startswith("data:image"):
-            try:
-                import base64
-                import PIL.Image
-                header, b64data = raw_sig.split(",", 1)
-                img_bytes = base64.b64decode(b64data)
-                img = PIL.Image.open(io.BytesIO(img_bytes)).convert("RGBA")
-                bg = PIL.Image.new("RGBA", img.size, (255, 255, 255, 255))
-                bg.alpha_composite(img)
-                sig_rgb = bg.convert("RGB")
-                sig_buf = io.BytesIO()
-                sig_rgb.save(sig_buf, format="PNG")
-                sig_png = sig_buf.getvalue()
-                has_sig = sig_rgb.getbbox() is not None
-            except Exception:
-                has_sig = False
-
+        # sig_png già impostato dalla sezione firma sopra
+        has_sig = bool(sig_png and len(sig_png) > 100)
         if not has_sig:
-            st.warning("Firma non rilevata. Il consenso verrà salvato senza immagine della firma.")
             sig_png = b""
+            # Non blocchiamo — l'OTP è già la prova di identità
 
         # genera PDF precompilato
         fields = {}
