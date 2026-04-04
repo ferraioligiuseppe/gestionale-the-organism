@@ -8137,93 +8137,126 @@ def ui_public_sign_page():
     st.subheader("Firma")
     st.caption("Firma qui sotto con il dito (o il mouse). Poi clicca **Conferma firma**.")
 
-    # Componente firma con protocollo Streamlit corretto
-    sig_key = f"firma_png_data_{pid}_{doc_type}"
-
-    sig_component_html = f"""
+    sig_component_html = """
 <!DOCTYPE html>
 <html>
 <head>
 <style>
-  body {{ margin:0; padding:0; font-family: sans-serif; background: transparent; }}
-  #wrap {{ background: #fff; border: 2px solid #2563a8; border-radius: 10px; overflow: hidden; }}
-  canvas {{ display: block; width: 100%; height: 200px; cursor: crosshair; touch-action: none; }}
-  .btns {{ display: flex; gap: 8px; padding: 8px; background: #f8fafc; }}
-  button {{ padding: 10px 20px; border-radius: 8px; font-size: 15px; cursor: pointer; border: 1.5px solid #cbd5e1; }}
-  #btnConfirm {{ background: #2563a8; color: #fff; border-color: #2563a8; }}
-  #btnClear   {{ background: #f1f5f9; color: #334155; }}
-  #msg {{ padding: 6px 10px; font-size: 13px; min-height: 24px; }}
-  .ok  {{ color: #15803d; }} .wait {{ color: #92400e; }}
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: transparent; font-family: sans-serif; }
+  #wrap { border: 2px solid #2563a8; border-radius: 10px; overflow: hidden; background: #fff; }
+  canvas { display: block; width: 100%; height: 200px; cursor: crosshair; touch-action: none; background: #fff; }
+  .btns { display: flex; gap: 8px; padding: 8px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+  button { padding: 10px 20px; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: 500; }
+  #btnConfirm { background: #2563a8; color: #fff; border: none; flex: 1; }
+  #btnClear { background: #f1f5f9; color: #334155; border: 1.5px solid #cbd5e1; }
+  #msg { padding: 8px 10px; font-size: 14px; min-height: 30px; text-align: center; }
 </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="c" width="800" height="200"></canvas>
   <div class="btns">
-    <button id="btnClear"   onclick="clearSig()">Cancella</button>
+    <button id="btnClear" onclick="clearSig()">Cancella</button>
     <button id="btnConfirm" onclick="confirmSig()">Conferma firma</button>
   </div>
 </div>
-<div id="msg" class="wait">Firma nel riquadro, poi clicca Conferma firma.</div>
+<div id="msg" style="color:#92400e;">Firma nel riquadro poi clicca Conferma firma</div>
 
 <script>
-const c   = document.getElementById('c');
-const ctx = c.getContext('2d');
-ctx.strokeStyle = '#111'; ctx.lineWidth = 2.8;
-ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-let drawing = false, hasMark = false;
+// Implementazione manuale del protocollo Streamlit component
+// Basata su: https://docs.streamlit.io/develop/concepts/custom-components/create
+(function() {
+  var RENDER_EVENT = "streamlit:render";
+  var SET_FRAME_HEIGHT_EVENT = "streamlit:setFrameHeight";
+  var COMPONENT_READY_EVENT = "streamlit:componentReady";
+  var SET_COMPONENT_VALUE = "streamlit:setComponentValue";
 
-function pos(e) {{
-  const r = c.getBoundingClientRect();
-  const sx = c.width / r.width, sy = c.height / r.height;
-  if (e.touches) return {{ x:(e.touches[0].clientX-r.left)*sx, y:(e.touches[0].clientY-r.top)*sy }};
-  return {{ x:(e.clientX-r.left)*sx, y:(e.clientY-r.top)*sy }};
-}}
+  function sendMsg(type, data) {
+    window.parent.postMessage(Object.assign({ type: type }, data), "*");
+  }
 
-c.onmousedown  = e => {{ drawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }};
-c.onmousemove  = e => {{ if(!drawing) return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasMark=true; }};
-c.onmouseup    = () => drawing=false;
-c.onmouseleave = () => drawing=false;
+  // Annuncia che il componente è pronto
+  sendMsg(COMPONENT_READY_EVENT, { apiVersion: 1 });
 
-c.addEventListener('touchstart', e=>{{ e.preventDefault(); drawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }}, {{passive:false}});
-c.addEventListener('touchmove',  e=>{{ e.preventDefault(); if(!drawing) return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasMark=true; }}, {{passive:false}});
-c.addEventListener('touchend',   e=>{{ e.preventDefault(); drawing=false; }}, {{passive:false}});
+  // Imposta altezza frame
+  function setHeight(h) {
+    sendMsg(SET_FRAME_HEIGHT_EVENT, { height: h });
+  }
 
-function clearSig() {{
-  ctx.clearRect(0,0,c.width,c.height); hasMark=false;
-  document.getElementById('msg').innerHTML = '<span class="wait">Firma nel riquadro, poi clicca Conferma firma.</span>';
-  Streamlit.setComponentValue('');
-}}
+  // Invia valore a Streamlit
+  window.setStreamlitValue = function(val) {
+    sendMsg(SET_COMPONENT_VALUE, { value: val, dataType: "json" });
+  };
 
-function confirmSig() {{
-  if (!hasMark) {{
-    document.getElementById('msg').innerHTML = '<span class="wait">Disegna prima la firma.</span>';
-    return;
-  }}
-  const data = c.toDataURL('image/png');
-  Streamlit.setComponentValue(data);
-  document.getElementById('msg').innerHTML = '<span class="ok">Firma confermata. Puoi procedere.</span>';
-}}
+  setHeight(290);
 
-// Inizializza componente Streamlit
-window.addEventListener('load', () => {{
-  Streamlit.setFrameHeight(280);
-  Streamlit.setComponentValue('');
-}});
+  // Canvas setup
+  var c   = document.getElementById('c');
+  var ctx = c.getContext('2d');
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth   = 2.8;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  var drawing = false, hasMark = false;
+
+  function getPos(e) {
+    var r  = c.getBoundingClientRect();
+    var sx = c.width  / r.width;
+    var sy = c.height / r.height;
+    if (e.touches && e.touches.length > 0) {
+      return { x: (e.touches[0].clientX - r.left) * sx,
+               y: (e.touches[0].clientY - r.top)  * sy };
+    }
+    return { x: (e.clientX - r.left) * sx,
+             y: (e.clientY - r.top)  * sy };
+  }
+
+  c.addEventListener('mousedown',  function(e) { drawing=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+  c.addEventListener('mousemove',  function(e) { if(!drawing) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasMark=true; });
+  c.addEventListener('mouseup',    function()  { drawing=false; });
+  c.addEventListener('mouseleave', function()  { drawing=false; });
+
+  c.addEventListener('touchstart', function(e) { e.preventDefault(); drawing=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }, {passive:false});
+  c.addEventListener('touchmove',  function(e) { e.preventDefault(); if(!drawing) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasMark=true; }, {passive:false});
+  c.addEventListener('touchend',   function(e) { e.preventDefault(); drawing=false; }, {passive:false});
+
+  window.clearSig = function() {
+    ctx.clearRect(0,0,c.width,c.height);
+    hasMark = false;
+    document.getElementById('msg').innerHTML = '<span style="color:#92400e;">Firma nel riquadro poi clicca Conferma firma</span>';
+    window.setStreamlitValue('');
+  };
+
+  window.confirmSig = function() {
+    if (!hasMark) {
+      document.getElementById('msg').innerHTML = '<span style="color:#b91c1c;">Disegna prima la firma nel riquadro.</span>';
+      return;
+    }
+    var data = c.toDataURL('image/png');
+    window.setStreamlitValue(data);
+    document.getElementById('msg').innerHTML = '<span style="color:#15803d;font-weight:600;">Firma confermata. Procedi con i consensi qui sotto.</span>';
+  };
+
+  // Ascolta messaggi da Streamlit (render)
+  window.addEventListener('message', function(e) {
+    if (e.data.type === RENDER_EVENT) {
+      setHeight(290);
+    }
+  });
+})();
 </script>
-<script src="https://unpkg.com/streamlit-component-lib/dist/StreamlitLib.bundle.js"></script>
 </body>
 </html>
 """
 
-    sig_input = st.components.v1.html(sig_component_html, height=290)
+    sig_input = st.components.v1.html(sig_component_html, height=295)
 
-    # Controlla stato firma
     firma_ok = sig_input and str(sig_input).startswith("data:image")
     if firma_ok:
-        st.success("Firma acquisita correttamente.")
+        st.success("Firma acquisita. Procedi con i consensi.")
     else:
-        st.info("Firma nel riquadro, poi clicca **Conferma firma** per salvare.")
+        st.info("Firma nel riquadro, poi clicca **Conferma firma**.")
 
     st.subheader("Consensi (Sì/No)")
     if doc_type == "adulto":
