@@ -106,12 +106,24 @@ PDF_PRIVACY_MINORE_SIGN_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Mi
 
 
 def _privacy_abs_path(p: str) -> str:
-    """Resolve relative paths against app directory (works on Streamlit Cloud)."""
+    """Resolve relative paths against project root (assets/ is at repo root, not inside modules/)."""
+    if os.path.isabs(p):
+        return p
     try:
-        base = os.path.dirname(__file__)
+        # app_core.py è in modules/ — risali alla root del progetto
+        modules_dir = os.path.dirname(__file__)
+        project_root = os.path.dirname(modules_dir)
+        candidate = os.path.join(project_root, p)
+        if os.path.exists(candidate):
+            return candidate
+        # fallback: prova dalla directory corrente di lavoro
+        cwd_candidate = os.path.join(os.getcwd(), p)
+        if os.path.exists(cwd_candidate):
+            return cwd_candidate
+        # ultimo fallback: relativo a modules/ (comportamento precedente)
+        return os.path.join(modules_dir, p)
     except Exception:
-        base = os.getcwd()
-    return p if os.path.isabs(p) else os.path.join(base, p)
+        return os.path.join(os.getcwd(), p)
 
 def _check_privacy_templates_ui():
     """Mostra in UI lo stato dei file template privacy (senza crashare)."""
