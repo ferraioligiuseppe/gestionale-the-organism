@@ -1637,7 +1637,7 @@ def ui_gestione_utenti(get_conn):
     st.header("Utenti / Ruoli")
 
     # Crea utente
-    with st.expander("➕ Crea nuovo utente", expanded=True):
+    with st.expander("Crea nuovo utente", expanded=True):
         new_u = st.text_input("Nuovo username")
         new_email = st.text_input("Email (opzionale)")
         new_pw = st.text_input("Password iniziale", type="password")
@@ -1694,7 +1694,7 @@ def ui_gestione_utenti(get_conn):
         is_active = bool(r[3])
         must_change = bool(r[4])
         last_login = r[5]
-        with st.expander(f"👤 {uname} (id {uid})", expanded=False):
+        with st.expander(f"{uname} (id {uid})", expanded=False):
             st.write({"email": email, "is_active": is_active, "must_change_password": must_change, "last_login_at": str(last_login) if last_login else None})
             # ruoli
             current_roles = _get_roles_for_user(conn, uid)
@@ -4484,7 +4484,7 @@ def ui_db_cleanup():
 
     tab1, tab2 = st.tabs(["Duplicati per Codice Fiscale", "Duplicati per Identità (nome/cognome/data)"])
 
-    with st.expander("🧾 Compatta consensi privacy (tieni solo l'ultimo)", expanded=False):
+    with st.expander("Compatta consensi privacy (tieni solo l'ultimo)", expanded=False):
         st.write("Elimina i consensi privacy precedenti e lascia SOLO l'ultimo per ogni paziente (DB TEST).")
         conf = st.text_input("Per confermare scrivi: COMPACT", key="compact_confirm")
         if st.button("Esegui compattazione consensi (tutti i pazienti)", disabled=(conf.strip().upper() != "COMPACT")):
@@ -4805,12 +4805,20 @@ def ui_pazienti():
     # Filtro ricerca
     filtro = st.text_input("Cerca per cognome/nome/codice fiscale", "")
 
+    mostra_archiviati = st.checkbox("Mostra anche pazienti archiviati", value=False, key="elenco_show_archiviati")
+
     query = "SELECT * FROM Pazienti"
     params = []
+    conditions = []
+    if not mostra_archiviati:
+        conditions.append("COALESCE(Stato_Paziente,'ATTIVO') = ?")
+        params.append("ATTIVO")
     if filtro.strip():
-        query += " WHERE Cognome LIKE ? OR Nome LIKE ? OR Codice_Fiscale LIKE ?"
+        conditions.append("(Cognome LIKE ? OR Nome LIKE ? OR Codice_Fiscale LIKE ?)")
         like = f"%{filtro.strip()}%"
-        params = [like, like, like]
+        params.extend([like, like, like])
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY Cognome, Nome"
 
     cur.execute(query, params)
@@ -4861,16 +4869,60 @@ def ui_pazienti():
             st.success("Paziente riattivato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_c:
-        if st.button("Elimina definitivamente", key="elimina"):
-            cur.execute("DELETE FROM anamnesi WHERE paziente_id = %s", (sel_id,))
-            cur.execute("DELETE FROM Valutazioni_Visive WHERE paziente_id = %s", (sel_id,))
-            cur.execute("DELETE FROM Sedute WHERE paziente_id = %s", (sel_id,))
-            cur.execute("DELETE FROM Coupons WHERE paziente_id = %s", (sel_id,))
-            cur.execute("DELETE FROM Pazienti WHERE id = %s", (sel_id,))
-            conn.commit()
-            st.success("Paziente e dati associati eliminati.")
-            conn.close()
-            st.stop()
+        if st.button("Elimina definitivamente", key="btn_elimina_paz"):
+            st.session_state["confirm_elimina_paz_id"] = sel_id
+
+    # ── Conferma eliminazione con digitazione cognome ─────────────────────
+    if st.session_state.get("confirm_elimina_paz_id") == sel_id:
+        st.markdown(
+            f"""
+            <div style="background:#fef2f2;border:2px solid #ef4444;border-radius:10px;
+                        padding:14px 18px;margin:10px 0;">
+                <b style="color:#991b1b;">Stai per eliminare questo paziente in modo irreversibile.</b><br>
+                <span style="color:#7f1d1d;font-size:0.88rem;">
+                Verranno cancellati: anagrafica, visite, anamnesi, sedute, coupon, consensi privacy e tutti i documenti collegati.
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        cognome_check = st.text_input(
+            f"Scrivi il cognome del paziente ({rec['Cognome'].upper()}) per confermare:",
+            key="elimina_paz_conferma_input",
+        )
+        dc1, dc2 = st.columns(2)
+        with dc1:
+            conferma_ok = cognome_check.strip().upper() == (rec["Cognome"] or "").strip().upper()
+            if st.button("Conferma eliminazione", key="elimina_paz_confirm", disabled=not conferma_ok):
+                try:
+                    # Cancella in ordine: prima tabelle figlie, poi paziente
+                    tabelle = [
+                        ("anamnesi",          "paziente_id"),
+                        ("Valutazioni_Visive", "paziente_id"),
+                        ("Sedute",             "paziente_id"),
+                        ("Coupons",            "paziente_id"),
+                        ("Consensi_Privacy",   "paziente_id"),
+                        ("documenti",          "paziente_id"),
+                        ("relazioni_cliniche", "paziente_id"),
+                    ]
+                    for tbl, col in tabelle:
+                        try:
+                            cur.execute(f"DELETE FROM {tbl} WHERE {col} = %s", (sel_id,))
+                        except Exception:
+                            try: conn.rollback()
+                            except Exception: pass
+                    cur.execute("DELETE FROM Pazienti WHERE id = %s", (sel_id,))
+                    conn.commit()
+                    st.session_state["confirm_elimina_paz_id"] = None
+                    st.success(f"Paziente {rec['Cognome']} {rec['Nome']} eliminato definitivamente.")
+                    conn.close()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore eliminazione: {e}")
+        with dc2:
+            if st.button("Annulla", key="elimina_paz_cancel"):
+                st.session_state["confirm_elimina_paz_id"] = None
+                st.rerun()
 
     st.markdown("### Modifica dati paziente")
     with st.form("modifica_paziente"):
@@ -4983,20 +5035,32 @@ def ui_anamnesi():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Seleziona paziente
-    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    # Seleziona paziente (solo ATTIVI, con data nascita per distinguere omonimi)
+    cur.execute(
+        "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
+        "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' ORDER BY Cognome, Nome"
+    )
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    def _paz_label_an(p):
+        dn = ""
+        if p.get("Data_Nascita"):
+            try:
+                dn = " · " + datetime.strptime(p["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                dn = " · " + str(p["Data_Nascita"])
+        return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
+
+    options = [_paz_label_an(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
     # --- Link pubblico per INPPS (genitori) ---
-    with st.expander("🔗 Link INPPS (genitori)", expanded=False):
+    with st.expander("Link INPPS (genitori)", expanded=False):
         if not _public_links_enabled():
             st.info("Link pubblici disattivati. Abilita in Secrets: [public_links] ENABLED=true")
         else:
@@ -5017,7 +5081,7 @@ def ui_anamnesi():
 
 
     # --- Migrazione legacy -> PNEV (sicura, non sovrascrive) ---
-    with st.expander("🧬 Migrazione legacy → PNEV", expanded=False):
+    with st.expander("Migrazione legacy PNEV", expanded=False):
         st.caption("Popola pnev_json/pnev_summary per le vecchie schede (che avevano solo testo libero). Non sovrascrive schede già migrate.")
         colm1, colm2 = st.columns([1, 1])
         with colm1:
@@ -5244,10 +5308,22 @@ def ui_anamnesi():
         st.rerun()
 
     if 'cancella' in locals() and cancella:
-        cur.execute("DELETE FROM anamnesi WHERE id = %s", (an_id,))
-        conn.commit()
-        st.success("Valutazione PNEV eliminata.")
-        st.rerun()
+        st.session_state["confirm_del_pnev"] = an_id
+
+    if st.session_state.get("confirm_del_pnev") == an_id:
+        st.warning(f"Confermi l'eliminazione della valutazione PNEV del {rec['data_anamnesi'] or ''}? L'operazione non è reversibile.")
+        cp1, cp2 = st.columns(2)
+        with cp1:
+            if st.button("Conferma eliminazione PNEV", key="del_pnev_yes", type="primary"):
+                cur.execute("DELETE FROM anamnesi WHERE id = %s", (an_id,))
+                conn.commit()
+                st.session_state["confirm_del_pnev"] = None
+                st.success("Valutazione PNEV eliminata.")
+                st.rerun()
+        with cp2:
+            if st.button("Annulla", key="del_pnev_no"):
+                st.session_state["confirm_del_pnev"] = None
+                st.rerun()
 
     conn.close()
 
@@ -5262,15 +5338,27 @@ def ui_valutazioni_visive():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Seleziona paziente
-    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    # Seleziona paziente (solo ATTIVI, con data nascita per distinguere omonimi)
+    cur.execute(
+        "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
+        "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' ORDER BY Cognome, Nome"
+    )
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    def _paz_label_vis(p):
+        dn = ""
+        if p.get("Data_Nascita"):
+            try:
+                dn = " · " + datetime.strptime(p["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                dn = " · " + str(p["Data_Nascita"])
+        return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
+
+    options = [_paz_label_vis(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
@@ -5820,10 +5908,10 @@ ESAMI STRUTTURALI / FUNZIONALI
         except ImportError:
             _storico_fn = None; _dresdner_fn = None
     if _storico_fn:
-        with st.expander("📈 Andamento IOP / Spessore corneale nel tempo", expanded=False):
+        with st.expander("Andamento IOP / Spessore corneale nel tempo", expanded=False):
             _storico_fn(rows)
     if _dresdner_fn:
-        with st.expander("📋 Tabella di correzione Dresdner (CCT → IOPc)", expanded=False):
+        with st.expander("Tabella di correzione Dresdner (CCT / IOPc)", expanded=False):
             _dresdner_fn()
 
     labels = [
@@ -5978,9 +6066,23 @@ ESAMI STRUTTURALI / FUNZIONALI
         st.success("Valutazione aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Valutazioni_Visive WHERE id = %s", (val_id,))
-        conn.commit()
-        st.success("Valutazione eliminata.")
+        st.session_state["confirm_del_vis"] = val_id
+
+    if st.session_state.get("confirm_del_vis") == val_id:
+        st.warning(f"Confermi l'eliminazione della valutazione oculistica #{val_id}? L'operazione non è reversibile.")
+        cv1, cv2 = st.columns(2)
+        with cv1:
+            if st.button("Conferma eliminazione visita", key="del_vis_yes", type="primary"):
+                cur.execute("DELETE FROM Valutazioni_Visive WHERE id = %s", (val_id,))
+                conn.commit()
+                st.session_state["confirm_del_vis"] = None
+                st.success("Valutazione eliminata.")
+                st.rerun()
+        with cv2:
+            if st.button("Annulla", key="del_vis_no"):
+                st.session_state["confirm_del_vis"] = None
+                st.rerun()
+
     st.markdown("---")
     st.subheader("Prescrizione occhiali (stampa A5 / A4 2×A5)")
 
@@ -6114,14 +6216,26 @@ def ui_sedute():
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute(
+        "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
+        "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' ORDER BY Cognome, Nome"
+    )
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    def _paz_label_sed(p):
+        dn = ""
+        if p.get("Data_Nascita"):
+            try:
+                dn = " · " + datetime.strptime(p["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                dn = " · " + str(p["Data_Nascita"])
+        return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
+
+    options = [_paz_label_sed(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -6245,9 +6359,22 @@ def ui_sedute():
         st.success("Seduta aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Sedute WHERE id = %s", (sed_id,))
-        conn.commit()
-        st.success("Seduta eliminata.")
+        st.session_state["confirm_del_sed"] = sed_id
+
+    if st.session_state.get("confirm_del_sed") == sed_id:
+        st.warning(f"Confermi l'eliminazione della seduta #{sed_id}? L'operazione non è reversibile.")
+        cs1, cs2 = st.columns(2)
+        with cs1:
+            if st.button("Conferma eliminazione seduta", key="del_sed_yes", type="primary"):
+                cur.execute("DELETE FROM Sedute WHERE id = %s", (sed_id,))
+                conn.commit()
+                st.session_state["confirm_del_sed"] = None
+                st.success("Seduta eliminata.")
+                st.rerun()
+        with cs2:
+            if st.button("Annulla", key="del_sed_no"):
+                st.session_state["confirm_del_sed"] = None
+                st.rerun()
 
     conn.close()
 def ui_coupons():
@@ -6256,15 +6383,27 @@ def ui_coupons():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Elenco pazienti
-    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    # Elenco pazienti (solo ATTIVI, con data nascita per distinguere omonimi)
+    cur.execute(
+        "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
+        "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' ORDER BY Cognome, Nome"
+    )
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    opt_paz = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    def _paz_label_coup(p):
+        dn = ""
+        if p.get("Data_Nascita"):
+            try:
+                dn = " · " + datetime.strptime(p["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                dn = " · " + str(p["Data_Nascita"])
+        return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
+
+    opt_paz = [_paz_label_coup(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -6374,8 +6513,23 @@ def ui_coupons():
                     st.rerun()
         with col4:
             if st.button("Elimina", key=f"c_del_{c['id']}"):
-                cur.execute("DELETE FROM Coupons WHERE id = %s", (c["id"],))
+                st.session_state["confirm_del_coup"] = c["id"]
+
+    # Conferma eliminazione coupon
+    del_coup_id = st.session_state.get("confirm_del_coup")
+    if del_coup_id:
+        st.warning(f"Confermi l'eliminazione del coupon #{del_coup_id}?")
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            if st.button("Conferma eliminazione coupon", key="del_coup_yes", type="primary"):
+                cur.execute("DELETE FROM Coupons WHERE id = %s", (del_coup_id,))
                 conn.commit()
+                st.session_state["confirm_del_coup"] = None
+                st.success("Coupon eliminato.")
+                st.rerun()
+        with cc2:
+            if st.button("Annulla", key="del_coup_no"):
+                st.session_state["confirm_del_coup"] = None
                 st.rerun()
 
     conn.close()
@@ -6768,7 +6922,7 @@ def ui_dashboard_evolutiva():
 
     _ensure_relazioni_cliniche_table(conn)
 
-    st.header("📊 Dashboard evolutiva")
+    st.header("Dashboard evolutiva")
 
     # Selezione paziente (AUTO) - indipendente dalla sezione Pazienti
     paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
@@ -6859,7 +7013,7 @@ def ui_dashboard_evolutiva():
                 if docx_path and os.path.exists(docx_path):
                     with cols[0]:
                         with open(docx_path, "rb") as f:
-                            st.download_button("⬇️ Word", f, file_name=os.path.basename(docx_path), key=f"dw_{rid}")
+                            st.download_button("Scarica Word", f, file_name=os.path.basename(docx_path), key=f"dw_{rid}")
                 else:
                     with cols[0]:
                         st.caption("Word non disponibile")
@@ -6867,7 +7021,7 @@ def ui_dashboard_evolutiva():
                 if pdf_path and os.path.exists(pdf_path):
                     with cols[1]:
                         with open(pdf_path, "rb") as f:
-                            st.download_button("⬇️ PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rid}")
+                            st.download_button("Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rid}")
                 else:
                     with cols[1]:
                         st.caption("PDF non disponibile (cloud)")
@@ -6916,7 +7070,7 @@ def ui_debug_db():
 
 def ui_import_pazienti():
     import streamlit as st
-    st.header("📥 Import Pazienti su Neon (Cloud)")
+    st.header("Import Pazienti su Neon (Cloud)")
     st.caption("Carica un file CSV o Excel con almeno: Cognome, Nome (consigliato anche Data_Nascita). I dati verranno inseriti su Neon.")
 
     if _DB_BACKEND != "postgres":
@@ -8042,7 +8196,7 @@ def ui_calibrazione_cuffie_test():
         else:
             st.info("Nessun device registrato.")
 
-        with st.expander("➕ Aggiungi device", expanded=False):
+        with st.expander("Aggiungi device", expanded=False):
             label = st.text_input("Nome device", value="PC Studio (Chrome)")
             vol = st.text_input("Volume (nota)", value="50%")
             notes = st.text_area("Note", value="EQ OFF, nessun enhancer")
@@ -8075,7 +8229,7 @@ def ui_calibrazione_cuffie_test():
         else:
             st.info("Nessuna cuffia registrata.")
 
-        with st.expander("➕ Aggiungi cuffie", expanded=False):
+        with st.expander("Aggiungi cuffie", expanded=False):
             brand = st.text_input("Marca", value="Sony")
             model = st.text_input("Modello", value="MDR-ZX110")
             hp_type = st.selectbox("Tipo", ["over-ear", "on-ear", "in-ear"], index=0)
@@ -9550,7 +9704,7 @@ def ui_sessione_stimolazione_uditiva_test():
 
     man = st.session_state["stim_pr"]
 
-    with st.expander("⚙️ Parametri realtime", expanded=True):
+    with st.expander("Parametri realtime", expanded=True):
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -10129,7 +10283,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
 
     _ensure_relazioni_cliniche_table(conn)
 
-    st.header("🗂️ Relazioni cliniche")
+    st.header("Relazioni cliniche")
     st.caption("Generazione: Word sempre (cloud) • PDF solo in locale se LibreOffice è disponibile")
 
     # Selezione tipo relazione
@@ -10198,7 +10352,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     template_file = rel["files"]["std"]
     template_path = os.path.join(templates_dir, template_file)
 
-    if st.button("📄 Genera Word ( + PDF se disponibile )", type="primary"):
+    if st.button("Genera Word (+ PDF se disponibile)", type="primary"):
         if not os.path.exists(template_path):
             st.error(f"Template mancante: {template_path}")
             st.stop()
@@ -10232,10 +10386,10 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
 
         st.success("Relazione generata ✅")
         with open(out_docx, "rb") as f:
-            st.download_button("⬇️ Scarica Word", f, file_name=os.path.basename(out_docx), key=f"dw_{rel_key}_{pid}")
+            st.download_button("Scarica Word", f, file_name=os.path.basename(out_docx), key=f"dw_{rel_key}_{pid}")
         if pdf_path and os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
-                st.download_button("⬇️ Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rel_key}_{pid}")
+                st.download_button("Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rel_key}_{pid}")
         else:
             st.info("PDF non disponibile in cloud: apri il Word e salva in PDF dal PC in studio.")
 
