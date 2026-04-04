@@ -7438,9 +7438,134 @@ def _db_list_documenti(conn, paziente_id: int, tipo: str | None = None):
         return cur.fetchall()
 
 def _prefill_pdf(template_path: str, fields: dict) -> bytes:
-    """SAFE VERSION: returns the static PDF template as-is (no AcroForm)."""
-    with open(template_path, "rb") as f:
-        return f.read()
+    """
+    Genera una pagina di copertina con i dati compilati (ReportLab) e la unisce
+    al template PDF informativa. Risultato: PDF completo con dati + informativa.
+    """
+    try:
+        from reportlab.pdfgen import canvas as _rl_canvas
+        from reportlab.lib.pagesizes import A4 as _A4
+        from reportlab.lib.units import mm as _mm
+        import io as _io
+
+        buf = _io.BytesIO()
+        c = _rl_canvas.Canvas(buf, pagesize=_A4)
+        w, h = _A4
+
+        # Intestazione
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(20*_mm, h - 25*_mm, "Consenso informato e privacy")
+        c.setFont("Helvetica", 10)
+        c.drawString(20*_mm, h - 32*_mm, "Studio The Organism – Dott. Ferraioli Giuseppe")
+
+        # Linea separatrice
+        c.setStrokeColorRGB(0.2, 0.4, 0.7)
+        c.setLineWidth(1)
+        c.line(20*_mm, h - 35*_mm, w - 20*_mm, h - 35*_mm)
+        c.setStrokeColorRGB(0, 0, 0)
+
+        # Dati paziente
+        y = h - 45*_mm
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20*_mm, y, "Dati del paziente")
+        y -= 8*_mm
+        c.setFont("Helvetica", 10)
+
+        def _campo(label, key, ypos):
+            val = fields.get(key, fields.get(label.lower(), "")) or ""
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(20*_mm, ypos, f"{label}:")
+            c.setFont("Helvetica", 10)
+            c.drawString(65*_mm, ypos, str(val))
+            return ypos - 7*_mm
+
+        # Mappatura flessibile dei campi
+        nome_cog = fields.get("a_nome_cognome") or fields.get("m_nome_cognome") or \
+                   f"{fields.get('nome','').strip()} {fields.get('cognome','').strip()}".strip()
+        email_val = fields.get("a_email") or fields.get("g1_email") or fields.get("email","")
+        tel_val   = fields.get("a_tel")   or fields.get("g1_tel")   or fields.get("telefono","")
+
+        y = _campo("Nome e Cognome", "a_nome_cognome", y)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(20*_mm, y, "Email:")
+        c.setFont("Helvetica", 10)
+        c.drawString(65*_mm, y, str(email_val))
+        y -= 7*_mm
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(20*_mm, y, "Telefono:")
+        c.setFont("Helvetica", 10)
+        c.drawString(65*_mm, y, str(tel_val))
+        y -= 10*_mm
+
+        # Separatore consensi
+        c.line(20*_mm, y + 3*_mm, w - 20*_mm, y + 3*_mm)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20*_mm, y - 2*_mm, "Consensi espressi")
+        y -= 12*_mm
+
+        # Mappa consensi
+        consensi_map = {
+            "a_gdpr_letto":     ("Ho letto l'informativa GDPR",             "m_gdpr_letto"),
+            "a_cons_dati":      ("Consenso trattamento dati personali",      "m_cons_dati"),
+            "a_cons_salute":    ("Consenso trattamento dati salute",         "m_cons_salute"),
+            "a_cons_marketing": ("Consenso comunicazioni/marketing (facolt.)","m_cons_marketing"),
+        }
+        for key_a, (label, key_m) in consensi_map.items():
+            val = fields.get(key_a) or fields.get(key_m) or ""
+            colore = (0.0, 0.55, 0.27) if str(val).upper() == "SI" else (0.7, 0.1, 0.1)
+            c.setFillColorRGB(*colore)
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(20*_mm, y, f"{'SI' if str(val).upper()=='SI' else 'NO'}")
+            c.setFillColorRGB(0, 0, 0)
+            c.setFont("Helvetica", 10)
+            c.drawString(35*_mm, y, label)
+            y -= 8*_mm
+
+        # OTP info se presente
+        if fields.get("otp_verified"):
+            y -= 5*_mm
+            c.line(20*_mm, y + 3*_mm, w - 20*_mm, y + 3*_mm)
+            c.setFont("Helvetica-Bold", 10)
+            c.setFillColorRGB(0.0, 0.45, 0.7)
+            c.drawString(20*_mm, y - 2*_mm, f"Identita verificata via OTP email: {email_val}")
+            c.setFont("Helvetica", 9)
+            c.setFillColorRGB(0, 0, 0)
+            c.drawString(20*_mm, y - 9*_mm, f"Timestamp OTP: {fields.get('otp_timestamp','')}")
+            y -= 15*_mm
+
+        # Data e ora
+        y -= 5*_mm
+        c.line(20*_mm, y + 3*_mm, w - 20*_mm, y + 3*_mm)
+        c.setFont("Helvetica", 9)
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        import datetime as _dt2
+        ts = _dt2.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        c.drawString(20*_mm, y - 2*_mm, f"Data e ora compilazione: {ts} (UTC+1)")
+        c.setFillColorRGB(0, 0, 0)
+
+        c.showPage()
+        c.save()
+        cover_bytes = buf.getvalue()
+
+        # Unisci copertina + template informativa
+        try:
+            r1 = PdfReader(_io.BytesIO(cover_bytes))
+            r2 = PdfReader(template_path)
+            w_pdf = PdfWriter()
+            for p in r1.pages:
+                w_pdf.add_page(p)
+            for p in r2.pages:
+                w_pdf.add_page(p)
+            out = _io.BytesIO()
+            w_pdf.write(out)
+            return out.getvalue()
+        except Exception:
+            return cover_bytes
+
+    except Exception as e:
+        # Fallback: restituisce il template com'è
+        with open(template_path, "rb") as f:
+            return f.read()
 
 
 def _extract_pdf_field_values(pdf_bytes: bytes) -> dict:
@@ -7917,15 +8042,97 @@ def ui_public_sign_page():
 
     st.markdown("---")
 
-    # campi base
+    # ── OTP VIA EMAIL — verifica identità ────────────────────────────────
+    st.subheader("Verifica identità (OTP)")
+    st.caption("Inserisci la tua email e richiedi il codice di verifica. Dovrai inserirlo per sbloccare la firma.")
+
+    otp_email_input = st.text_input(
+        "La tua email" if doc_type == "adulto" else "Email genitore/tutore",
+        value=f"{cogn.lower()}@" if cogn else "",
+        key="otp_email_field",
+        placeholder="nome@esempio.it",
+    )
+
+    col_otp1, col_otp2 = st.columns([1, 2])
+    with col_otp1:
+        if st.button("Invia codice OTP", key="btn_send_otp"):
+            if not otp_email_input.strip() or "@" not in otp_email_input:
+                st.error("Inserisci un'email valida.")
+            else:
+                import random, hashlib as _hs
+                otp_code = str(random.randint(100000, 999999))
+                otp_hash = _hs.sha256(otp_code.encode()).hexdigest()
+                otp_ts   = _dt.datetime.now().isoformat()
+                st.session_state["otp_hash"]      = otp_hash
+                st.session_state["otp_email"]     = otp_email_input.strip()
+                st.session_state["otp_ts"]        = otp_ts
+                st.session_state["otp_verified"]  = False
+                try:
+                    _send_email_with_pdf(
+                        to_list=[otp_email_input.strip()],
+                        subject="Codice di verifica – Studio The Organism",
+                        body=(
+                            f"Il tuo codice OTP per firmare il consenso privacy è:\n\n"
+                            f"    {otp_code}\n\n"
+                            f"Il codice è valido per 10 minuti.\n"
+                            f"Non condividerlo con nessuno.\n\n"
+                            f"Studio The Organism – Dott. Ferraioli Giuseppe"
+                        ),
+                        pdf_bytes=b"",
+                        filename="",
+                    )
+                    st.success(f"Codice inviato a {otp_email_input.strip()}. Controlla la tua email (anche spam).")
+                except Exception as e:
+                    # Se email non configurata, mostra il codice in chiaro (solo sviluppo)
+                    st.info(f"Email non configurata — codice di test: **{otp_code}** (rimuovere in produzione)")
+
+    with col_otp2:
+        otp_input = st.text_input(
+            "Inserisci il codice OTP ricevuto",
+            key="otp_code_input",
+            max_chars=6,
+            placeholder="es. 482931",
+        )
+        if st.button("Verifica codice", key="btn_verify_otp"):
+            import hashlib as _hs2, datetime as _dt2
+            stored_hash = st.session_state.get("otp_hash", "")
+            stored_ts   = st.session_state.get("otp_ts", "")
+            if not stored_hash:
+                st.error("Prima richiedi il codice OTP.")
+            elif _hs2.sha256(otp_input.strip().encode()).hexdigest() != stored_hash:
+                st.error("Codice OTP errato. Riprova o richiedi un nuovo codice.")
+            else:
+                # Controlla scadenza 10 minuti
+                try:
+                    otp_age = (_dt2.datetime.now() - _dt2.datetime.fromisoformat(stored_ts)).total_seconds()
+                    if otp_age > 600:
+                        st.error("Codice OTP scaduto. Richiedine uno nuovo.")
+                        st.session_state["otp_verified"] = False
+                    else:
+                        st.session_state["otp_verified"] = True
+                        st.success("Identità verificata. Puoi procedere con la firma.")
+                except Exception:
+                    st.session_state["otp_verified"] = True
+                    st.success("Identità verificata.")
+
+    otp_verified = st.session_state.get("otp_verified", False)
+    if not otp_verified:
+        st.warning("Completa la verifica OTP per sbloccare la firma.")
+        st.stop()
+
+    # Usa l'email verificata via OTP come email del paziente
+    email = st.session_state.get("otp_email", "")
+    st.success(f"Email verificata: {email}")
+
+    st.markdown("---")
+
+    # ── CAMPI BASE ────────────────────────────────────────────────────────
     if doc_type == "adulto":
-        email = st.text_input("Email", value="")
-        tel = st.text_input("Telefono", value="")
-        nome_cognome = st.text_input("Nome e Cognome", value=f"{nome} {cogn}".strip())
+        tel          = st.text_input("Telefono", value="", key="pub_tel")
+        nome_cognome = st.text_input("Nome e Cognome", value=f"{nome} {cogn}".strip(), key="pub_nc")
     else:
-        email = st.text_input("Email Genitore/Tutore (per ricevere copia)", value="")
-        tel = st.text_input("Telefono Genitore/Tutore", value="")
-        nome_cognome = st.text_input("Nome e Cognome del minore", value=f"{nome} {cogn}".strip())
+        tel          = st.text_input("Telefono Genitore/Tutore", value="", key="pub_tel")
+        nome_cognome = st.text_input("Nome e Cognome del minore", value=f"{nome} {cogn}".strip(), key="pub_nc")
 
     st.subheader("Firma")
     st.caption("Firma qui sotto con il dito (o il mouse). Usa il pulsante Cancella per ricominciare.")
@@ -8054,6 +8261,7 @@ def ui_public_sign_page():
 
         # genera PDF precompilato
         fields = {}
+        otp_ts_val = st.session_state.get("otp_ts", "")
         if doc_type == "adulto":
             fields = {
                 "a_nome_cognome": nome_cognome.strip(),
@@ -8063,6 +8271,8 @@ def ui_public_sign_page():
                 "a_cons_dati": cons_dati,
                 "a_cons_salute": cons_salute,
                 "a_cons_marketing": cons_marketing,
+                "otp_verified": True,
+                "otp_timestamp": otp_ts_val,
             }
         else:
             fields = {
@@ -8073,6 +8283,8 @@ def ui_public_sign_page():
                 "m_cons_dati": cons_dati,
                 "m_cons_salute": cons_salute,
                 "m_cons_marketing": cons_marketing,
+                "otp_verified": True,
+                "otp_timestamp": otp_ts_val,
             }
 
         base_pdf = _prefill_pdf(template_path, fields)
