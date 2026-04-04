@@ -495,19 +495,48 @@ def archivia_paziente_duplicato(conn, paziente_id):
 def _cancella_paziente(conn, paziente_id):
     """
     Cancella definitivamente il paziente e tutte le sue visite.
-    Su Postgres usa CASCADE (già definito nello schema).
-    Su SQLite cancella prima le visite poi il paziente.
+    Cancella prima le tabelle figlie poi il paziente (compatibile con
+    qualsiasi schema, indipendentemente dal CASCADE definito).
     """
     ph = _ph(conn)
     cur = conn.cursor()
     try:
+        # Tabelle figlie — cancella in ordine per evitare FK violations
+        tabelle_figlie = [
+            "visite_visive",
+            "prescrizioni_occhiali",
+        ]
+        # Aggiungi anche le altre tabelle del gestionale principale se presenti
+        tabelle_opzionali = [
+            ("Anamnesi",         "Paziente_ID"),
+            ("anamnesi",         "paziente_id"),
+            ("Sedute",           "Paziente_ID"),
+            ("sedute",           "paziente_id"),
+            ("Coupons",          "Paziente_ID"),
+            ("coupons",          "paziente_id"),
+            ("Consensi_Privacy", "paziente_id"),
+            ("consensi_privacy", "paziente_id"),
+        ]
+        for tbl in tabelle_figlie:
+            try:
+                cur.execute(f"DELETE FROM {tbl} WHERE paziente_id={ph}", (paziente_id,))
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+
+        for tbl, col in tabelle_opzionali:
+            try:
+                cur.execute(f"DELETE FROM {tbl} WHERE {col}={ph}", (paziente_id,))
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+
+        # Ora cancella il paziente
         if _is_pg(conn):
-            # Le visite_visive hanno ON DELETE CASCADE → basta cancellare il paziente
             cur.execute(f"DELETE FROM pazienti WHERE id={ph}", (paziente_id,))
         else:
-            cur.execute(f"DELETE FROM visite_visive WHERE paziente_id={ph}", (paziente_id,))
-            cur.execute(f"DELETE FROM prescrizioni_occhiali WHERE paziente_id={ph}", (paziente_id,))
             cur.execute(f"DELETE FROM Pazienti WHERE ID={ph}", (paziente_id,))
+
         conn.commit()
     except Exception:
         try: conn.rollback()
