@@ -182,7 +182,9 @@ def _get_columns(conn, table_name: str):
     except Exception:
         return []
 
+@st.cache_data(ttl=300, show_spinner=False)
 def _detect_patient_table_and_cols(conn):
+    """Rileva tabella pazienti — cache 5 minuti, cambia raramente."""
     table_candidates = [
         'pazienti','Pazienti','patients','Patients','patienti','Patienti',
         'anagrafica_pazienti','Anagrafica_Pazienti','tbl_pazienti','Tbl_Pazienti'
@@ -240,7 +242,9 @@ def _detect_patient_table_and_cols(conn):
         return table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
     return None, {}
 
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_pazienti_for_select(conn, limit=5000):
+    """Lista pazienti con cache 30 secondi — evita query ripetute ad ogni click."""
     table, colmap = _detect_patient_table_and_cols(conn)
     if not table:
         return [], None, None
@@ -2105,7 +2109,9 @@ DATABASE_URL = "postgresql://...sslmode=require"
 
 Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
+@st.cache_resource
 def _connect_cached():
+    """Connessione DB con cache — creata UNA VOLTA per sessione. Elimina latenza multipla."""
     _require_postgres_on_cloud()
     if _DB_BACKEND == "postgres":
         if not PSYCOPG2_AVAILABLE:
