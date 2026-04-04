@@ -178,7 +178,8 @@ def ensure_visit_state():
         "vm_last_saved_hash": None,
         "vm_last_autosave_reason": None,
         "vm_flash_message": None,
-        "vm_delete_confirm": None,
+        "vm_delete_confirm":         None,
+        "vm_confirm_delete_paz":     None,
         "vm_in_dilatazione": False,
     }
     for k, v in defaults.items():
@@ -489,6 +490,33 @@ def archivia_paziente_duplicato(conn, paziente_id):
     finally:
         try: cur.close()
         except Exception: pass
+
+
+def _cancella_paziente(conn, paziente_id):
+    """
+    Cancella definitivamente il paziente e tutte le sue visite.
+    Su Postgres usa CASCADE (già definito nello schema).
+    Su SQLite cancella prima le visite poi il paziente.
+    """
+    ph = _ph(conn)
+    cur = conn.cursor()
+    try:
+        if _is_pg(conn):
+            # Le visite_visive hanno ON DELETE CASCADE → basta cancellare il paziente
+            cur.execute(f"DELETE FROM pazienti WHERE id={ph}", (paziente_id,))
+        else:
+            cur.execute(f"DELETE FROM visite_visive WHERE paziente_id={ph}", (paziente_id,))
+            cur.execute(f"DELETE FROM prescrizioni_occhiali WHERE paziente_id={ph}", (paziente_id,))
+            cur.execute(f"DELETE FROM Pazienti WHERE ID={ph}", (paziente_id,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
+
 
 
 def _get_available_cols(conn, table):
@@ -1397,17 +1425,64 @@ def ui_visita_visiva_v2(conn):
         tel_e  = ea4.text_input("Telefono", key=f"vm_etel_{paziente_id}")
         mail_e = ea5.text_input("Email",    key=f"vm_eml_{paziente_id}")
         note_e = st.text_area("Note anagrafiche", key=f"vm_enote_{paziente_id}", height=60)
-        if st.button("Salva modifiche anagrafiche", key=f"vm_esave_{paziente_id}"):
-            try:
-                update_paziente(conn, paziente_id, nome_e, cognome_e,
-                                dn_e.isoformat() if dn_e else "",
-                                telefono=tel_e, email=mail_e, note=note_e)
-                st.session_state["vision_last_pid"] = int(paziente_id)
-                st.success("Anagrafica aggiornata.")
-                st.rerun()
-            except (ValueError, Exception) as ex:
-                st.error(str(ex))
+
+        col_save, col_del = st.columns([2, 1])
+        with col_save:
+            if st.button("Salva modifiche anagrafiche", key=f"vm_esave_{paziente_id}"):
+                try:
+                    update_paziente(conn, paziente_id, nome_e, cognome_e,
+                                    dn_e.isoformat() if dn_e else "",
+                                    telefono=tel_e, email=mail_e, note=note_e)
+                    st.session_state["vision_last_pid"] = int(paziente_id)
+                    st.success("Anagrafica aggiornata.")
+                    st.rerun()
+                except (ValueError, Exception) as ex:
+                    st.error(str(ex))
+        with col_del:
+            if st.button("Cancella paziente", key=f"vm_del_paz_btn_{paziente_id}",
+                         help="Elimina definitivamente il paziente e tutte le sue visite"):
+                st.session_state["vm_confirm_delete_paz"] = paziente_id
+
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── CONFERMA CANCELLAZIONE PAZIENTE ──────────────────────
+    if st.session_state.get("vm_confirm_delete_paz") == paziente_id:
+        st.markdown("""
+        <div style="background:#fef2f2;border:2px solid #ef4444;border-radius:12px;
+                    padding:16px 20px;margin-bottom:12px;">
+            <div style="font-weight:700;color:#991b1b;font-size:1rem;margin-bottom:6px;">
+                Stai per eliminare questo paziente
+            </div>
+            <div style="color:#7f1d1d;font-size:0.88rem;">
+                Verranno cancellati il paziente e tutte le sue visite. Questa operazione non e reversibile.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        nome_conferma = st.text_input(
+            f"Scrivi il cognome del paziente ({cognome_paz.upper()}) per confermare:",
+            key="vm_del_paz_conferma"
+        )
+
+        dc1, dc2 = st.columns(2)
+        with dc1:
+            conferma_ok = nome_conferma.strip().upper() == cognome_paz.strip().upper()
+            if st.button("Elimina definitivamente", key="vm_del_paz_confirm",
+                         disabled=not conferma_ok):
+                try:
+                    _cancella_paziente(conn, paziente_id)
+                    st.session_state["vm_confirm_delete_paz"] = None
+                    st.session_state["vm_current_patient_id"] = None
+                    st.session_state["vision_last_pid"] = None
+                    clear_visit_form()
+                    st.success(f"Paziente {cognome_paz} {nome_paz} eliminato.")
+                    st.rerun()
+                except Exception as ex:
+                    st.error(f"Errore cancellazione: {ex}")
+        with dc2:
+            if st.button("Annulla", key="vm_del_paz_cancel"):
+                st.session_state["vm_confirm_delete_paz"] = None
+                st.rerun()
 
     # Alert dilatazione attiva
     if st.session_state.get("vm_in_dilatazione") and loaded_id:
