@@ -141,21 +141,37 @@ input::placeholder, textarea::placeholder {
 }
 
 /* 10. BOTTONI */
-.stButton > button {
+button,
+.stButton > button,
+.stDownloadButton > button,
+[data-testid="stBaseButton-secondary"],
+[data-testid="stDownloadButton"] button {
     background: #f1f5f9 !important;
-    color: #334155 !important;
-    -webkit-text-fill-color: #334155 !important;
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
     border: 1.5px solid #e2e8f0 !important;
     border-radius: 10px !important;
     font-weight: 500 !important;
-    transition: all 0.15s;
 }
-.stButton > button:hover { background: #e2e8f0 !important; }
-.stButton > button[kind="primary"] {
+.stButton > button *,
+.stDownloadButton > button *,
+[data-testid="stBaseButton-secondary"] * {
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
+}
+.stButton > button:hover,
+.stDownloadButton > button:hover { background: #e2e8f0 !important; }
+.stButton > button[kind="primary"],
+[data-testid="stBaseButton-primary"] {
     background: #2563a8 !important;
     color: #ffffff !important;
     -webkit-text-fill-color: #ffffff !important;
     border: none !important;
+}
+.stButton > button[kind="primary"] *,
+[data-testid="stBaseButton-primary"] * {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
 }
 .stButton > button[kind="primary"]:hover { background: #1d4ed8 !important; }
 

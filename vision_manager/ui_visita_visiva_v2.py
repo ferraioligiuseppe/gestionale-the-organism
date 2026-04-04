@@ -1005,23 +1005,58 @@ input::placeholder, textarea::placeholder {
     flex-shrink: 0 !important;
 }
 
-/* 11. BOTTONI */
-.stButton > button {
+/* 11. BOTTONI — forza testo scuro su sfondo chiaro su tutti i tipi */
+button,
+.stButton > button,
+.stDownloadButton > button,
+[data-testid="stBaseButton-secondary"],
+[data-testid="stBaseButton-minimal"],
+[data-testid="stDownloadButton"] button {
     background: #f1f5f9 !important;
-    color: #334155 !important;
-    -webkit-text-fill-color: #334155 !important;
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
     border: 1.5px solid #e2e8f0 !important;
     border-radius: 10px !important;
     font-weight: 500 !important;
+    font-size: 0.88rem !important;
 }
-.stButton > button:hover { background: #e2e8f0 !important; }
-.stButton > button[kind="primary"] {
+button:hover,
+.stButton > button:hover,
+.stDownloadButton > button:hover {
+    background: #e2e8f0 !important;
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
+}
+/* Testo dentro i bottoni — qualsiasi elemento figlio */
+.stButton > button *,
+.stDownloadButton > button *,
+[data-testid="stBaseButton-secondary"] *,
+[data-testid="stDownloadButton"] button * {
+    color: #1e293b !important;
+    -webkit-text-fill-color: #1e293b !important;
+}
+/* Bottone primario */
+.stButton > button[kind="primary"],
+[data-testid="stBaseButton-primary"] {
     background: #2563a8 !important;
     color: #ffffff !important;
     -webkit-text-fill-color: #ffffff !important;
     border: none !important;
 }
-.stButton > button[kind="primary"]:hover { background: #1d4ed8 !important; }
+.stButton > button[kind="primary"] *,
+[data-testid="stBaseButton-primary"] * {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+.stButton > button[kind="primary"]:hover,
+[data-testid="stBaseButton-primary"]:hover {
+    background: #1d4ed8 !important;
+}
+/* Bottone cancella/pericoloso */
+.stButton > button[kind="primary"].danger {
+    background: #dc2626 !important;
+}
+
 
 /* 12. ALERT */
 [data-testid="stAlert"] * { -webkit-text-fill-color: inherit !important; }
