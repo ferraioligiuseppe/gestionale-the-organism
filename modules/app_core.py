@@ -8137,76 +8137,124 @@ def ui_public_sign_page():
     st.subheader("Firma")
     st.caption("Firma qui sotto con il dito (o il mouse). Usa il pulsante Cancella per ricominciare.")
 
-    # Canvas HTML5 nativo — funziona su qualsiasi dispositivo mobile
-    canvas_html = """
-    <div style="border:2px solid #2563a8;border-radius:10px;background:#fff;touch-action:none;margin-bottom:8px;">
-        <canvas id="sigCanvas" width="600" height="200"
-            style="width:100%;height:200px;border-radius:8px;cursor:crosshair;display:block;"></canvas>
+    # Chiave univoca per questa sessione di firma
+    sig_key = f"firma_png_data_{pid}_{doc_type}"
+
+    # Canvas HTML5 che scrive il risultato in un campo Streamlit tramite query param trick
+    canvas_html = f"""
+    <div style="border:2px solid #2563a8;border-radius:10px;background:#fff;
+                touch-action:none;margin-bottom:8px;user-select:none;">
+        <canvas id="sigCanvas" width="700" height="220"
+            style="width:100%;height:220px;border-radius:8px;cursor:crosshair;display:block;
+                   touch-action:none;"></canvas>
     </div>
-    <button onclick="clearSig()" style="background:#f1f5f9;border:1px solid #cbd5e1;
-        border-radius:8px;padding:8px 20px;font-size:15px;cursor:pointer;margin-bottom:8px;">
-        Cancella firma
-    </button>
-    <br>
-    <input type="hidden" id="sigData" name="sigData" value="">
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button id="btnClear" onclick="clearSig()"
+            style="background:#f1f5f9;border:1.5px solid #cbd5e1;border-radius:8px;
+                   padding:10px 24px;font-size:15px;cursor:pointer;">
+            Cancella firma
+        </button>
+        <button id="btnSave" onclick="saveSigToField()"
+            style="background:#2563a8;color:#fff;border:none;border-radius:8px;
+                   padding:10px 24px;font-size:15px;cursor:pointer;">
+            Conferma firma
+        </button>
+    </div>
+    <div id="saveMsg" style="display:none;color:#15803d;font-size:14px;margin-bottom:8px;">
+        Firma salvata. Procedi con i consensi qui sotto.
+    </div>
     <script>
-    const canvas = document.getElementById('sigCanvas');
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    let drawing = false;
+    (function() {{
+        const canvas = document.getElementById('sigCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 2.8;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        let drawing = false;
 
-    function getPos(e, canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        if (e.touches) {
-            return {
-                x: (e.touches[0].clientX - rect.left) * scaleX,
-                y: (e.touches[0].clientY - rect.top) * scaleY
-            };
-        }
-        return {
-            x: (e.clientX - rect.left) * scaleX,
-            y: (e.clientY - rect.top) * scaleY
-        };
-    }
+        function getPos(e) {{
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            if (e.touches && e.touches.length > 0) {{
+                return {{
+                    x: (e.touches[0].clientX - rect.left) * scaleX,
+                    y: (e.touches[0].clientY - rect.top) * scaleY
+                }};
+            }}
+            return {{
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            }};
+        }}
 
-    canvas.addEventListener('mousedown', e => { drawing = true; const p = getPos(e, canvas); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
-    canvas.addEventListener('mousemove', e => { if (!drawing) return; const p = getPos(e, canvas); ctx.lineTo(p.x, p.y); ctx.stroke(); });
-    canvas.addEventListener('mouseup', () => { drawing = false; saveSig(); });
-    canvas.addEventListener('mouseleave', () => { drawing = false; });
+        canvas.addEventListener('mousedown',  e => {{ drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }});
+        canvas.addEventListener('mousemove',  e => {{ if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); }});
+        canvas.addEventListener('mouseup',    () => {{ drawing=false; }});
+        canvas.addEventListener('mouseleave', () => {{ drawing=false; }});
 
-    canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e, canvas); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, {passive:false});
-    canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!drawing) return; const p = getPos(e, canvas); ctx.lineTo(p.x, p.y); ctx.stroke(); }, {passive:false});
-    canvas.addEventListener('touchend', () => { drawing = false; saveSig(); });
+        canvas.addEventListener('touchstart', e => {{ e.preventDefault(); drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }}, {{passive:false}});
+        canvas.addEventListener('touchmove',  e => {{ e.preventDefault(); if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); }}, {{passive:false}});
+        canvas.addEventListener('touchend',   e => {{ e.preventDefault(); drawing=false; }}, {{passive:false}});
 
-    function saveSig() {
-        const data = canvas.toDataURL('image/png');
-        document.getElementById('sigData').value = data;
-        // invia al parent Streamlit
-        window.parent.postMessage({type:'streamlit:setComponentValue', value: data}, '*');
-    }
-    function clearSig() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        document.getElementById('sigData').value = '';
-        window.parent.postMessage({type:'streamlit:setComponentValue', value: ''}, '*');
-    }
+        function saveSigToField() {{
+            const data = canvas.toDataURL('image/png');
+            // Trova il textarea di Streamlit con il data-testid corrispondente
+            // e scrivi il valore della firma
+            const textareas = window.parent.document.querySelectorAll('textarea');
+            let found = false;
+            textareas.forEach(ta => {{
+                if (ta.getAttribute('aria-label') === '{sig_key}' ||
+                    (ta.placeholder && ta.placeholder.includes('{sig_key}'))) {{
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                        window.parent.HTMLTextAreaElement.prototype, 'value').set;
+                    nativeInputValueSetter.call(ta, data);
+                    ta.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    found = true;
+                }}
+            }});
+            // Fallback: cerca per label testuale
+            if (!found) {{
+                const allTA = window.parent.document.querySelectorAll('textarea');
+                allTA.forEach(ta => {{
+                    if (ta.value === '' && ta.style.display !== 'none') {{
+                        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                            window.parent.HTMLTextAreaElement.prototype, 'value').set;
+                        nativeInputValueSetter.call(ta, data);
+                        ta.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    }}
+                }});
+            }}
+            document.getElementById('saveMsg').style.display = 'block';
+        }}
+
+        function clearSig() {{
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('saveMsg').style.display = 'none';
+        }}
+    }})();
     </script>
     """
 
-    sig_data_url = st.components.v1.html(canvas_html, height=280, scrolling=False)
+    st.components.v1.html(canvas_html, height=340, scrolling=False)
 
-    # Campo di testo nascosto per passare la firma (fallback se il componente non restituisce valore)
-    sig_input = st.text_input(
-        "Incolla qui la firma (solo se il riquadro non funziona)",
-        value="",
-        key="sig_manual_input",
+    # Campo dove il JavaScript scrive il data URL della firma
+    sig_input = st.text_area(
+        sig_key,
+        value=st.session_state.get(sig_key, ""),
+        key=sig_key,
+        height=68,
         label_visibility="collapsed",
-        placeholder="(campo tecnico — lascia vuoto se hai firmato nel riquadro sopra)",
+        placeholder=f"(campo tecnico firma — {sig_key})",
+        help="Questo campo viene compilato automaticamente quando clicchi 'Conferma firma'",
     )
+
+    # Mostra stato firma
+    if sig_input and sig_input.strip().startswith("data:image"):
+        st.success("Firma acquisita correttamente.")
+    else:
+        st.info("Firma nel riquadro, poi clicca **Conferma firma** per salvare.")
 
     st.subheader("Consensi (Sì/No)")
     if doc_type == "adulto":
@@ -8230,12 +8278,11 @@ def ui_public_sign_page():
             st.error("Inserisci un'email valida per ricevere la copia.")
             st.stop()
 
-        # Recupera firma dal componente HTML5 o dal campo manuale
+        # Recupera firma dal text_area compilato dal JS
         sig_png = b""
         has_sig = False
 
-        # Prova prima con il valore restituito dal componente
-        raw_sig = sig_data_url if (sig_data_url and str(sig_data_url).startswith("data:image")) else sig_input.strip()
+        raw_sig = (sig_input or "").strip()
 
         if raw_sig and raw_sig.startswith("data:image"):
             try:
@@ -8254,9 +8301,8 @@ def ui_public_sign_page():
             except Exception:
                 has_sig = False
 
-        # Se il componente non ha restituito nulla, accettiamo comunque (firma non obbligatoria su vecchi dispositivi)
         if not has_sig:
-            st.warning("Firma non rilevata nel riquadro. Il consenso verrà salvato senza immagine della firma.")
+            st.warning("Firma non rilevata. Il consenso verrà salvato senza immagine della firma.")
             sig_png = b""
 
         # genera PDF precompilato
