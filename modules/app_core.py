@@ -8303,25 +8303,35 @@ def ui_public_sign_page():
         c.drawString(20*_mm, 275*_mm, f"Paziente id: {pid} – Tipo: {doc_type}")
         c.drawString(20*_mm, 268*_mm, f"Data/ora (UTC): {_dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
         c.drawString(20*_mm, 261*_mm, f"Email: {email.strip()}")
-        c.drawString(20*_mm, 254*_mm, "Firma acquisita tramite pagina web; copia inviata a studio e interessato.")
-        # disegna immagine firma
-        import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-            tmp.write(sig_png)
-            tmp_path = tmp.name
-        c.drawImage(tmp_path, 20*_mm, 190*_mm, width=120*_mm, height=40*_mm, preserveAspectRatio=True, mask='auto')
+        otp_ts_str = st.session_state.get("otp_ts", "")
+        c.drawString(20*_mm, 254*_mm, f"OTP verificato: {otp_ts_str or 'si'}")
+        c.drawString(20*_mm, 247*_mm, "Firma acquisita tramite pagina web; copia inviata a studio e interessato.")
+
+        # disegna immagine firma (solo se presente)
+        if sig_png and len(sig_png) > 100:
+            import tempfile
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    tmp.write(sig_png)
+                    tmp_path = tmp.name
+                c.drawImage(tmp_path, 20*_mm, 190*_mm, width=120*_mm, height=40*_mm,
+                            preserveAspectRatio=True, mask="auto")
+            except Exception:
+                c.setFont("Helvetica-Oblique", 10)
+                c.drawString(20*_mm, 210*_mm, "[Immagine firma non disponibile]")
+            finally:
+                if tmp_path:
+                    try: os.unlink(tmp_path)
+                    except Exception: pass
+        else:
+            c.setFont("Helvetica-Oblique", 10)
+            c.drawString(20*_mm, 210*_mm, "[Firma non acquisita graficamente — consenso espresso digitalmente]")
+
         c.rect(20*_mm, 190*_mm, 120*_mm, 40*_mm)
         c.showPage()
         c.save()
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
         sig_page_bytes = sig_page.getvalue()
-
-        # init
-        extra_pdf = None
-        extra_name = None
 
         # merge base_pdf + sig_page (robusto: se il PDF base è illeggibile/monco, inviamo 2 allegati separati)
         final_pdf = None
