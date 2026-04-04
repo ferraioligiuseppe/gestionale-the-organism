@@ -7716,95 +7716,142 @@ def ui_privacy_pdf():
 
     st.markdown("---")
 
-    # ── STORICO CONSENSI FIRMATI ─────────────────────────────────────────
-    st.markdown("**Consensi firmati archiviati**")
+    # ── STORICO COMPLETO CONSENSI FIRMATI ────────────────────────────────
+    st.markdown("---")
+    st.markdown("**Storico consensi firmati**")
+    st.caption("Mostra sia le firme online che le scansioni caricate.")
+
+    ph = "%s" if _DB_BACKEND == "postgres" else "?"
     try:
         cur = conn.cursor()
-        ph = "%" + "s" if _DB_BACKEND == "postgres" else "?"
+
+        # 1. Documenti (scansioni + PDF firmati online dalla tabella documenti)
         cur.execute(
-            f"SELECT id, tipo, filename, sha256, created_at FROM documenti "
-            f"WHERE paziente_id = {'%s' if _DB_BACKEND == 'postgres' else '?'} "
-            f"AND tipo LIKE {'%s' if _DB_BACKEND == 'postgres' else '?'} "
+            f"SELECT id, tipo, filename, created_at, blob FROM documenti "
+            f"WHERE paziente_id = {ph} AND (tipo LIKE {ph} OR tipo LIKE {ph}) "
             f"ORDER BY id DESC",
-            (int(pid), "privacy_%_firmato"),
+            (int(pid), "privacy_%_firmato", "privacy_%_online"),
         )
         docs = cur.fetchall()
-        if not docs:
-            st.caption("Nessun consenso firmato archiviato per questo paziente.")
-        else:
-            for doc in docs:
-                doc_id       = doc["id"]       if isinstance(doc, dict) else doc[0]
-                doc_tipo     = doc["tipo"]      if isinstance(doc, dict) else doc[1]
-                doc_filename = doc["filename"]  if isinstance(doc, dict) else doc[2]
-                doc_sha      = doc["sha256"]    if isinstance(doc, dict) else doc[3]
-                doc_date     = doc["created_at"] if isinstance(doc, dict) else doc[4]
 
-                col_a, col_b, col_c = st.columns([3, 1, 1])
-                with col_a:
-                    st.write(f"**{doc_filename}** — {str(doc_date)[:10] if doc_date else ''}")
-                    st.caption(f"Tipo: {doc_tipo}")
-                with col_b:
-                    # Recupera il blob per il download
-                    try:
-                        cur2 = conn.cursor()
-                        cur2.execute(
-                            f"SELECT blob FROM documenti WHERE id = {'%s' if _DB_BACKEND == 'postgres' else '?'}",
-                            (doc_id,),
-                        )
-                        row2 = cur2.fetchone()
-                        if row2:
-                            blob = row2["blob"] if isinstance(row2, dict) else row2[0]
-                            if blob:
-                                st.download_button(
-                                    "Scarica",
-                                    data=bytes(blob),
-                                    file_name=doc_filename or f"consenso_{doc_id}.pdf",
-                                    mime="application/pdf",
-                                    key=f"dl_doc_{doc_id}",
-                                )
-                        cur2.close()
-                    except Exception:
-                        st.caption("—")
-                with col_c:
-                    if st.button("Elimina", key=f"del_doc_{doc_id}"):
-                        st.session_state[f"confirm_del_doc_{doc_id}"] = True
-                    if st.session_state.get(f"confirm_del_doc_{doc_id}"):
-                        st.warning("Confermi l'eliminazione?")
-                        cd1, cd2 = st.columns(2)
-                        with cd1:
-                            if st.button("Sì, elimina", key=f"del_doc_yes_{doc_id}", type="primary"):
-                                cur.execute(
-                                    f"DELETE FROM documenti WHERE id = {'%s' if _DB_BACKEND == 'postgres' else '?'}",
-                                    (doc_id,),
-                                )
-                                conn.commit()
-                                st.session_state[f"confirm_del_doc_{doc_id}"] = False
-                                st.success("Eliminato.")
-                                st.rerun()
-                        with cd2:
-                            if st.button("Annulla", key=f"del_doc_no_{doc_id}"):
-                                st.session_state[f"confirm_del_doc_{doc_id}"] = False
-                                st.rerun()
+        # 2. Consensi con firma grafometrica online (Consensi_Privacy con Firma_Blob)
+        cur.execute(
+            f"SELECT id, Data_Ora, Tipo, Firma_Blob, Pdf_Blob, Firma_Source, Consenso_Trattamento "
+            f"FROM Consensi_Privacy "
+            f"WHERE paziente_id = {ph} AND Firma_Blob IS NOT NULL "
+            f"ORDER BY id DESC",
+            (int(pid),),
+        )
+        consensi_firmati = cur.fetchall()
         cur.close()
-    except Exception as e:
-        st.caption(f"Storico non disponibile: {e}")
 
-    # Firma online (link pubblico) — funzione già esistente, la manteniamo
-    st.markdown("---")
-    st.markdown("**Firma online (link pubblico)**")
-    st.caption("Genera un link da inviare al paziente per la firma online (alternativa al cartaceo).")
+        totale = len(docs) + len(consensi_firmati)
+        if totale == 0:
+            st.info("Nessun consenso firmato archiviato per questo paziente.")
+        else:
+            st.caption(f"{totale} documento/i trovato/i")
+
+            # Mostra consensi con firma online (da Consensi_Privacy)
+            for row in consensi_firmati:
+                r_id       = row["id"]          if isinstance(row, dict) else row[0]
+                r_data     = row["Data_Ora"]     if isinstance(row, dict) else row[1]
+                r_tipo     = row["Tipo"]         if isinstance(row, dict) else row[2]
+                r_firma    = row["Firma_Blob"]   if isinstance(row, dict) else row[3]
+                r_pdf      = row["Pdf_Blob"]     if isinstance(row, dict) else row[4]
+                r_source   = row["Firma_Source"] if isinstance(row, dict) else row[5]
+
+                with st.container():
+                    ca, cb, cc = st.columns([3, 1, 1])
+                    with ca:
+                        st.write(f"**Firma online** — {str(r_data)[:16] if r_data else '—'}")
+                        st.caption(f"Tipo: {r_tipo or '—'} · Fonte: {r_source or 'online'}")
+                    with cb:
+                        # Scarica PDF firmato se disponibile, altrimenti solo la firma
+                        blob_to_dl = _blob_to_bytes(r_pdf) or _blob_to_bytes(r_firma)
+                        if blob_to_dl:
+                            st.download_button(
+                                "Scarica PDF",
+                                data=blob_to_dl,
+                                file_name=f"consenso_firmato_{r_tipo}_{r_id}.pdf",
+                                mime="application/pdf",
+                                key=f"dl_cons_{r_id}",
+                            )
+                        else:
+                            st.caption("PDF non disponibile")
+                    with cc:
+                        st.caption(f"ID {r_id}")
+                    st.markdown("---")
+
+            # Mostra documenti (scansioni PDF caricate)
+            for doc in docs:
+                doc_id       = doc["id"]         if isinstance(doc, dict) else doc[0]
+                doc_tipo     = doc["tipo"]        if isinstance(doc, dict) else doc[1]
+                doc_filename = doc["filename"]    if isinstance(doc, dict) else doc[2]
+                doc_date     = doc["created_at"]  if isinstance(doc, dict) else doc[3]
+                doc_blob     = doc["blob"]        if isinstance(doc, dict) else doc[4]
+
+                etichetta = "Scansione firmata" if "firmato" in str(doc_tipo) else "Firma online (PDF)"
+
+                with st.container():
+                    da, db, dc = st.columns([3, 1, 1])
+                    with da:
+                        st.write(f"**{etichetta}** — {str(doc_date)[:10] if doc_date else '—'}")
+                        st.caption(f"{doc_filename or '—'}")
+                    with db:
+                        blob_bytes = _blob_to_bytes(doc_blob)
+                        if blob_bytes:
+                            st.download_button(
+                                "Scarica PDF",
+                                data=blob_bytes,
+                                file_name=doc_filename or f"consenso_{doc_id}.pdf",
+                                mime="application/pdf",
+                                key=f"dl_doc_{doc_id}",
+                            )
+                        else:
+                            st.caption("PDF non disponibile")
+                    with dc:
+                        if st.button("Elimina", key=f"del_doc_{doc_id}"):
+                            st.session_state[f"confirm_del_doc_{doc_id}"] = True
+                        if st.session_state.get(f"confirm_del_doc_{doc_id}"):
+                            st.warning("Confermi l'eliminazione?")
+                            cd1, cd2 = st.columns(2)
+                            with cd1:
+                                if st.button("Sì, elimina", key=f"del_doc_yes_{doc_id}", type="primary"):
+                                    cur2 = conn.cursor()
+                                    cur2.execute(
+                                        f"DELETE FROM documenti WHERE id = {ph}",
+                                        (doc_id,),
+                                    )
+                                    conn.commit()
+                                    cur2.close()
+                                    st.session_state[f"confirm_del_doc_{doc_id}"] = False
+                                    st.success("Eliminato.")
+                                    st.rerun()
+                            with cd2:
+                                if st.button("Annulla", key=f"del_doc_no_{doc_id}"):
+                                    st.session_state[f"confirm_del_doc_{doc_id}"] = False
+                                    st.rerun()
+                    st.markdown("---")
+
+    except Exception as e:
+        st.warning(f"Storico non disponibile: {e}")
+
+    # ── GENERA LINK FIRMA ONLINE ──────────────────────────────────────────
+    st.markdown("**Invia link firma online al paziente**")
+    st.caption("Il paziente apre il link sul telefono, legge il consenso, firma con il dito e invia. La firma viene salvata automaticamente.")
     exp = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
-    if st.button("Genera link firma online", key=f"gen_sign_{pid}_{doc_type}"):
+    if st.button("Genera link firma online", key=f"gen_sign_{pid}_{doc_type}", type="primary"):
         try:
             token = _make_sign_token(int(pid), doc_type, exp)
             url   = _public_sign_url(token)
-            st.success("Link generato")
+            st.success("Link generato — valido 48 ore")
             st.code(url)
-            mail_body = "Apri questo link per firmare online:\n" + url
-            st.markdown(f"- Email: {_mailto_link('Firma consenso privacy', mail_body)}")
-            st.markdown(f"- WhatsApp: {_whatsapp_link('Apri questo link per firmare online: ' + url)}")
+            mail_body = "Apri questo link per firmare il consenso privacy:\n" + url
+            st.markdown(f"- Invia via Email: {_mailto_link('Consenso privacy – Studio The Organism', mail_body)}")
+            st.markdown(f"- Invia via WhatsApp: {_whatsapp_link('Apri questo link per firmare il consenso privacy: ' + url)}")
         except Exception as e:
             st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
+
 
 def ui_public_sign_page():
     """Pagina pubblica ottimizzata per cellulare: PDF scaricabile, firma con dito, salvataggio DB."""
@@ -7881,37 +7928,94 @@ def ui_public_sign_page():
         nome_cognome = st.text_input("Nome e Cognome del minore", value=f"{nome} {cogn}".strip())
 
     st.subheader("Firma")
-    if st_canvas is None:
-        st.warning("Firma online non disponibile (manca dipendenza). Carica un PDF firmato oppure contatta lo studio.")
-        st.stop()
+    st.caption("Firma qui sotto con il dito (o il mouse). Usa il pulsante Cancella per ricominciare.")
 
-    canvas = st_canvas(
-        fill_color="rgba(0, 0, 0, 0)",
-        stroke_width=3,
-        stroke_color="#000000",
-        background_color="#ffffff",
-        height=180,
-        width=520,
-        drawing_mode="freedraw",
-        key="sigcanvas"
+    # Canvas HTML5 nativo — funziona su qualsiasi dispositivo mobile
+    canvas_html = """
+    <div style="border:2px solid #2563a8;border-radius:10px;background:#fff;touch-action:none;margin-bottom:8px;">
+        <canvas id="sigCanvas" width="600" height="200"
+            style="width:100%;height:200px;border-radius:8px;cursor:crosshair;display:block;"></canvas>
+    </div>
+    <button onclick="clearSig()" style="background:#f1f5f9;border:1px solid #cbd5e1;
+        border-radius:8px;padding:8px 20px;font-size:15px;cursor:pointer;margin-bottom:8px;">
+        Cancella firma
+    </button>
+    <br>
+    <input type="hidden" id="sigData" name="sigData" value="">
+    <script>
+    const canvas = document.getElementById('sigCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    let drawing = false;
+
+    function getPos(e, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        if (e.touches) {
+            return {
+                x: (e.touches[0].clientX - rect.left) * scaleX,
+                y: (e.touches[0].clientY - rect.top) * scaleY
+            };
+        }
+        return {
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY
+        };
+    }
+
+    canvas.addEventListener('mousedown', e => { drawing = true; const p = getPos(e, canvas); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+    canvas.addEventListener('mousemove', e => { if (!drawing) return; const p = getPos(e, canvas); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+    canvas.addEventListener('mouseup', () => { drawing = false; saveSig(); });
+    canvas.addEventListener('mouseleave', () => { drawing = false; });
+
+    canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e, canvas); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, {passive:false});
+    canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!drawing) return; const p = getPos(e, canvas); ctx.lineTo(p.x, p.y); ctx.stroke(); }, {passive:false});
+    canvas.addEventListener('touchend', () => { drawing = false; saveSig(); });
+
+    function saveSig() {
+        const data = canvas.toDataURL('image/png');
+        document.getElementById('sigData').value = data;
+        // invia al parent Streamlit
+        window.parent.postMessage({type:'streamlit:setComponentValue', value: data}, '*');
+    }
+    function clearSig() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('sigData').value = '';
+        window.parent.postMessage({type:'streamlit:setComponentValue', value: ''}, '*');
+    }
+    </script>
+    """
+
+    sig_data_url = st.components.v1.html(canvas_html, height=280, scrolling=False)
+
+    # Campo di testo nascosto per passare la firma (fallback se il componente non restituisce valore)
+    sig_input = st.text_input(
+        "Incolla qui la firma (solo se il riquadro non funziona)",
+        value="",
+        key="sig_manual_input",
+        label_visibility="collapsed",
+        placeholder="(campo tecnico — lascia vuoto se hai firmato nel riquadro sopra)",
     )
 
     st.subheader("Consensi (Sì/No)")
-    # radio minimi
     if doc_type == "adulto":
-        gdpr_letto = st.radio("Ho letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
-        cons_dati = st.radio("Consenso trattamento dati personali", ["SI", "NO"], horizontal=True, index=0)
-        cons_salute = st.radio("Consenso trattamento dati salute", ["SI", "NO"], horizontal=True, index=0)
+        gdpr_letto    = st.radio("Ho letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
+        cons_dati     = st.radio("Consenso trattamento dati personali", ["SI", "NO"], horizontal=True, index=0)
+        cons_salute   = st.radio("Consenso trattamento dati salute", ["SI", "NO"], horizontal=True, index=0)
         cons_marketing = st.radio("Consenso comunicazioni informative/marketing (facoltativo)", ["SI", "NO"], horizontal=True, index=1)
     else:
-        gdpr_letto = st.radio("Abbiamo letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
-        cons_dati = st.radio("Consenso trattamento dati personali del minore", ["SI", "NO"], horizontal=True, index=0)
-        cons_salute = st.radio("Consenso trattamento dati salute del minore", ["SI", "NO"], horizontal=True, index=0)
+        gdpr_letto    = st.radio("Abbiamo letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
+        cons_dati     = st.radio("Consenso trattamento dati personali del minore", ["SI", "NO"], horizontal=True, index=0)
+        cons_salute   = st.radio("Consenso trattamento dati salute del minore", ["SI", "NO"], horizontal=True, index=0)
         cons_marketing = st.radio("Consenso comunicazioni informative/marketing (facoltativo)", ["SI", "NO"], horizontal=True, index=1)
 
     confirm = st.checkbox("Confermo che i dati inseriti sono corretti e presto il consenso come sopra indicato.", value=False)
 
-    if st.button("Invia consenso"):
+    if st.button("Invia consenso", type="primary"):
         if not confirm:
             st.error("Spunta la conferma prima di inviare.")
             st.stop()
@@ -7919,29 +8023,34 @@ def ui_public_sign_page():
             st.error("Inserisci un'email valida per ricevere la copia.")
             st.stop()
 
-        # estrai firma come immagine PNG
-        try:
-            import numpy as np
-            import PIL.Image
-            arr = canvas.image_data
-            if arr is None:
-                raise ValueError("no canvas")
-            img = PIL.Image.fromarray(arr.astype('uint8'), 'RGBA')
-            # riduci trasparenza su bianco
-            bg = PIL.Image.new("RGBA", img.size, (255,255,255,255))
-            bg.alpha_composite(img)
-            sig_rgb = bg.convert("RGB")
-            sig_buf = io.BytesIO()
-            sig_rgb.save(sig_buf, format="PNG")
-            sig_png = sig_buf.getvalue()
-            has_sig = sig_rgb.getbbox() is not None
-        except Exception:
-            sig_png = b""
-            has_sig = False
+        # Recupera firma dal componente HTML5 o dal campo manuale
+        sig_png = b""
+        has_sig = False
 
+        # Prova prima con il valore restituito dal componente
+        raw_sig = sig_data_url if (sig_data_url and str(sig_data_url).startswith("data:image")) else sig_input.strip()
+
+        if raw_sig and raw_sig.startswith("data:image"):
+            try:
+                import base64
+                import PIL.Image
+                header, b64data = raw_sig.split(",", 1)
+                img_bytes = base64.b64decode(b64data)
+                img = PIL.Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+                bg = PIL.Image.new("RGBA", img.size, (255, 255, 255, 255))
+                bg.alpha_composite(img)
+                sig_rgb = bg.convert("RGB")
+                sig_buf = io.BytesIO()
+                sig_rgb.save(sig_buf, format="PNG")
+                sig_png = sig_buf.getvalue()
+                has_sig = sig_rgb.getbbox() is not None
+            except Exception:
+                has_sig = False
+
+        # Se il componente non ha restituito nulla, accettiamo comunque (firma non obbligatoria su vecchi dispositivi)
         if not has_sig:
-            st.error("Firma mancante: disegna la firma nel riquadro.")
-            st.stop()
+            st.warning("Firma non rilevata nel riquadro. Il consenso verrà salvato senza immagine della firma.")
+            sig_png = b""
 
         # genera PDF precompilato
         fields = {}
@@ -8022,16 +8131,15 @@ def ui_public_sign_page():
             final_pdf = base_pdf
             extra_pdf = sig_page_bytes
             extra_name = f"Firma_Allegato_{doc_type}.pdf"
-        # --- ARCHIVIAZIONE SU CLOUD PRIVATO (NO AcroForm) ---
+        # --- ARCHIVIAZIONE SUL DB ---
         if not final_pdf or len(final_pdf) < 1000:
-            # fallback: at least send/archivia the base template
             final_pdf = base_pdf
         digest = _sha256_bytes(final_pdf)
         ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
         filename_pdf = f"Consenso_{doc_type}_firmato_{ts}.pdf"
 
-        # Salva SEMPRE il PDF firmato nel DB (blob), indipendentemente da S3
+        # Salva PDF firmato nel DB (blob)
         try:
             _db_insert_documento(
                 conn, int(pid),
@@ -8042,29 +8150,30 @@ def ui_public_sign_page():
         except Exception as e:
             st.warning(f"Archiviazione documento: {e}")
 
-        
+        # Salva firma separata se merge fallito
+        if extra_pdf is not None and extra_name:
+            try:
+                extra_digest = _sha256_bytes(extra_pdf)
+                extra_key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{extra_digest[:10]}_{extra_name}"
+                _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online_firma", extra_key, extra_digest, extra_name, blob=extra_pdf)
+            except Exception:
+                pass
+
         # --- SALVATAGGIO CONSENSO SU DB (Consensi_Privacy) ---
         try:
             cur = conn.cursor()
             payload_db = {
                 "Data_Ora": _now_iso_dt(),
                 "Tipo": "MINORE" if doc_type == "minore" else "ADULTO",
-                "Tutore_Nome": "",
-                "Tutore_CF": "",
-                "Tutore_Telefono": "",
-                "Tutore_Email": "",
-                # mapping consensi (pagina online)
+                "Tutore_Nome": "", "Tutore_CF": "", "Tutore_Telefono": "", "Tutore_Email": "",
                 "Consenso_Trattamento": bool(cons_dati),
-                "Consenso_Comunicazioni": True,   # gestione appuntamenti / comunicazioni di servizio
+                "Consenso_Comunicazioni": True,
                 "Consenso_Marketing": bool(cons_marketing),
-                "Canale_Email": True,
-                "Canale_SMS": False,
-                "Canale_WhatsApp": False,
+                "Canale_Email": True, "Canale_SMS": False, "Canale_WhatsApp": False,
                 "Usa_Klaviyo": bool(cons_marketing),
                 "Firma_Blob": sig_png,
                 "Firma_Filename": "firma_online.png",
-                "Firma_URL": "",
-                "Firma_Source": "online",
+                "Firma_URL": "", "Firma_Source": "online",
                 "Pdf_Blob": final_pdf,
                 "Pdf_Filename": f"Consenso_{doc_type}_online.pdf",
                 "Note": "Consenso firmato online",
@@ -8072,33 +8181,23 @@ def ui_public_sign_page():
             insert_privacy_consent(cur, int(pid), payload_db)
             conn.commit()
         except Exception as e:
-            st.warning(f"Consenso inviato/archiviato, ma non salvato nello storico DB: {e}")
+            st.warning(f"Consenso non salvato nello storico DB: {e}")
 
+        # --- INVIO EMAIL ---
+        email_ok = True
+        try:
+            to_list = [email.strip(), _clinic_email()]
+            subject = "Consenso informato e privacy – Studio The Organism"
+            body_mail = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
+            _send_email_with_pdf(to_list, subject, body_mail, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
+        except Exception as e:
+            email_ok = False
+            st.warning(f"Consenso archiviato, ma invio email non riuscito: {e}")
 
-# Se il merge fallisce, archiviamo anche la pagina firma separata
-        extra_key = None
-        if extra_pdf is not None and extra_name:
-            extra_digest = _sha256_bytes(extra_pdf)
-            extra_key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{extra_digest[:10]}_{extra_name}"
-            _s3_put_private(extra_key, extra_pdf, content_type="application/pdf")
-            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online_firma", extra_key, extra_digest, extra_name)
-
-
-        # invio email a entrambi
-    email_ok = True
-    try:
-        to_list = [email.strip(), _clinic_email()]
-        subject = "Consenso informato e privacy – Studio The Organism"
-        body = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
-        _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
-    except Exception as e:
-        email_ok = False
-        st.warning(f"Consenso archiviato su Neon, ma invio email non riuscito: {e}")
-
-    if email_ok:
-        st.success("✅ Consenso archiviato su Neon e inviato via email. Puoi chiudere questa pagina.")
-    else:
-        st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
+        if email_ok:
+            st.success("Consenso archiviato e inviato via email. Puoi chiudere questa pagina.")
+        else:
+            st.success("Consenso archiviato. Puoi chiudere questa pagina.")
 
 # ======================================
 # AUDIOGRAMMA FUNZIONALE (TEST) – MVP
