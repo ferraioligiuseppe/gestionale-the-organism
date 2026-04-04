@@ -538,7 +538,10 @@ def ui_dashboard_paziente():
         ("Andamento Pachimetria", ["pach_od", "pach_os"], "µm",       None),
         ("Refrazione finale SF",  ["sf_od",   "sf_os"],   "Diottrie", None),
     ]:
-        if df[cols].notna().any().any():
+        # Mostra solo se ci sono valori non nulli e non tutti zero
+        col_data = df[cols].copy()
+        has_data = col_data.notna().any().any() and (col_data.fillna(0).abs() > 0.01).any().any()
+        if has_data:
             st.markdown(f'<div class="vm-section-title">{title}</div>', unsafe_allow_html=True)
             fig = _chart(df, cols, ylabel, threshold)
             if fig:
@@ -604,7 +607,8 @@ def ui_dashboard_paziente():
 
     st.divider()
 
-    with st.expander("📚 Storico completo visite"):
+    mostra_storico = st.checkbox("Storico completo visite", key="vm_dash_storico", value=False)
+    if mostra_storico:
         show_df = df.copy()
         if "data" in show_df.columns:
             show_df["data"] = show_df["data"].dt.strftime("%d/%m/%Y")
