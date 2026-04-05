@@ -106,12 +106,24 @@ PDF_PRIVACY_MINORE_SIGN_TEMPLATE = "assets/privacy/Consenso_Informato_Privacy_Mi
 
 
 def _privacy_abs_path(p: str) -> str:
-    """Resolve relative paths against app directory (works on Streamlit Cloud)."""
+    """Resolve relative paths against project root (assets/ is at repo root, not inside modules/)."""
+    if os.path.isabs(p):
+        return p
     try:
-        base = os.path.dirname(__file__)
+        # app_core.py è in modules/ — risali alla root del progetto
+        modules_dir = os.path.dirname(__file__)
+        project_root = os.path.dirname(modules_dir)
+        candidate = os.path.join(project_root, p)
+        if os.path.exists(candidate):
+            return candidate
+        # fallback: prova dalla directory corrente di lavoro
+        cwd_candidate = os.path.join(os.getcwd(), p)
+        if os.path.exists(cwd_candidate):
+            return cwd_candidate
+        # ultimo fallback: relativo a modules/ (comportamento precedente)
+        return os.path.join(modules_dir, p)
     except Exception:
-        base = os.getcwd()
-    return p if os.path.isabs(p) else os.path.join(base, p)
+        return os.path.join(os.getcwd(), p)
 
 def _check_privacy_templates_ui():
     """Mostra in UI lo stato dei file template privacy (senza crashare)."""
@@ -170,7 +182,9 @@ def _get_columns(conn, table_name: str):
     except Exception:
         return []
 
+@st.cache_data(ttl=300, show_spinner=False)
 def _detect_patient_table_and_cols(conn):
+    """Rileva tabella pazienti — cache 5 minuti, cambia raramente."""
     table_candidates = [
         'pazienti','Pazienti','patients','Patients','patienti','Patienti',
         'anagrafica_pazienti','Anagrafica_Pazienti','tbl_pazienti','Tbl_Pazienti'
@@ -228,7 +242,9 @@ def _detect_patient_table_and_cols(conn):
         return table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
     return None, {}
 
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_pazienti_for_select(conn, limit=5000):
+    """Lista pazienti con cache 30 secondi — evita query ripetute ad ogni click."""
     table, colmap = _detect_patient_table_and_cols(conn)
     if not table:
         return [], None, None
@@ -1637,7 +1653,7 @@ def ui_gestione_utenti(get_conn):
     st.header("Utenti / Ruoli")
 
     # Crea utente
-    with st.expander("➕ Crea nuovo utente", expanded=True):
+    with st.expander("Crea nuovo utente", expanded=True):
         new_u = st.text_input("Nuovo username")
         new_email = st.text_input("Email (opzionale)")
         new_pw = st.text_input("Password iniziale", type="password")
@@ -1694,7 +1710,7 @@ def ui_gestione_utenti(get_conn):
         is_active = bool(r[3])
         must_change = bool(r[4])
         last_login = r[5]
-        with st.expander(f"👤 {uname} (id {uid})", expanded=False):
+        with st.expander(f"{uname} (id {uid})", expanded=False):
             st.write({"email": email, "is_active": is_active, "must_change_password": must_change, "last_login_at": str(last_login) if last_login else None})
             # ruoli
             current_roles = _get_roles_for_user(conn, uid)
@@ -2093,7 +2109,9 @@ DATABASE_URL = "postgresql://...sslmode=require"
 
 Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
+@st.cache_resource
 def _connect_cached():
+    """Connessione DB con cache — creata UNA VOLTA per sessione. Elimina latenza multipla."""
     _require_postgres_on_cloud()
     if _DB_BACKEND == "postgres":
         if not PSYCOPG2_AVAILABLE:
@@ -3170,7 +3188,14 @@ def genera_referto_oculistico_pdf(paziente, valutazione, include_header: bool) -
 # -----------------------------
 
 def _now_iso_dt() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """Ora corrente nel fuso orario italiano (Europe/Rome)."""
+    try:
+        import zoneinfo
+        tz_it = zoneinfo.ZoneInfo("Europe/Rome")
+    except ImportError:
+        from datetime import timezone, timedelta
+        tz_it = timezone(timedelta(hours=2))  # UTC+2 ora legale
+    return datetime.now(tz_it).strftime("%Y-%m-%d %H:%M:%S")
 
 def _bool_i(v) -> int:
     try:
@@ -4484,7 +4509,7 @@ def ui_db_cleanup():
 
     tab1, tab2 = st.tabs(["Duplicati per Codice Fiscale", "Duplicati per Identità (nome/cognome/data)"])
 
-    with st.expander("🧾 Compatta consensi privacy (tieni solo l'ultimo)", expanded=False):
+    with st.expander("Compatta consensi privacy (tieni solo l'ultimo)", expanded=False):
         st.write("Elimina i consensi privacy precedenti e lascia SOLO l'ultimo per ogni paziente (DB TEST).")
         conf = st.text_input("Per confermare scrivi: COMPACT", key="compact_confirm")
         if st.button("Esegui compattazione consensi (tutti i pazienti)", disabled=(conf.strip().upper() != "COMPACT")):
@@ -4805,12 +4830,20 @@ def ui_pazienti():
     # Filtro ricerca
     filtro = st.text_input("Cerca per cognome/nome/codice fiscale", "")
 
+    mostra_archiviati = st.checkbox("Mostra anche pazienti archiviati", value=False, key="elenco_show_archiviati")
+
     query = "SELECT * FROM Pazienti"
     params = []
+    conditions = []
+    if not mostra_archiviati:
+        conditions.append("COALESCE(Stato_Paziente,'ATTIVO') = ?")
+        params.append("ATTIVO")
     if filtro.strip():
-        query += " WHERE Cognome LIKE ? OR Nome LIKE ? OR Codice_Fiscale LIKE ?"
+        conditions.append("(Cognome LIKE ? OR Nome LIKE ? OR Codice_Fiscale LIKE ?)")
         like = f"%{filtro.strip()}%"
-        params = [like, like, like]
+        params.extend([like, like, like])
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY Cognome, Nome"
 
     cur.execute(query, params)
@@ -4861,16 +4894,60 @@ def ui_pazienti():
             st.success("Paziente riattivato.")
             st.experimental_rerun() if hasattr(st, "experimental_rerun") else st.rerun()
     with col_c:
-        if st.button("Elimina definitivamente", key="elimina"):
-            cur.execute("DELETE FROM anamnesi WHERE paziente_id = %s", (sel_id,))
-            cur.execute("DELETE FROM Valutazioni_Visive WHERE paziente_id = %s", (sel_id,))
-            cur.execute("DELETE FROM Sedute WHERE paziente_id = %s", (sel_id,))
-            cur.execute("DELETE FROM Coupons WHERE paziente_id = %s", (sel_id,))
-            cur.execute("DELETE FROM Pazienti WHERE id = %s", (sel_id,))
-            conn.commit()
-            st.success("Paziente e dati associati eliminati.")
-            conn.close()
-            st.stop()
+        if st.button("Elimina definitivamente", key="btn_elimina_paz"):
+            st.session_state["confirm_elimina_paz_id"] = sel_id
+
+    # ── Conferma eliminazione con digitazione cognome ─────────────────────
+    if st.session_state.get("confirm_elimina_paz_id") == sel_id:
+        st.markdown(
+            f"""
+            <div style="background:#fef2f2;border:2px solid #ef4444;border-radius:10px;
+                        padding:14px 18px;margin:10px 0;">
+                <b style="color:#991b1b;">Stai per eliminare questo paziente in modo irreversibile.</b><br>
+                <span style="color:#7f1d1d;font-size:0.88rem;">
+                Verranno cancellati: anagrafica, visite, anamnesi, sedute, coupon, consensi privacy e tutti i documenti collegati.
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        cognome_check = st.text_input(
+            f"Scrivi il cognome del paziente ({rec['Cognome'].upper()}) per confermare:",
+            key="elimina_paz_conferma_input",
+        )
+        dc1, dc2 = st.columns(2)
+        with dc1:
+            conferma_ok = cognome_check.strip().upper() == (rec["Cognome"] or "").strip().upper()
+            if st.button("Conferma eliminazione", key="elimina_paz_confirm", disabled=not conferma_ok):
+                try:
+                    # Cancella in ordine: prima tabelle figlie, poi paziente
+                    tabelle = [
+                        ("anamnesi",          "paziente_id"),
+                        ("Valutazioni_Visive", "paziente_id"),
+                        ("Sedute",             "paziente_id"),
+                        ("Coupons",            "paziente_id"),
+                        ("Consensi_Privacy",   "paziente_id"),
+                        ("documenti",          "paziente_id"),
+                        ("relazioni_cliniche", "paziente_id"),
+                    ]
+                    for tbl, col in tabelle:
+                        try:
+                            cur.execute(f"DELETE FROM {tbl} WHERE {col} = %s", (sel_id,))
+                        except Exception:
+                            try: conn.rollback()
+                            except Exception: pass
+                    cur.execute("DELETE FROM Pazienti WHERE id = %s", (sel_id,))
+                    conn.commit()
+                    st.session_state["confirm_elimina_paz_id"] = None
+                    st.success(f"Paziente {rec['Cognome']} {rec['Nome']} eliminato definitivamente.")
+                    conn.close()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore eliminazione: {e}")
+        with dc2:
+            if st.button("Annulla", key="elimina_paz_cancel"):
+                st.session_state["confirm_elimina_paz_id"] = None
+                st.rerun()
 
     st.markdown("### Modifica dati paziente")
     with st.form("modifica_paziente"):
@@ -4983,20 +5060,32 @@ def ui_anamnesi():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Seleziona paziente
-    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    # Seleziona paziente (solo ATTIVI, con data nascita per distinguere omonimi)
+    cur.execute(
+        "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
+        "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' ORDER BY Cognome, Nome"
+    )
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    def _paz_label_an(p):
+        dn = ""
+        if p.get("Data_Nascita"):
+            try:
+                dn = " · " + datetime.strptime(p["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                dn = " · " + str(p["Data_Nascita"])
+        return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
+
+    options = [_paz_label_an(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
     # --- Link pubblico per INPPS (genitori) ---
-    with st.expander("🔗 Link INPPS (genitori)", expanded=False):
+    with st.expander("Link INPPS (genitori)", expanded=False):
         if not _public_links_enabled():
             st.info("Link pubblici disattivati. Abilita in Secrets: [public_links] ENABLED=true")
         else:
@@ -5017,7 +5106,7 @@ def ui_anamnesi():
 
 
     # --- Migrazione legacy -> PNEV (sicura, non sovrascrive) ---
-    with st.expander("🧬 Migrazione legacy → PNEV", expanded=False):
+    with st.expander("Migrazione legacy PNEV", expanded=False):
         st.caption("Popola pnev_json/pnev_summary per le vecchie schede (che avevano solo testo libero). Non sovrascrive schede già migrate.")
         colm1, colm2 = st.columns([1, 1])
         with colm1:
@@ -5046,31 +5135,105 @@ def ui_anamnesi():
     # -----------------------------
     # NUOVA VALUTAZIONE PNEV
     # -----------------------------
+    st.markdown("---")
+    st.subheader("Nuova Valutazione PNEV")
+
+    # ── TAB: Anamnesi Catagnini vs PNEV clinico ──────────────────────────────
+    tab_cat, tab_pnev_cl, tab_inpps = st.tabs([
+        "📋 Anamnesi Catagnini (0–2 anni)",
+        "🧠 Valutazione PNEV clinica",
+        "📊 Questionario INPPS",
+    ])
+
+    # Stato temporaneo dell'anamnesi Catagnini (fuori dal form per supportare
+    # widget interattivi come radio/checkbox annidati in expander)
+    _cat_pnev_key = f"catagnini_new_{paz_id}"
+    if _cat_pnev_key not in st.session_state:
+        st.session_state[_cat_pnev_key] = {}
+
+    with tab_cat:
+        try:
+            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_catagnini
+            _cat_json_tmp, _cat_summary_tmp = render_anamnesi_catagnini(
+                pnev_json=st.session_state[_cat_pnev_key],
+                prefix=f"new_{paz_id}",
+                readonly=False,
+            )
+            st.session_state[_cat_pnev_key] = _cat_json_tmp
+        except Exception as _cat_err:
+            st.error(f"Errore modulo Catagnini: {_cat_err}")
+            _cat_summary_tmp = ""
+
+    with tab_pnev_cl:
+        _motivo_placeholder = st.text_area(
+            "Domanda clinica / motivo dell'invio",
+            key=f"motivo_new_{paz_id}",
+        )
+        _visita_snapshot_new = {"paziente_id": paz_id, "motivo": _motivo_placeholder}
+        pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(
+            prefix="pnev_new", visita=_visita_snapshot_new, existing=None
+        )
+
+    with tab_inpps:
+        _inpps_existing_new = (
+            pnev_data_new.get("questionari", {}) or {}
+        ).get("inpps_screening_genitori") if isinstance(pnev_data_new, dict) else None
+        inpps_data_new, inpps_summary_new = inpps_collect_ui(
+            prefix="inpps_new", existing=_inpps_existing_new
+        )
+
+    # ── Scenario clinico (calcolato in tempo reale dai dati Catagnini) ────────
+    st.markdown("---")
+    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
+        try:
+            from modules.pnev.scenario_engine import render_scenario_ui
+            _cat_for_scenario = st.session_state.get(_cat_pnev_key, {})
+            if _cat_for_scenario:
+                render_scenario_ui(
+                    pnev_json=_cat_for_scenario,
+                    data_nascita=None,
+                    eta_mesi_override=None,
+                )
+            else:
+                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
+        except Exception as _sc_err:
+            st.warning(f"Scenario non disponibile: {_sc_err}")
+
+    # ── Form di salvataggio (solo campi non-interattivi + bottone) ───────────
     with st.form("nuova_pnev"):
-        st.subheader("Nuova Valutazione PNEV")
+        data_str = st.text_input("Data valutazione (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
+        note = st.text_area("Note cliniche aggiuntive (per uso interno)")
 
-        data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
-        motivo = st.text_area("Domanda clinica / motivo dell'invio")
-
-        # visita_snapshot qui può essere minimale (questa sezione è trasversale, non solo visiva)
-        visita_snapshot = {"paziente_id": paz_id, "motivo": motivo}
-
-        pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(prefix="pnev_new", visita=visita_snapshot, existing=None)
-
-        # --- Questionario INPPS (Genitori) agganciato al PNEV ---
-        inpps_existing = (pnev_data_new.get("questionari", {}) or {}).get("inpps_screening_genitori") if isinstance(pnev_data_new, dict) else None
-        inpps_data_new, inpps_summary_new = inpps_collect_ui(prefix="inpps_new", existing=inpps_existing)
-        # merge nel PNEV JSON scalabile
+        # merge dati nel pnev_json
         try:
             pnev_data_new.setdefault("questionari", {})
             pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
         except Exception:
             pass
-        # aggiorna summary (non distruttivo)
+        # merge anamnesi Catagnini
+        try:
+            cat_data = st.session_state.get(_cat_pnev_key, {})
+            if cat_data.get("anamnesi_catagnini"):
+                pnev_data_new["anamnesi_catagnini"] = cat_data["anamnesi_catagnini"]
+        except Exception:
+            pass
+
+        # aggiorna summary
+        motivo = st.session_state.get(f"motivo_new_{paz_id}", "")
         if inpps_summary_new and (inpps_summary_new not in (pnev_summary_new or "")):
             pnev_summary_new = ((pnev_summary_new or "").strip() + "\n" + inpps_summary_new).strip()
+        _cat_sum = st.session_state.get(_cat_pnev_key, {})
+        if isinstance(_cat_sum, dict):
+            try:
+                from modules.pnev.ui_anamnesi_catagnini import _build_summary as _cat_bs
+                _cs = _cat_bs(_cat_sum.get("anamnesi_catagnini", {}))
+                if _cs and _cs not in (pnev_summary_new or ""):
+                    pnev_summary_new = ((pnev_summary_new or "").strip() + "\n" + _cs).strip()
+            except Exception:
+                pass
 
-        note = st.text_area("Note cliniche aggiuntive (per uso interno)")
+        # visita_snapshot
+        visita_snapshot = {"paziente_id": paz_id, "motivo": motivo}
 
         col_ai1, col_ai2, col_save = st.columns([1, 1, 1])
         with col_ai1:
@@ -5078,7 +5241,7 @@ def ui_anamnesi():
         with col_ai2:
             ai_plan = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su PNEV.")
         with col_save:
-            salva = st.form_submit_button("Salva Valutazione PNEV")
+            salva = st.form_submit_button("💾 Salva Valutazione PNEV")
 
     # --- IA helper (TEST only) ---
     if 'ai_hyp' in locals() and (ai_hyp or ai_plan):
@@ -5159,27 +5322,123 @@ def ui_anamnesi():
         existing_pnev_raw = None
     pnev_existing = pnev.pnev_load(existing_pnev_raw)
 
+    # ── Tab modifica: Catagnini / PNEV clinico / INPPS (FUORI dal form) ──────
+    _cat_edit_key = f"catagnini_edit_{an_id}"
+    if _cat_edit_key not in st.session_state:
+        st.session_state[_cat_edit_key] = dict(pnev_existing)
+
+    tab_cat_m, tab_pnev_m, tab_inpps_m = st.tabs([
+        "📋 Anamnesi Catagnini (0–2 anni)",
+        "🧠 Valutazione PNEV clinica",
+        "📊 Questionario INPPS",
+    ])
+
+    with tab_cat_m:
+        try:
+            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_catagnini
+            _cat_json_m, _cat_sum_m = render_anamnesi_catagnini(
+                pnev_json=st.session_state[_cat_edit_key],
+                prefix=f"edit_{an_id}",
+                readonly=False,
+            )
+            st.session_state[_cat_edit_key] = _cat_json_m
+        except Exception as _cat_err_m:
+            st.error(f"Errore modulo Catagnini: {_cat_err_m}")
+            _cat_sum_m = ""
+
+    with tab_pnev_m:
+        motivo_m = st.text_area("Domanda clinica / motivo", rec["Motivo"] or "", key=f"motivo_edit_{an_id}")
+        visita_snapshot_m = {"paziente_id": paz_id, "motivo": motivo_m}
+        pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(
+            prefix=f"pnev_edit_{an_id}", visita=visita_snapshot_m, existing=pnev_existing
+        )
+
+    with tab_inpps_m:
+        inpps_existing_m = (
+            pnev_data_m.get("questionari", {}) or {}
+        ).get("inpps_screening_genitori") if isinstance(pnev_data_m, dict) else None
+        inpps_data_m, inpps_summary_m2 = inpps_collect_ui(
+            prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m
+        )
+
+    # Visualizzazione risposte INPPS già compilate (se presenti)
+    _inpps_saved = (pnev_existing.get("questionari", {}) or {}).get("inpps_screening_genitori")
+    if isinstance(_inpps_saved, dict) and _inpps_saved.get("screening"):
+        with st.expander("📊 Risposte INPPS ricevute dal paziente", expanded=True):
+            _scr = _inpps_saved.get("screening", {})
+            _tot = _scr.get("totale_positivi", 0)
+            _cut = _scr.get("cutoff", 7)
+            _flag = _scr.get("flag_possibile_immaturita_neuromotoria", False)
+            _pos = _inpps_saved.get("positivi", {})
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Totale positivi", _tot)
+            c2.metric("Neurologica/Scuola", _pos.get("neurologica_scuola", 0))
+            c3.metric("Nutrizione", _pos.get("nutrizione", 0))
+            c4.metric("Udito (Madaule)", _pos.get("udito_madaule", 0))
+            if _flag:
+                st.warning(f"⚠️ Screening positivo ({_tot} ≥ cut-off {_cut}) → possibile immaturità neuromotoria.")
+            else:
+                st.success(f"✅ Screening negativo ({_tot} < cut-off {_cut}).")
+            _items_pos = [k for k, v in (_inpps_saved.get("items", {}) or {}).items() if v]
+            if _items_pos:
+                with st.expander(f"Domande positive ({len(_items_pos)})", expanded=False):
+                    for _it in _items_pos:
+                        st.markdown(f"- `{_it}`")
+
+    # ── Scenario clinico (modifica) ──────────────────────────────────────────
+    st.markdown("---")
+    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
+        try:
+            from modules.pnev.scenario_engine import render_scenario_ui
+            _cat_for_sc_edit = st.session_state.get(_cat_edit_key, {})
+            # recupera data nascita del paziente per calcolo età
+            _paz_dn = None
+            try:
+                cur.execute("SELECT Data_Nascita FROM Pazienti WHERE id = %s", (paz_id,))
+                _paz_row = cur.fetchone()
+                if _paz_row:
+                    _paz_dn = _paz_row.get("Data_Nascita") if hasattr(_paz_row, "get") else _paz_row[0]
+            except Exception:
+                pass
+            if _cat_for_sc_edit:
+                render_scenario_ui(
+                    pnev_json=_cat_for_sc_edit,
+                    data_nascita=_paz_dn,
+                )
+            else:
+                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
+        except Exception as _sc_edit_err:
+            st.warning(f"Scenario non disponibile: {_sc_edit_err}")
+
+    # ── Form di salvataggio ───────────────────────────────────────────────────
     with st.form("modifica_pnev"):
         data_m = st.text_input(
             "Data (gg/mm/aaaa)",
             datetime.strptime(rec["data_anamnesi"], "%Y-%m-%d").strftime("%d/%m/%Y")
             if rec["data_anamnesi"] else "",
         )
-        motivo_m = st.text_area("Domanda clinica / motivo", rec["Motivo"] or "")
 
-        visita_snapshot_m = {"paziente_id": paz_id, "motivo": motivo_m}
-        pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(prefix=f"pnev_edit_{an_id}", visita=visita_snapshot_m, existing=pnev_existing)
-
-        # --- Questionario INPPS (Genitori) agganciato al PNEV ---
-        inpps_existing_m = (pnev_data_m.get("questionari", {}) or {}).get("inpps_screening_genitori") if isinstance(pnev_data_m, dict) else None
-        inpps_data_m, inpps_summary_m2 = inpps_collect_ui(prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m)
+        # merge dati
         try:
             pnev_data_m.setdefault("questionari", {})
             pnev_data_m["questionari"]["inpps_screening_genitori"] = inpps_data_m
         except Exception:
             pass
+        try:
+            _cat_state = st.session_state.get(_cat_edit_key, {})
+            if isinstance(_cat_state, dict) and _cat_state.get("anamnesi_catagnini"):
+                pnev_data_m["anamnesi_catagnini"] = _cat_state["anamnesi_catagnini"]
+        except Exception:
+            pass
         if inpps_summary_m2 and (inpps_summary_m2 not in (pnev_summary_m or "")):
             pnev_summary_m = ((pnev_summary_m or "").strip() + "\n" + inpps_summary_m2).strip()
+        try:
+            from modules.pnev.ui_anamnesi_catagnini import _build_summary as _cat_bs_m
+            _cs_m = _cat_bs_m(st.session_state.get(_cat_edit_key, {}).get("anamnesi_catagnini", {}))
+            if _cs_m and _cs_m not in (pnev_summary_m or ""):
+                pnev_summary_m = ((pnev_summary_m or "").strip() + "\n" + _cs_m).strip()
+        except Exception:
+            pass
 
         note_m = st.text_area("Note cliniche aggiuntive (per uso interno)", rec["Note"] or "")
 
@@ -5189,7 +5448,7 @@ def ui_anamnesi():
         with col_ai2:
             ai_plan_m = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su PNEV.")
         with col_save:
-            salva_m = st.form_submit_button("Salva modifiche")
+            salva_m = st.form_submit_button("💾 Salva modifiche")
         with col_del:
             cancella = st.form_submit_button("Elimina Valutazione PNEV")
 
@@ -5244,10 +5503,22 @@ def ui_anamnesi():
         st.rerun()
 
     if 'cancella' in locals() and cancella:
-        cur.execute("DELETE FROM anamnesi WHERE id = %s", (an_id,))
-        conn.commit()
-        st.success("Valutazione PNEV eliminata.")
-        st.rerun()
+        st.session_state["confirm_del_pnev"] = an_id
+
+    if st.session_state.get("confirm_del_pnev") == an_id:
+        st.warning(f"Confermi l'eliminazione della valutazione PNEV del {rec['data_anamnesi'] or ''}? L'operazione non è reversibile.")
+        cp1, cp2 = st.columns(2)
+        with cp1:
+            if st.button("Conferma eliminazione PNEV", key="del_pnev_yes", type="primary"):
+                cur.execute("DELETE FROM anamnesi WHERE id = %s", (an_id,))
+                conn.commit()
+                st.session_state["confirm_del_pnev"] = None
+                st.success("Valutazione PNEV eliminata.")
+                st.rerun()
+        with cp2:
+            if st.button("Annulla", key="del_pnev_no"):
+                st.session_state["confirm_del_pnev"] = None
+                st.rerun()
 
     conn.close()
 
@@ -5262,15 +5533,27 @@ def ui_valutazioni_visive():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Seleziona paziente
-    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    # Seleziona paziente (solo ATTIVI, con data nascita per distinguere omonimi)
+    cur.execute(
+        "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
+        "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' ORDER BY Cognome, Nome"
+    )
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    def _paz_label_vis(p):
+        dn = ""
+        if p.get("Data_Nascita"):
+            try:
+                dn = " · " + datetime.strptime(p["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                dn = " · " + str(p["Data_Nascita"])
+        return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
+
+    options = [_paz_label_vis(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
@@ -5820,10 +6103,10 @@ ESAMI STRUTTURALI / FUNZIONALI
         except ImportError:
             _storico_fn = None; _dresdner_fn = None
     if _storico_fn:
-        with st.expander("📈 Andamento IOP / Spessore corneale nel tempo", expanded=False):
+        with st.expander("Andamento IOP / Spessore corneale nel tempo", expanded=False):
             _storico_fn(rows)
     if _dresdner_fn:
-        with st.expander("📋 Tabella di correzione Dresdner (CCT → IOPc)", expanded=False):
+        with st.expander("Tabella di correzione Dresdner (CCT / IOPc)", expanded=False):
             _dresdner_fn()
 
     labels = [
@@ -5978,9 +6261,23 @@ ESAMI STRUTTURALI / FUNZIONALI
         st.success("Valutazione aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Valutazioni_Visive WHERE id = %s", (val_id,))
-        conn.commit()
-        st.success("Valutazione eliminata.")
+        st.session_state["confirm_del_vis"] = val_id
+
+    if st.session_state.get("confirm_del_vis") == val_id:
+        st.warning(f"Confermi l'eliminazione della valutazione oculistica #{val_id}? L'operazione non è reversibile.")
+        cv1, cv2 = st.columns(2)
+        with cv1:
+            if st.button("Conferma eliminazione visita", key="del_vis_yes", type="primary"):
+                cur.execute("DELETE FROM Valutazioni_Visive WHERE id = %s", (val_id,))
+                conn.commit()
+                st.session_state["confirm_del_vis"] = None
+                st.success("Valutazione eliminata.")
+                st.rerun()
+        with cv2:
+            if st.button("Annulla", key="del_vis_no"):
+                st.session_state["confirm_del_vis"] = None
+                st.rerun()
+
     st.markdown("---")
     st.subheader("Prescrizione occhiali (stampa A5 / A4 2×A5)")
 
@@ -6114,14 +6411,26 @@ def ui_sedute():
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    cur.execute(
+        "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
+        "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' ORDER BY Cognome, Nome"
+    )
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    options = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    def _paz_label_sed(p):
+        dn = ""
+        if p.get("Data_Nascita"):
+            try:
+                dn = " · " + datetime.strptime(p["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                dn = " · " + str(p["Data_Nascita"])
+        return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
+
+    options = [_paz_label_sed(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -6245,9 +6554,22 @@ def ui_sedute():
         st.success("Seduta aggiornata.")
 
     if cancella:
-        cur.execute("DELETE FROM Sedute WHERE id = %s", (sed_id,))
-        conn.commit()
-        st.success("Seduta eliminata.")
+        st.session_state["confirm_del_sed"] = sed_id
+
+    if st.session_state.get("confirm_del_sed") == sed_id:
+        st.warning(f"Confermi l'eliminazione della seduta #{sed_id}? L'operazione non è reversibile.")
+        cs1, cs2 = st.columns(2)
+        with cs1:
+            if st.button("Conferma eliminazione seduta", key="del_sed_yes", type="primary"):
+                cur.execute("DELETE FROM Sedute WHERE id = %s", (sed_id,))
+                conn.commit()
+                st.session_state["confirm_del_sed"] = None
+                st.success("Seduta eliminata.")
+                st.rerun()
+        with cs2:
+            if st.button("Annulla", key="del_sed_no"):
+                st.session_state["confirm_del_sed"] = None
+                st.rerun()
 
     conn.close()
 def ui_coupons():
@@ -6256,15 +6578,27 @@ def ui_coupons():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Elenco pazienti
-    cur.execute("SELECT id, Cognome, Nome FROM Pazienti ORDER BY Cognome, Nome")
+    # Elenco pazienti (solo ATTIVI, con data nascita per distinguere omonimi)
+    cur.execute(
+        "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
+        "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' ORDER BY Cognome, Nome"
+    )
     pazienti = cur.fetchall()
     if not pazienti:
         st.info("Nessun paziente registrato.")
         conn.close()
         return
 
-    opt_paz = [f"{p['id']} - {p['Cognome']} {p['Nome']}" for p in pazienti]
+    def _paz_label_coup(p):
+        dn = ""
+        if p.get("Data_Nascita"):
+            try:
+                dn = " · " + datetime.strptime(p["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                dn = " · " + str(p["Data_Nascita"])
+        return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
+
+    opt_paz = [_paz_label_coup(p) for p in pazienti]
     sel = st.selectbox("Seleziona paziente", opt_paz)
     paz_id = int(sel.split(" - ", 1)[0])
 
@@ -6374,8 +6708,23 @@ def ui_coupons():
                     st.rerun()
         with col4:
             if st.button("Elimina", key=f"c_del_{c['id']}"):
-                cur.execute("DELETE FROM Coupons WHERE id = %s", (c["id"],))
+                st.session_state["confirm_del_coup"] = c["id"]
+
+    # Conferma eliminazione coupon
+    del_coup_id = st.session_state.get("confirm_del_coup")
+    if del_coup_id:
+        st.warning(f"Confermi l'eliminazione del coupon #{del_coup_id}?")
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            if st.button("Conferma eliminazione coupon", key="del_coup_yes", type="primary"):
+                cur.execute("DELETE FROM Coupons WHERE id = %s", (del_coup_id,))
                 conn.commit()
+                st.session_state["confirm_del_coup"] = None
+                st.success("Coupon eliminato.")
+                st.rerun()
+        with cc2:
+            if st.button("Annulla", key="del_coup_no"):
+                st.session_state["confirm_del_coup"] = None
                 st.rerun()
 
     conn.close()
@@ -6768,7 +7117,7 @@ def ui_dashboard_evolutiva():
 
     _ensure_relazioni_cliniche_table(conn)
 
-    st.header("📊 Dashboard evolutiva")
+    st.header("Dashboard evolutiva")
 
     # Selezione paziente (AUTO) - indipendente dalla sezione Pazienti
     paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
@@ -6859,7 +7208,7 @@ def ui_dashboard_evolutiva():
                 if docx_path and os.path.exists(docx_path):
                     with cols[0]:
                         with open(docx_path, "rb") as f:
-                            st.download_button("⬇️ Word", f, file_name=os.path.basename(docx_path), key=f"dw_{rid}")
+                            st.download_button("Scarica Word", f, file_name=os.path.basename(docx_path), key=f"dw_{rid}")
                 else:
                     with cols[0]:
                         st.caption("Word non disponibile")
@@ -6867,7 +7216,7 @@ def ui_dashboard_evolutiva():
                 if pdf_path and os.path.exists(pdf_path):
                     with cols[1]:
                         with open(pdf_path, "rb") as f:
-                            st.download_button("⬇️ PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rid}")
+                            st.download_button("Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rid}")
                 else:
                     with cols[1]:
                         st.caption("PDF non disponibile (cloud)")
@@ -6916,7 +7265,7 @@ def ui_debug_db():
 
 def ui_import_pazienti():
     import streamlit as st
-    st.header("📥 Import Pazienti su Neon (Cloud)")
+    st.header("Import Pazienti su Neon (Cloud)")
     st.caption("Carica un file CSV o Excel con almeno: Cognome, Nome (consigliato anche Data_Nascita). I dati verranno inseriti su Neon.")
 
     if _DB_BACKEND != "postgres":
@@ -7075,10 +7424,16 @@ def _ensure_documenti_table(conn):
                 filename TEXT,
                 sha256 TEXT NOT NULL,
                 mime TEXT DEFAULT 'application/pdf',
-                created_at TEXT DEFAULT (datetime('now'))
+                created_at TEXT DEFAULT (datetime('now')),
+                blob BLOB
             )
             """
         )
+        # Migrazione: aggiungi colonna blob se manca
+        try:
+            cur.execute("ALTER TABLE documenti ADD COLUMN blob BLOB")
+        except Exception:
+            pass
         conn.commit()
         return
     # postgres
@@ -7092,10 +7447,16 @@ def _ensure_documenti_table(conn):
           filename TEXT,
           sha256 TEXT NOT NULL,
           mime TEXT DEFAULT 'application/pdf',
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          blob BYTEA
         );
         """
     )
+    # Migrazione: aggiungi colonna blob se manca
+    try:
+        cur.execute("ALTER TABLE public.documenti ADD COLUMN IF NOT EXISTS blob BYTEA;")
+    except Exception:
+        pass
     try:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documenti_paziente ON public.documenti(paziente_id);")
     except Exception:
@@ -7216,19 +7577,19 @@ def _s3_presign_get(key: str) -> str:
         ExpiresIn=_presign_expires(),
     )
 
-def _db_insert_documento(conn, paziente_id: int, tipo: str, s3_key: str, sha256: str, filename: str):
+def _db_insert_documento(conn, paziente_id: int, tipo: str, s3_key: str, sha256: str, filename: str, blob: bytes | None = None):
     cur = conn.cursor()
     if _DB_BACKEND == "sqlite":
         cur.execute(
-            """INSERT INTO documenti (paziente_id, tipo, s3_key, filename, sha256, mime)
-                 VALUES (?, ?, ?, ?, ?, 'application/pdf')""",
-            (paziente_id, tipo, s3_key, filename, sha256),
+            """INSERT INTO documenti (paziente_id, tipo, s3_key, filename, sha256, mime, blob)
+                 VALUES (?, ?, ?, ?, ?, 'application/pdf', ?)""",
+            (paziente_id, tipo, s3_key, filename, sha256, blob),
         )
     else:
         cur.execute(
-            """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime)
-                 VALUES (%s, %s, %s, %s, %s, 'application/pdf')""",
-            (paziente_id, tipo, s3_key, filename, sha256),
+            """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime, blob)
+                 VALUES (%s, %s, %s, %s, %s, 'application/pdf', %s)""",
+            (paziente_id, tipo, s3_key, filename, sha256, blob),
         )
     conn.commit()
 
@@ -7260,9 +7621,140 @@ def _db_list_documenti(conn, paziente_id: int, tipo: str | None = None):
         return cur.fetchall()
 
 def _prefill_pdf(template_path: str, fields: dict) -> bytes:
-    """SAFE VERSION: returns the static PDF template as-is (no AcroForm)."""
-    with open(template_path, "rb") as f:
-        return f.read()
+    """
+    Genera una pagina di copertina con i dati compilati (ReportLab) e la unisce
+    al template PDF informativa. Risultato: PDF completo con dati + informativa.
+    """
+    try:
+        from reportlab.pdfgen import canvas as _rl_canvas
+        from reportlab.lib.pagesizes import A4 as _A4
+        from reportlab.lib.units import mm as _mm
+        import io as _io
+
+        buf = _io.BytesIO()
+        c = _rl_canvas.Canvas(buf, pagesize=_A4)
+        w, h = _A4
+
+        # Intestazione
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(20*_mm, h - 25*_mm, "Consenso informato e privacy")
+        c.setFont("Helvetica", 10)
+        c.drawString(20*_mm, h - 32*_mm, "Studio The Organism – Dott. Ferraioli Giuseppe")
+
+        # Linea separatrice
+        c.setStrokeColorRGB(0.2, 0.4, 0.7)
+        c.setLineWidth(1)
+        c.line(20*_mm, h - 35*_mm, w - 20*_mm, h - 35*_mm)
+        c.setStrokeColorRGB(0, 0, 0)
+
+        # Dati paziente
+        y = h - 45*_mm
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20*_mm, y, "Dati del paziente")
+        y -= 8*_mm
+        c.setFont("Helvetica", 10)
+
+        def _campo(label, key, ypos):
+            val = fields.get(key, fields.get(label.lower(), "")) or ""
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(20*_mm, ypos, f"{label}:")
+            c.setFont("Helvetica", 10)
+            c.drawString(65*_mm, ypos, str(val))
+            return ypos - 7*_mm
+
+        # Mappatura flessibile dei campi
+        nome_cog = fields.get("a_nome_cognome") or fields.get("m_nome_cognome") or \
+                   f"{fields.get('nome','').strip()} {fields.get('cognome','').strip()}".strip()
+        email_val = fields.get("a_email") or fields.get("g1_email") or fields.get("email","")
+        tel_val   = fields.get("a_tel")   or fields.get("g1_tel")   or fields.get("telefono","")
+
+        y = _campo("Nome e Cognome", "a_nome_cognome", y)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(20*_mm, y, "Email:")
+        c.setFont("Helvetica", 10)
+        c.drawString(65*_mm, y, str(email_val))
+        y -= 7*_mm
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(20*_mm, y, "Telefono:")
+        c.setFont("Helvetica", 10)
+        c.drawString(65*_mm, y, str(tel_val))
+        y -= 10*_mm
+
+        # Separatore consensi
+        c.line(20*_mm, y + 3*_mm, w - 20*_mm, y + 3*_mm)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20*_mm, y - 2*_mm, "Consensi espressi")
+        y -= 12*_mm
+
+        # Mappa consensi
+        consensi_map = {
+            "a_gdpr_letto":     ("Ho letto l'informativa GDPR",             "m_gdpr_letto"),
+            "a_cons_dati":      ("Consenso trattamento dati personali",      "m_cons_dati"),
+            "a_cons_salute":    ("Consenso trattamento dati salute",         "m_cons_salute"),
+            "a_cons_marketing": ("Consenso comunicazioni/marketing (facolt.)","m_cons_marketing"),
+        }
+        for key_a, (label, key_m) in consensi_map.items():
+            val = fields.get(key_a) or fields.get(key_m) or ""
+            colore = (0.0, 0.55, 0.27) if str(val).upper() == "SI" else (0.7, 0.1, 0.1)
+            c.setFillColorRGB(*colore)
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(20*_mm, y, f"{'SI' if str(val).upper()=='SI' else 'NO'}")
+            c.setFillColorRGB(0, 0, 0)
+            c.setFont("Helvetica", 10)
+            c.drawString(35*_mm, y, label)
+            y -= 8*_mm
+
+        # OTP info se presente
+        if fields.get("otp_verified"):
+            y -= 5*_mm
+            c.line(20*_mm, y + 3*_mm, w - 20*_mm, y + 3*_mm)
+            c.setFont("Helvetica-Bold", 10)
+            c.setFillColorRGB(0.0, 0.45, 0.7)
+            c.drawString(20*_mm, y - 2*_mm, f"Identita verificata via OTP email: {email_val}")
+            c.setFont("Helvetica", 9)
+            c.setFillColorRGB(0, 0, 0)
+            c.drawString(20*_mm, y - 9*_mm, f"Timestamp OTP: {fields.get('otp_timestamp','')}")
+            y -= 15*_mm
+
+        # Data e ora
+        y -= 5*_mm
+        c.line(20*_mm, y + 3*_mm, w - 20*_mm, y + 3*_mm)
+        c.setFont("Helvetica", 9)
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        import datetime as _dt2
+        try:
+            import zoneinfo as _zi2
+            _tz_it2 = _zi2.ZoneInfo("Europe/Rome")
+        except ImportError:
+            from datetime import timezone as _tz2, timedelta as _td2
+            _tz_it2 = _tz2(timedelta(hours=2))
+        ts = _dt2.datetime.now(_tz_it2).strftime("%d/%m/%Y %H:%M:%S")
+        c.drawString(20*_mm, y - 2*_mm, f"Data e ora compilazione (IT): {ts}")
+        c.setFillColorRGB(0, 0, 0)
+
+        c.showPage()
+        c.save()
+        cover_bytes = buf.getvalue()
+
+        # Unisci copertina + template informativa
+        try:
+            r1 = PdfReader(_io.BytesIO(cover_bytes))
+            r2 = PdfReader(template_path)
+            w_pdf = PdfWriter()
+            for p in r1.pages:
+                w_pdf.add_page(p)
+            for p in r2.pages:
+                w_pdf.add_page(p)
+            out = _io.BytesIO()
+            w_pdf.write(out)
+            return out.getvalue()
+        except Exception:
+            return cover_bytes
+
+    except Exception as e:
+        # Fallback: restituisce il template com'è
+        with open(template_path, "rb") as f:
+            return f.read()
 
 
 def _extract_pdf_field_values(pdf_bytes: bytes) -> dict:
@@ -7423,25 +7915,20 @@ def _clinic_email() -> str:
     return st.secrets.get("privacy", {}).get("CLINIC_EMAIL") or st.secrets.get("smtp", {}).get("FROM") or st.secrets.get("smtp", {}).get("USERNAME") or ""
 
 def ui_privacy_pdf():
-    st.subheader("📄 Privacy & Consensi (PDF)")
+    st.subheader("Privacy e Consensi (PDF)")
 
-    # diagnostica rapida file template (non blocca la UI)
     try:
         _check_privacy_templates_ui()
     except Exception:
         pass
 
-
-    # Sezione dedicata alla generazione/stampa dei PDF (cartaceo) e al salvataggio su cloud privato (se S3 configurato)
     conn = get_connection()
-
-    # (facoltativo) assicurati che esista la tabella documenti se la usi
     try:
         _ensure_documenti_table(conn)
     except Exception:
         pass
 
-    # Selezione paziente
+    # Selezione paziente (solo ATTIVI)
     paz, _ptab, _pcolmap = fetch_pazienti_for_select(conn)
     if not paz:
         st.info("Nessun paziente presente.")
@@ -7454,70 +7941,266 @@ def ui_privacy_pdf():
     doc_type = st.radio("Tipo consenso", ["adulto", "minore"], horizontal=True)
     template = PDF_PRIVACY_ADULTO_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_TEMPLATE
 
-    st.markdown("### ✍️ Firma online (link pubblico)")
-    st.caption("Genera un link pubblico per la firma (senza login). Il link scade secondo PRESIGN_EXPIRE_SECONDS o un valore dedicato.")
-    # scadenza token: usa privacy.TOKEN_EXPIRE_SECONDS se presente, altrimenti 48h
-    exp = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
-    if st.button("🔗 Genera link firma online", key=f"gen_sign_{pid}_{doc_type}"):
-        try:
-            token = _make_sign_token(int(pid), doc_type, exp)
-            url = _public_sign_url(token)
-            st.success("Link generato ✅")
-            st.code(url)
-            # Link rapidi
-            mail_body = "Apri questo link per firmare online:\n" + url
-            st.markdown(f"- 📩 Email: {_mailto_link('Firma consenso privacy – Studio The Organism', mail_body)}")
-            st.markdown(f"- 💬 WhatsApp: {_whatsapp_link('Apri questo link per firmare online: ' + url)}")
-        except Exception as e:
-            st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
+    st.markdown("---")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### 🖨️ Stampa / Scarica (cartaceo)")
+    # ── COLONNA 1: Scarica da stampare ───────────────────────────────────
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Passo 1 — Stampa il consenso**")
+        st.caption("Scarica il PDF, stampalo e fallo firmare al paziente.")
         try:
             with open(_privacy_abs_path(template), "rb") as f:
                 pdf_bytes = f.read()
             st.download_button(
-                "⬇️ Scarica PDF da stampare",
+                "Scarica PDF da stampare",
                 data=pdf_bytes,
                 file_name=f"privacy_{doc_type}_stampabile.pdf",
                 mime="application/pdf",
+                key=f"dl_template_{pid}_{doc_type}",
             )
         except Exception as e:
             st.error(f"Impossibile leggere il template PDF: {e}")
             return
 
-    with col2:
-        st.markdown("### ☁️ Archivia su Cloud (opzionale)")
-        st.caption("Usa questa funzione solo se hai configurato S3 nei Secrets.")
-        if st.button("📤 Carica su cloud il PDF (template) per questo paziente"):
-            # Key univoca (template associato al paziente)
-            digest = _sha256_bytes(pdf_bytes)
-            key = f"consensi/{pid}/template/privacy_{doc_type}_{digest[:10]}.pdf"
+    # ── COLONNA 2: Carica scansione firmata ──────────────────────────────
+    with c2:
+        st.markdown("**Passo 2 — Carica la scansione firmata**")
+        st.caption("Scansiona il modulo firmato (PDF o immagine JPG/PNG) e caricalo qui.")
 
-            ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
-            if not ok_s3:
-                st.error(f"Upload S3 disabilitato: {msg_s3}")
-                return
+        uploaded = st.file_uploader(
+            "Carica scansione firmata",
+            type=["pdf", "jpg", "jpeg", "png"],
+            key=f"upload_firma_{pid}_{doc_type}",
+        )
 
-            # salva su DB SOLO se upload ok
-            try:
-                _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_template", key, digest, f"privacy_{doc_type}_template.pdf")
-                st.success("Caricato e registrato nel DB ✅")
-            except Exception as e:
-                st.warning(f"Caricato su S3, ma DB non aggiornato: {e}")
+        if uploaded is not None:
+            file_bytes = uploaded.read()
+            filename   = uploaded.name
+            mime_type  = uploaded.type
 
-            # link presigned (se disponibile)
-            try:
-                url = _s3_presign_get(key)
-                st.write("Link (24h):")
-                st.code(url)
-            except Exception:
-                pass
+            st.caption(f"File caricato: {filename} ({len(file_bytes)//1024} KB)")
+
+            # Se è immagine, converti in PDF
+            if mime_type in ("image/jpeg", "image/png", "image/jpg"):
+                try:
+                    from pypdf import PdfWriter
+                    from reportlab.lib.pagesizes import A4
+                    from reportlab.pdfgen import canvas as rl_canvas
+                    import io as _io
+
+                    img_buf = _io.BytesIO(file_bytes)
+                    pdf_buf = _io.BytesIO()
+                    c_rl = rl_canvas.Canvas(pdf_buf, pagesize=A4)
+                    w, h = A4
+                    c_rl.drawImage(img_buf, 0, 0, width=w, height=h, preserveAspectRatio=True)
+                    c_rl.save()
+                    file_bytes = pdf_buf.getvalue()
+                    filename   = filename.rsplit(".", 1)[0] + "_firmato.pdf"
+                    st.caption("Immagine convertita in PDF.")
+                except Exception as e:
+                    st.warning(f"Conversione immagine in PDF non riuscita ({e}). Il file verrà salvato come immagine.")
+
+            if st.button("Salva consenso firmato nel DB", key=f"save_firma_{pid}_{doc_type}", type="primary"):
+                try:
+                    digest = _sha256_bytes(file_bytes)
+                    doc_tipo = f"privacy_{doc_type}_firmato"
+
+                    # Inserisce nella tabella documenti
+                    _db_insert_documento(
+                        conn, int(pid),
+                        doc_tipo,
+                        f"locale/{doc_tipo}_{digest[:10]}.pdf",
+                        digest,
+                        filename,
+                        blob=file_bytes,
+                    )
+                    conn.commit()
+                    st.success(f"Consenso firmato salvato correttamente per questo paziente.")
+
+                    # Offre anche il download immediato
+                    st.download_button(
+                        "Scarica copia del consenso firmato",
+                        data=file_bytes,
+                        file_name=filename,
+                        mime="application/pdf",
+                        key=f"dl_firma_{pid}_{doc_type}",
+                    )
+                except Exception as e:
+                    st.error(f"Errore salvataggio: {e}")
+
+    st.markdown("---")
+
+    # ── STORICO COMPLETO CONSENSI FIRMATI ────────────────────────────────
+    st.markdown("---")
+    st.markdown("**Storico consensi firmati**")
+    st.caption("Mostra sia le firme online che le scansioni caricate.")
+
+    ph = "%s" if _DB_BACKEND == "postgres" else "?"
+    try:
+        cur = conn.cursor()
+
+        # 1. Documenti (scansioni + PDF firmati online dalla tabella documenti)
+        cur.execute(
+            f"SELECT id, tipo, filename, created_at, blob FROM documenti "
+            f"WHERE paziente_id = {ph} AND (tipo LIKE {ph} OR tipo LIKE {ph}) "
+            f"ORDER BY id DESC",
+            (int(pid), "privacy_%_firmato", "privacy_%_online"),
+        )
+        docs = cur.fetchall()
+
+        # 2. Tutti i consensi Privacy (con O senza firma grafica)
+        cur.execute(
+            f"SELECT id, Data_Ora, Tipo, Firma_Blob, Pdf_Blob, Firma_Source, Consenso_Trattamento "
+            f"FROM Consensi_Privacy "
+            f"WHERE paziente_id = {ph} "
+            f"ORDER BY id DESC",
+            (int(pid),),
+        )
+        consensi_firmati = cur.fetchall()
+        cur.close()
+
+        totale = len(docs) + len(consensi_firmati)
+        if totale == 0:
+            st.info("Nessun consenso archiviato per questo paziente.")
+        else:
+            st.caption(f"{totale} documento/i trovato/i")
+
+            # Mostra consensi da Consensi_Privacy (firme online + OTP)
+            for row in consensi_firmati:
+                r_id     = row["id"]           if isinstance(row, dict) else row[0]
+                r_data   = row["Data_Ora"]      if isinstance(row, dict) else row[1]
+                r_tipo   = row["Tipo"]          if isinstance(row, dict) else row[2]
+                r_firma  = row["Firma_Blob"]    if isinstance(row, dict) else row[3]
+                r_pdf    = row["Pdf_Blob"]      if isinstance(row, dict) else row[4]
+                r_source = row["Firma_Source"]  if isinstance(row, dict) else row[5]
+
+                ha_firma = bool(_blob_to_bytes(r_firma))
+                etichetta = "Firma online + OTP" if ha_firma else "Consenso via OTP"
+
+                with st.container():
+                    ca, cb, cc = st.columns([3, 1, 1])
+                    with ca:
+                        st.write(f"**{etichetta}** — {str(r_data)[:16] if r_data else '—'}")
+                        st.caption(f"Tipo: {r_tipo or '—'} · Fonte: {r_source or 'online'}")
+                    with cb:
+                        blob_to_dl = _blob_to_bytes(r_pdf) or _blob_to_bytes(r_firma)
+                        if blob_to_dl:
+                            st.download_button(
+                                "Scarica PDF",
+                                data=blob_to_dl,
+                                file_name=f"consenso_{r_tipo}_{r_id}.pdf",
+                                mime="application/pdf",
+                                key=f"dl_cons_{r_id}",
+                            )
+                        else:
+                            st.caption("PDF non disp.")
+                    with cc:
+                        if st.button("Elimina", key=f"del_cons_{r_id}"):
+                            st.session_state[f"confirm_del_cons_{r_id}"] = True
+                        if st.session_state.get(f"confirm_del_cons_{r_id}"):
+                            st.warning("Eliminare definitivamente?")
+                            cd1, cd2 = st.columns(2)
+                            with cd1:
+                                if st.button("Sì", key=f"del_cons_yes_{r_id}", type="primary"):
+                                    cur2 = conn.cursor()
+                                    cur2.execute(
+                                        f"DELETE FROM Consensi_Privacy WHERE id = {ph}",
+                                        (r_id,),
+                                    )
+                                    conn.commit()
+                                    cur2.close()
+                                    st.session_state[f"confirm_del_cons_{r_id}"] = False
+                                    st.success("Eliminato.")
+                                    st.rerun()
+                            with cd2:
+                                if st.button("No", key=f"del_cons_no_{r_id}"):
+                                    st.session_state[f"confirm_del_cons_{r_id}"] = False
+                                    st.rerun()
+                    st.markdown("---")
+
+            # Mostra documenti (scansioni PDF caricate)
+            for doc in docs:
+                doc_id       = doc["id"]         if isinstance(doc, dict) else doc[0]
+                doc_tipo     = doc["tipo"]        if isinstance(doc, dict) else doc[1]
+                doc_filename = doc["filename"]    if isinstance(doc, dict) else doc[2]
+                doc_date     = doc["created_at"]  if isinstance(doc, dict) else doc[3]
+                doc_blob     = doc["blob"]        if isinstance(doc, dict) else doc[4]
+
+                etichetta = "Scansione firmata" if "firmato" in str(doc_tipo) else "Firma online (PDF)"
+
+                with st.container():
+                    da, db, dc = st.columns([3, 1, 1])
+                    with da:
+                        st.write(f"**{etichetta}** — {str(doc_date)[:10] if doc_date else '—'}")
+                        st.caption(f"{doc_filename or '—'}")
+                    with db:
+                        blob_bytes = _blob_to_bytes(doc_blob)
+                        if blob_bytes:
+                            st.download_button(
+                                "Scarica PDF",
+                                data=blob_bytes,
+                                file_name=doc_filename or f"consenso_{doc_id}.pdf",
+                                mime="application/pdf",
+                                key=f"dl_doc_{doc_id}",
+                            )
+                        else:
+                            st.caption("PDF non disponibile")
+                    with dc:
+                        if st.button("Elimina", key=f"del_doc_{doc_id}"):
+                            st.session_state[f"confirm_del_doc_{doc_id}"] = True
+                        if st.session_state.get(f"confirm_del_doc_{doc_id}"):
+                            st.warning("Confermi l'eliminazione?")
+                            cd1, cd2 = st.columns(2)
+                            with cd1:
+                                if st.button("Sì, elimina", key=f"del_doc_yes_{doc_id}", type="primary"):
+                                    cur2 = conn.cursor()
+                                    cur2.execute(
+                                        f"DELETE FROM documenti WHERE id = {ph}",
+                                        (doc_id,),
+                                    )
+                                    conn.commit()
+                                    cur2.close()
+                                    st.session_state[f"confirm_del_doc_{doc_id}"] = False
+                                    st.success("Eliminato.")
+                                    st.rerun()
+                            with cd2:
+                                if st.button("Annulla", key=f"del_doc_no_{doc_id}"):
+                                    st.session_state[f"confirm_del_doc_{doc_id}"] = False
+                                    st.rerun()
+                    st.markdown("---")
+
+    except Exception as e:
+        st.warning(f"Storico non disponibile: {e}")
+
+    # ── GENERA LINK FIRMA ONLINE ──────────────────────────────────────────
+    st.markdown("**Invia link firma online al paziente**")
+    st.caption("Il paziente apre il link sul telefono, legge il consenso, firma con il dito e invia. La firma viene salvata automaticamente.")
+    exp = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
+    if st.button("Genera link firma online", key=f"gen_sign_{pid}_{doc_type}", type="primary"):
+        try:
+            token = _make_sign_token(int(pid), doc_type, exp)
+            url   = _public_sign_url(token)
+            st.success("Link generato — valido 48 ore")
+            st.code(url)
+            mail_body = "Apri questo link per firmare il consenso privacy:\n" + url
+            st.markdown(f"- Invia via Email: {_mailto_link('Consenso privacy – Studio The Organism', mail_body)}")
+            st.markdown(f"- Invia via WhatsApp: {_whatsapp_link('Apri questo link per firmare il consenso privacy: ' + url)}")
+        except Exception as e:
+            st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
+
 
 def ui_public_sign_page():
-    """Pagina pubblica: compilazione + firma online (canvas) + invio PDF a clinica e paziente."""
+    """Pagina pubblica ottimizzata per cellulare: PDF scaricabile, firma con dito, salvataggio DB."""
+
+    # CSS ottimizzato per mobile
+    st.markdown("""
+    <style>
+    .block-container { max-width: 600px !important; padding: 1rem !important; }
+    input, textarea { font-size: 16px !important; }
+    .stButton > button { width: 100%; padding: 14px !important; font-size: 1rem !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
     qp = st.query_params
     tok = qp.get("sign", "")
     payload = _parse_sign_token(tok) if tok else {}
@@ -7525,13 +8208,13 @@ def ui_public_sign_page():
         st.error("Link non valido o scaduto. Richiedi un nuovo link allo studio.")
         return
 
-    pid = int(payload["pid"])
+    pid      = int(payload["pid"])
     doc_type = payload["doc"]  # 'adulto' / 'minore'
-    # connessione DB
+
     conn = get_connection()
     _ensure_documenti_table(conn)
 
-    # recupera paziente per prefill (se disponibile)
+    # Recupera paziente
     paz_list, _, _ = fetch_pazienti_for_select(conn)
     paz_row = None
     for r in paz_list:
@@ -7543,7 +8226,6 @@ def ui_public_sign_page():
 
     template_path = _privacy_abs_path(PDF_PRIVACY_ADULTO_SIGN_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_SIGN_TEMPLATE)
 
-    # diagnostica template (utile se manca il file in cloud)
     try:
         _check_privacy_templates_ui()
     except Exception:
@@ -7553,50 +8235,166 @@ def ui_public_sign_page():
         return
 
     st.title("Consenso informato e privacy")
-    st.caption("Compila i dati e firma. Alla conferma, riceverai una copia via email.")
+    st.caption("Leggi il documento, compila i campi e firma con il dito.")
 
-    # campi base
-    if doc_type == "adulto":
-        email = st.text_input("Email", value="")
-        tel = st.text_input("Telefono", value="")
-        nome_cognome = st.text_input("Nome e Cognome", value=f"{nome} {cogn}".strip())
-    else:
-        email = st.text_input("Email Genitore/Tutore (per ricevere copia)", value="")
-        tel = st.text_input("Telefono Genitore/Tutore", value="")
-        nome_cognome = st.text_input("Nome e Cognome del minore", value=f"{nome} {cogn}".strip())
+    # Scarica PDF da leggere
+    try:
+        with open(template_path, "rb") as f:
+            template_bytes = f.read()
+        st.download_button(
+            "Leggi / scarica il consenso informato (PDF)",
+            data=template_bytes,
+            file_name=f"consenso_informato_{doc_type}.pdf",
+            mime="application/pdf",
+            key="dl_consenso_lettura",
+        )
+    except Exception:
+        pass
 
-    st.subheader("Firma")
-    if st_canvas is None:
-        st.warning("Firma online non disponibile (manca dipendenza). Carica un PDF firmato oppure contatta lo studio.")
-        st.stop()
+    st.markdown("---")
 
-    canvas = st_canvas(
-        fill_color="rgba(0, 0, 0, 0)",
-        stroke_width=3,
-        stroke_color="#000000",
-        background_color="#ffffff",
-        height=180,
-        width=520,
-        drawing_mode="freedraw",
-        key="sigcanvas"
+    # ── OTP VIA EMAIL — verifica identità ────────────────────────────────
+    st.subheader("Verifica identità (OTP)")
+    st.caption("Inserisci la tua email e richiedi il codice di verifica. Dovrai inserirlo per sbloccare la firma.")
+
+    otp_email_input = st.text_input(
+        "La tua email" if doc_type == "adulto" else "Email genitore/tutore",
+        value=f"{cogn.lower()}@" if cogn else "",
+        key="otp_email_field",
+        placeholder="nome@esempio.it",
     )
 
-    st.subheader("Consensi (Sì/No)")
-    # radio minimi
+    col_otp1, col_otp2 = st.columns([1, 2])
+    with col_otp1:
+        if st.button("Invia codice OTP", key="btn_send_otp"):
+            if not otp_email_input.strip() or "@" not in otp_email_input:
+                st.error("Inserisci un'email valida.")
+            else:
+                import random, hashlib as _hs
+                otp_code = str(random.randint(100000, 999999))
+                otp_hash = _hs.sha256(otp_code.encode()).hexdigest()
+                otp_ts   = _dt.datetime.now().isoformat()
+                st.session_state["otp_hash"]      = otp_hash
+                st.session_state["otp_email"]     = otp_email_input.strip()
+                st.session_state["otp_ts"]        = otp_ts
+                st.session_state["otp_verified"]  = False
+                try:
+                    _send_email_with_pdf(
+                        to_list=[otp_email_input.strip()],
+                        subject="Codice di verifica – Studio The Organism",
+                        body=(
+                            f"Il tuo codice OTP per firmare il consenso privacy è:\n\n"
+                            f"    {otp_code}\n\n"
+                            f"Il codice è valido per 10 minuti.\n"
+                            f"Non condividerlo con nessuno.\n\n"
+                            f"Studio The Organism – Dott. Ferraioli Giuseppe"
+                        ),
+                        pdf_bytes=b"",
+                        filename="",
+                    )
+                    st.success(f"Codice inviato a {otp_email_input.strip()}. Controlla la tua email (anche spam).")
+                except Exception as e:
+                    # Se email non configurata, mostra il codice in chiaro (solo sviluppo)
+                    st.info(f"Email non configurata — codice di test: **{otp_code}** (rimuovere in produzione)")
+
+    with col_otp2:
+        otp_input = st.text_input(
+            "Inserisci il codice OTP ricevuto",
+            key="otp_code_input",
+            max_chars=6,
+            placeholder="es. 482931",
+        )
+        if st.button("Verifica codice", key="btn_verify_otp"):
+            import hashlib as _hs2, datetime as _dt2
+            stored_hash = st.session_state.get("otp_hash", "")
+            stored_ts   = st.session_state.get("otp_ts", "")
+            if not stored_hash:
+                st.error("Prima richiedi il codice OTP.")
+            elif _hs2.sha256(otp_input.strip().encode()).hexdigest() != stored_hash:
+                st.error("Codice OTP errato. Riprova o richiedi un nuovo codice.")
+            else:
+                # Controlla scadenza 10 minuti
+                try:
+                    otp_age = (_dt2.datetime.now() - _dt2.datetime.fromisoformat(stored_ts)).total_seconds()
+                    if otp_age > 600:
+                        st.error("Codice OTP scaduto. Richiedine uno nuovo.")
+                        st.session_state["otp_verified"] = False
+                    else:
+                        st.session_state["otp_verified"] = True
+                        st.success("Identità verificata. Puoi procedere con la firma.")
+                except Exception:
+                    st.session_state["otp_verified"] = True
+                    st.success("Identità verificata.")
+
+    otp_verified = st.session_state.get("otp_verified", False)
+    if not otp_verified:
+        st.warning("Completa la verifica OTP per sbloccare la firma.")
+        st.stop()
+
+    # Usa l'email verificata via OTP come email del paziente
+    email = st.session_state.get("otp_email", "")
+    st.success(f"Email verificata: {email}")
+
+    st.markdown("---")
+
+    # ── CAMPI BASE ────────────────────────────────────────────────────────
     if doc_type == "adulto":
-        gdpr_letto = st.radio("Ho letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
-        cons_dati = st.radio("Consenso trattamento dati personali", ["SI", "NO"], horizontal=True, index=0)
-        cons_salute = st.radio("Consenso trattamento dati salute", ["SI", "NO"], horizontal=True, index=0)
+        tel          = st.text_input("Telefono", value="", key="pub_tel")
+        nome_cognome = st.text_input("Nome e Cognome", value=f"{nome} {cogn}".strip(), key="pub_nc")
+    else:
+        tel          = st.text_input("Telefono Genitore/Tutore", value="", key="pub_tel")
+        nome_cognome = st.text_input("Nome e Cognome del minore", value=f"{nome} {cogn}".strip(), key="pub_nc")
+
+    st.subheader("Firma (facoltativa)")
+    st.caption("Firma qui sotto con il dito. La firma è opzionale — l'OTP è già la prova di identità.")
+
+    # Firma opzionale via streamlit-drawable-canvas (se disponibile)
+    sig_png = b""
+    try:
+        from streamlit_drawable_canvas import st_canvas as _st_canvas
+        _canvas_result = _st_canvas(
+            fill_color="rgba(0,0,0,0)",
+            stroke_width=3,
+            stroke_color="#111111",
+            background_color="#ffffff",
+            height=160,
+            width=None,
+            drawing_mode="freedraw",
+            key="sig_canvas_pub",
+        )
+        if _canvas_result is not None and _canvas_result.image_data is not None:
+            try:
+                import numpy as np
+                import PIL.Image
+                arr = _canvas_result.image_data
+                img = PIL.Image.fromarray(arr.astype("uint8"), "RGBA")
+                bg  = PIL.Image.new("RGBA", img.size, (255,255,255,255))
+                bg.alpha_composite(img)
+                rgb = bg.convert("RGB")
+                if rgb.getbbox():  # c'è davvero qualcosa disegnato
+                    buf = io.BytesIO()
+                    rgb.save(buf, format="PNG")
+                    sig_png = buf.getvalue()
+                    st.success("Firma acquisita.")
+            except Exception:
+                pass
+    except ImportError:
+        st.info("Firma grafica non disponibile su questo dispositivo — procedi comunque.")
+    st.subheader("Consensi (Sì/No)")
+    if doc_type == "adulto":
+        gdpr_letto    = st.radio("Ho letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
+        cons_dati     = st.radio("Consenso trattamento dati personali", ["SI", "NO"], horizontal=True, index=0)
+        cons_salute   = st.radio("Consenso trattamento dati salute", ["SI", "NO"], horizontal=True, index=0)
         cons_marketing = st.radio("Consenso comunicazioni informative/marketing (facoltativo)", ["SI", "NO"], horizontal=True, index=1)
     else:
-        gdpr_letto = st.radio("Abbiamo letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
-        cons_dati = st.radio("Consenso trattamento dati personali del minore", ["SI", "NO"], horizontal=True, index=0)
-        cons_salute = st.radio("Consenso trattamento dati salute del minore", ["SI", "NO"], horizontal=True, index=0)
+        gdpr_letto    = st.radio("Abbiamo letto l'informativa GDPR (pag. 2)", ["SI", "NO"], horizontal=True, index=0)
+        cons_dati     = st.radio("Consenso trattamento dati personali del minore", ["SI", "NO"], horizontal=True, index=0)
+        cons_salute   = st.radio("Consenso trattamento dati salute del minore", ["SI", "NO"], horizontal=True, index=0)
         cons_marketing = st.radio("Consenso comunicazioni informative/marketing (facoltativo)", ["SI", "NO"], horizontal=True, index=1)
 
     confirm = st.checkbox("Confermo che i dati inseriti sono corretti e presto il consenso come sopra indicato.", value=False)
 
-    if st.button("Invia consenso"):
+    if st.button("Invia consenso", type="primary"):
         if not confirm:
             st.error("Spunta la conferma prima di inviare.")
             st.stop()
@@ -7604,32 +8402,15 @@ def ui_public_sign_page():
             st.error("Inserisci un'email valida per ricevere la copia.")
             st.stop()
 
-        # estrai firma come immagine PNG
-        try:
-            import numpy as np
-            import PIL.Image
-            arr = canvas.image_data
-            if arr is None:
-                raise ValueError("no canvas")
-            img = PIL.Image.fromarray(arr.astype('uint8'), 'RGBA')
-            # riduci trasparenza su bianco
-            bg = PIL.Image.new("RGBA", img.size, (255,255,255,255))
-            bg.alpha_composite(img)
-            sig_rgb = bg.convert("RGB")
-            sig_buf = io.BytesIO()
-            sig_rgb.save(sig_buf, format="PNG")
-            sig_png = sig_buf.getvalue()
-            has_sig = sig_rgb.getbbox() is not None
-        except Exception:
-            sig_png = b""
-            has_sig = False
-
+        # sig_png già impostato dalla sezione firma sopra
+        has_sig = bool(sig_png and len(sig_png) > 100)
         if not has_sig:
-            st.error("Firma mancante: disegna la firma nel riquadro.")
-            st.stop()
+            sig_png = b""
+            # Non blocchiamo — l'OTP è già la prova di identità
 
         # genera PDF precompilato
         fields = {}
+        otp_ts_val = st.session_state.get("otp_ts", "")
         if doc_type == "adulto":
             fields = {
                 "a_nome_cognome": nome_cognome.strip(),
@@ -7639,6 +8420,8 @@ def ui_public_sign_page():
                 "a_cons_dati": cons_dati,
                 "a_cons_salute": cons_salute,
                 "a_cons_marketing": cons_marketing,
+                "otp_verified": True,
+                "otp_timestamp": otp_ts_val,
             }
         else:
             fields = {
@@ -7649,6 +8432,8 @@ def ui_public_sign_page():
                 "m_cons_dati": cons_dati,
                 "m_cons_salute": cons_salute,
                 "m_cons_marketing": cons_marketing,
+                "otp_verified": True,
+                "otp_timestamp": otp_ts_val,
             }
 
         base_pdf = _prefill_pdf(template_path, fields)
@@ -7665,27 +8450,44 @@ def ui_public_sign_page():
         c.drawString(20*_mm, 285*_mm, "Firma elettronica (grafometrica) – Allegato")
         c.setFont("Helvetica", 10)
         c.drawString(20*_mm, 275*_mm, f"Paziente id: {pid} – Tipo: {doc_type}")
-        c.drawString(20*_mm, 268*_mm, f"Data/ora (UTC): {_dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+        try:
+            import zoneinfo as _zi
+            _tz_it = _zi.ZoneInfo("Europe/Rome")
+        except ImportError:
+            from datetime import timezone as _tz, timedelta as _td
+            _tz_it = _tz(timedelta(hours=2))
+        _ts_it = _dt.datetime.now(_tz_it).strftime('%Y-%m-%d %H:%M:%S')
+        c.drawString(20*_mm, 268*_mm, f"Data/ora (IT): {_ts_it}")
         c.drawString(20*_mm, 261*_mm, f"Email: {email.strip()}")
-        c.drawString(20*_mm, 254*_mm, "Firma acquisita tramite pagina web; copia inviata a studio e interessato.")
-        # disegna immagine firma
-        import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-            tmp.write(sig_png)
-            tmp_path = tmp.name
-        c.drawImage(tmp_path, 20*_mm, 190*_mm, width=120*_mm, height=40*_mm, preserveAspectRatio=True, mask='auto')
+        otp_ts_str = st.session_state.get("otp_ts", "")
+        c.drawString(20*_mm, 254*_mm, f"OTP verificato: {otp_ts_str or 'si'}")
+        c.drawString(20*_mm, 247*_mm, "Firma acquisita tramite pagina web; copia inviata a studio e interessato.")
+
+        # disegna immagine firma (solo se presente)
+        if sig_png and len(sig_png) > 100:
+            import tempfile
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    tmp.write(sig_png)
+                    tmp_path = tmp.name
+                c.drawImage(tmp_path, 20*_mm, 190*_mm, width=120*_mm, height=40*_mm,
+                            preserveAspectRatio=True, mask="auto")
+            except Exception:
+                c.setFont("Helvetica-Oblique", 10)
+                c.drawString(20*_mm, 210*_mm, "[Immagine firma non disponibile]")
+            finally:
+                if tmp_path:
+                    try: os.unlink(tmp_path)
+                    except Exception: pass
+        else:
+            c.setFont("Helvetica-Oblique", 10)
+            c.drawString(20*_mm, 210*_mm, "[Firma non acquisita graficamente — consenso espresso digitalmente]")
+
         c.rect(20*_mm, 190*_mm, 120*_mm, 40*_mm)
         c.showPage()
         c.save()
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
         sig_page_bytes = sig_page.getvalue()
-
-        # init
-        extra_pdf = None
-        extra_name = None
 
         # merge base_pdf + sig_page (robusto: se il PDF base è illeggibile/monco, inviamo 2 allegati separati)
         final_pdf = None
@@ -7707,44 +8509,53 @@ def ui_public_sign_page():
             final_pdf = base_pdf
             extra_pdf = sig_page_bytes
             extra_name = f"Firma_Allegato_{doc_type}.pdf"
-        # --- ARCHIVIAZIONE SU CLOUD PRIVATO (NO AcroForm) ---
+        # --- ARCHIVIAZIONE SUL DB ---
         if not final_pdf or len(final_pdf) < 1000:
-            # fallback: at least send/archivia the base template
             final_pdf = base_pdf
         digest = _sha256_bytes(final_pdf)
-        ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        try:
+            import zoneinfo as _zi3
+            ts = _dt.datetime.now(_zi3.ZoneInfo("Europe/Rome")).strftime("%Y%m%d_%H%M%S")
+        except ImportError:
+            ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
-        ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
-        ok_upload = ok_s3
-        if not ok_upload:
-            st.error(f"Upload S3 disabilitato: {msg_s3}")
-            st.warning("Documento archiviato su Neon. (S3 disabilitato). Il PDF verrà comunque inviato via email se configurata.")
-        else:
-            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
+        filename_pdf = f"Consenso_{doc_type}_firmato_{ts}.pdf"
 
-        
+        # Salva PDF firmato nel DB (blob)
+        try:
+            _db_insert_documento(
+                conn, int(pid),
+                f"privacy_{doc_type}_online",
+                key, digest, filename_pdf,
+                blob=final_pdf,
+            )
+        except Exception as e:
+            st.warning(f"Archiviazione documento: {e}")
+
+        # Salva firma separata se merge fallito
+        if extra_pdf is not None and extra_name:
+            try:
+                extra_digest = _sha256_bytes(extra_pdf)
+                extra_key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{extra_digest[:10]}_{extra_name}"
+                _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online_firma", extra_key, extra_digest, extra_name, blob=extra_pdf)
+            except Exception:
+                pass
+
         # --- SALVATAGGIO CONSENSO SU DB (Consensi_Privacy) ---
         try:
             cur = conn.cursor()
             payload_db = {
                 "Data_Ora": _now_iso_dt(),
                 "Tipo": "MINORE" if doc_type == "minore" else "ADULTO",
-                "Tutore_Nome": "",
-                "Tutore_CF": "",
-                "Tutore_Telefono": "",
-                "Tutore_Email": "",
-                # mapping consensi (pagina online)
+                "Tutore_Nome": "", "Tutore_CF": "", "Tutore_Telefono": "", "Tutore_Email": "",
                 "Consenso_Trattamento": bool(cons_dati),
-                "Consenso_Comunicazioni": True,   # gestione appuntamenti / comunicazioni di servizio
+                "Consenso_Comunicazioni": True,
                 "Consenso_Marketing": bool(cons_marketing),
-                "Canale_Email": True,
-                "Canale_SMS": False,
-                "Canale_WhatsApp": False,
+                "Canale_Email": True, "Canale_SMS": False, "Canale_WhatsApp": False,
                 "Usa_Klaviyo": bool(cons_marketing),
                 "Firma_Blob": sig_png,
                 "Firma_Filename": "firma_online.png",
-                "Firma_URL": "",
-                "Firma_Source": "online",
+                "Firma_URL": "", "Firma_Source": "online",
                 "Pdf_Blob": final_pdf,
                 "Pdf_Filename": f"Consenso_{doc_type}_online.pdf",
                 "Note": "Consenso firmato online",
@@ -7752,33 +8563,23 @@ def ui_public_sign_page():
             insert_privacy_consent(cur, int(pid), payload_db)
             conn.commit()
         except Exception as e:
-            st.warning(f"Consenso inviato/archiviato, ma non salvato nello storico DB: {e}")
+            st.warning(f"Consenso non salvato nello storico DB: {e}")
 
+        # --- INVIO EMAIL ---
+        email_ok = True
+        try:
+            to_list = [email.strip(), _clinic_email()]
+            subject = "Consenso informato e privacy – Studio The Organism"
+            body_mail = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
+            _send_email_with_pdf(to_list, subject, body_mail, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
+        except Exception as e:
+            email_ok = False
+            st.warning(f"Consenso archiviato, ma invio email non riuscito: {e}")
 
-# Se il merge fallisce, archiviamo anche la pagina firma separata
-        extra_key = None
-        if extra_pdf is not None and extra_name:
-            extra_digest = _sha256_bytes(extra_pdf)
-            extra_key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{extra_digest[:10]}_{extra_name}"
-            _s3_put_private(extra_key, extra_pdf, content_type="application/pdf")
-            _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online_firma", extra_key, extra_digest, extra_name)
-
-
-        # invio email a entrambi
-    email_ok = True
-    try:
-        to_list = [email.strip(), _clinic_email()]
-        subject = "Consenso informato e privacy – Studio The Organism"
-        body = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
-        _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
-    except Exception as e:
-        email_ok = False
-        st.warning(f"Consenso archiviato su Neon, ma invio email non riuscito: {e}")
-
-    if email_ok:
-        st.success("✅ Consenso archiviato su Neon e inviato via email. Puoi chiudere questa pagina.")
-    else:
-        st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
+        if email_ok:
+            st.success("Consenso archiviato e inviato via email. Puoi chiudere questa pagina.")
+        else:
+            st.success("Consenso archiviato. Puoi chiudere questa pagina.")
 
 # ======================================
 # AUDIOGRAMMA FUNZIONALE (TEST) – MVP
@@ -8042,7 +8843,7 @@ def ui_calibrazione_cuffie_test():
         else:
             st.info("Nessun device registrato.")
 
-        with st.expander("➕ Aggiungi device", expanded=False):
+        with st.expander("Aggiungi device", expanded=False):
             label = st.text_input("Nome device", value="PC Studio (Chrome)")
             vol = st.text_input("Volume (nota)", value="50%")
             notes = st.text_area("Note", value="EQ OFF, nessun enhancer")
@@ -8075,7 +8876,7 @@ def ui_calibrazione_cuffie_test():
         else:
             st.info("Nessuna cuffia registrata.")
 
-        with st.expander("➕ Aggiungi cuffie", expanded=False):
+        with st.expander("Aggiungi cuffie", expanded=False):
             brand = st.text_input("Marca", value="Sony")
             model = st.text_input("Modello", value="MDR-ZX110")
             hp_type = st.selectbox("Tipo", ["over-ear", "on-ear", "in-ear"], index=0)
@@ -9550,7 +10351,7 @@ def ui_sessione_stimolazione_uditiva_test():
 
     man = st.session_state["stim_pr"]
 
-    with st.expander("⚙️ Parametri realtime", expanded=True):
+    with st.expander("Parametri realtime", expanded=True):
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -9816,6 +10617,15 @@ def main():
     # --- PUBLIC SIGN PAGE (no login) ---
     if st.query_params.get('sign'):
         ui_public_sign_page()
+        return
+
+    # --- PHOTOREF MOBILE ENTRY (no login) ---
+    photoref_token = st.query_params.get('photoref_token', '')
+    if isinstance(photoref_token, list):
+        photoref_token = photoref_token[0] if photoref_token else ''
+    if photoref_token:
+        from modules.photoref_ai.ui_photoref import ui_photoref
+        ui_photoref(conn=get_connection())
         return
 
     _sidebar_db_indicator()
@@ -10120,7 +10930,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
 
     _ensure_relazioni_cliniche_table(conn)
 
-    st.header("🗂️ Relazioni cliniche")
+    st.header("Relazioni cliniche")
     st.caption("Generazione: Word sempre (cloud) • PDF solo in locale se LibreOffice è disponibile")
 
     # Selezione tipo relazione
@@ -10189,7 +10999,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     template_file = rel["files"]["std"]
     template_path = os.path.join(templates_dir, template_file)
 
-    if st.button("📄 Genera Word ( + PDF se disponibile )", type="primary"):
+    if st.button("Genera Word (+ PDF se disponibile)", type="primary"):
         if not os.path.exists(template_path):
             st.error(f"Template mancante: {template_path}")
             st.stop()
@@ -10223,10 +11033,10 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
 
         st.success("Relazione generata ✅")
         with open(out_docx, "rb") as f:
-            st.download_button("⬇️ Scarica Word", f, file_name=os.path.basename(out_docx), key=f"dw_{rel_key}_{pid}")
+            st.download_button("Scarica Word", f, file_name=os.path.basename(out_docx), key=f"dw_{rel_key}_{pid}")
         if pdf_path and os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
-                st.download_button("⬇️ Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rel_key}_{pid}")
+                st.download_button("Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rel_key}_{pid}")
         else:
             st.info("PDF non disponibile in cloud: apri il Word e salva in PDF dal PC in studio.")
 
