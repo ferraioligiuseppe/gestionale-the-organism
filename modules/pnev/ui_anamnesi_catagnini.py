@@ -433,7 +433,7 @@ def _sezione_alimentazione_sonno(als: dict, px: str) -> dict:
 
     c1, c2 = st.columns(2)
     with c1:
-        als["svezzamento_mesi"] = _mesi("Svezzamento (mesi)", als.get("svezzamento_mesi"), f"{px}_svez_mesi", min_v=3, max_v=24)
+        als["svezzamento_mesi"] = _mesi("Svezzamento (mesi)", als.get("svezzamento_mesi"), f"{px}_svez_mesi", min_v=0, max_v=24)
         als["svezzamento_difficolta"] = _radio("Difficoltà nello svezzamento",
                                                 ["no", "sì"], als.get("svezzamento_difficolta", "no"), f"{px}_svez_diff")
         als["masticazione"] = _radio("Masticazione",
@@ -485,7 +485,7 @@ def _sezione_storia_familiare(sf: dict, px: str) -> dict:
         sf["nido"] = _radio("Frequenta / ha frequentato nido", ["no", "sì"],
                              sf.get("nido", "no"), f"{px}_nido")
         if sf.get("nido") == "sì":
-            sf["nido_eta_mesi"] = _mesi("Età ingresso nido (mesi)", sf.get("nido_eta_mesi"), f"{px}_nido_eta", min_v=3, max_v=36)
+            sf["nido_eta_mesi"] = _mesi("Età ingresso nido (mesi)", sf.get("nido_eta_mesi"), f"{px}_nido_eta", min_v=0, max_v=36)
             sf["nido_adattamento"] = _radio("Adattamento al nido",
                                              ["buono", "difficile", "molto difficile"],
                                              sf.get("nido_adattamento", "buono"), f"{px}_nido_adatt")
