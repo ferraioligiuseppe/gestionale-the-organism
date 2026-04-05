@@ -5138,14 +5138,14 @@ def ui_anamnesi():
     st.markdown("---")
     st.subheader("Nuova Valutazione PNEV")
 
-    # ── TAB: Anamnesi Castagnini vs PNEV clinico ──────────────────────────────
+    # ── TAB: Anamnesi Catagnini vs PNEV clinico ──────────────────────────────
     tab_cat, tab_pnev_cl, tab_inpps = st.tabs([
-        "📋 Anamnesi Castagnini (0–2 anni)",
+        "📋 Anamnesi Catagnini (0–2 anni)",
         "🧠 Valutazione PNEV clinica",
         "📊 Questionario INPPS",
     ])
 
-    # Stato temporaneo dell'anamnesi Castagnini (fuori dal form per supportare
+    # Stato temporaneo dell'anamnesi Catagnini (fuori dal form per supportare
     # widget interattivi come radio/checkbox annidati in expander)
     _cat_pnev_key = f"catagnini_new_{paz_id}"
     if _cat_pnev_key not in st.session_state:
@@ -5161,7 +5161,7 @@ def ui_anamnesi():
             )
             st.session_state[_cat_pnev_key] = _cat_json_tmp
         except Exception as _cat_err:
-            st.error(f"Errore modulo Castagnini: {_cat_err}")
+            st.error(f"Errore modulo Catagnini: {_cat_err}")
             _cat_summary_tmp = ""
 
     with tab_pnev_cl:
@@ -5182,7 +5182,7 @@ def ui_anamnesi():
             prefix="inpps_new", existing=_inpps_existing_new
         )
 
-    # ── Scenario clinico (calcolato in tempo reale dai dati Castagnini) ────────
+    # ── Scenario clinico (calcolato in tempo reale dai dati Catagnini) ────────
     st.markdown("---")
     with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
         try:
@@ -5195,7 +5195,7 @@ def ui_anamnesi():
                     eta_mesi_override=None,
                 )
             else:
-                st.info("Compila l'anamnesi Castagnini per visualizzare lo scenario clinico.")
+                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
         except Exception as _sc_err:
             st.warning(f"Scenario non disponibile: {_sc_err}")
 
@@ -5210,7 +5210,7 @@ def ui_anamnesi():
             pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
         except Exception:
             pass
-        # merge anamnesi Castagnini
+        # merge anamnesi Catagnini
         try:
             cat_data = st.session_state.get(_cat_pnev_key, {})
             if cat_data.get("anamnesi_catagnini"):
@@ -5322,13 +5322,13 @@ def ui_anamnesi():
         existing_pnev_raw = None
     pnev_existing = pnev.pnev_load(existing_pnev_raw)
 
-    # ── Tab modifica: Castagnini / PNEV clinico / INPPS (FUORI dal form) ──────
+    # ── Tab modifica: Catagnini / PNEV clinico / INPPS (FUORI dal form) ──────
     _cat_edit_key = f"catagnini_edit_{an_id}"
     if _cat_edit_key not in st.session_state:
         st.session_state[_cat_edit_key] = dict(pnev_existing)
 
     tab_cat_m, tab_pnev_m, tab_inpps_m = st.tabs([
-        "📋 Anamnesi Castagnini (0–2 anni)",
+        "📋 Anamnesi Catagnini (0–2 anni)",
         "🧠 Valutazione PNEV clinica",
         "📊 Questionario INPPS",
     ])
@@ -5343,7 +5343,7 @@ def ui_anamnesi():
             )
             st.session_state[_cat_edit_key] = _cat_json_m
         except Exception as _cat_err_m:
-            st.error(f"Errore modulo Castagnini: {_cat_err_m}")
+            st.error(f"Errore modulo Catagnini: {_cat_err_m}")
             _cat_sum_m = ""
 
     with tab_pnev_m:
@@ -5406,7 +5406,7 @@ def ui_anamnesi():
                     data_nascita=_paz_dn,
                 )
             else:
-                st.info("Compila l'anamnesi Castagnini per visualizzare lo scenario clinico.")
+                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
         except Exception as _sc_edit_err:
             st.warning(f"Scenario non disponibile: {_sc_edit_err}")
 
