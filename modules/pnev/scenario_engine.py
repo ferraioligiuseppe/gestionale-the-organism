@@ -555,7 +555,8 @@ def render_scenario_ui(
     )
 
     # Scenario testuale
-    with st.container(  # era expander("📋 Descrizione scenario", expanded=True):
+    st.markdown("---")
+    if True:  # era expander
         for line in result.scenario_testo.split("\n"):
             if line.startswith("•"):
                 st.markdown(line)
@@ -570,19 +571,20 @@ def render_scenario_ui(
 
     # Fattori di rischio
     if result.fattori_rischio:
-        with st.container(  # era expander(f"⚠️ Fattori di rischio rilevati ({len(result.fattori_rischio)})", expanded=True):
+        with st.expander(f"⚠️ Fattori di rischio rilevati ({len(result.fattori_rischio)})", expanded=True):
             for f in result.fattori_rischio:
                 st.markdown(f"- {f}")
 
     # Milestone in ritardo
     if result.milestone_ritardo:
-        with st.container(  # era expander(f"⏳ Milestone in ritardo ({len(result.milestone_ritardo)})", expanded=True):
+        with st.expander(f"⏳ Milestone in ritardo ({len(result.milestone_ritardo)})", expanded=True):
             for m in result.milestone_ritardo:
                 st.markdown(f"- {m}")
 
     # Indicazioni operative
     if result.indicazioni:
-        with st.container(  # era expander("🎯 Indicazioni operative", expanded=True):
+        st.markdown("---")
+        if True:  # era expander
             for ind in result.indicazioni:
                 if ind.startswith("🚨") or ind.startswith("⚠️") or ind.startswith("🔴"):
                     st.info(ind)
