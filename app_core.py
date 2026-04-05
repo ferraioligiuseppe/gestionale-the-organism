@@ -182,7 +182,9 @@ def _get_columns(conn, table_name: str):
     except Exception:
         return []
 
+@st.cache_data(ttl=300, show_spinner=False)
 def _detect_patient_table_and_cols(conn):
+    """Rileva tabella pazienti — cache 5 minuti, cambia raramente."""
     table_candidates = [
         'pazienti','Pazienti','patients','Patients','patienti','Patienti',
         'anagrafica_pazienti','Anagrafica_Pazienti','tbl_pazienti','Tbl_Pazienti'
@@ -240,7 +242,9 @@ def _detect_patient_table_and_cols(conn):
         return table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
     return None, {}
 
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_pazienti_for_select(conn, limit=5000):
+    """Lista pazienti con cache 30 secondi — evita query ripetute ad ogni click."""
     table, colmap = _detect_patient_table_and_cols(conn)
     if not table:
         return [], None, None
@@ -452,79 +456,142 @@ def _hash_token(token: str) -> str:
     return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
     
 def create_questionario_link(cur, paziente_id: int, questionario: str, ttl_days: int | None = None) -> str:
-    """Wrapper legacy -> delega al nuovo sistema unificato."""
-    from modules.public_questionnaires import create_public_token
-    return create_public_token(
-        paziente_id=int(paziente_id),
-        questionario=str(questionario),
-        ttl_days=ttl_days,
+    """Crea un token per link pubblico. In DB viene salvato solo l'hash del token."""
+    token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(token)
+
+    ttl = ttl_days or int(st.secrets.get("public_links", {}).get("DEFAULT_TTL_DAYS", 7))
+    expires_at = datetime.now(timezone.utc) + timedelta(days=ttl)
+
+    cur.execute(
+        """
+        INSERT INTO questionari_links (paziente_id, questionario, token_hash, created_at, expires_at)
+        VALUES (?,?,?,?,?)
+        """,
+        (int(paziente_id), str(questionario), token_hash, datetime.now(timezone.utc).isoformat(), expires_at.isoformat()),
     )
+    return token
 
 def validate_token(cur, token: str, questionario: str):
-    """Wrapper legacy -> delega al nuovo sistema unificato."""
-    from modules.public_questionnaires import validate_public_token
-    return validate_public_token(token, questionario)
-
-def mark_token_used(cur, link_id: int):
-    """Wrapper legacy -> delega al nuovo sistema unificato."""
-    from modules.public_questionnaires import mark_token_used as _mark
-    _mark(int(link_id))
-
-def maybe_handle_public_questionario(get_conn) -> bool:
-    """
-    Gestisce i link pubblici ?q=INPPS&t=TOKEN nella app principale.
-    I nuovi link usano pages/pnev_pubblico.py direttamente.
-    Questa funzione garantisce retrocompatibilità con link già inviati.
-    """
-    qp = getattr(st, "query_params", {}) or {}
-    q  = (qp.get("q", "") or "").upper().strip()
-    t  = (qp.get("t", "") or "").strip()
-
-    if not q or not t:
-        return False
-
-    from modules.public_questionnaires import (
-        validate_public_token, mark_token_used as _mark_used,
-        save_inpps_response, init_public_tokens_table, REGISTRY,
+    """Ritorna la riga se il token è valido (non scaduto e non usato), altrimenti None."""
+    th = _hash_token(token)
+    cur.execute(
+        """
+        SELECT * FROM questionari_links
+        WHERE token_hash = ? AND questionario = ?
+        LIMIT 1
+        """,
+        (th, str(questionario)),
     )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    exp = row.get("expires_at") if hasattr(row, "get") else row["expires_at"]
+    used = row.get("used_at") if hasattr(row, "get") else row["used_at"]
 
     try:
-        init_public_tokens_table()
+        exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00")) if isinstance(exp, str) else exp
     except Exception:
-        pass
+        return None
 
-    if q not in REGISTRY:
+    if used:
+        return None
+    if datetime.now(timezone.utc) > exp_dt:
+        return None
+    return row
+
+def mark_token_used(cur, link_id: int):
+    cur.execute(
+        "UPDATE questionari_links SET used_at = ? WHERE id = ?",
+        (datetime.now(timezone.utc).isoformat(), int(link_id)),
+    )
+
+def maybe_handle_public_questionario(get_conn) -> bool:
+    """Gestisce pagina pubblica (senza login) per compilazione questionari via token."""
+    if not _public_links_enabled():
         return False
 
-    rec = validate_public_token(t, q)
-    if not rec:
+    qp = getattr(st, "query_params", None)
+    if qp is None:
+        qp = st.experimental_get_query_params()
+        q = (qp.get("q", [""])[0] or "").upper()
+        t = (qp.get("t", [""])[0] or "")
+    else:
+        q = (qp.get("q", "") or "").upper()
+        t = (qp.get("t", "") or "")
+
+    if q != "INPPS" or not t:
+        return False
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    link = validate_token(cur, t, "INPPS")
+    if not link:
         st.error("Link non valido, scaduto o già utilizzato.")
-        st.caption("Contatta lo studio: 📞 0815152334")
-        st.stop()
+        try: conn.close()
+        except Exception: pass
         return True
 
-    paziente_id = int(rec["paziente_id"])
-    token_id    = int(rec["id"])
-    nome        = rec.get("nome_paziente", "")
+    paziente_id = int(link.get("paziente_id") if hasattr(link, "get") else link["paziente_id"])
 
-    st.markdown(f"## {REGISTRY[q]['label']}")
-    if nome:
-        st.caption(f"Paziente: **{nome}**")
-    st.caption("Compila e premi INVIA. Le risposte verranno registrate nel gestionale.")
+    st.title("Questionario INPPS – Compilazione Genitori")
+    st.caption("Compila e premi INVIA. Il questionario verrà registrato nel gestionale.")
 
-    with st.form("legacy_public_form"):
-        inpps_data, inpps_summary = inpps_collect_ui(prefix="legacy_pub", existing=None)
-        submitted = st.form_submit_button("✅ INVIA QUESTIONARIO", type="primary")
+    with st.form("public_inpps_form"):
+        inpps_data, inpps_summary = inpps_collect_ui(prefix="public_inpps", existing=None)
+        submitted = st.form_submit_button("INVIA QUESTIONARIO")
 
     if submitted:
         try:
-            save_inpps_response(paziente_id, inpps_data, inpps_summary)
-            _mark_used(token_id)
+            cur.execute(
+                "SELECT id, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
+                (paziente_id,),
+            )
+            last = cur.fetchone()
+
+            pnev_obj = {}
+            if last:
+                raw = last.get("pnev_json") if hasattr(last, "get") else last[1]
+                if raw:
+                    pnev_obj = pnev.pnev_load(raw)
+
+            pnev_obj.setdefault("questionari", {})
+            pnev_obj["questionari"]["inpps_screening_genitori"] = inpps_data
+
+            dump = pnev.pnev_dump(pnev_obj)
+            prev_sum = ""
+            if last:
+                prev_sum = (last.get("pnev_summary") if hasattr(last, "get") else last[2]) or ""
+            summary = (prev_sum.strip() + "\n" + inpps_summary).strip() if prev_sum.strip() else inpps_summary
+
+            if last:
+                an_id = int(last.get("id") if hasattr(last, "get") else last[0])
+                cur.execute(
+                    "UPDATE anamnesi SET pnev_json = ?, pnev_summary = ? WHERE id = ?",
+                    (dump, summary, an_id),
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO anamnesi (paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary) VALUES (?,?,?,?,?,?,?)",
+                    (paziente_id, date.today().isoformat(), "INPPS (genitori)", summary, "", dump, summary),
+                )
+
+            mark_token_used(cur, int(link.get("id") if hasattr(link, "get") else link["id"]))
+            conn.commit()
             st.success("✅ Grazie! Questionario inviato correttamente.")
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             st.error(f"Errore salvataggio: {e}")
+        finally:
+            try: conn.close()
+            except Exception: pass
         st.stop()
 
+    try: conn.close()
+    except Exception: pass
     return True
 def _is_empty_pnev(raw) -> bool:
     """True if pnev_json is missing/empty (works for sqlite TEXT or postgres JSONB)."""
@@ -2042,7 +2109,9 @@ DATABASE_URL = "postgresql://...sslmode=require"
 
 Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
+@st.cache_resource
 def _connect_cached():
+    """Connessione DB con cache — creata UNA VOLTA per sessione. Elimina latenza multipla."""
     _require_postgres_on_cloud()
     if _DB_BACKEND == "postgres":
         if not PSYCOPG2_AVAILABLE:
@@ -5015,10 +5084,25 @@ def ui_anamnesi():
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
-    # --- Link pubblici questionari (nuovo sistema unificato) ---
-    from modules.public_questionnaires import ui_genera_link_pubblico
-    _paz_nome_display = " ".join(sel.split(" - ", 1)[1:]) if " - " in sel else sel
-    ui_genera_link_pubblico(paz_id, _paz_nome_display)
+    # --- Link pubblico per INPPS (genitori) ---
+    with st.expander("Link INPPS (genitori)", expanded=False):
+        if not _public_links_enabled():
+            st.info("Link pubblici disattivati. Abilita in Secrets: [public_links] ENABLED=true")
+        else:
+            if not _public_base_url():
+                st.warning("BASE_URL mancante in Secrets: [public_links] BASE_URL='https://...streamlit.app'")
+            else:
+                if st.button("Genera link INPPS", key="gen_link_inpps"):
+                    try:
+                        token = create_questionario_link(cur, paz_id, "INPPS")
+                        conn.commit()
+                        url = f"{_public_base_url()}/?q=INPPS&t={token}"
+                        st.code(url, language="text")
+                        st.success("Link creato. Invia questo link al genitore (valido per i giorni configurati).")
+                    except Exception as e:
+                        try: conn.rollback()
+                        except Exception: pass
+                        st.error(f"Errore creazione link: {e}")
 
 
     # --- Migrazione legacy -> PNEV (sicura, non sovrascrive) ---
@@ -5051,31 +5135,105 @@ def ui_anamnesi():
     # -----------------------------
     # NUOVA VALUTAZIONE PNEV
     # -----------------------------
+    st.markdown("---")
+    st.subheader("Nuova Valutazione PNEV")
+
+    # ── TAB: Anamnesi Catagnini vs PNEV clinico ──────────────────────────────
+    tab_cat, tab_pnev_cl, tab_inpps = st.tabs([
+        "📋 Anamnesi Catagnini (0–2 anni)",
+        "🧠 Valutazione PNEV clinica",
+        "📊 Questionario INPPS",
+    ])
+
+    # Stato temporaneo dell'anamnesi Catagnini (fuori dal form per supportare
+    # widget interattivi come radio/checkbox annidati in expander)
+    _cat_pnev_key = f"catagnini_new_{paz_id}"
+    if _cat_pnev_key not in st.session_state:
+        st.session_state[_cat_pnev_key] = {}
+
+    with tab_cat:
+        try:
+            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_catagnini
+            _cat_json_tmp, _cat_summary_tmp = render_anamnesi_catagnini(
+                pnev_json=st.session_state[_cat_pnev_key],
+                prefix=f"new_{paz_id}",
+                readonly=False,
+            )
+            st.session_state[_cat_pnev_key] = _cat_json_tmp
+        except Exception as _cat_err:
+            st.error(f"Errore modulo Catagnini: {_cat_err}")
+            _cat_summary_tmp = ""
+
+    with tab_pnev_cl:
+        _motivo_placeholder = st.text_area(
+            "Domanda clinica / motivo dell'invio",
+            key=f"motivo_new_{paz_id}",
+        )
+        _visita_snapshot_new = {"paziente_id": paz_id, "motivo": _motivo_placeholder}
+        pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(
+            prefix="pnev_new", visita=_visita_snapshot_new, existing=None
+        )
+
+    with tab_inpps:
+        _inpps_existing_new = (
+            pnev_data_new.get("questionari", {}) or {}
+        ).get("inpps_screening_genitori") if isinstance(pnev_data_new, dict) else None
+        inpps_data_new, inpps_summary_new = inpps_collect_ui(
+            prefix="inpps_new", existing=_inpps_existing_new
+        )
+
+    # ── Scenario clinico (calcolato in tempo reale dai dati Catagnini) ────────
+    st.markdown("---")
+    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
+        try:
+            from modules.pnev.scenario_engine import render_scenario_ui
+            _cat_for_scenario = st.session_state.get(_cat_pnev_key, {})
+            if _cat_for_scenario:
+                render_scenario_ui(
+                    pnev_json=_cat_for_scenario,
+                    data_nascita=None,
+                    eta_mesi_override=None,
+                )
+            else:
+                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
+        except Exception as _sc_err:
+            st.warning(f"Scenario non disponibile: {_sc_err}")
+
+    # ── Form di salvataggio (solo campi non-interattivi + bottone) ───────────
     with st.form("nuova_pnev"):
-        st.subheader("Nuova Valutazione PNEV")
+        data_str = st.text_input("Data valutazione (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
+        note = st.text_area("Note cliniche aggiuntive (per uso interno)")
 
-        data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
-        motivo = st.text_area("Domanda clinica / motivo dell'invio")
-
-        # visita_snapshot qui può essere minimale (questa sezione è trasversale, non solo visiva)
-        visita_snapshot = {"paziente_id": paz_id, "motivo": motivo}
-
-        pnev_data_new, pnev_summary_new = pnev.pnev_collect_ui(prefix="pnev_new", visita=visita_snapshot, existing=None)
-
-        # --- Questionario INPPS (Genitori) agganciato al PNEV ---
-        inpps_existing = (pnev_data_new.get("questionari", {}) or {}).get("inpps_screening_genitori") if isinstance(pnev_data_new, dict) else None
-        inpps_data_new, inpps_summary_new = inpps_collect_ui(prefix="inpps_new", existing=inpps_existing)
-        # merge nel PNEV JSON scalabile
+        # merge dati nel pnev_json
         try:
             pnev_data_new.setdefault("questionari", {})
             pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
         except Exception:
             pass
-        # aggiorna summary (non distruttivo)
+        # merge anamnesi Catagnini
+        try:
+            cat_data = st.session_state.get(_cat_pnev_key, {})
+            if cat_data.get("anamnesi_catagnini"):
+                pnev_data_new["anamnesi_catagnini"] = cat_data["anamnesi_catagnini"]
+        except Exception:
+            pass
+
+        # aggiorna summary
+        motivo = st.session_state.get(f"motivo_new_{paz_id}", "")
         if inpps_summary_new and (inpps_summary_new not in (pnev_summary_new or "")):
             pnev_summary_new = ((pnev_summary_new or "").strip() + "\n" + inpps_summary_new).strip()
+        _cat_sum = st.session_state.get(_cat_pnev_key, {})
+        if isinstance(_cat_sum, dict):
+            try:
+                from modules.pnev.ui_anamnesi_catagnini import _build_summary as _cat_bs
+                _cs = _cat_bs(_cat_sum.get("anamnesi_catagnini", {}))
+                if _cs and _cs not in (pnev_summary_new or ""):
+                    pnev_summary_new = ((pnev_summary_new or "").strip() + "\n" + _cs).strip()
+            except Exception:
+                pass
 
-        note = st.text_area("Note cliniche aggiuntive (per uso interno)")
+        # visita_snapshot
+        visita_snapshot = {"paziente_id": paz_id, "motivo": motivo}
 
         col_ai1, col_ai2, col_save = st.columns([1, 1, 1])
         with col_ai1:
@@ -5083,7 +5241,7 @@ def ui_anamnesi():
         with col_ai2:
             ai_plan = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su PNEV.")
         with col_save:
-            salva = st.form_submit_button("Salva Valutazione PNEV")
+            salva = st.form_submit_button("💾 Salva Valutazione PNEV")
 
     # --- IA helper (TEST only) ---
     if 'ai_hyp' in locals() and (ai_hyp or ai_plan):
@@ -5164,27 +5322,123 @@ def ui_anamnesi():
         existing_pnev_raw = None
     pnev_existing = pnev.pnev_load(existing_pnev_raw)
 
+    # ── Tab modifica: Catagnini / PNEV clinico / INPPS (FUORI dal form) ──────
+    _cat_edit_key = f"catagnini_edit_{an_id}"
+    if _cat_edit_key not in st.session_state:
+        st.session_state[_cat_edit_key] = dict(pnev_existing)
+
+    tab_cat_m, tab_pnev_m, tab_inpps_m = st.tabs([
+        "📋 Anamnesi Catagnini (0–2 anni)",
+        "🧠 Valutazione PNEV clinica",
+        "📊 Questionario INPPS",
+    ])
+
+    with tab_cat_m:
+        try:
+            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_catagnini
+            _cat_json_m, _cat_sum_m = render_anamnesi_catagnini(
+                pnev_json=st.session_state[_cat_edit_key],
+                prefix=f"edit_{an_id}",
+                readonly=False,
+            )
+            st.session_state[_cat_edit_key] = _cat_json_m
+        except Exception as _cat_err_m:
+            st.error(f"Errore modulo Catagnini: {_cat_err_m}")
+            _cat_sum_m = ""
+
+    with tab_pnev_m:
+        motivo_m = st.text_area("Domanda clinica / motivo", rec["Motivo"] or "", key=f"motivo_edit_{an_id}")
+        visita_snapshot_m = {"paziente_id": paz_id, "motivo": motivo_m}
+        pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(
+            prefix=f"pnev_edit_{an_id}", visita=visita_snapshot_m, existing=pnev_existing
+        )
+
+    with tab_inpps_m:
+        inpps_existing_m = (
+            pnev_data_m.get("questionari", {}) or {}
+        ).get("inpps_screening_genitori") if isinstance(pnev_data_m, dict) else None
+        inpps_data_m, inpps_summary_m2 = inpps_collect_ui(
+            prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m
+        )
+
+    # Visualizzazione risposte INPPS già compilate (se presenti)
+    _inpps_saved = (pnev_existing.get("questionari", {}) or {}).get("inpps_screening_genitori")
+    if isinstance(_inpps_saved, dict) and _inpps_saved.get("screening"):
+        with st.expander("📊 Risposte INPPS ricevute dal paziente", expanded=True):
+            _scr = _inpps_saved.get("screening", {})
+            _tot = _scr.get("totale_positivi", 0)
+            _cut = _scr.get("cutoff", 7)
+            _flag = _scr.get("flag_possibile_immaturita_neuromotoria", False)
+            _pos = _inpps_saved.get("positivi", {})
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Totale positivi", _tot)
+            c2.metric("Neurologica/Scuola", _pos.get("neurologica_scuola", 0))
+            c3.metric("Nutrizione", _pos.get("nutrizione", 0))
+            c4.metric("Udito (Madaule)", _pos.get("udito_madaule", 0))
+            if _flag:
+                st.warning(f"⚠️ Screening positivo ({_tot} ≥ cut-off {_cut}) → possibile immaturità neuromotoria.")
+            else:
+                st.success(f"✅ Screening negativo ({_tot} < cut-off {_cut}).")
+            _items_pos = [k for k, v in (_inpps_saved.get("items", {}) or {}).items() if v]
+            if _items_pos:
+                with st.expander(f"Domande positive ({len(_items_pos)})", expanded=False):
+                    for _it in _items_pos:
+                        st.markdown(f"- `{_it}`")
+
+    # ── Scenario clinico (modifica) ──────────────────────────────────────────
+    st.markdown("---")
+    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
+        try:
+            from modules.pnev.scenario_engine import render_scenario_ui
+            _cat_for_sc_edit = st.session_state.get(_cat_edit_key, {})
+            # recupera data nascita del paziente per calcolo età
+            _paz_dn = None
+            try:
+                cur.execute("SELECT Data_Nascita FROM Pazienti WHERE id = %s", (paz_id,))
+                _paz_row = cur.fetchone()
+                if _paz_row:
+                    _paz_dn = _paz_row.get("Data_Nascita") if hasattr(_paz_row, "get") else _paz_row[0]
+            except Exception:
+                pass
+            if _cat_for_sc_edit:
+                render_scenario_ui(
+                    pnev_json=_cat_for_sc_edit,
+                    data_nascita=_paz_dn,
+                )
+            else:
+                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
+        except Exception as _sc_edit_err:
+            st.warning(f"Scenario non disponibile: {_sc_edit_err}")
+
+    # ── Form di salvataggio ───────────────────────────────────────────────────
     with st.form("modifica_pnev"):
         data_m = st.text_input(
             "Data (gg/mm/aaaa)",
             datetime.strptime(rec["data_anamnesi"], "%Y-%m-%d").strftime("%d/%m/%Y")
             if rec["data_anamnesi"] else "",
         )
-        motivo_m = st.text_area("Domanda clinica / motivo", rec["Motivo"] or "")
 
-        visita_snapshot_m = {"paziente_id": paz_id, "motivo": motivo_m}
-        pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(prefix=f"pnev_edit_{an_id}", visita=visita_snapshot_m, existing=pnev_existing)
-
-        # --- Questionario INPPS (Genitori) agganciato al PNEV ---
-        inpps_existing_m = (pnev_data_m.get("questionari", {}) or {}).get("inpps_screening_genitori") if isinstance(pnev_data_m, dict) else None
-        inpps_data_m, inpps_summary_m2 = inpps_collect_ui(prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m)
+        # merge dati
         try:
             pnev_data_m.setdefault("questionari", {})
             pnev_data_m["questionari"]["inpps_screening_genitori"] = inpps_data_m
         except Exception:
             pass
+        try:
+            _cat_state = st.session_state.get(_cat_edit_key, {})
+            if isinstance(_cat_state, dict) and _cat_state.get("anamnesi_catagnini"):
+                pnev_data_m["anamnesi_catagnini"] = _cat_state["anamnesi_catagnini"]
+        except Exception:
+            pass
         if inpps_summary_m2 and (inpps_summary_m2 not in (pnev_summary_m or "")):
             pnev_summary_m = ((pnev_summary_m or "").strip() + "\n" + inpps_summary_m2).strip()
+        try:
+            from modules.pnev.ui_anamnesi_catagnini import _build_summary as _cat_bs_m
+            _cs_m = _cat_bs_m(st.session_state.get(_cat_edit_key, {}).get("anamnesi_catagnini", {}))
+            if _cs_m and _cs_m not in (pnev_summary_m or ""):
+                pnev_summary_m = ((pnev_summary_m or "").strip() + "\n" + _cs_m).strip()
+        except Exception:
+            pass
 
         note_m = st.text_area("Note cliniche aggiuntive (per uso interno)", rec["Note"] or "")
 
@@ -5194,7 +5448,7 @@ def ui_anamnesi():
         with col_ai2:
             ai_plan_m = st.form_submit_button("🤖 IA: bozza piano", help="Genera obiettivi/piano (TEST) basati su PNEV.")
         with col_save:
-            salva_m = st.form_submit_button("Salva modifiche")
+            salva_m = st.form_submit_button("💾 Salva modifiche")
         with col_del:
             cancella = st.form_submit_button("Elimina Valutazione PNEV")
 
