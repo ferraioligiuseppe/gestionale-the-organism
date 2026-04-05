@@ -234,7 +234,7 @@ def _sezione_gravidanza(g: dict, px: str) -> dict:
                                           ["regolari", "parziali", "assenti"],
                                           g.get("controlli_regolari", "regolari"), f"{px}_ctrl_prena")
 
-    g["note"] = _txt("Note gravidanza", g.get("note", ""), f"{px}_grav_note", height=60)
+    g["note"] = _txt("Note gravidanza", g.get("note", ""), f"{px}_grav_note", height=80)
     return g
 
 
@@ -293,7 +293,7 @@ def _sezione_parto(p: dict, px: str) -> dict:
     if p.get("ospedalizzazione_neonato") == "sì":
         p["ospedalizzazione_motivo"] = _inp("Motivo ospedalizzazione", p.get("ospedalizzazione_motivo", ""), f"{px}_osped_mot")
 
-    p["note"] = _txt("Note parto", p.get("note", ""), f"{px}_parto_note", height=60)
+    p["note"] = _txt("Note parto", p.get("note", ""), f"{px}_parto_note", height=80)
     return p
 
 
@@ -337,7 +337,7 @@ def _sezione_neonatale(n: dict, px: str) -> dict:
         rifl["tonic_neck"]  = _radio("RTLN (collo tonico)",     opts_rifl, rifl.get("tonic_neck", "non valutato"), f"{px}_rtln")
     n["riflessi"] = rifl
 
-    n["note"] = _txt("Note periodo neonatale", n.get("note", ""), f"{px}_neo_note", height=60)
+    n["note"] = _txt("Note periodo neonatale", n.get("note", ""), f"{px}_neo_note", height=80)
     return n
 
 
@@ -388,7 +388,7 @@ def _sezione_sviluppo_motorio(sm: dict, px: str) -> dict:
         "Qualità del movimento (asimmetrie, preferenze posturali, difficoltà osservate)",
         sm.get("qualita_movimento", ""), f"{px}_qualita_mov", height=80
     )
-    sm["note"] = _txt("Note sviluppo motorio", sm.get("note", ""), f"{px}_sm_note", height=60)
+    sm["note"] = _txt("Note sviluppo motorio", sm.get("note", ""), f"{px}_sm_note", height=80)
     return sm
 
 
@@ -424,7 +424,7 @@ def _sezione_sviluppo_sensoriale(ss: dict, px: str) -> dict:
     with c4:
         ss["risposta_nome_mesi"]    = _mesi("Risposta al nome",  ss.get("risposta_nome_mesi"),    f"{px}_nome",     max_v=18)
 
-    ss["note"] = _txt("Note sviluppo sensoriale/comunicativo", ss.get("note", ""), f"{px}_ss_note", height=60)
+    ss["note"] = _txt("Note sviluppo sensoriale/comunicativo", ss.get("note", ""), f"{px}_ss_note", height=80)
     return ss
 
 
@@ -498,7 +498,7 @@ def _sezione_storia_familiare(sf: dict, px: str) -> dict:
         if sf.get("lingua_casa") in ("bilingue", "altra lingua"):
             sf["lingua_altro"] = _inp("Specifica lingua(e)", sf.get("lingua_altro", ""), f"{px}_lingua_altro")
 
-    sf["note"] = _txt("Note storia familiare / contesto", sf.get("note", ""), f"{px}_sf_note", height=60)
+    sf["note"] = _txt("Note storia familiare / contesto", sf.get("note", ""), f"{px}_sf_note", height=80)
     return sf
 
 
@@ -527,7 +527,7 @@ def _sezione_motivo_invio(mi: dict, px: str) -> dict:
         "Preoccupazione principale dei genitori (testo libero)",
         mi.get("preoccupazione_principale", ""), f"{px}_preoccup", height=100
     )
-    mi["note"] = _txt("Note aggiuntive", mi.get("note", ""), f"{px}_mi_note", height=60)
+    mi["note"] = _txt("Note aggiuntive", mi.get("note", ""), f"{px}_mi_note", height=80)
     return mi
 
 
