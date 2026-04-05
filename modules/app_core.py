@@ -5381,9 +5381,9 @@ def ui_anamnesi():
                 st.success(f"✅ Screening negativo ({_tot} < cut-off {_cut}).")
             _items_pos = [k for k, v in (_inpps_saved.get("items", {}) or {}).items() if v]
             if _items_pos:
-                with st.expander(f"Domande positive ({len(_items_pos)})", expanded=False):
-                    for _it in _items_pos:
-                        st.markdown(f"- `{_it}`")
+                st.markdown(f"**Domande positive ({len(_items_pos)})**")
+                for _it in _items_pos:
+                    st.markdown(f"- `{_it}`")
 
     # ── Scenario clinico (modifica) ──────────────────────────────────────────
     st.markdown("---")
