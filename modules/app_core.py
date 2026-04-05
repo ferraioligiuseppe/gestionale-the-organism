@@ -2142,16 +2142,21 @@ def _connect_cached():
 
 
 def get_connection():
-    try:
-        conn = _connect_cached()
-        conn._conn.cursor().execute('SELECT 1')
-        return conn
-    except Exception:
+    """Crea una nuova connessione ad ogni chiamata (no cache) per evitare
+    connessioni zombi con Neon PostgreSQL."""
+    _require_postgres_on_cloud()
+    if _DB_BACKEND == 'postgres':
+        if not PSYCOPG2_AVAILABLE:
+            raise RuntimeError('psycopg2 non disponibile')
         try:
-            _connect_cached.clear()
-        except Exception:
-            pass
-        return _connect_cached()
+            conn = psycopg2.connect(_DB_URL)
+            return _PgConn(conn)
+        except Exception as e:
+            st.error(f'Errore connessione PostgreSQL: {e}')
+            st.stop()
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db() -> None:
     conn = get_connection()
