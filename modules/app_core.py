@@ -2142,14 +2142,16 @@ def _connect_cached():
 
 
 def get_connection():
-    conn = _connect_cached()
-    # Verifica connessione e riconnetti se morta
     try:
-        conn._conn.cursor().execute('SELECT 1')
-    except Exception:
-        _connect_cached.clear()
         conn = _connect_cached()
-    return conn
+        conn._conn.cursor().execute('SELECT 1')
+        return conn
+    except Exception:
+        try:
+            _connect_cached.clear()
+        except Exception:
+            pass
+        return _connect_cached()
 
 def init_db() -> None:
     conn = get_connection()
