@@ -5166,8 +5166,8 @@ def ui_anamnesi():
 
     with tab_cat:
         try:
-            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_catagnini
-            _cat_json_tmp, _cat_summary_tmp = render_anamnesi_catagnini(
+            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_castagnini
+            _cat_json_tmp, _cat_summary_tmp = render_anamnesi_castagnini(
                 pnev_json=st.session_state[_cat_pnev_key],
                 prefix=f"new_{paz_id}",
                 readonly=False,
@@ -5348,8 +5348,8 @@ def ui_anamnesi():
 
     with tab_cat_m:
         try:
-            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_catagnini
-            _cat_json_m, _cat_sum_m = render_anamnesi_catagnini(
+            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_castagnini
+            _cat_json_m, _cat_sum_m = render_anamnesi_castagnini(
                 pnev_json=st.session_state[_cat_edit_key],
                 prefix=f"edit_{an_id}",
                 readonly=False,
