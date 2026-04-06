@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Anamnesi strutturata PNEV — Metodo Catagnini (0–2 anni)
-Salvataggio dentro pnev_json["anamnesi_catagnini"] (JSONB/TEXT esistente).
+Anamnesi strutturata PNEV — Metodo Castagnini (0–2 anni)
+Salvataggio dentro pnev_json["anamnesi_castagnini"] (JSONB/TEXT esistente).
 Nessuna migrazione DB richiesta.
 
 Struttura JSON prodotta:
 {
-  "anamnesi_catagnini": {
+  "anamnesi_castagnini": {
     "_meta": {"versione": "1.0", "data": "YYYY-MM-DD"},
     "gravidanza": {...},
     "parto": {...},
@@ -342,7 +342,7 @@ def _sezione_neonatale(n: dict, px: str) -> dict:
 
 
 def _sezione_sviluppo_motorio(sm: dict, px: str) -> dict:
-    st.markdown("#### 🏃 Sviluppo motorio (0–24 mesi) — Catagnini")
+    st.markdown("#### 🏃 Sviluppo motorio (0–24 mesi) — Castagnini")
     st.caption("Inserire l'età in mesi in cui la tappa è stata raggiunta. Lasciare 0 se non compilato.")
 
     c1, c2, c3 = st.columns(3)
@@ -620,17 +620,17 @@ def _build_summary(data: dict) -> str:
 
 # ── entry point principale ────────────────────────────────────────────────────
 
-def render_anamnesi_catagnini(
+def render_anamnesi_castagnini(
     pnev_json: Dict[str, Any],
     prefix: str,
     readonly: bool = False,
 ) -> Tuple[Dict[str, Any], str]:
     """
-    Renderizza l'anamnesi strutturata Catagnini 0–2 anni.
+    Renderizza l'anamnesi strutturata Castagnini 0–2 anni.
 
     Args:
         pnev_json: dict caricato da pnev_load() — verrà modificato in-place
-                   nella chiave "anamnesi_catagnini".
+                   nella chiave "anamnesi_castagnini".
         prefix:    prefisso univoco per i widget Streamlit (es. "new" o str(anamnesi_id))
         readonly:  se True, mostra solo il summary testuale (no widget)
 
@@ -641,7 +641,7 @@ def render_anamnesi_catagnini(
         pnev_json = {}
 
     # Carica o inizializza sotto-chiave
-    raw_cat = pnev_json.get("anamnesi_catagnini")
+    raw_cat = pnev_json.get("anamnesi_castagnini")
     if isinstance(raw_cat, str):
         try:
             raw_cat = json.loads(raw_cat)
@@ -658,14 +658,14 @@ def render_anamnesi_catagnini(
     if readonly:
         summary = _build_summary(cat)
         if summary:
-            st.markdown("**Sintesi anamnesi Catagnini:**")
+            st.markdown("**Sintesi anamnesi Castagnini:**")
             for line in summary.split("\n"):
                 st.markdown(f"- {line}")
         else:
-            st.caption("Anamnesi Catagnini non compilata.")
+            st.caption("Anamnesi Castagnini non compilata.")
         return pnev_json, summary
 
-    st.markdown("## 📋 Anamnesi PNEV — Catagnini (0–2 anni)")
+    st.markdown("## 📋 Anamnesi PNEV — Castagnini (0–2 anni)")
     st.caption("Tutti i campi sono facoltativi. I dati vengono salvati in pnev_json senza migrazioni DB.")
 
     px = f"cat_{prefix}"
@@ -698,7 +698,7 @@ def render_anamnesi_catagnini(
     cat["_meta"] = {"versione": "1.0", "data": date.today().isoformat()}
 
     # Scrivi nel pnev_json principale
-    pnev_json["anamnesi_catagnini"] = cat
+    pnev_json["anamnesi_castagnini"] = cat
 
     summary = _build_summary(cat)
 
