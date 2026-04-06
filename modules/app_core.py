@@ -242,7 +242,7 @@ def _detect_patient_table_and_cols(conn):
         return table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
     return None, {}
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False, hash_funcs={"modules.app_core._PgConn": lambda _: 0})
 def fetch_pazienti_for_select(conn, limit=5000):
     """Lista pazienti con cache 30 secondi — evita query ripetute ad ogni click."""
     table, colmap = _detect_patient_table_and_cols(conn)
