@@ -3,7 +3,7 @@
 modules/pnev/scenario_engine.py
 
 Motore di scenari clinici basato sul metodo Castagnini/FSC.
-Legge i dati dell'anamnesi Catagnini (anamnesi_catagnini in pnev_json)
+Legge i dati dell'anamnesi Castagnini (anamnesi_castagnini in pnev_json)
 e produce:
   - livello di rischio complessivo (NORMALE / INCERTO / A RISCHIO / ALTO RISCHIO)
   - fattori di rischio attivati (con fonte Castagnini)
@@ -204,7 +204,7 @@ def calcola_scenario(
         ScenarioResult con livello, fattori, milestone, scenario testuale
     """
     result = ScenarioResult()
-    cat = pnev_json.get("anamnesi_catagnini", {}) if isinstance(pnev_json, dict) else {}
+    cat = pnev_json.get("anamnesi_castagnini", {}) if isinstance(pnev_json, dict) else {}
     if not isinstance(cat, dict):
         cat = {}
 
