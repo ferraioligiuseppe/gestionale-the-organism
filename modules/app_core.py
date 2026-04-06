@@ -5166,8 +5166,8 @@ def ui_anamnesi():
 
     with tab_cat:
         try:
-            from modules.pnev.ui_anamnesi_castagnini import render_anamnesi_castagnini
-            _cat_json_tmp, _cat_summary_tmp = render_anamnesi_castagnini(
+            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_catagnini
+            _cat_json_tmp, _cat_summary_tmp = render_anamnesi_catagnini(
                 pnev_json=st.session_state[_cat_pnev_key],
                 prefix=f"new_{paz_id}",
                 readonly=False,
@@ -5238,7 +5238,7 @@ def ui_anamnesi():
         _cat_sum = st.session_state.get(_cat_pnev_key, {})
         if isinstance(_cat_sum, dict):
             try:
-                from modules.pnev.ui_anamnesi_castagnini import _build_summary as _cat_bs
+                from modules.pnev.ui_anamnesi_catagnini import _build_summary as _cat_bs
                 _cs = _cat_bs(_cat_sum.get("anamnesi_castagnini", {}))
                 if _cs and _cs not in (pnev_summary_new or ""):
                     pnev_summary_new = ((pnev_summary_new or "").strip() + "\n" + _cs).strip()
@@ -5348,8 +5348,8 @@ def ui_anamnesi():
 
     with tab_cat_m:
         try:
-            from modules.pnev.ui_anamnesi_castagnini import render_anamnesi_castagnini
-            _cat_json_m, _cat_sum_m = render_anamnesi_castagnini(
+            from modules.pnev.ui_anamnesi_catagnini import render_anamnesi_catagnini
+            _cat_json_m, _cat_sum_m = render_anamnesi_catagnini(
                 pnev_json=st.session_state[_cat_edit_key],
                 prefix=f"edit_{an_id}",
                 readonly=False,
@@ -5446,7 +5446,7 @@ def ui_anamnesi():
         if inpps_summary_m2 and (inpps_summary_m2 not in (pnev_summary_m or "")):
             pnev_summary_m = ((pnev_summary_m or "").strip() + "\n" + inpps_summary_m2).strip()
         try:
-            from modules.pnev.ui_anamnesi_castagnini import _build_summary as _cat_bs_m
+            from modules.pnev.ui_anamnesi_catagnini import _build_summary as _cat_bs_m
             _cs_m = _cat_bs_m(st.session_state.get(_cat_edit_key, {}).get("anamnesi_castagnini", {}))
             if _cs_m and _cs_m not in (pnev_summary_m or ""):
                 pnev_summary_m = ((pnev_summary_m or "").strip() + "\n" + _cs_m).strip()
