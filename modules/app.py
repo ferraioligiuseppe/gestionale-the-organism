@@ -17,7 +17,7 @@ def load_css():
 
 load_css()
 
-from app_core import main
+from modules.app_core import main
 
 if __name__ == "__main__":
     main()

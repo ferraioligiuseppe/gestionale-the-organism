@@ -46,6 +46,19 @@ SECTION_PHOTOREF = "📸 Photoref AI"
 
 
 def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -> bool:
+    photoref_token = st.query_params.get("photoref_token", "")
+    if isinstance(photoref_token, list):
+        photoref_token = photoref_token[0] if photoref_token else ""
+
+    if photoref_token:
+        try:
+            from .photoref_ai.ui_photoref_mobile import ui_photoref_mobile
+            ui_photoref_mobile(conn=get_connection())
+        except Exception as e:
+            st.error("Modulo Photoref Mobile non disponibile.")
+            st.exception(e)
+        return True
+
     if sezione == SECTION_PAZIENTI:
         render_pazienti_section()
         return True
