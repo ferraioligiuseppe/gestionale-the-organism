@@ -7,5 +7,5 @@ esterni possono puntare a questo file stabile.
 """
 
 def render_pazienti_section(*args, **kwargs):
-    from app_core import ui_pazienti
+    from modules.app_core import ui_pazienti
     return ui_pazienti(*args, **kwargs)

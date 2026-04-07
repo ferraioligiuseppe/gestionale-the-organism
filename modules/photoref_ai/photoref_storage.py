@@ -13,10 +13,7 @@ def ensure_dirs(base_dir: str) -> dict:
 def build_capture_filename(patient_id: str, visit_id: str, eye_side: str, original_name: str) -> str:
     ext = os.path.splitext(original_name or "")[1].lower() or ".jpg"
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_patient = str(patient_id or "NA").replace(" ", "_")
-    safe_visit = str(visit_id or "NA").replace(" ", "_")
-    safe_eye = str(eye_side or "BINOCULAR").replace(" ", "_")
-    return f"photoref_{safe_patient}_{safe_visit}_{safe_eye}_{ts}{ext}"
+    return f"photoref_{str(patient_id or 'NA').replace(' ','_')}_{str(visit_id or 'NA').replace(' ','_')}_{str(eye_side or 'BINOCULAR').replace(' ','_')}_{ts}{ext}"
 
 def save_uploaded_capture(uploaded_file, *, patient_id: str, visit_id: str, eye_side: str, base_dir: str) -> dict:
     dirs = ensure_dirs(base_dir)

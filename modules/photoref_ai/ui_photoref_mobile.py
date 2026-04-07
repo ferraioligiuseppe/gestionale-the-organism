@@ -1,78 +1,110 @@
-from __future__ import annotations
-from pathlib import Path
-from datetime import datetime, timezone
+import io
 import streamlit as st
 from PIL import Image
-from .photoref_tokens import is_token_expired
-from .photoref_storage import save_uploaded_capture
-from .photoref_db import get_session_by_token, update_session_status, save_capture_record
 
-BASE_DIR = str(Path(__file__).resolve().parent)
+from modules.photoref_ai.photoref_mobile_service import (
+    get_photoref_session_by_token,
+    update_photoref_session_status,
+    run_photoref_analysis,
+    save_photoref_capture,
+)
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
-def ui_photoref_mobile():
-    st.title("📱 Photoref Mobile Upload")
-    token = st.query_params.get("photoref_token", "")
-    if not token:
-        token = st.text_input("Token sessione")
+def ui_photoref_mobile(conn=None):
+    st.title("📸 Photoref Mobile")
 
-    if not token:
-        st.info("Apri questa pagina da un link con token oppure inserisci il token manualmente.")
-        return
+    photoref_token = st.query_params.get("photoref_token", "")
+    if isinstance(photoref_token, list):
+        photoref_token = photoref_token[0] if photoref_token else ""
 
-    session = get_session_by_token(BASE_DIR, token)
-    if not session:
-        st.error("Sessione non trovata.")
-        return
+    if not photoref_token:
+        st.error("Token non valido")
+        st.stop()
 
-    if is_token_expired(session.get("expires_at", "")):
-        st.error("Sessione scaduta.")
-        update_session_status(BASE_DIR, token, status="expired")
-        return
+    session_data = get_photoref_session_by_token(conn, photoref_token)
+    if not session_data:
+        st.error("Sessione non trovata. Rigenera il link dal desktop.")
+        st.stop()
 
-    update_session_status(BASE_DIR, token, status="opened", opened_at=_utc_now())
+    st.success("Sessione attiva")
+    st.caption(f"Session ID: {session_data.get('id')} | Token: {session_data.get('token')}")
 
-    st.success("Sessione valida")
-    st.write(f"Paziente: **{session.get('patient_id','')}**")
-    st.write(f"Visita: **{session.get('visit_id','')}**")
-    st.write(f"Lato: **{session.get('eye_side','')}**")
+    photo = st.camera_input("Scatta foto")
 
-    photo = st.camera_input("Scatta una foto")
-    upload = st.file_uploader("Oppure carica immagine", type=["jpg", "jpeg", "png"])
-    selected = photo if photo is not None else upload
+    uploaded = None
+    source = None
 
-    if selected is None:
+    if photo is not None:
+        uploaded = photo
+        source = "camera"
+    else:
+        file = st.file_uploader("Oppure carica", type=["jpg", "jpeg", "png"])
+        if file is not None:
+            uploaded = file
+            source = "upload"
+
+    if uploaded is None:
         st.info("Scatta o carica una foto per continuare.")
         return
 
-    img = Image.open(selected).convert("RGB")
-    st.image(img, caption="Anteprima", use_container_width=True)
+    image_bytes = uploaded.getvalue()
+    image_len = len(image_bytes) if image_bytes else 0
 
-    if st.button("Invia al gestionale"):
-        saved = save_uploaded_capture(
-            selected,
-            patient_id=str(session.get("patient_id", "")),
-            visit_id=str(session.get("visit_id", "")),
-            eye_side=str(session.get("eye_side", "BINOCULAR")),
-            base_dir=BASE_DIR,
-        )
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    except Exception as e:
+        st.error(f"Errore apertura immagine: {e}")
+        st.stop()
 
-        capture_record = {
-            "session_token": token,
-            "patient_id": session.get("patient_id", ""),
-            "visit_id": session.get("visit_id", ""),
-            "eye_side": session.get("eye_side", ""),
-            "capture_type": session.get("capture_type", ""),
-            "uploaded_at": _utc_now(),
-            "original_filename": getattr(selected, "name", "capture.jpg"),
-            "storage_path": saved["storage_path"],
-            "file_size": saved["file_size"],
-            "image_width": img.size[0],
-            "image_height": img.size[1],
-            "source_device": "smartphone_browser",
-        }
-        save_capture_record(BASE_DIR, capture_record)
-        update_session_status(BASE_DIR, token, status="uploaded", uploaded_at=_utc_now(), last_storage_path=saved["storage_path"])
-        st.success("Foto inviata al gestionale.")
+    st.image(image, caption="Anteprima foto", use_container_width=True)
+
+    with st.expander("Debug acquisizione", expanded=True):
+        st.write("session_id:", session_data.get("id"))
+        st.write("source:", source)
+        st.write("image_bytes_len:", image_len)
+
+    if st.button("Analizza e salva", type="primary"):
+        with st.spinner("Analisi in corso..."):
+            try:
+                session_id = session_data.get("id")
+                if not session_id:
+                    raise ValueError("Sessione senza id: impossibile salvare.")
+
+                if not image_bytes:
+                    raise ValueError("Immagine vuota: nessun byte acquisito.")
+
+                update_photoref_session_status(conn, photoref_token, "captured")
+
+                result = run_photoref_analysis(conn, image, image_bytes, session_data)
+
+                st.write("DEBUG result:", {
+                    "ok": result.get("ok"),
+                    "quality_score": result.get("quality_score"),
+                    "has_annotated": bool(result.get("annotated_image_bytes")),
+                })
+
+                save_info = save_photoref_capture(
+                    conn=conn,
+                    session=session_data,
+                    image_bytes=image_bytes,
+                    annotated=result.get("annotated_image_bytes"),
+                    result=result,
+                    source=source,
+                )
+
+                update_photoref_session_status(
+                    conn,
+                    photoref_token,
+                    "completed" if result.get("ok") else "error"
+                )
+
+                st.success("Foto e analisi salvate correttamente")
+                st.write(result)
+
+                if save_info:
+                    st.success(f"Capture salvata con id: {save_info.get('capture_id')}")
+                    st.caption(f"Bytes immagine salvati: {save_info.get('image_bytes_len')}")
+
+            except Exception as e:
+                update_photoref_session_status(conn, photoref_token, "error")
+                st.error(f"Errore durante il salvataggio: {e}")
