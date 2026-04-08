@@ -10,6 +10,7 @@ from .app_sections import (
     SECTION_PNEV,
     SECTION_VISION,
     SECTION_SEDUTE,
+    SECTION_TERAPIA,
     SECTION_OSTEOPATIA,
     SECTION_COUPON,
     SECTION_DASHBOARD,
@@ -40,6 +41,7 @@ from .sections.ui_cliniche import (
     render_utenti_section,
 )
 from .ui_lenti_contatto import ui_lenti_contatto
+from .terapia_section import render_terapia_section
 
 SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
 SECTION_PHOTOREF = "📸 Photoref AI"
@@ -86,6 +88,10 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
 
     if sezione == SECTION_SEDUTE:
         render_sedute_section()
+        return True
+
+    if sezione == SECTION_TERAPIA:
+        render_terapia_section(conn=get_connection())
         return True
 
     if sezione == SECTION_OSTEOPATIA:
