@@ -10,7 +10,6 @@ from .app_sections import (
     SECTION_PNEV,
     SECTION_VISION,
     SECTION_SEDUTE,
-    SECTION_TERAPIA,
     SECTION_OSTEOPATIA,
     SECTION_COUPON,
     SECTION_DASHBOARD,
@@ -22,6 +21,7 @@ from .app_sections import (
     SECTION_GAZE,
     SECTION_READING_DOM,
     SECTION_UTENTI,
+    SECTION_TERAPIA,
 )
 from .pazienti import render_pazienti_section
 from .anamnesi import render_anamnesi_section
@@ -86,12 +86,12 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
             st.exception(e)
         return True
 
-    if sezione == SECTION_SEDUTE:
-        render_sedute_section()
-        return True
-
     if sezione == SECTION_TERAPIA:
         render_terapia_section(conn=get_connection())
+        return True
+
+    if sezione == SECTION_SEDUTE:
+        render_sedute_section()
         return True
 
     if sezione == SECTION_OSTEOPATIA:
