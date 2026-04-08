@@ -711,3 +711,6 @@ def render_anamnesi_castagnini(
             st.caption("Nessun elemento saliente da evidenziare (tutti i valori sono nella norma attesa).")
 
     return pnev_json, summary
+-e 
+# Alias per compatibilità con app_core.py (typo storico)
+render_anamnesi_catagnini = render_anamnesi_castagnini
