@@ -51,8 +51,7 @@ def ui_slap_tap(conn=None):
         st.success(f"Accuratezza: {scoring['accuracy']}%")
 
         report = build_slap_tap_report(scoring)
-
-        st.text_area("Report", report, height=200)
+        st.text_area("Report", report, height=220)
 
         if conn is not None:
             cur = conn.cursor()
@@ -71,6 +70,8 @@ def ui_slap_tap(conn=None):
                 ))
                 conn.commit()
                 st.success("Sessione salvata.")
+            except Exception as e:
+                st.error(f"Errore salvataggio sessione: {e}")
             finally:
                 try:
                     cur.close()
