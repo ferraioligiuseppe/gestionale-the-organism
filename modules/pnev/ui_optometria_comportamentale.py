@@ -115,9 +115,9 @@ def _sezione_refrattivo(d: dict, px: str) -> dict:
 
     # Occhiali in uso
     st.markdown("**Occhiali/LAC in uso**")
-    rx_in_uso = _t("Rx in uso (descrizione)", _g(d,"rx_in_uso"), f"{px}_rx_in_uso", height=60)
+    rx_in_uso = _t("Rx in uso (descrizione)", _g(d,"rx_in_uso"), f"{px}_rx_in_uso", height=68)
 
-    note_ref = _t("Note refrattive", _g(d,"note_refrattivo"), f"{px}_note_ref", height=60)
+    note_ref = _t("Note refrattive", _g(d,"note_refrattivo"), f"{px}_note_ref", height=68)
 
     return {
         "av_naturale": {"od": av_nat_od, "os": av_nat_os, "oo": av_nat_oo},
@@ -162,7 +162,7 @@ def _sezione_strabismo(d: dict, px: str) -> dict:
         stereo = _s("Stereoacuità", STEREO_OPTS, _g(d,"stereoacuita"), f"{px}_stereo")
 
     dominanza_oculare = _s("Dominanza oculare", DOMINANZA_OPTS, _g(d,"dominanza_oculare"), f"{px}_dom_ocul")
-    note_strab = _t("Note strabismo", _g(d,"note_strabismo"), f"{px}_note_strab", height=60)
+    note_strab = _t("Note strabismo", _g(d,"note_strabismo"), f"{px}_note_strab", height=68)
 
     return {
         "stato_refrattivo": stato_ref,
@@ -219,7 +219,7 @@ def _sezione_telebinocular(d: dict, px: str) -> dict:
         nuovi[f"{code}_val"] = valore
         nuovi[f"{code}_q"] = qualita
 
-    note_tb = _t("Note Telebinocular", d.get("note_telebinocular", ""), f"{px}_note_tb", height=60)
+    note_tb = _t("Note Telebinocular", d.get("note_telebinocular", ""), f"{px}_note_tb", height=68)
 
     return {"telebinocular": nuovi, "note_telebinocular": note_tb}
 
@@ -279,7 +279,7 @@ def _sezione_oep(d: dict, px: str) -> dict:
         nuovi[f"{code}_val"] = val
         nuovi[f"{code}_nota"] = nota
 
-    note_oep = _t("Note analisi OEP", d.get("note_oep", ""), f"{px}_note_oep", height=60)
+    note_oep = _t("Note analisi OEP", d.get("note_oep", ""), f"{px}_note_oep", height=68)
 
     return {"oep": nuovi, "note_oep": note_oep}
 
@@ -314,7 +314,7 @@ def _sezione_retinoscopie(d: dict, px: str) -> dict:
         nott_os = st.number_input("Nott OS (D)", -3.0, 3.0, float(ret.get("nott_os") or 0), 0.25, format="%.2f", key=f"{px}_nott_os")
 
     lag_acc = st.number_input("Lag accomodativo medio (D)", 0.0, 3.0, float(ret.get("lag_accomodativo") or 0), 0.25, format="%.2f", key=f"{px}_lag_acc")
-    note_ret = _t("Note retinoscopie", ret.get("note", ""), f"{px}_note_ret", height=60)
+    note_ret = _t("Note retinoscopie", ret.get("note", ""), f"{px}_note_ret", height=68)
 
     return {
         "retinoscopie": {
@@ -348,7 +348,7 @@ def _sezione_test_aggiuntivi(d: dict, px: str) -> dict:
         campo_visivo = st.text_input("Campo visivo (confrontazione/perimetria)", ta.get("campo_visivo",""), key=f"{px}_campo_vis")
 
     purkinje = _s("Test di Purkinje (fissazione eccentrica)", ["—","Normale","Positivo OD","Positivo OS"], ta.get("purkinje","—"), f"{px}_purkinje")
-    note_ta = _t("Note test aggiuntivi", ta.get("note",""), f"{px}_note_ta", height=60)
+    note_ta = _t("Note test aggiuntivi", ta.get("note",""), f"{px}_note_ta", height=68)
 
     return {
         "test_aggiuntivi": {
@@ -410,7 +410,7 @@ def _sezione_performance(d: dict, px: str) -> dict:
     with c4[2]: visag_wpm = st.number_input("Velocità lettura (wpm)", 0.0, 800.0, float(perf.get("visag_wpm") or 0), 1.0, format="%.0f", key=f"{px}_visag_wpm")
     visag_grade = st.text_input("Grade equivalent (Visagraph)", perf.get("visag_grade",""), key=f"{px}_visag_grade")
 
-    note_perf = _t("Note performance", perf.get("note",""), f"{px}_note_perf", height=60)
+    note_perf = _t("Note performance", perf.get("note",""), f"{px}_note_perf", height=68)
 
     return {
         "performance": {
