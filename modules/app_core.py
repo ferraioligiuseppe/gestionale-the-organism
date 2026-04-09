@@ -6040,6 +6040,66 @@ ESAMI STRUTTURALI / FUNZIONALI
         conn.commit()
         st.success("Valutazione visiva salvata.")
 
+    # ── Optometria Comportamentale ──────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("🧠 Optometria Comportamentale")
+    _optom_key = f"optom_{paz_id}"
+    if _optom_key not in st.session_state:
+        try:
+            cur.execute(
+                "SELECT visita_json FROM valutazioni_visive WHERE paziente_id = %s "
+                "ORDER BY data_visita DESC, id DESC LIMIT 1",
+                (paz_id,)
+            )
+            _last_vis = cur.fetchone()
+            if _last_vis:
+                import json as _json
+                _vj = _last_vis.get("visita_json") if hasattr(_last_vis,"get") else _last_vis[0]
+                _vj_dict = _json.loads(_vj) if isinstance(_vj, str) else (_vj or {})
+                st.session_state[_optom_key] = _vj_dict.get("optometria_comportamentale", {})
+            else:
+                st.session_state[_optom_key] = {}
+        except Exception:
+            st.session_state[_optom_key] = {}
+
+    try:
+        from modules.pnev.ui_optometria_comportamentale import render_optometria_comportamentale
+        _optom_data, _optom_summary = render_optometria_comportamentale(
+            optom_json=st.session_state[_optom_key],
+            prefix=f"optom_{paz_id}",
+            readonly=False,
+        )
+        st.session_state[_optom_key] = _optom_data
+
+        if st.button("💾 Salva Optometria Comportamentale", key=f"save_optom_{paz_id}"):
+            try:
+                import json as _json
+                cur.execute(
+                    "SELECT id, visita_json FROM valutazioni_visive WHERE paziente_id = %s "
+                    "ORDER BY data_visita DESC, id DESC LIMIT 1",
+                    (paz_id,)
+                )
+                _last = cur.fetchone()
+                if _last:
+                    _vid = int(_last.get("id") if hasattr(_last,"get") else _last[0])
+                    _vj_raw = _last.get("visita_json") if hasattr(_last,"get") else _last[1]
+                    _vj_dict = _json.loads(_vj_raw) if isinstance(_vj_raw, str) else (_vj_raw or {})
+                    _vj_dict["optometria_comportamentale"] = _optom_data
+                    cur.execute(
+                        "UPDATE valutazioni_visive SET visita_json = %s WHERE id = %s",
+                        (_json.dumps(_vj_dict), _vid)
+                    )
+                    conn.commit()
+                    st.success("✅ Optometria comportamentale salvata.")
+                else:
+                    st.warning("Nessuna visita visiva trovata. Crea prima una valutazione visiva.")
+            except Exception as e:
+                try: conn.rollback()
+                except Exception: pass
+                st.error(f"Errore salvataggio optometria: {e}")
+    except Exception as e:
+        st.error(f"Errore modulo optometria: {e}")
+
     # -------- Strumenti optometrici/oculistici stand-alone --------
     st.markdown("---")
     st.subheader("Strumenti di supporto optometrici / oculistici")
