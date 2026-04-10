@@ -182,9 +182,13 @@ def _get_columns(conn, table_name: str):
     except Exception:
         return []
 
-@st.cache_data(ttl=300, show_spinner=False)
 def _detect_patient_table_and_cols(conn):
-    """Rileva tabella pazienti — cache 5 minuti, cambia raramente."""
+    """Rileva tabella pazienti — cache 5 minuti in session_state, cambia raramente."""
+    import time
+    _ck = "_detect_table_cache"; _tk = "_detect_table_ts"
+    now = time.time()
+    if _ck in st.session_state and _tk in st.session_state and now - st.session_state[_tk] < 300:
+        return st.session_state[_ck]
     table_candidates = [
         'pazienti','Pazienti','patients','Patients','patienti','Patienti',
         'anagrafica_pazienti','Anagrafica_Pazienti','tbl_pazienti','Tbl_Pazienti'
@@ -239,18 +243,20 @@ def _detect_patient_table_and_cols(conn):
         dnc = pick(cols, dn_cols)
         sc  = pick(cols, scuola_cols)
         ec  = pick(cols, eta_cols)
-        return table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
-    return None, {}
+        _res1 = table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
+        st.session_state[_ck] = _res1; st.session_state[_tk] = time.time()
+        return _res1
+    result1 = None, {}
+    st.session_state[_ck] = result1; st.session_state[_tk] = time.time()
+    return result1
 
 def fetch_pazienti_for_select(conn, limit=5000):
     """Lista pazienti con cache 30s in session_state — evita query ripetute ad ogni click."""
     import time
-    _ck = "_pazienti_cache"
-    _tk = "_pazienti_ts"
+    _ck2 = "_pazienti_cache"; _tk2 = "_pazienti_ts"
     now = time.time()
-    if _ck in st.session_state and _tk in st.session_state and now - st.session_state[_tk] < 30:
-        return st.session_state[_ck]
-
+    if _ck2 in st.session_state and _tk2 in st.session_state and now - st.session_state[_tk2] < 30:
+        return st.session_state[_ck2]
     table, colmap = _detect_patient_table_and_cols(conn)
     if not table:
         return [], None, None
@@ -283,11 +289,9 @@ def fetch_pazienti_for_select(conn, limit=5000):
         while len(r) < 6:
             r.append('')
         out.append(tuple(r[:6]))
-
-    result = out, table, colmap
-    st.session_state[_ck] = result
-    st.session_state[_tk] = now
-    return result
+    result2 = out, table, colmap
+    st.session_state[_ck2] = result2; st.session_state[_tk2] = time.time()
+    return result2
 
 
 # ---------- DEBUG DB (non mostra credenziali) ----------
