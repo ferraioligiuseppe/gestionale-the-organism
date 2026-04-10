@@ -26,8 +26,8 @@ import streamlit as st
 
 def _n(label: str, val: Any, key: str, min_v: float = -20.0, max_v: float = 20.0,
        step: float = 0.25, fmt: str = "%.2f") -> float:
-    return st.number_input(label, min_value=min_v, max_value=max_v,
-                           value=float(val or 0.0), step=step, format=fmt, key=key)
+    return st.number_input(label, min_value=float(min_v), max_value=float(max_v),
+                           value=float(val or 0.0), step=float(step), format=fmt, key=key)
 
 def _s(label: str, opts: list, val: str, key: str) -> str:
     idx = opts.index(val) if val in opts else 0
@@ -52,11 +52,11 @@ def _g(d: dict, *keys, default=""):
 def _col_od_os(st_cols, label_od, label_os, val_od, val_os, key_od, key_os,
                min_v=-20.0, max_v=20.0, step=0.25):
     with st_cols[0]:
-        v_od = st.number_input(label_od, min_value=min_v, max_value=max_v,
-                               value=float(val_od or 0.0), step=step, format="%.2f", key=key_od)
+        v_od = st.number_input(label_od, min_value=float(min_v), max_value=float(max_v),
+                               value=float(val_od or 0.0), step=float(step), format="%.2f", key=key_od)
     with st_cols[1]:
-        v_os = st.number_input(label_os, min_value=min_v, max_value=max_v,
-                               value=float(val_os or 0.0), step=step, format="%.2f", key=key_os)
+        v_os = st.number_input(label_os, min_value=float(min_v), max_value=float(max_v),
+                               value=float(val_os or 0.0), step=float(step), format="%.2f", key=key_os)
     return v_od, v_os
 
 LATI = ["—", "OD", "OS", "OO", "Alt"]
