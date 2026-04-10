@@ -242,9 +242,15 @@ def _detect_patient_table_and_cols(conn):
         return table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
     return None, {}
 
-@st.cache_data(ttl=30, show_spinner=False, hash_funcs={"_PgConn": lambda _: 0, "psycopg2.extensions.connection": lambda _: 0})
 def fetch_pazienti_for_select(conn, limit=5000):
-    """Lista pazienti con cache 30 secondi — evita query ripetute ad ogni click."""
+    """Lista pazienti con cache 30s in session_state — evita query ripetute ad ogni click."""
+    import time
+    _ck = "_pazienti_cache"
+    _tk = "_pazienti_ts"
+    now = time.time()
+    if _ck in st.session_state and _tk in st.session_state and now - st.session_state[_tk] < 30:
+        return st.session_state[_ck]
+
     table, colmap = _detect_patient_table_and_cols(conn)
     if not table:
         return [], None, None
@@ -277,7 +283,11 @@ def fetch_pazienti_for_select(conn, limit=5000):
         while len(r) < 6:
             r.append('')
         out.append(tuple(r[:6]))
-    return out, table, colmap
+
+    result = out, table, colmap
+    st.session_state[_ck] = result
+    st.session_state[_tk] = now
+    return result
 
 
 # ---------- DEBUG DB (non mostra credenziali) ----------
