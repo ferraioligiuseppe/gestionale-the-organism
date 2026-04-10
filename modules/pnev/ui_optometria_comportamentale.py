@@ -26,8 +26,10 @@ import streamlit as st
 
 def _n(label: str, val: Any, key: str, min_v: float = -20.0, max_v: float = 20.0,
        step: float = 0.25, fmt: str = "%.2f") -> float:
+    v = float(val or 0.0)
+    v = max(float(min_v), min(float(max_v), v))
     return st.number_input(label, min_value=float(min_v), max_value=float(max_v),
-                           value=float(val or 0.0), step=float(step), format=fmt, key=key)
+                           value=v, step=float(step), format=fmt, key=key)
 
 def _s(label: str, opts: list, val: str, key: str) -> str:
     idx = opts.index(val) if val in opts else 0
