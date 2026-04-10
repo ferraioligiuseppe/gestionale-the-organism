@@ -146,6 +146,40 @@ def _estrai_pnev(pnev_json: dict) -> dict:
             tot_s = sc.get("tot_sintomi", sc.get("totale", 0))
             output[key_q] = f"{label}: {tot_s} sintomi selezionati"
 
+    # ── INPP Neuromotorio ─────────────────────────────────────────────────────
+    inpp = pnev_json.get("inpp_neuromotorio", {})
+    if inpp:
+        indice = inpp.get("indice_disfunzione", {})
+        if indice.get("indice") is not None:
+            txt, _ = _interpreta_ds(None)  # non usato qui
+            val = indice["indice"]
+            bd = indice.get("breakdown", {})
+            output["inpp_indice"] = (
+                f"INPP Indice di Disfunzione: {val}% "
+                f"(Coord {bd.get('coordinazione',0):.0f}% "
+                f"Cerebellare {bd.get('cerebellare',0):.0f}% "
+                f"R.Primitivi {bd.get('primitivi',0):.0f}% "
+                f"R.Posturali {bd.get('posturali',0):.0f}%)"
+            )
+        # Riflessi attivi
+        prim = inpp.get("primitivi", {})
+        rf_attivi = []
+        nomi_rf = {
+            "rtac_supino":"RTAC","rtsc":"RTSC","rtl_supino":"RTL",
+            "moro_supino":"Moro","galant":"Galant","babinski":"Babinski",
+            "rooting":"Rooting","prensile_mano":"Prensile palmare",
+        }
+        for k, nome in nomi_rf.items():
+            sc = prim.get(k, {}).get("score", 0)
+            if sc and int(sc) >= 2:
+                rf_attivi.append(f"{nome} ({sc}/4)")
+        if rf_attivi:
+            output["inpp_riflessi_attivi"] = "Riflessi primitivi attivi: " + ", ".join(rf_attivi)
+        # Lateralità
+        lat = inpp.get("lateralita", {})
+        if lat.get("lateralita_consistente"):
+            output["inpp_lateralita"] = f"Lateralità: {lat['lateralita_consistente']}"
+
     return output
 
 
