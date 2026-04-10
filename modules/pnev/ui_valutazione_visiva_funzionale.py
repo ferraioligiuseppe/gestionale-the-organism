@@ -306,8 +306,11 @@ def _nsuco_norma(eta):
 
 def s3_oculomotori(d: dict, px: str) -> dict:
     st.markdown("### 👁️ S3 — Test Oculomotori")
-    st.info("💡 Per DEM, K-D e Visual Tracking interattivi usa il **widget React** (`widget_test_interattivi.jsx`) "
-            "oppure inserisci i risultati manualmente qui sotto.")
+    st.info(
+        "💡 **DEM, K-D, Visual Tracking e Groffman** possono essere somministrati "
+        "con registrazione vocale automatica nella sezione **🎤 Test di Lettura Orale** qui sopra. "
+        "I risultati vengono trasferiti automaticamente. Qui puoi anche inserirli manualmente."
+    )
 
     eta = int(_n("Età paziente (anni)", _g(d,"eta",10), f"{px}_eta_ocm", 5, 18, 1))
     risultati = {"eta": eta}
@@ -538,7 +541,7 @@ def s6_visuo_spaziali(d: dict, px: str) -> dict:
 
     # Piaget
     with st.expander("**Test di Piaget (Consapevolezza Destra/Sinistra)**", expanded=True):
-        st.info("💡 Per somministrazione interattiva usa il **widget React**")
+        st.info("💡 Somministra il test di persona e segna le risposte corrette qui sotto.")
         eta_p = int(_n("Età (anni)", _g(d,"piaget","eta",7), f"{px}_eta_piag", 5, 11, 1))
         attesi = PIAGET_ETA.get(max(5,min(11,eta_p)),["A"])
         st.caption(f"Livelli attesi al 75% per età {eta_p}: **{', '.join(attesi)}**")
