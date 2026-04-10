@@ -37,8 +37,8 @@ def _g(d, *keys, default=""):
     return d if d != {} else default
 
 def _n(label, val, key, min_v=0.0, max_v=999.0, step=1.0, fmt="%.0f"):
-    return st.number_input(label, min_value=min_v, max_value=max_v,
-                           value=float(val or 0), step=step, format=fmt, key=key)
+    return st.number_input(label, min_value=float(min_v), max_value=float(max_v),
+                           value=float(val or 0), step=float(step), format=fmt, key=key)
 
 def _s(label, opts, val, key):
     idx = opts.index(val) if val in opts else 0
