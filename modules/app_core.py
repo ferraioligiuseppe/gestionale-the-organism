@@ -6040,60 +6040,118 @@ ESAMI STRUTTURALI / FUNZIONALI
         conn.commit()
         st.success("Valutazione visiva salvata.")
 
-    # ── Test Visivi Funzionali con Scoring ──────────────────────────────────
+    # ── Valutazione Visiva Funzionale — Batteria Completa ───────────────────
     st.markdown("---")
-    st.subheader("🧪 Test Visivi Funzionali")
-    _tv_key = f"test_visivi_{paz_id}"
-    if _tv_key not in st.session_state:
+    st.subheader("🧪 Valutazione Visiva Funzionale — Batteria Completa")
+
+    def _load_vvf_from_db():
         try:
             cur.execute(
                 "SELECT visita_json FROM valutazioni_visive WHERE paziente_id = %s "
                 "ORDER BY data_visita DESC, id DESC LIMIT 1", (paz_id,)
             )
-            _lv = cur.fetchone()
-            if _lv:
-                import json as _json2
-                _vj2 = _lv.get("visita_json") if hasattr(_lv,"get") else _lv[0]
-                _vj2d = _json2.loads(_vj2) if isinstance(_vj2, str) else (_vj2 or {})
-                st.session_state[_tv_key] = _vj2d.get("test_visivi", {})
-            else:
-                st.session_state[_tv_key] = {}
+            lv = cur.fetchone()
+            if lv:
+                import json as _jvvf
+                vj = lv.get("visita_json") if hasattr(lv,"get") else lv[0]
+                vj_d = _jvvf.loads(vj) if isinstance(vj, str) else (vj or {})
+                return vj_d.get("valutazione_visiva_funzionale", {})
         except Exception:
-            st.session_state[_tv_key] = {}
+            pass
+        return {}
+
+    _vvf_key = f"vvf_{paz_id}"
+    if _vvf_key not in st.session_state:
+        st.session_state[_vvf_key] = _load_vvf_from_db()
 
     try:
-        from modules.pnev.ui_test_visivi import render_test_visivi
-        _tv_data, _tv_summary = render_test_visivi(
-            test_json=st.session_state[_tv_key],
-            prefix=f"tv_{paz_id}",
+        from modules.pnev.ui_valutazione_visiva_funzionale import render_valutazione_visiva_funzionale
+        _vvf_data, _vvf_summary = render_valutazione_visiva_funzionale(
+            data_json=st.session_state[_vvf_key],
+            prefix=f"vvf_{paz_id}",
         )
-        st.session_state[_tv_key] = _tv_data
+        st.session_state[_vvf_key] = _vvf_data
 
-        if st.button("💾 Salva Test Visivi", key=f"save_tv_{paz_id}"):
+        if st.button("💾 Salva Valutazione Visiva Funzionale", key=f"save_vvf_{paz_id}"):
             try:
-                import json as _json2
+                import json as _jvvf
                 cur.execute(
                     "SELECT id, visita_json FROM valutazioni_visive WHERE paziente_id = %s "
                     "ORDER BY data_visita DESC, id DESC LIMIT 1", (paz_id,)
                 )
-                _last2 = cur.fetchone()
-                if _last2:
-                    _vid2 = int(_last2.get("id") if hasattr(_last2,"get") else _last2[0])
-                    _vj2r = _last2.get("visita_json") if hasattr(_last2,"get") else _last2[1]
-                    _vj2d = _json2.loads(_vj2r) if isinstance(_vj2r, str) else (_vj2r or {})
-                    _vj2d["test_visivi"] = _tv_data
+                last_vvf = cur.fetchone()
+                if last_vvf:
+                    vid = int(last_vvf.get("id") if hasattr(last_vvf,"get") else last_vvf[0])
+                    vjr = last_vvf.get("visita_json") if hasattr(last_vvf,"get") else last_vvf[1]
+                    vjd = _jvvf.loads(vjr) if isinstance(vjr, str) else (vjr or {})
+                    vjd["valutazione_visiva_funzionale"] = _vvf_data
                     cur.execute("UPDATE valutazioni_visive SET visita_json = %s WHERE id = %s",
-                                (_json2.dumps(_vj2d), _vid2))
+                                (_jvvf.dumps(vjd), vid))
                     conn.commit()
-                    st.success("✅ Test visivi salvati.")
+                    st.success("✅ Valutazione visiva funzionale salvata.")
                 else:
-                    st.warning("Nessuna visita visiva trovata. Crea prima una valutazione visiva.")
+                    st.warning("Crea prima una valutazione visiva (modulo superiore).")
             except Exception as e:
                 try: conn.rollback()
                 except Exception: pass
-                st.error(f"Errore salvataggio test visivi: {e}")
+                st.error(f"Errore salvataggio VVF: {e}")
     except Exception as e:
-        st.error(f"Errore modulo test visivi: {e}")
+        st.error(f"Errore modulo VVF: {e}")
+
+    # ── Test Vocali (DEM, K-D, VT, Groffman, VADS) ──────────────────────────
+    st.markdown("---")
+    st.subheader("🎤 Test di Lettura Orale — Registrazione Vocale")
+    _voc_key = f"test_vocali_{paz_id}"
+    if _voc_key not in st.session_state:
+        try:
+            cur.execute(
+                "SELECT visita_json FROM valutazioni_visive WHERE paziente_id = %s "
+                "ORDER BY data_visita DESC, id DESC LIMIT 1", (paz_id,)
+            )
+            _lv3 = cur.fetchone()
+            if _lv3:
+                import json as _jvoc
+                _vj3 = _lv3.get("visita_json") if hasattr(_lv3,"get") else _lv3[0]
+                _vj3d = _jvoc.loads(_vj3) if isinstance(_vj3, str) else (_vj3 or {})
+                st.session_state[_voc_key] = _vj3d.get("test_vocali", {})
+            else:
+                st.session_state[_voc_key] = {}
+        except Exception:
+            st.session_state[_voc_key] = {}
+
+    try:
+        from modules.pnev.ui_test_vocali import render_test_vocali
+        _voc_data, _voc_summary = render_test_vocali(
+            data_json=st.session_state[_voc_key],
+            prefix=f"voc_{paz_id}",
+        )
+        st.session_state[_voc_key] = _voc_data
+
+        if st.button("💾 Salva Test Vocali", key=f"save_voc_{paz_id}"):
+            try:
+                import json as _jvoc
+                cur.execute(
+                    "SELECT id, visita_json FROM valutazioni_visive WHERE paziente_id = %s "
+                    "ORDER BY data_visita DESC, id DESC LIMIT 1", (paz_id,)
+                )
+                _lv_v = cur.fetchone()
+                if _lv_v:
+                    _vid_v = int(_lv_v.get("id") if hasattr(_lv_v,"get") else _lv_v[0])
+                    _vjr_v = _lv_v.get("visita_json") if hasattr(_lv_v,"get") else _lv_v[1]
+                    _vjd_v = _jvoc.loads(_vjr_v) if isinstance(_vjr_v, str) else (_vjr_v or {})
+                    _vjd_v["test_vocali"] = _voc_data
+                    cur.execute("UPDATE valutazioni_visive SET visita_json = %s WHERE id = %s",
+                                (_jvoc.dumps(_vjd_v), _vid_v))
+                    conn.commit()
+                    st.success("✅ Test vocali salvati.")
+                else:
+                    st.warning("Crea prima una valutazione visiva.")
+            except Exception as e:
+                try: conn.rollback()
+                except Exception: pass
+                st.error(f"Errore salvataggio test vocali: {e}")
+    except Exception as e:
+        st.error(f"Errore modulo test vocali: {e}")
 
     # ── Optometria Comportamentale ──────────────────────────────────────────
     st.markdown("---")
