@@ -291,7 +291,15 @@ def _sezione_parto(p: dict, px: str) -> dict:
     p["ospedalizzazione_neonato"] = _radio("Ospedalizzazione neonato dopo il parto",
                                             ["no", "sì"], p.get("ospedalizzazione_neonato", "no"), f"{px}_osped")
     if p.get("ospedalizzazione_neonato") == "sì":
-        p["ospedalizzazione_motivo"] = _inp("Motivo ospedalizzazione", p.get("ospedalizzazione_motivo", ""), f"{px}_osped_mot")
+        _col_osped1, _col_osped2 = st.columns(2)
+        with _col_osped1:
+            p["ospedalizzazione_motivo"] = _inp("Motivo ospedalizzazione", p.get("ospedalizzazione_motivo", ""), f"{px}_osped_mot")
+        with _col_osped2:
+            p["ospedalizzazione_giorni"] = int(st.number_input(
+                "Durata degenza (giorni)", min_value=0, max_value=365,
+                value=int(p.get("ospedalizzazione_giorni") or 0),
+                step=1, key=f"{px}_osped_gg"
+            ))
 
     p["note"] = _txt("Note parto", p.get("note", ""), f"{px}_parto_note", height=80)
     return p
