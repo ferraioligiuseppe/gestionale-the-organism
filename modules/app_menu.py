@@ -18,6 +18,14 @@ from .app_sections import (
     SECTION_READING_DOM,
     SECTION_UTENTI,
     SECTION_TERAPIA,
+    # Nuove sezioni
+    SECTION_NPS,
+    SECTION_PIANO_VT,
+    SECTION_REPORT_PDF,
+    SECTION_DEM,
+    SECTION_KD,
+    SECTION_EXPORT,
+    SECTION_SEED_DEMO,
 )
 
 SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
@@ -41,10 +49,18 @@ BASE_SECTIONS = [
     SECTION_DEBUG,
     SECTION_IMPORT,
     SECTION_GAZE,
+    # ── Nuove sezioni ──────────────────────────────
+    SECTION_NPS,
+    SECTION_DEM,
+    SECTION_KD,
+    SECTION_PIANO_VT,
+    SECTION_REPORT_PDF,
+    SECTION_EXPORT,
 ]
 
 ADMIN_SECTIONS = [
     SECTION_UTENTI,
+    SECTION_SEED_DEMO,   # solo admin
 ]
 
 SECTION_DIAGNOSTICA_UDITIVA = "🔉 Diagnostica Uditiva"
