@@ -5346,6 +5346,21 @@ def ui_anamnesi():
             st.error(f"Errore questionari PNEV: {e}")
             _q_summary_new = ""
 
+    # ── INPP Neuromotorio (nuova valutazione) ────────────────────────────────
+    _inpp_key_new = f"inpp_new_{paz_id}"
+    if _inpp_key_new not in st.session_state:
+        st.session_state[_inpp_key_new] = {}
+    try:
+        from modules.pnev.ui_inpp_neuromotorio import render_inpp_neuromotorio
+        _inpp_data_new, _inpp_sum_new = render_inpp_neuromotorio(
+            data_json=st.session_state[_inpp_key_new],
+            prefix=f"inpp_new_{paz_id}",
+        )
+        st.session_state[_inpp_key_new] = _inpp_data_new
+    except Exception as e:
+        st.error(f"Errore modulo INPP: {e}")
+        _inpp_data_new = {}
+
     # ── Scenario clinico (calcolato in tempo reale dai dati Catagnini) ────────
     st.markdown("---")
     with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
@@ -5374,6 +5389,11 @@ def ui_anamnesi():
             pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
         except Exception:
             pass
+        # merge INPP neuromotorio
+        _inpp_state_new = st.session_state.get(f"inpp_new_{paz_id}", {})
+        if _inpp_state_new:
+            pnev_data_new["inpp_neuromotorio"] = _inpp_state_new
+
         # merge questionari PNEV (Melillo, Fisher, Visione)
         _q_state_new = st.session_state.get(f"questionari_new_{paz_id}", {})
         if isinstance(_q_state_new, dict) and _q_state_new.get("questionari"):
@@ -5605,6 +5625,21 @@ def ui_anamnesi():
         except Exception as _sc_edit_err:
             st.warning(f"Scenario non disponibile: {_sc_edit_err}")
 
+    # ── INPP Neuromotorio (modifica) ─────────────────────────────────────────
+    _inpp_key_m = f"inpp_edit_{an_id}"
+    if _inpp_key_m not in st.session_state:
+        st.session_state[_inpp_key_m] = pnev_existing.get("inpp_neuromotorio", {})
+    try:
+        from modules.pnev.ui_inpp_neuromotorio import render_inpp_neuromotorio
+        _inpp_data_m, _inpp_sum_m = render_inpp_neuromotorio(
+            data_json=st.session_state[_inpp_key_m],
+            prefix=f"inpp_{an_id}",
+        )
+        st.session_state[_inpp_key_m] = _inpp_data_m
+    except Exception as e:
+        st.error(f"Errore modulo INPP: {e}")
+        _inpp_data_m = {}; _inpp_sum_m = ""
+
     # ── Form di salvataggio ───────────────────────────────────────────────────
     with st.form("modifica_pnev"):
         data_m = st.text_input(
@@ -5627,6 +5662,11 @@ def ui_anamnesi():
                 pnev_data_m.setdefault("questionari", {}).update(
                     _q_state_m.get("questionari", {})
                 )
+
+            # merge INPP neuromotorio
+            _inpp_state = st.session_state.get(f"inpp_edit_{an_id}", {})
+            if _inpp_state:
+                pnev_data_m["inpp_neuromotorio"] = _inpp_state
 
             if isinstance(_cat_state, dict) and _cat_state.get("anamnesi_catagnini"):
                 pnev_data_m["anamnesi_catagnini"] = _cat_state["anamnesi_catagnini"]
@@ -11100,11 +11140,8 @@ except Exception:
     DocxTemplate = None
 
 def _ensure_relazioni_cliniche_table(conn):
-    """Crea la tabella relazioni_cliniche sia su SQLite che su PostgreSQL (Neon).
-    Aggiunge colonne mancanti per il flusso AI: stato, contenuto_json, pdf_bytes, professionista, fonte_dati.
-    """
+    """Crea la tabella relazioni_cliniche con colonne AI: stato, contenuto_json, pdf_bytes."""
     cur = conn.cursor()
-    # Prova prima sintassi PostgreSQL (psycopg2)
     try:
         cur.execute("""
         CREATE TABLE IF NOT EXISTS relazioni_cliniche (
@@ -11125,19 +11162,13 @@ def _ensure_relazioni_cliniche_table(conn):
           created_at TIMESTAMP NOT NULL DEFAULT NOW()
         )
         """)
-        # Migrazione colonne mancanti su tabella esistente
         for col, defn in [
-            ("stato", "TEXT DEFAULT 'bozza'"),
-            ("contenuto_json", "TEXT"),
-            ("pdf_bytes", "BYTEA"),
-            ("professionista", "TEXT"),
-            ("fonte_dati", "TEXT"),
-            ("approvata_il", "TIMESTAMP"),
+            ("stato","TEXT DEFAULT 'bozza'"),("contenuto_json","TEXT"),
+            ("pdf_bytes","BYTEA"),("professionista","TEXT"),
+            ("fonte_dati","TEXT"),("approvata_il","TIMESTAMP"),
         ]:
-            try:
-                cur.execute(f"ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS {col} {defn}")
-            except Exception:
-                pass
+            try: cur.execute(f"ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS {col} {defn}")
+            except Exception: pass
         try:
             cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
