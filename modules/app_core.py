@@ -5363,20 +5363,20 @@ def ui_anamnesi():
 
     # ── Scenario clinico (calcolato in tempo reale dai dati Catagnini) ────────
     st.markdown("---")
-    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
-        try:
-            from modules.pnev.scenario_engine import render_scenario_ui
-            _cat_for_scenario = st.session_state.get(_cat_pnev_key, {})
-            if _cat_for_scenario:
-                render_scenario_ui(
-                    pnev_json=_cat_for_scenario,
-                    data_nascita=None,
-                    eta_mesi_override=None,
-                )
-            else:
-                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
-        except Exception as _sc_err:
-            st.warning(f"Scenario non disponibile: {_sc_err}")
+    st.markdown("#### 🧠 Scenario clinico (dal profilo anamnestico)")
+    try:
+        from modules.pnev.scenario_engine import render_scenario_ui
+        _cat_for_scenario = st.session_state.get(_cat_pnev_key, {})
+        if _cat_for_scenario:
+            render_scenario_ui(
+                pnev_json=_cat_for_scenario,
+                data_nascita=None,
+                eta_mesi_override=None,
+            )
+        else:
+            st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
+    except Exception as _sc_err:
+        st.warning(f"Scenario non disponibile: {_sc_err}")
 
     # ── Form di salvataggio (solo campi non-interattivi + bottone) ───────────
     with st.form("nuova_pnev"):
@@ -5602,7 +5602,8 @@ def ui_anamnesi():
 
     # ── Scenario clinico (modifica) ──────────────────────────────────────────
     st.markdown("---")
-    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
+    st.markdown("#### 🧠 Scenario clinico (dal profilo anamnestico)")
+    if True:  # blocco inline invece di expander
         try:
             from modules.pnev.scenario_engine import render_scenario_ui
             _cat_for_sc_edit = st.session_state.get(_cat_edit_key, {})
