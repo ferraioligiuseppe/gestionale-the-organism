@@ -2071,49 +2071,77 @@ def render_export_statistici(conn) -> None:
 #  ROUTER — funzione di aggregazione per app_main_router.py
 # ══════════════════════════════════════════════════════════════════════
 
+def _seleziona_paziente(conn, key_suffix: str = "") -> Optional[int]:
+    """Selettore paziente autonomo — stesso pattern di app_core.py."""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, Cognome, Nome, Data_Nascita "
+            "FROM Pazienti "
+            "WHERE COALESCE(Stato_Paziente,'ATTIVO') = 'ATTIVO' "
+            "ORDER BY Cognome, Nome"
+        )
+        rows = cur.fetchall()
+    except Exception as e:
+        st.error(f"Errore caricamento pazienti: {e}")
+        return None
+
+    if not rows:
+        st.info("Nessun paziente registrato.")
+        return None
+
+    def _label(r):
+        if isinstance(r, dict):
+            pid  = r.get("id")
+            cogn = r.get("Cognome", "")
+            nome = r.get("Nome", "")
+            dn   = r.get("Data_Nascita", "")
+        else:
+            pid, cogn, nome = r[0], r[1], r[2]
+            dn = r[3] if len(r) > 3 else ""
+        return f"{pid} - {cogn} {nome}" + (f" · {dn}" if dn else "")
+
+    sel = st.selectbox(
+        "Seleziona paziente",
+        options=rows,
+        format_func=_label,
+        key=f"paz_sel_{key_suffix}",
+    )
+    if isinstance(sel, dict):
+        return int(sel.get("id"))
+    return int(sel[0])
+
+
 def render_nuovi_moduli(conn, sezione: str, paziente_id: Optional[int] = None) -> None:
-    """
-    Dispatcher per tutte le sezioni nuove.
-    Aggiungilo in app_main_router.py:
+    """Dispatcher per tutte le sezioni nuove."""
 
-        elif sezione == "NPS":
-            render_nuovi_moduli(conn, "NPS", paziente_id)
-        elif sezione == "ReportPDF":
-            render_nuovi_moduli(conn, "ReportPDF", paziente_id)
-        ...
-    """
-    if sezione == "NPS":
-        if paziente_id:
-            render_nps(conn, paziente_id)
-        else:
-            st.warning("Seleziona un paziente per accedere alla sezione NPS.")
-
-    elif sezione == "PianoVT":
-        if paziente_id:
-            render_piano_vt(conn, paziente_id)
-        else:
-            st.warning("Seleziona un paziente.")
-
-    elif sezione == "ReportPDF":
-        if paziente_id:
-            render_report_pdf_ui(conn, paziente_id)
-        else:
-            st.warning("Seleziona un paziente.")
-
-    elif sezione == "DEM":
+    if sezione == "DEM":
         render_dem_widget()
-
-    elif sezione == "KD":
+        return
+    if sezione == "KD":
         render_kd_widget()
-
-    elif sezione == "ExportStatistici":
+        return
+    if sezione == "ExportStatistici":
         render_export_statistici(conn)
-
-    elif sezione == "SeedDemo":
+        return
+    if sezione == "SeedDemo":
         render_seed_panel(conn)
+        return
 
-    else:
-        st.error(f"Sezione sconosciuta: {sezione}")
+    # Sezioni con selettore paziente autonomo
+    if sezione in ("NPS", "PianoVT", "ReportPDF"):
+        paziente_id = _seleziona_paziente(conn, key_suffix=sezione)
+        if not paziente_id:
+            return
+        if sezione == "NPS":
+            render_nps(conn, paziente_id)
+        elif sezione == "PianoVT":
+            render_piano_vt(conn, paziente_id)
+        elif sezione == "ReportPDF":
+            render_report_pdf_ui(conn, paziente_id)
+        return
+
+    st.error(f"Sezione sconosciuta: {sezione}")
 
 
 # ══════════════════════════════════════════════════════════════════════
