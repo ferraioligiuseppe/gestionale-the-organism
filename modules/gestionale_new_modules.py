@@ -29,6 +29,8 @@
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
+from typing import Optional
+
 import streamlit as st
 import json
 import math
