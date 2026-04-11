@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Temp / artefatti
+tmp_*.png
+*.tmp
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
