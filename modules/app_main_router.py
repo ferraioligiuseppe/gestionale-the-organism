@@ -22,6 +22,14 @@ from .app_sections import (
     SECTION_READING_DOM,
     SECTION_UTENTI,
     SECTION_TERAPIA,
+    # Nuove sezioni
+    SECTION_NPS,
+    SECTION_PIANO_VT,
+    SECTION_REPORT_PDF,
+    SECTION_DEM,
+    SECTION_KD,
+    SECTION_EXPORT,
+    SECTION_SEED_DEMO,
 )
 from .pazienti import render_pazienti_section
 from .anamnesi import render_anamnesi_section
@@ -147,6 +155,34 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
 
     if sezione == SECTION_UTENTI:
         render_utenti_section(get_connection)
+        return True
+
+    # ── Nuove sezioni ──────────────────────────────────────────────────
+    if sezione in (
+        SECTION_NPS, SECTION_PIANO_VT, SECTION_REPORT_PDF,
+        SECTION_DEM, SECTION_KD, SECTION_EXPORT, SECTION_SEED_DEMO,
+    ):
+        try:
+            from .gestionale_new_modules import render_nuovi_moduli
+        except ImportError as e:
+            st.error(f"Modulo nuovi moduli non disponibile: {e}")
+            return True
+
+        mappa = {
+            SECTION_NPS:        "NPS",
+            SECTION_PIANO_VT:   "PianoVT",
+            SECTION_REPORT_PDF: "ReportPDF",
+            SECTION_DEM:        "DEM",
+            SECTION_KD:         "KD",
+            SECTION_EXPORT:     "ExportStatistici",
+            SECTION_SEED_DEMO:  "SeedDemo",
+        }
+        paziente_id = st.session_state.get("paziente_id")
+        render_nuovi_moduli(
+            conn=get_connection(),
+            sezione=mappa[sezione],
+            paziente_id=paziente_id,
+        )
         return True
 
     return False

@@ -20,3 +20,12 @@ SECTION_GAZE = " Eye Tracking"
 SECTION_READING_DOM = " Lettura Avanzata DOM"
 
 SECTION_TERAPIA = "🧠 Terapia"
+
+# ── Nuove sezioni (gestionale_new_modules) ─────────────────────────────
+SECTION_NPS         = "🧠 NPS Neuropsicologico"
+SECTION_PIANO_VT    = "🎯 Piano Vision Therapy"
+SECTION_REPORT_PDF  = "📄 Report PDF Clinico"
+SECTION_DEM         = "🔢 DEM Interattivo"
+SECTION_KD          = "👁️ K-D Interattivo"
+SECTION_EXPORT      = "📊 Export Statistici"
+SECTION_SEED_DEMO   = "🧪 Caso Demo"
