@@ -180,6 +180,23 @@ def _estrai_pnev(pnev_json: dict) -> dict:
         if lat.get("lateralita_consistente"):
             output["inpp_lateralita"] = f"Lateralità: {lat['lateralita_consistente']}"
 
+    # ── Miofunzionale ──────────────────────────────────────────────────────────
+    mft = pnev_json.get("miofunzionale", {})
+    if mft:
+        mft_items = []
+        deg = mft.get("funzionale",{}).get("deglutizione_tipo","")
+        if deg and deg != "—": mft_items.append(f"Deglutizione: {deg}")
+        resp = mft.get("funzionale",{}).get("respirazione_tipo","")
+        if resp and resp != "—": mft_items.append(f"Respirazione: {resp}")
+        fren = mft.get("funzionale",{}).get("frenulo_classificazione","")
+        if fren and fren != "—": mft_items.append(f"Frenulo: {fren}")
+        lab = mft.get("esame_obiettivo",{}).get("competenza_labiale","")
+        if lab and lab != "Sì": mft_items.append(f"Competenza labiale: {lab}")
+        n_diag = len(mft.get("diagnosi",[]))
+        if n_diag: mft_items.append(f"{n_diag} diagnosi funzionali")
+        if mft_items:
+            output["miofunzionale"] = "; ".join(mft_items)
+
     return output
 
 
