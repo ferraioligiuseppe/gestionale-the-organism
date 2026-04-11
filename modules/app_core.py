@@ -251,7 +251,12 @@ def _detect_patient_table_and_cols(conn):
     return _r
 
 def fetch_pazienti_for_select(conn, limit=5000):
-    """Lista pazienti con cache 30 secondi — evita query ripetute ad ogni click."""
+    """Lista pazienti con cache 30s in session_state — evita query ripetute ad ogni click."""
+    import time
+    _ck2 = "_pazienti_cache"; _tk2 = "_pazienti_ts"
+    now = time.time()
+    if _ck2 in st.session_state and _tk2 in st.session_state and now - st.session_state[_tk2] < 30:
+        return st.session_state[_ck2]
     table, colmap = _detect_patient_table_and_cols(conn)
     if not table:
         return [], None, None
@@ -284,7 +289,9 @@ def fetch_pazienti_for_select(conn, limit=5000):
         while len(r) < 6:
             r.append('')
         out.append(tuple(r[:6]))
-    return out, table, colmap
+    result2 = out, table, colmap
+    st.session_state[_ck2] = result2; st.session_state[_tk2] = time.time()
+    return result2
 
 
 # ---------- DEBUG DB (non mostra credenziali) ----------
@@ -5361,6 +5368,21 @@ def ui_anamnesi():
         st.error(f"Errore modulo INPP: {e}")
         _inpp_data_new = {}
 
+    # ── Miofunzionale (nuova valutazione) ───────────────────────────────────
+    _mft_key_new = f"mft_new_{paz_id}"
+    if _mft_key_new not in st.session_state:
+        st.session_state[_mft_key_new] = {}
+    try:
+        from modules.pnev.ui_miofunzionale import render_miofunzionale
+        _mft_data_new, _mft_sum_new = render_miofunzionale(
+            data_json=st.session_state[_mft_key_new],
+            prefix=f"mft_new_{paz_id}",
+        )
+        st.session_state[_mft_key_new] = _mft_data_new
+    except Exception as e:
+        st.error(f"Errore modulo Miofunzionale: {e}")
+        _mft_data_new = {}
+
     # ── Scenario clinico (calcolato in tempo reale dai dati Catagnini) ────────
     st.markdown("---")
     st.markdown("#### 🧠 Scenario clinico (dal profilo anamnestico)")
@@ -5393,6 +5415,11 @@ def ui_anamnesi():
         _inpp_state_new = st.session_state.get(f"inpp_new_{paz_id}", {})
         if _inpp_state_new:
             pnev_data_new["inpp_neuromotorio"] = _inpp_state_new
+
+        # merge Miofunzionale
+        _mft_state_new = st.session_state.get(f"mft_new_{paz_id}", {})
+        if _mft_state_new:
+            pnev_data_new["miofunzionale"] = _mft_state_new
 
         # merge questionari PNEV (Melillo, Fisher, Visione)
         _q_state_new = st.session_state.get(f"questionari_new_{paz_id}", {})
@@ -5626,6 +5653,21 @@ def ui_anamnesi():
         except Exception as _sc_edit_err:
             st.warning(f"Scenario non disponibile: {_sc_edit_err}")
 
+    # ── Miofunzionale (modifica) ─────────────────────────────────────────────
+    _mft_key_m = f"mft_edit_{an_id}"
+    if _mft_key_m not in st.session_state:
+        st.session_state[_mft_key_m] = pnev_existing.get("miofunzionale", {})
+    try:
+        from modules.pnev.ui_miofunzionale import render_miofunzionale
+        _mft_data_m, _mft_sum_m = render_miofunzionale(
+            data_json=st.session_state[_mft_key_m],
+            prefix=f"mft_{an_id}",
+        )
+        st.session_state[_mft_key_m] = _mft_data_m
+    except Exception as e:
+        st.error(f"Errore modulo Miofunzionale: {e}")
+        _mft_data_m = {}
+
     # ── INPP Neuromotorio (modifica) ─────────────────────────────────────────
     _inpp_key_m = f"inpp_edit_{an_id}"
     if _inpp_key_m not in st.session_state:
@@ -5663,6 +5705,11 @@ def ui_anamnesi():
                 pnev_data_m.setdefault("questionari", {}).update(
                     _q_state_m.get("questionari", {})
                 )
+
+            # merge Miofunzionale
+            _mft_state = st.session_state.get(f"mft_edit_{an_id}", {})
+            if _mft_state:
+                pnev_data_m["miofunzionale"] = _mft_state
 
             # merge INPP neuromotorio
             _inpp_state = st.session_state.get(f"inpp_edit_{an_id}", {})
