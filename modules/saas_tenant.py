@@ -444,6 +444,7 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
         st.info("Per cambiare piano o per assistenza: **info@theorganism.it**")
 
     with tab_utenti:
+        rows = []
         try:
             cur = meta_conn.cursor()
             cur.execute("""
@@ -451,7 +452,7 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
                 FROM utenti_meta WHERE studio_id = %s
                 ORDER BY ruolo, cognome
             """, (studio_id,))
-            rows = cur.fetchall()
+            rows = cur.fetchall() or []
             if rows:
                 import pandas as pd
                 df = pd.DataFrame(rows,
@@ -459,14 +460,14 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
                                            "Ruolo", "Attivo", "Ultimo accesso"])
                 st.dataframe(df, use_container_width=True)
             else:
-                st.info("Nessun utente.")
+                st.info("Nessun utente ancora.")
         except Exception as e:
-            st.error(f"Errore: {e}")
+            st.error(f"Errore caricamento utenti: {e}")
 
         st.markdown("---")
         st.subheader("Aggiungi utente")
         max_u = cfg["max_utenti"]
-        n_utenti = len(rows) if rows else 0
+        n_utenti = len(rows)
         if n_utenti >= max_u:
             st.warning(f"Hai raggiunto il limite di {max_u} utenti per il piano {cfg['nome']}.")
         else:
