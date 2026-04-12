@@ -2,30 +2,15 @@
 """Menu principale del gestionale."""
 
 from .app_sections import (
-    SECTION_PAZIENTI,
-    SECTION_PNEV,
-    SECTION_VISION,
-    SECTION_SEDUTE,
-    SECTION_OSTEOPATIA,
-    SECTION_COUPON,
-    SECTION_DASHBOARD,
-    SECTION_RELAZIONI,
-    SECTION_EVOLUTIVA,
-    SECTION_PRIVACY,
-    SECTION_DEBUG,
-    SECTION_IMPORT,
-    SECTION_GAZE,
-    SECTION_READING_DOM,
-    SECTION_UTENTI,
-    SECTION_TERAPIA,
-    # Nuove sezioni
-    SECTION_NPS,
-    SECTION_PIANO_VT,
-    SECTION_REPORT_PDF,
-    SECTION_DEM,
-    SECTION_KD,
-    SECTION_EXPORT,
-    SECTION_SEED_DEMO,
+    SECTION_PAZIENTI, SECTION_PNEV, SECTION_VISION, SECTION_SEDUTE,
+    SECTION_OSTEOPATIA, SECTION_COUPON, SECTION_DASHBOARD,
+    SECTION_RELAZIONI, SECTION_EVOLUTIVA, SECTION_PRIVACY,
+    SECTION_DEBUG, SECTION_IMPORT, SECTION_GAZE, SECTION_READING_DOM,
+    SECTION_UTENTI, SECTION_TERAPIA,
+    SECTION_NPS_OLD, SECTION_PIANO_VT, SECTION_REPORT_PDF,
+    SECTION_DEM, SECTION_KD, SECTION_EXPORT, SECTION_SEED_DEMO,
+    SECTION_NPS, SECTION_DSA, SECTION_TEST_PSY, SECTION_FE,
+    SECTION_SAAS_ADMIN, SECTION_MIO_STUDIO,
 )
 
 SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
@@ -49,18 +34,27 @@ BASE_SECTIONS = [
     SECTION_DEBUG,
     SECTION_IMPORT,
     SECTION_GAZE,
-    # ── Nuove sezioni ──────────────────────────────
+    # ── Valutazioni cognitive / DSA / PSY ──────────────────────────
     SECTION_NPS,
+    SECTION_DSA,
+    SECTION_FE,
+    SECTION_SOMMINISTRAZIONE,
+    SECTION_TEST_PSY,
+    # ── Strumenti VT e report ───────────────────────────────────────
     SECTION_DEM,
     SECTION_KD,
     SECTION_PIANO_VT,
     SECTION_REPORT_PDF,
     SECTION_EXPORT,
+    # ── Studio ─────────────────────────────────────────────────────
+    SECTION_MIO_STUDIO,
+    SECTION_SOMMINISTRAZIONE,
 ]
 
 ADMIN_SECTIONS = [
     SECTION_UTENTI,
-    SECTION_SEED_DEMO,   # solo admin
+    SECTION_SEED_DEMO,
+    SECTION_SAAS_ADMIN,
 ]
 
 SECTION_DIAGNOSTICA_UDITIVA = "🔉 Diagnostica Uditiva"
@@ -71,8 +65,6 @@ def build_sections(is_admin: bool, app_mode: str) -> list[str]:
     sections = list(BASE_SECTIONS)
     if is_admin:
         sections.extend(ADMIN_SECTIONS)
-
     sections.append(SECTION_DIAGNOSTICA_UDITIVA)
     sections.append(SECTION_STIMOLAZIONE_PASSIVA)
-
     return sections
