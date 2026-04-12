@@ -462,58 +462,91 @@ def _ensure_saas_tables(conn) -> None:
 
 
 def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
-    """Pannello per l\'admin di un singolo studio."""
-    _ensure_saas_tables(meta_conn)
+    """Pannello per l'admin di un singolo studio."""
     st.title("🏥 Il mio studio")
 
+    cfg = PIANI.get(piano, PIANI["professional"])
     tab_piano, tab_utenti, tab_moduli = st.tabs([
         "💳 Piano attivo", "👥 Utenti", "📦 Moduli abilitati"
     ])
 
     with tab_piano:
-        cfg = PIANI.get(piano, PIANI["base"])
         st.markdown(f"### Piano: **{cfg['nome']}**")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Prezzo mensile", f"€{cfg['prezzo_mese']}")
-        c2.metric("Max utenti", cfg["max_utenti"])
-        c3.metric("Max pazienti", cfg["max_pazienti"])
+        c1.metric("Prezzo mensile",  f"€{cfg['prezzo_mese']}")
+        c2.metric("Max utenti",       cfg["max_utenti"])
+        c3.metric("Max pazienti",     cfg["max_pazienti"])
         st.markdown(f"_{cfg['descrizione']}_")
         st.info("Per cambiare piano o per assistenza: **info@theorganism.it**")
 
     with tab_utenti:
-        rows = []
+        # Crea tabella se non esiste — con autocommit esplicito
+        try:
+            cur = meta_conn.cursor()
+            cur.execute("ROLLBACK")
+        except Exception:
+            pass
         try:
             cur = meta_conn.cursor()
             cur.execute("""
-                SELECT nome, cognome, email, ruolo, attivo, ultimo_accesso
-                FROM utenti_meta WHERE studio_id = %s
-                ORDER BY ruolo, cognome
-            """, (studio_id,))
+                CREATE TABLE IF NOT EXISTS utenti_meta (
+                    id            BIGSERIAL PRIMARY KEY,
+                    studio_id     BIGINT DEFAULT 1,
+                    email         TEXT UNIQUE NOT NULL,
+                    nome          TEXT DEFAULT \'\',
+                    cognome       TEXT DEFAULT \'\',
+                    ruolo         TEXT DEFAULT \'clinico\',
+                    password_hash TEXT NOT NULL DEFAULT \'\',
+                    salt          TEXT NOT NULL DEFAULT \'\',
+                    attivo        BOOLEAN DEFAULT TRUE,
+                    ultimo_accesso TIMESTAMP,
+                    created_at    TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            meta_conn.commit()
+        except Exception as ex_create:
+            try:
+                meta_conn.rollback()
+            except Exception:
+                pass
+            st.warning(f"Tabella utenti non ancora disponibile: {ex_create}")
+
+        rows = []
+        try:
+            cur = meta_conn.cursor()
+            cur.execute(
+                "SELECT nome, cognome, email, ruolo, attivo, ultimo_accesso "
+                "FROM utenti_meta WHERE studio_id = %s ORDER BY ruolo, cognome",
+                (studio_id,)
+            )
             rows = cur.fetchall() or []
-            if rows:
+        except Exception:
+            rows = []
+
+        if rows:
+            try:
                 import pandas as pd
-                df = pd.DataFrame(rows,
-                                  columns=["Nome", "Cognome", "Email",
-                                           "Ruolo", "Attivo", "Ultimo accesso"])
+                df = pd.DataFrame(rows, columns=["Nome","Cognome","Email",
+                                                  "Ruolo","Attivo","Ultimo accesso"])
                 st.dataframe(df, use_container_width=True)
-            else:
-                st.info("Nessun utente ancora.")
-        except Exception as e:
-            st.error(f"Errore caricamento utenti: {e}")
+            except Exception:
+                for r in rows:
+                    st.write(r)
+        else:
+            st.info("Nessun utente registrato per questo studio.")
 
         st.markdown("---")
         st.subheader("Aggiungi utente")
-        max_u = cfg["max_utenti"]
         n_utenti = len(rows)
+        max_u    = cfg["max_utenti"]
         if n_utenti >= max_u:
-            st.warning(f"Hai raggiunto il limite di {max_u} utenti per il piano {cfg['nome']}.")
+            st.warning(f"Limite {max_u} utenti raggiunto per il piano {cfg['nome']}.")
         else:
             with st.form("form_add_user"):
                 nu_nome  = st.text_input("Nome")
                 nu_cog   = st.text_input("Cognome")
                 nu_email = st.text_input("Email")
-                nu_ruolo = st.selectbox("Ruolo",
-                                        ["clinico", "segreteria", "admin"])
+                nu_ruolo = st.selectbox("Ruolo", ["clinico","segreteria","admin"])
                 nu_pwd   = st.text_input("Password temporanea", type="password")
                 if st.form_submit_button("➕ Aggiungi"):
                     if all([nu_nome, nu_email, nu_pwd]):
@@ -532,7 +565,6 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
             sezioni = MODULO_SEZIONE.get(modulo, [])
             etichette = ", ".join(sezioni) if sezioni else modulo
             st.markdown(f"✅ **{modulo}** → {etichette}")
-
         non_attivi = [m for m in MODULO_SEZIONE if m not in moduli]
         if non_attivi:
             st.markdown("---")
