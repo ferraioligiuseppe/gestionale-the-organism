@@ -422,11 +422,48 @@ def render_admin_saas(meta_conn) -> None:
 #  PANNELLO STUDIO — Gestione utenti del singolo studio
 # ══════════════════════════════════════════════════════════════════════
 
+def _ensure_saas_tables(conn) -> None:
+    """Crea le tabelle SaaS nel DB corrente se non esistono ancora."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS utenti_meta (
+                id BIGSERIAL PRIMARY KEY,
+                studio_id BIGINT DEFAULT 1,
+                email TEXT UNIQUE NOT NULL,
+                nome TEXT DEFAULT \'\',
+                cognome TEXT DEFAULT \'\',
+                ruolo TEXT DEFAULT \'clinico\',
+                password_hash TEXT NOT NULL DEFAULT \'\',
+                salt TEXT NOT NULL DEFAULT \'\',
+                attivo BOOLEAN DEFAULT TRUE,
+                ultimo_accesso TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS studi (
+                id BIGSERIAL PRIMARY KEY,
+                codice TEXT UNIQUE DEFAULT \'studio_locale\',
+                nome TEXT DEFAULT \'Studio\',
+                email_admin TEXT DEFAULT \'\',
+                db_url TEXT DEFAULT \'\',
+                piano TEXT DEFAULT \'professional\',
+                stato TEXT DEFAULT \'attivo\',
+                created_at TIMESTAMP DEFAULT NOW(),
+                scadenza_piano DATE,
+                note TEXT
+            )
+        """)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
 def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
-    """
-    Pannello per l'admin di un singolo studio.
-    Mostra info piano, utenti, moduli attivi.
-    """
+    """Pannello per l\'admin di un singolo studio."""
+    _ensure_saas_tables(meta_conn)
     st.title("🏥 Il mio studio")
 
     tab_piano, tab_utenti, tab_moduli = st.tabs([
