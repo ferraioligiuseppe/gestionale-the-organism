@@ -14,12 +14,22 @@ PROFESSIONALI = [
     "Medico",
     "Educatore",
     "Tutor DSA",
+    "Optometrista Comportamentale / VVF",
+    "Neuropsicomotricista / PNEV",
     "Altro (custom)",
 ]
 
 # profili di scrittura per professione (tono/struttura)
 PROFILI = {
     "Osteopata": {"tone": "clinico-sintetico", "focus": "dolore, funzionalità, risposta al trattamento"},
+    "Optometrista Comportamentale / VVF": {
+        "tone": "tecnico-funzionale",
+        "focus": "risultati batteria visiva, diagnosi funzionale, piano Vision Therapy, indicazioni",
+    },
+    "Neuropsicomotricista / PNEV": {
+        "tone": "neuroevolutivo-integrato",
+        "focus": "profilo PNEV, immaturità neuromotoria, riflessologia primitiva, obiettivi terapeutici",
+    },
     "Psicologo/Psicoterapeuta": {"tone": "clinico-relazionale", "focus": "funzionamento, obiettivi, progressi"},
     "Optometrista/Visione": {"tone": "tecnico", "focus": "risultati test, follow-up, indicazioni"},
     "Logopedista": {"tone": "riabilitativo", "focus": "abilità, esercizi, progressi"},
@@ -65,13 +75,19 @@ NOTE AGGIUNTIVE (facoltative):
 {note_libere if note_libere else "-"}
 
 OBIETTIVO:
-Genera una relazione personalizzata per il professionista indicato, con:
-- Sintesi problema / domanda (se presente)
-- Valutazione iniziale (se presente)
-- Intervento/percorsi con progressione nel periodo
-- Risultati / osservazioni
-- Indicazioni e raccomandazioni
-- Piano proposto / follow-up
+Genera una relazione personalizzata per il professionista indicato.
+
+Se nei dati è presente "diagnosi_automatica", usala come base per le diagnosi funzionali.
+Se nei dati sono presenti risultati di test (DEM, K-D, TVPS, VMI, Fisher, ecc.), riportali
+con i valori numerici e la loro interpretazione clinica.
+
+Struttura relazione:
+- Motivo della valutazione
+- Anamnesi rilevante (perinatale, sviluppo, storia clinica)
+- Risultati test oggettivi (con valori numerici e interpretazione)
+- Diagnosi funzionale (usa diagnosi_automatica se disponibile)
+- Indicazioni terapeutiche (Vision Therapy, riabilitazione, invii)
+- Piano e follow-up proposto
 """.strip()
 
 def relazione_schema() -> Dict[str, Any]:

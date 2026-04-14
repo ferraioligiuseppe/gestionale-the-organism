@@ -4,13 +4,16 @@ from typing import Any, Dict, List
 
 from .providers.osteopatia import load_osteopatia_dataset
 from .providers.generic import load_generic_dataset, load_single_row
+from .providers.pnev_visiva import load_pnev_dataset, load_visiva_dataset
 
 # Sorgenti REALI rilevate dal tuo DB (public schema)
 AVAILABLE_SOURCES = [
     ("Osteopatia (auto)", "osteopatia"),
+    ("PNEV — Anamnesi, Questionari, Castagnini", "pnev"),
+    ("Valutazione Visiva Funzionale (VVF + Diagnosi)", "visiva_funzionale"),
     ("Anamnesi (generale)", "anamnesi"),
     ("Sedute (generale)", "sedute"),
-    ("Valutazioni visive", "valutazioni_visive"),
+    ("Valutazioni visive (raw)", "valutazioni_visive"),
     ("Relazioni cliniche", "relazioni_cliniche"),
     ("Documenti (metadati)", "documenti"),
     ("Consensi privacy", "consensi_privacy"),
@@ -41,6 +44,12 @@ def gather_dataset(conn, paziente_id: int, date_from: dt.date, date_to: dt.date,
 
     if "documenti" in sources:
         data["sezioni"].update(load_generic_dataset(conn, "documenti", paziente_id, date_from, date_to, include_deleted=include_deleted, limit=100))
+
+    if "pnev" in sources:
+        data["sezioni"].update(load_pnev_dataset(conn, paziente_id, date_from, date_to, include_deleted=include_deleted))
+
+    if "visiva_funzionale" in sources:
+        data["sezioni"].update(load_visiva_dataset(conn, paziente_id, date_from, date_to, include_deleted=include_deleted))
 
     if "consensi_privacy" in sources:
         # spesso basta l'ultimo consenso
