@@ -182,13 +182,9 @@ def _get_columns(conn, table_name: str):
     except Exception:
         return []
 
+@st.cache_data(ttl=300, show_spinner=False)
 def _detect_patient_table_and_cols(conn):
-    """Rileva tabella pazienti — cache 5min session_state."""
-    import time
-    _ck = "_detect_table_cache"; _tk = "_detect_table_ts"
-    now = time.time()
-    if _ck in st.session_state and _tk in st.session_state and now - st.session_state[_tk] < 300:
-        return st.session_state[_ck]
+    """Rileva tabella pazienti — cache 5 minuti, cambia raramente."""
     table_candidates = [
         'pazienti','Pazienti','patients','Patients','patienti','Patienti',
         'anagrafica_pazienti','Anagrafica_Pazienti','tbl_pazienti','Tbl_Pazienti'
@@ -243,20 +239,12 @@ def _detect_patient_table_and_cols(conn):
         dnc = pick(cols, dn_cols)
         sc  = pick(cols, scuola_cols)
         ec  = pick(cols, eta_cols)
-        _r2 = table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
-        st.session_state[_ck] = _r2; st.session_state[_tk] = time.time()
-        return _r2
-    _r = None, {}
-    st.session_state[_ck] = _r; st.session_state[_tk] = time.time()
-    return _r
+        return table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
+    return None, {}
 
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_pazienti_for_select(conn, limit=5000):
-    """Lista pazienti con cache 30s in session_state — evita query ripetute ad ogni click."""
-    import time
-    _ck2 = "_pazienti_cache"; _tk2 = "_pazienti_ts"
-    now = time.time()
-    if _ck2 in st.session_state and _tk2 in st.session_state and now - st.session_state[_tk2] < 30:
-        return st.session_state[_ck2]
+    """Lista pazienti con cache 30 secondi — evita query ripetute ad ogni click."""
     table, colmap = _detect_patient_table_and_cols(conn)
     if not table:
         return [], None, None
@@ -289,9 +277,7 @@ def fetch_pazienti_for_select(conn, limit=5000):
         while len(r) < 6:
             r.append('')
         out.append(tuple(r[:6]))
-    result2 = out, table, colmap
-    st.session_state[_ck2] = result2; st.session_state[_tk2] = time.time()
-    return result2
+    return out, table, colmap
 
 
 # ---------- DEBUG DB (non mostra credenziali) ----------
@@ -5353,52 +5339,22 @@ def ui_anamnesi():
             st.error(f"Errore questionari PNEV: {e}")
             _q_summary_new = ""
 
-    # ── INPP Neuromotorio (nuova valutazione) ────────────────────────────────
-    _inpp_key_new = f"inpp_new_{paz_id}"
-    if _inpp_key_new not in st.session_state:
-        st.session_state[_inpp_key_new] = {}
-    try:
-        from modules.pnev.ui_inpp_neuromotorio import render_inpp_neuromotorio
-        _inpp_data_new, _inpp_sum_new = render_inpp_neuromotorio(
-            data_json=st.session_state[_inpp_key_new],
-            prefix=f"inpp_new_{paz_id}",
-        )
-        st.session_state[_inpp_key_new] = _inpp_data_new
-    except Exception as e:
-        st.error(f"Errore modulo INPP: {e}")
-        _inpp_data_new = {}
-
-    # ── Miofunzionale (nuova valutazione) ───────────────────────────────────
-    _mft_key_new = f"mft_new_{paz_id}"
-    if _mft_key_new not in st.session_state:
-        st.session_state[_mft_key_new] = {}
-    try:
-        from modules.pnev.ui_miofunzionale import render_miofunzionale
-        _mft_data_new, _mft_sum_new = render_miofunzionale(
-            data_json=st.session_state[_mft_key_new],
-            prefix=f"mft_new_{paz_id}",
-        )
-        st.session_state[_mft_key_new] = _mft_data_new
-    except Exception as e:
-        st.error(f"Errore modulo Miofunzionale: {e}")
-        _mft_data_new = {}
-
     # ── Scenario clinico (calcolato in tempo reale dai dati Catagnini) ────────
     st.markdown("---")
-    st.markdown("#### 🧠 Scenario clinico (dal profilo anamnestico)")
-    try:
-        from modules.pnev.scenario_engine import render_scenario_ui
-        _cat_for_scenario = st.session_state.get(_cat_pnev_key, {})
-        if _cat_for_scenario:
-            render_scenario_ui(
-                pnev_json=_cat_for_scenario,
-                data_nascita=None,
-                eta_mesi_override=None,
-            )
-        else:
-            st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
-    except Exception as _sc_err:
-        st.warning(f"Scenario non disponibile: {_sc_err}")
+    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
+        try:
+            from modules.pnev.scenario_engine import render_scenario_ui
+            _cat_for_scenario = st.session_state.get(_cat_pnev_key, {})
+            if _cat_for_scenario:
+                render_scenario_ui(
+                    pnev_json=_cat_for_scenario,
+                    data_nascita=None,
+                    eta_mesi_override=None,
+                )
+            else:
+                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
+        except Exception as _sc_err:
+            st.warning(f"Scenario non disponibile: {_sc_err}")
 
     # ── Form di salvataggio (solo campi non-interattivi + bottone) ───────────
     with st.form("nuova_pnev"):
@@ -5411,16 +5367,6 @@ def ui_anamnesi():
             pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
         except Exception:
             pass
-        # merge INPP neuromotorio
-        _inpp_state_new = st.session_state.get(f"inpp_new_{paz_id}", {})
-        if _inpp_state_new:
-            pnev_data_new["inpp_neuromotorio"] = _inpp_state_new
-
-        # merge Miofunzionale
-        _mft_state_new = st.session_state.get(f"mft_new_{paz_id}", {})
-        if _mft_state_new:
-            pnev_data_new["miofunzionale"] = _mft_state_new
-
         # merge questionari PNEV (Melillo, Fisher, Visione)
         _q_state_new = st.session_state.get(f"questionari_new_{paz_id}", {})
         if isinstance(_q_state_new, dict) and _q_state_new.get("questionari"):
@@ -5629,8 +5575,7 @@ def ui_anamnesi():
 
     # ── Scenario clinico (modifica) ──────────────────────────────────────────
     st.markdown("---")
-    st.markdown("#### 🧠 Scenario clinico (dal profilo anamnestico)")
-    if True:  # blocco inline invece di expander
+    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
         try:
             from modules.pnev.scenario_engine import render_scenario_ui
             _cat_for_sc_edit = st.session_state.get(_cat_edit_key, {})
@@ -5652,36 +5597,6 @@ def ui_anamnesi():
                 st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
         except Exception as _sc_edit_err:
             st.warning(f"Scenario non disponibile: {_sc_edit_err}")
-
-    # ── Miofunzionale (modifica) ─────────────────────────────────────────────
-    _mft_key_m = f"mft_edit_{an_id}"
-    if _mft_key_m not in st.session_state:
-        st.session_state[_mft_key_m] = pnev_existing.get("miofunzionale", {})
-    try:
-        from modules.pnev.ui_miofunzionale import render_miofunzionale
-        _mft_data_m, _mft_sum_m = render_miofunzionale(
-            data_json=st.session_state[_mft_key_m],
-            prefix=f"mft_{an_id}",
-        )
-        st.session_state[_mft_key_m] = _mft_data_m
-    except Exception as e:
-        st.error(f"Errore modulo Miofunzionale: {e}")
-        _mft_data_m = {}
-
-    # ── INPP Neuromotorio (modifica) ─────────────────────────────────────────
-    _inpp_key_m = f"inpp_edit_{an_id}"
-    if _inpp_key_m not in st.session_state:
-        st.session_state[_inpp_key_m] = pnev_existing.get("inpp_neuromotorio", {})
-    try:
-        from modules.pnev.ui_inpp_neuromotorio import render_inpp_neuromotorio
-        _inpp_data_m, _inpp_sum_m = render_inpp_neuromotorio(
-            data_json=st.session_state[_inpp_key_m],
-            prefix=f"inpp_{an_id}",
-        )
-        st.session_state[_inpp_key_m] = _inpp_data_m
-    except Exception as e:
-        st.error(f"Errore modulo INPP: {e}")
-        _inpp_data_m = {}; _inpp_sum_m = ""
 
     # ── Form di salvataggio ───────────────────────────────────────────────────
     with st.form("modifica_pnev"):
@@ -5705,16 +5620,6 @@ def ui_anamnesi():
                 pnev_data_m.setdefault("questionari", {}).update(
                     _q_state_m.get("questionari", {})
                 )
-
-            # merge Miofunzionale
-            _mft_state = st.session_state.get(f"mft_edit_{an_id}", {})
-            if _mft_state:
-                pnev_data_m["miofunzionale"] = _mft_state
-
-            # merge INPP neuromotorio
-            _inpp_state = st.session_state.get(f"inpp_edit_{an_id}", {})
-            if _inpp_state:
-                pnev_data_m["inpp_neuromotorio"] = _inpp_state
 
             if isinstance(_cat_state, dict) and _cat_state.get("anamnesi_catagnini"):
                 pnev_data_m["anamnesi_catagnini"] = _cat_state["anamnesi_catagnini"]
@@ -11188,8 +11093,9 @@ except Exception:
     DocxTemplate = None
 
 def _ensure_relazioni_cliniche_table(conn):
-    """Crea la tabella relazioni_cliniche con colonne AI: stato, contenuto_json, pdf_bytes."""
+    """Crea la tabella relazioni_cliniche sia su SQLite che su PostgreSQL (Neon)."""
     cur = conn.cursor()
+    # Prova prima sintassi PostgreSQL (psycopg2)
     try:
         cur.execute("""
         CREATE TABLE IF NOT EXISTS relazioni_cliniche (
@@ -11198,25 +11104,12 @@ def _ensure_relazioni_cliniche_table(conn):
           tipo TEXT NOT NULL,
           titolo TEXT NOT NULL,
           data_relazione DATE NOT NULL,
-          docx_path TEXT DEFAULT '',
-          pdf_path TEXT DEFAULT '',
+          docx_path TEXT NOT NULL,
+          pdf_path TEXT NOT NULL,
           note TEXT,
-          stato TEXT DEFAULT 'bozza',
-          contenuto_json TEXT,
-          pdf_bytes BYTEA,
-          professionista TEXT,
-          fonte_dati TEXT,
-          approvata_il TIMESTAMP,
           created_at TIMESTAMP NOT NULL DEFAULT NOW()
         )
         """)
-        for col, defn in [
-            ("stato","TEXT DEFAULT 'bozza'"),("contenuto_json","TEXT"),
-            ("pdf_bytes","BYTEA"),("professionista","TEXT"),
-            ("fonte_dati","TEXT"),("approvata_il","TIMESTAMP"),
-        ]:
-            try: cur.execute(f"ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS {col} {defn}")
-            except Exception: pass
         try:
             cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")

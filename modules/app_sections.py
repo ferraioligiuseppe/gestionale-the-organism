@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Costanti condivise per le sezioni del gestionale.
-Questo file riduce il rischio di refusi tra menu e routing.
-"""
+"""Costanti condivise per le sezioni del gestionale."""
 
 SECTION_PAZIENTI = "Pazienti"
 SECTION_PNEV = "Valutazione PNEV"
@@ -18,3 +16,25 @@ SECTION_IMPORT = " Import Pazienti"
 SECTION_UTENTI = " Utenti / Ruoli"
 SECTION_GAZE = " Eye Tracking"
 SECTION_READING_DOM = " Lettura Avanzata DOM"
+SECTION_TERAPIA = "🧠 Terapia"
+
+# ── Moduli gestionale_new_modules ─────────────────────────────────────
+SECTION_NPS_OLD     = "🧠 NPS Neuropsicologico"   # legacy, rimane per compatibilità
+SECTION_PIANO_VT    = "🎯 Piano Vision Therapy"
+SECTION_REPORT_PDF  = "📄 Report PDF Clinico"
+SECTION_DEM         = "🔢 DEM Interattivo"
+SECTION_KD          = "👁️ K-D Interattivo"
+SECTION_EXPORT      = "📊 Export Statistici"
+SECTION_SEED_DEMO   = "🧪 Caso Demo"
+
+# ── Nuove sezioni NPS / DSA / PSY ────────────────────────────────────
+SECTION_NPS         = "🧠 NPS — Valutazione Neuropsicologica"
+SECTION_DSA         = "📚 DSA — Apprendimento"
+SECTION_TEST_PSY    = "🔬 Test Psicologici"
+SECTION_FE          = "⚡ Funzioni Esecutive"
+
+# ── SaaS Admin ────────────────────────────────────────────────────────
+SECTION_SAAS_ADMIN  = "⚙️ Platform Admin"
+SECTION_MIO_STUDIO  = "🏥 Il mio studio"
+
+SECTION_SOMMINISTRAZIONE = "🖥️ Somministrazione Test"
