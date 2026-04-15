@@ -322,12 +322,14 @@ def studio_ha_modulo(piano: str, modulo: str) -> bool:
 # ══════════════════════════════════════════════════════════════════════
 
 def render_admin_saas(meta_conn) -> None:
-    """
-    Pannello di amministrazione SaaS.
-    Solo per admin della piattaforma (non per admin dei singoli studi).
-    """
-    _ensure_saas_tables(meta_conn)
+    """Pannello di amministrazione SaaS."""
     st.title("⚙️ The Organism Platform — Admin SaaS")
+    tabelle_ok = _ensure_saas_tables(meta_conn)
+    if not tabelle_ok:
+        st.warning(
+            "⚠️ Tabelle SaaS non ancora inizializzate. "
+            "Vai alla tab **🔧 Init DB** e clicca il pulsante per crearle."
+        )
     st.caption("Pannello riservato all'amministratore della piattaforma")
 
     tab_studi, tab_crea, tab_piani, tab_init = st.tabs([
@@ -423,64 +425,25 @@ def render_admin_saas(meta_conn) -> None:
 #  PANNELLO STUDIO — Gestione utenti del singolo studio
 # ══════════════════════════════════════════════════════════════════════
 
-def _ensure_saas_tables(conn) -> None:
-    """Crea le tabelle SaaS nel DB se non esistono. Sicuro da chiamare più volte."""
-    # Prima fai rollback per pulire eventuali transazioni abortite
-    try:
-        conn.rollback()
-    except Exception:
-        pass
-    tabelle = [
-        """CREATE TABLE IF NOT EXISTS studi (
-            id BIGSERIAL PRIMARY KEY,
-            codice TEXT UNIQUE DEFAULT 'studio_locale',
-            nome TEXT DEFAULT 'Studio',
-            email_admin TEXT DEFAULT '',
-            db_url TEXT DEFAULT '',
-            piano TEXT DEFAULT 'professional',
-            stato TEXT DEFAULT 'attivo',
-            created_at TIMESTAMP DEFAULT NOW(),
-            scadenza_piano DATE,
-            telefono TEXT,
-            indirizzo TEXT,
-            partita_iva TEXT,
-            note TEXT
-        )""",
-        """CREATE TABLE IF NOT EXISTS utenti_meta (
-            id BIGSERIAL PRIMARY KEY,
-            studio_id BIGINT DEFAULT 1,
-            email TEXT UNIQUE NOT NULL,
-            nome TEXT DEFAULT '',
-            cognome TEXT DEFAULT '',
-            ruolo TEXT DEFAULT 'clinico',
-            password_hash TEXT NOT NULL DEFAULT '',
-            salt TEXT NOT NULL DEFAULT '',
-            attivo BOOLEAN DEFAULT TRUE,
-            ultimo_accesso TIMESTAMP,
-            created_at TIMESTAMP DEFAULT NOW()
-        )""",
-        """CREATE TABLE IF NOT EXISTS abbonamenti (
-            id BIGSERIAL PRIMARY KEY,
-            studio_id BIGINT,
-            piano TEXT NOT NULL,
-            inizio DATE NOT NULL DEFAULT CURRENT_DATE,
-            fine DATE,
-            importo_mese NUMERIC(8,2),
-            stato TEXT DEFAULT 'attivo',
-            created_at TIMESTAMP DEFAULT NOW()
-        )""",
-    ]
+def _ensure_saas_tables(conn) -> bool:
+    """
+    Tenta di creare le tabelle SaaS usando una savepoint
+    per non sporcare la transazione corrente.
+    Ritorna True se le tabelle esistono, False altrimenti.
+    """
     try:
         cur = conn.cursor()
-        for sql in tabelle:
-            cur.execute(sql)
-        conn.commit()
-    except Exception as e:
+        cur.execute("SAVEPOINT sp_saas_check")
+        cur.execute("SELECT 1 FROM studi LIMIT 1")
+        cur.execute("RELEASE SAVEPOINT sp_saas_check")
+        return True
+    except Exception:
         try:
-            conn.rollback()
+            cur.execute("ROLLBACK TO SAVEPOINT sp_saas_check")
+            cur.execute("RELEASE SAVEPOINT sp_saas_check")
         except Exception:
             pass
-    return
+        return False
 
 
 
@@ -503,48 +466,24 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
         st.info("Per cambiare piano o per assistenza: **info@theorganism.it**")
 
     with tab_utenti:
-        # Crea tabella se non esiste — con autocommit esplicito
-        try:
-            cur = meta_conn.cursor()
-            cur.execute("ROLLBACK")
-        except Exception:
-            pass
-        try:
-            cur = meta_conn.cursor()
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS utenti_meta (
-                    id            BIGSERIAL PRIMARY KEY,
-                    studio_id     BIGINT DEFAULT 1,
-                    email         TEXT UNIQUE NOT NULL,
-                    nome          TEXT DEFAULT \'\',
-                    cognome       TEXT DEFAULT \'\',
-                    ruolo         TEXT DEFAULT \'clinico\',
-                    password_hash TEXT NOT NULL DEFAULT \'\',
-                    salt          TEXT NOT NULL DEFAULT \'\',
-                    attivo        BOOLEAN DEFAULT TRUE,
-                    ultimo_accesso TIMESTAMP,
-                    created_at    TIMESTAMP DEFAULT NOW()
-                )
-            """)
-            meta_conn.commit()
-        except Exception as ex_create:
-            try:
-                meta_conn.rollback()
-            except Exception:
-                pass
-            st.warning(f"Tabella utenti non ancora disponibile: {ex_create}")
-
-        rows = []
-        try:
-            cur = meta_conn.cursor()
-            cur.execute(
-                "SELECT nome, cognome, email, ruolo, attivo, ultimo_accesso "
-                "FROM utenti_meta WHERE studio_id = %s ORDER BY ruolo, cognome",
-                (studio_id,)
+        if not tabelle_ok:
+            st.info(
+                "Le tabelle SaaS non sono ancora state create. "
+                "Vai su **⚙️ Platform Admin → 🔧 Init DB** e clicca il pulsante."
             )
-            rows = cur.fetchall() or []
-        except Exception:
             rows = []
+        else:
+            rows = []
+            try:
+                cur = meta_conn.cursor()
+                cur.execute(
+                    "SELECT nome, cognome, email, ruolo, attivo, ultimo_accesso "
+                    "FROM utenti_meta WHERE studio_id = %s ORDER BY ruolo, cognome",
+                    (studio_id,)
+                )
+                rows = cur.fetchall() or []
+            except Exception:
+                rows = []
 
         if rows:
             try:
