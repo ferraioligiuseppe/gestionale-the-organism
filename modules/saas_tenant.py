@@ -425,26 +425,16 @@ def render_admin_saas(meta_conn) -> None:
 #  PANNELLO STUDIO — Gestione utenti del singolo studio
 # ══════════════════════════════════════════════════════════════════════
 
+
 def _ensure_saas_tables(conn) -> bool:
-    """
-    Tenta di creare le tabelle SaaS usando una savepoint
-    per non sporcare la transazione corrente.
-    Ritorna True se le tabelle esistono, False altrimenti.
-    """
+    """Non-op: verifica esistenza tabelle senza toccare la transazione."""
     try:
         cur = conn.cursor()
-        cur.execute("SAVEPOINT sp_saas_check")
-        cur.execute("SELECT 1 FROM studi LIMIT 1")
-        cur.execute("RELEASE SAVEPOINT sp_saas_check")
-        return True
+        cur.execute("SELECT to_regclass('public.studi')")
+        row = cur.fetchone()
+        return row and row[0] is not None
     except Exception:
-        try:
-            cur.execute("ROLLBACK TO SAVEPOINT sp_saas_check")
-            cur.execute("RELEASE SAVEPOINT sp_saas_check")
-        except Exception:
-            pass
         return False
-
 
 
 def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
