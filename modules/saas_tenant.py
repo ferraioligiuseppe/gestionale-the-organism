@@ -326,6 +326,7 @@ def render_admin_saas(meta_conn) -> None:
     Pannello di amministrazione SaaS.
     Solo per admin della piattaforma (non per admin dei singoli studi).
     """
+    _ensure_saas_tables(meta_conn)
     st.title("⚙️ The Organism Platform — Admin SaaS")
     st.caption("Pannello riservato all'amministratore della piattaforma")
 
@@ -423,42 +424,64 @@ def render_admin_saas(meta_conn) -> None:
 # ══════════════════════════════════════════════════════════════════════
 
 def _ensure_saas_tables(conn) -> None:
-    """Crea le tabelle SaaS nel DB corrente se non esistono ancora."""
+    """Crea le tabelle SaaS nel DB se non esistono. Sicuro da chiamare più volte."""
+    # Prima fai rollback per pulire eventuali transazioni abortite
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+    tabelle = [
+        """CREATE TABLE IF NOT EXISTS studi (
+            id BIGSERIAL PRIMARY KEY,
+            codice TEXT UNIQUE DEFAULT 'studio_locale',
+            nome TEXT DEFAULT 'Studio',
+            email_admin TEXT DEFAULT '',
+            db_url TEXT DEFAULT '',
+            piano TEXT DEFAULT 'professional',
+            stato TEXT DEFAULT 'attivo',
+            created_at TIMESTAMP DEFAULT NOW(),
+            scadenza_piano DATE,
+            telefono TEXT,
+            indirizzo TEXT,
+            partita_iva TEXT,
+            note TEXT
+        )""",
+        """CREATE TABLE IF NOT EXISTS utenti_meta (
+            id BIGSERIAL PRIMARY KEY,
+            studio_id BIGINT DEFAULT 1,
+            email TEXT UNIQUE NOT NULL,
+            nome TEXT DEFAULT '',
+            cognome TEXT DEFAULT '',
+            ruolo TEXT DEFAULT 'clinico',
+            password_hash TEXT NOT NULL DEFAULT '',
+            salt TEXT NOT NULL DEFAULT '',
+            attivo BOOLEAN DEFAULT TRUE,
+            ultimo_accesso TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS abbonamenti (
+            id BIGSERIAL PRIMARY KEY,
+            studio_id BIGINT,
+            piano TEXT NOT NULL,
+            inizio DATE NOT NULL DEFAULT CURRENT_DATE,
+            fine DATE,
+            importo_mese NUMERIC(8,2),
+            stato TEXT DEFAULT 'attivo',
+            created_at TIMESTAMP DEFAULT NOW()
+        )""",
+    ]
     try:
         cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS utenti_meta (
-                id BIGSERIAL PRIMARY KEY,
-                studio_id BIGINT DEFAULT 1,
-                email TEXT UNIQUE NOT NULL,
-                nome TEXT DEFAULT \'\',
-                cognome TEXT DEFAULT \'\',
-                ruolo TEXT DEFAULT \'clinico\',
-                password_hash TEXT NOT NULL DEFAULT \'\',
-                salt TEXT NOT NULL DEFAULT \'\',
-                attivo BOOLEAN DEFAULT TRUE,
-                ultimo_accesso TIMESTAMP,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS studi (
-                id BIGSERIAL PRIMARY KEY,
-                codice TEXT UNIQUE DEFAULT \'studio_locale\',
-                nome TEXT DEFAULT \'Studio\',
-                email_admin TEXT DEFAULT \'\',
-                db_url TEXT DEFAULT \'\',
-                piano TEXT DEFAULT \'professional\',
-                stato TEXT DEFAULT \'attivo\',
-                created_at TIMESTAMP DEFAULT NOW(),
-                scadenza_piano DATE,
-                note TEXT
-            )
-        """)
+        for sql in tabelle:
+            cur.execute(sql)
         conn.commit()
-    except Exception:
-        try: conn.rollback()
-        except Exception: pass
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    return
+
 
 
 def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
