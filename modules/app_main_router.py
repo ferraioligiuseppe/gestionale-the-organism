@@ -306,17 +306,18 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except Exception as e:
                 st.error(f"Modulo anamnesi non disponibile: {e}")
             return
-        if sotto == "👁️ Valutazione visiva (VVF)":
+        if sotto == "👁️ Valutazione visuo-percettiva":
             try:
-                from .sections.ui_cliniche import render_vision_section
-                render_vision_section()
+                from .ui_valutazione_visuo_percettiva import render_valutazione_visuo_percettiva
+                cur2 = conn.cursor()
+                cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
+                paz_rec = cur2.fetchone()
+                if paz_rec and not isinstance(paz_rec, dict):
+                    cols = [d[0] for d in cur2.description]
+                    paz_rec = dict(zip(cols, paz_rec))
+                render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
             except Exception as e:
-                st.warning(
-                    "La sezione Valutazione Visiva e' temporaneamente in manutenzione. "
-                    "Stiamo aggiornando il database. Riprova tra qualche minuto o "
-                    "contatta il supporto se il problema persiste."
-                )
-                st.caption(f"Dettaglio tecnico: {type(e).__name__}")
+                st.error(f"Errore valutazione visuo-percettiva: {e}")
             return
         if sotto == "🧠 NPS — Neuropsicologica":
             try:
@@ -557,7 +558,7 @@ def dispatch_main_section(*, sezione: str,
     _legacy_map = {
         "Pazienti":                      (AREA_PAZIENTI,    "👤 Anagrafica pazienti"),
         "Valutazione PNEV":              (AREA_VALUTAZIONE, "🔬 PNEV"),
-        "Valutazioni visive / oculistiche": (AREA_VALUTAZIONE, "👁️ Valutazione visiva (VVF)"),
+        "Valutazioni visive / oculistiche": (AREA_VALUTAZIONE, "👁️ Valutazione visuo-percettiva"),
         "Sedute / Terapie":              (AREA_PAZIENTI,    "📅 Sedute / Terapie"),
         "Osteopatia":                    (AREA_QUESTIONARI, "🦴 Osteopatia"),
         "Dashboard incassi":             (AREA_STUDIO,      "📊 Dashboard incassi"),
