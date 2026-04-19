@@ -297,8 +297,22 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if not paz_id:
             return
         if sotto == "🔬 PNEV":
-            from .pnev.ui_pnev import render_pnev_section
-            render_pnev_section(); return
+            paz_id2, _ = _seleziona_paziente(conn, "pnev2")
+            if paz_id2:
+                pnev_tab, anamnesi_tab = st.tabs([
+                    "Valutazione PNEV",
+                    "Anamnesi The Organism",
+                ])
+                with pnev_tab:
+                    from .pnev.ui_pnev import render_pnev_section
+                    render_pnev_section()
+                with anamnesi_tab:
+                    try:
+                        from .ui_anamnesi_the_organism import render_anamnesi_the_organism
+                        render_anamnesi_the_organism(conn, paz_id2)
+                    except Exception as e:
+                        st.error(f"Modulo anamnesi non disponibile: {e}")
+            return
         if sotto == "👁️ Valutazione visiva (VVF)":
             from .sections.ui_cliniche import render_vision_section
             render_vision_section(); return
