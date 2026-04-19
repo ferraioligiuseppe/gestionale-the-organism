@@ -274,9 +274,12 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             try:
                 from .ui_anagrafica import render_anagrafica
                 render_anagrafica(conn)
-            except ImportError:
-                from .pazienti import render_pazienti_section
-                render_pazienti_section()
+            except Exception:
+                try:
+                    from .pazienti import render_pazienti_section
+                    render_pazienti_section()
+                except Exception as e2:
+                    st.error(f"Anagrafica non disponibile: {e2}")
             return
         if sotto == "📅 Sedute / Terapie":
             from .sections.ui_cliniche import render_sedute_section
@@ -455,8 +458,12 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Modulo Studio non disponibile: {e}")
             return
         if sotto == "👥 Utenti / Ruoli":
-            from .sections.ui_cliniche import render_utenti_section
-            render_utenti_section(lambda: conn); return
+            try:
+                from .ui_gestione_utenti import render_gestione_utenti
+                render_gestione_utenti(conn, is_admin)
+            except Exception as e:
+                st.error(f"Modulo gestione utenti non disponibile: {e}")
+            return
         if sotto == "⚙️ Platform Admin":
             try:
                 from .saas_tenant import render_admin_saas
