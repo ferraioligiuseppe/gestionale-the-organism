@@ -11100,81 +11100,16 @@ def main():
     if not login(get_connection):
         return
 
-    # menu laterale
-    st.sidebar.title("Navigazione")
-    sections = build_sections(is_admin(), APP_MODE)
-
-    nav_key = "main_nav_sezione"
-    if nav_key not in st.session_state:
-        st.session_state[nav_key] = SECTION_DASHBOARD if SECTION_DASHBOARD in sections else sections[0]
-
-    if "go_section" in st.session_state:
-        target = st.session_state.pop("go_section")
-        if target in sections:
-            st.session_state[nav_key] = target
-
-    sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
-
-    if sezione == "🔉 Diagnostica Uditiva":
-        if _ui_diag_uditiva:
-            _ui_diag_uditiva(conn=get_connection())
-        return
-
-    if sezione == "🎵 Stimolazione Passiva":
-        if _ui_stim_passiva:
-            _ui_stim_passiva(conn=get_connection())
-        return
-
-    # routing moduli uditivi (estratti)
-    try:
-        _udito_handled = dispatch_udito_section(
-            sezione=sezione,
-            app_mode=APP_MODE,
-            get_connection=get_connection,
-            paziente_selector_fn=_select_paziente_minimal,
-            ui_orl_eq=ui_orl_eq,
-            ui_generatore_stimolazione=ui_generatore_stimolazione,
-            ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
-            ui_audiogramma_test=ui_audiogramma_test,
-            ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
-            ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
-            ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
-            ui_db_cleanup=ui_db_cleanup,
-        )
-    except Exception as _udito_err:
-        import traceback
-        st.error(f"Errore sezione uditiva: {type(_udito_err).__name__}: {_udito_err}")
-        st.code(traceback.format_exc())
-        return
-    if _udito_handled:
-        return
-
-    # routing Lenti a contatto
-    if sezione == SECTION_LENTI_CONTATTO:
-        ui_lenti_contatto()
-        return
-
-    # routing Esami Strumentali
-    if sezione == SECTION_ESAMI_STRUM:
-        ui_esami_strumentali()
-        return
-
-    # routing Bilancio Uditivo
-    if sezione == SECTION_BILANCIO_UDITIVO:
-        ui_bilancio_uditivo()
-        return
-
-    # routing Audiometria Funzionale
-    if sezione == SECTION_AUDIOMETRIA_FUN:
-        ui_audiometria_funzionale()
-        return
-
-    # routing principale (estratto)
-    if dispatch_main_section(
-        sezione=sezione,
+    # ── NUOVO MENU A 7 AREE ──────────────────────────────────────────
+    from modules.app_main_router import build_smart_menu, dispatch_smart_section
+    area, sotto = build_smart_menu(is_admin=is_admin())
+    dispatch_smart_section(
+        area=area,
+        sotto=sotto,
         get_connection=get_connection,
-    ):
-        return
+        is_admin=is_admin(),
+    )
+    return
 
 
 # ================================
@@ -11514,4 +11449,3 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
                 st.download_button("Scarica PDF", f, file_name=os.path.basename(pdf_path), key=f"dp_{rel_key}_{pid}")
         else:
             st.info("PDF non disponibile in cloud: apri il Word e salva in PDF dal PC in studio.")
-
