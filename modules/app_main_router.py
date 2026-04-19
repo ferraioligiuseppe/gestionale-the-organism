@@ -352,6 +352,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except ImportError as e:
                 st.error(f"Modulo somministrazione non disponibile: {e}")
             return
+        if sotto == "👁️ Eye tracking":
+            from .sections.ui_cliniche import render_gaze_section
+            render_gaze_section(); return
 
     # ── AREA QUESTIONARI ──────────────────────────────────────────────
     elif area == AREA_QUESTIONARI:
@@ -432,9 +435,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except ImportError:
                 st.info("Modulo Audiometria Funzionale.")
             return
-        if sotto == "👁️ Eye tracking":
-            from .sections.ui_cliniche import render_gaze_section
-            render_gaze_section(); return
         if sotto == "📖 Lettura avanzata":
             try:
                 from .reading.ui_reading_dom import ui_reading_dom

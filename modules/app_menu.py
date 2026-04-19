@@ -55,6 +55,7 @@ SOTTOSEZIONI = {
         "🔢 DEM interattivo",
         "👁️ K-D interattivo",
         "🖥️ Somministrazione test",
+        "👁️ Eye tracking",
     ],
     AREA_QUESTIONARI: [
         "📋 Questionari remoti",
@@ -74,7 +75,6 @@ SOTTOSEZIONI = {
         "🎵 Stimolazione passiva",
         "🎧 Bilancio uditivo",
         "📊 Audiometria funzionale",
-        "👁️ Eye tracking",
         "📖 Lettura avanzata",
     ],
     AREA_STUDIO: [
