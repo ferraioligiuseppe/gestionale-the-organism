@@ -12,6 +12,7 @@ from .app_sections import (
     SECTION_NPS, SECTION_DSA, SECTION_TEST_PSY, SECTION_FE,
     SECTION_SAAS_ADMIN, SECTION_MIO_STUDIO,
     SECTION_SOMMINISTRAZIONE,
+    SECTION_QUESTIONARI,
 )
 
 SECTION_LENTI_CONTATTO = "👁️ Lenti a contatto"
@@ -36,10 +37,12 @@ BASE_SECTIONS = [
     SECTION_IMPORT,
     SECTION_GAZE,
     # ── Valutazioni cognitive / DSA / PSY ──────────────────────────
+    SECTION_QUESTIONARI,
     SECTION_NPS,
     SECTION_DSA,
     SECTION_FE,
     SECTION_SOMMINISTRAZIONE,
+    SECTION_QUESTIONARI,
     SECTION_TEST_PSY,
     # ── Strumenti VT e report ───────────────────────────────────────
     SECTION_DEM,

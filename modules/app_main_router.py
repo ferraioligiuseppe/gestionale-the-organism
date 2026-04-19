@@ -14,7 +14,8 @@ from .app_sections import (
     SECTION_DEM, SECTION_KD, SECTION_EXPORT, SECTION_SEED_DEMO,
     SECTION_NPS, SECTION_DSA, SECTION_TEST_PSY, SECTION_FE,
     SECTION_SAAS_ADMIN,
-    SECTION_SOMMINISTRAZIONE, SECTION_MIO_STUDIO,
+    SECTION_SOMMINISTRAZIONE,
+    SECTION_QUESTIONARI, SECTION_MIO_STUDIO,
 )
 from .pazienti import render_pazienti_section
 from .anamnesi import render_anamnesi_section
@@ -191,6 +192,16 @@ def dispatch_main_section(*, sezione: str, get_connection: Callable[..., Any]) -
         render_nuovi_moduli(conn=get_connection(),
                             sezione=mappa[sezione],
                             paziente_id=paz_id)
+        return True
+
+    if sezione == SECTION_QUESTIONARI:
+        try:
+            from .ui_questionari import render_questionari_section
+        except ImportError as e:
+            st.error(f"Modulo questionari non disponibile: {e}"); return True
+        paz_id = _seleziona_paziente(get_connection(), "qsec")
+        if paz_id:
+            render_questionari_section(get_connection(), paz_id)
         return True
 
     if sezione == SECTION_SOMMINISTRAZIONE:
