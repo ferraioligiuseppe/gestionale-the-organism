@@ -56,22 +56,115 @@ def _seleziona_paziente(conn, key_suffix: str = "") -> tuple[int | None, str]:
 #  DASHBOARD HOME
 # ══════════════════════════════════════════════════════════════════════
 
+def _fmt_data(raw) -> str:
+    """Formatta data in italiano: 19 Apr 2026"""
+    try:
+        import datetime as _dt
+        s = str(raw)[:10]
+        d = _dt.date.fromisoformat(s)
+        mesi = ["","Gen","Feb","Mar","Apr","Mag","Giu",
+                "Lug","Ago","Set","Ott","Nov","Dic"]
+        return f"{d.day} {mesi[d.month]} {d.year}"
+    except Exception:
+        return str(raw)[:10] if raw else "—"
+
+
+def _seleziona_paziente_card(conn) -> tuple:
+    """Selettore paziente con formato pulito (solo Cognome Nome)."""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, Cognome, Nome, Data_Nascita, Email "
+            "FROM Pazienti WHERE COALESCE(Stato_Paziente,'ATTIVO')='ATTIVO' "
+            "ORDER BY Cognome, Nome"
+        )
+        rows = cur.fetchall() or []
+    except Exception:
+        return None, "", {}
+
+    if not rows:
+        st.info("Nessun paziente registrato.")
+        return None, "", {}
+
+    def _label(r):
+        if isinstance(r, dict):
+            c = r.get("Cognome",""); n = r.get("Nome","")
+            dn = r.get("Data_Nascita","")
+        else:
+            c, n = r[1], r[2]
+            dn = r[3] if len(r) > 3 else ""
+        eta = ""
+        if dn:
+            try:
+                import datetime as _dt
+                anni = (_dt.date.today() - _dt.date.fromisoformat(str(dn)[:10])).days // 365
+                eta = f"  ({anni} anni)"
+            except Exception:
+                pass
+        return f"{c} {n}{eta}"
+
+    sel = st.selectbox(
+        "Seleziona paziente",
+        options=rows,
+        format_func=_label,
+        key="paz_home_card",
+        label_visibility="collapsed",
+    )
+    if isinstance(sel, dict):
+        pid = int(sel.get("id"))
+        info = sel
+    else:
+        pid = int(sel[0])
+        cols_names = ["id","Cognome","Nome","Data_Nascita","Email"]
+        info = dict(zip(cols_names, sel))
+    return pid, _label(sel), info
+
+
 def _render_dashboard(conn) -> None:
     """Dashboard home — riepilogo paziente corrente."""
-    st.title("🏠 The Organism — Gestionale")
 
-    paz_id, paz_label = _seleziona_paziente(conn, "home")
+    # ── Intestazione ─────────────────────────────────────────────────
+    st.markdown(
+        "<h2 style='margin-bottom:4px'>🏠 The Organism</h2>"
+        "<p style='color:#8b949e;margin-top:0'>Seleziona un paziente</p>",
+        unsafe_allow_html=True
+    )
+
+    paz_id, paz_label, paz_info = _seleziona_paziente_card(conn)
     if not paz_id:
         return
 
-    st.markdown(f"### {paz_label}")
-    st.markdown("---")
+    # ── Card paziente ────────────────────────────────────────────────
+    cognome  = paz_info.get("Cognome","")
+    nome     = paz_info.get("Nome","")
+    dn_raw   = paz_info.get("Data_Nascita","")
+    email    = paz_info.get("Email","") or "—"
+    dn_fmt   = _fmt_data(dn_raw)
 
+    try:
+        import datetime as _dt
+        eta = (_dt.date.today() - _dt.date.fromisoformat(str(dn_raw)[:10])).days // 365
+        eta_str = f"{eta} anni"
+    except Exception:
+        eta_str = ""
+
+    st.markdown(f"""
+<div style="background:var(--color-background-secondary);
+     border:1px solid var(--color-border-tertiary);
+     border-radius:12px;padding:20px 24px;margin:8px 0 20px 0">
+  <div style="font-size:1.6rem;font-weight:700;color:var(--color-text-primary)">
+    {cognome} {nome}
+  </div>
+  <div style="color:#8b949e;font-size:.95rem;margin-top:4px">
+    Nato il {dn_fmt} &nbsp;·&nbsp; {eta_str} &nbsp;·&nbsp; {email}
+  </div>
+</div>""", unsafe_allow_html=True)
+
+    # ── Tre colonne info ─────────────────────────────────────────────
     col1, col2, col3 = st.columns(3)
 
-    # ── Ultima seduta ─────────────────────────────────────────────────
     with col1:
-        st.markdown("#### 📅 Ultima seduta")
+        st.markdown("**📅 Ultima seduta**")
         try:
             cur = conn.cursor()
             cur.execute(
@@ -81,21 +174,20 @@ def _render_dashboard(conn) -> None:
             )
             s = cur.fetchone()
             if s:
-                data = s[0] if not isinstance(s, dict) else s.get("Data_Ora","")
-                tipo = s[1] if not isinstance(s, dict) else s.get("Tipo","")
-                st.info(f"{str(data)[:10]}\n\n{tipo or '—'}")
+                data = _fmt_data(s[0] if not isinstance(s, dict) else s.get("Data_Ora",""))
+                tipo = (s[1] if not isinstance(s, dict) else s.get("Tipo","")) or "—"
+                st.info(f"**{data}** — {tipo}")
             else:
-                st.caption("Nessuna seduta registrata")
+                st.caption("Nessuna seduta")
         except Exception:
             st.caption("—")
 
-    # ── Questionari in attesa ─────────────────────────────────────────
     with col2:
-        st.markdown("#### 📋 Questionari")
+        st.markdown("**📋 Questionari**")
         try:
             cur = conn.cursor()
             cur.execute(
-                "SELECT questionario, created_at, used_at, expires_at "
+                "SELECT questionario, used_at, expires_at "
                 "FROM questionari_links "
                 "WHERE paziente_id=%s ORDER BY created_at DESC LIMIT 5",
                 (paz_id,)
@@ -104,21 +196,24 @@ def _render_dashboard(conn) -> None:
             if links:
                 for lk in links:
                     if isinstance(lk, dict):
-                        q = lk.get("questionario","")
+                        q    = lk.get("questionario","")
                         used = lk.get("used_at")
-                        exp  = str(lk.get("expires_at",""))[:10]
+                        exp  = lk.get("expires_at","")
                     else:
-                        q, _, used, exp = lk[0], lk[1], lk[2], str(lk[3])[:10]
-                    stato = "✅ compilato" if used else f"⏳ scade {exp}"
-                    st.caption(f"**{q}** — {stato}")
+                        q, used, exp = lk[0], lk[1], lk[2]
+                    q_clean = q.replace("_"," ").title()
+                    if used:
+                        st.markdown(f"✅ &nbsp;{q_clean}", unsafe_allow_html=True)
+                    else:
+                        exp_fmt = _fmt_data(exp)
+                        st.markdown(f"⏳ {q_clean} — scade {exp_fmt}", unsafe_allow_html=True)
             else:
-                st.caption("Nessun link generato")
+                st.caption("Nessun link inviato")
         except Exception:
             st.caption("—")
 
-    # ── Ultimi test ───────────────────────────────────────────────────
     with col3:
-        st.markdown("#### 🔬 Ultimi test")
+        st.markdown("**🔬 Ultimi test**")
         try:
             cur = conn.cursor()
             cur.execute(
@@ -130,17 +225,16 @@ def _render_dashboard(conn) -> None:
             if tests:
                 for t in tests:
                     nome = t[0] if not isinstance(t, dict) else t.get("nome_test","")
-                    data = str(t[1] if not isinstance(t, dict) else t.get("data_somm",""))[:10]
-                    st.caption(f"**{nome}** — {data}")
+                    data = _fmt_data(t[1] if not isinstance(t, dict) else t.get("data_somm",""))
+                    st.markdown(f"**{nome}** — {data}")
             else:
                 st.caption("Nessun test registrato")
         except Exception:
             st.caption("—")
 
+    # ── Anamnesi ─────────────────────────────────────────────────────
     st.markdown("---")
-
-    # ── Anamnesi / questionari compilati ──────────────────────────────
-    st.markdown("#### 📊 Riepilogo valutazioni")
+    st.markdown("**📊 Riepilogo valutazioni**")
     try:
         cur = conn.cursor()
         cur.execute(
@@ -151,15 +245,15 @@ def _render_dashboard(conn) -> None:
         )
         an = cur.fetchone()
         if an:
-            data_an = str(an[0] if not isinstance(an, dict) else an.get("data_anamnesi",""))[:10]
+            data_an = _fmt_data(an[0] if not isinstance(an, dict) else an.get("data_anamnesi",""))
             motivo  = (an[1] if not isinstance(an, dict) else an.get("motivo","")) or "—"
             summary = (an[2] if not isinstance(an, dict) else an.get("pnev_summary","")) or ""
             st.success(f"Ultima anamnesi: **{data_an}** — {motivo}")
             if summary:
-                with st.expander("Sintesi anamnesi"):
+                with st.expander("Leggi sintesi"):
                     st.markdown(summary[:800] + ("…" if len(summary) > 800 else ""))
         else:
-            st.info("Nessuna anamnesi registrata per questo paziente.")
+            st.info("Nessuna anamnesi registrata.")
     except Exception:
         st.caption("—")
 
