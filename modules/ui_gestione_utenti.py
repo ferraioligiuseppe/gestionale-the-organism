@@ -54,11 +54,11 @@ def _get_role_id(conn, role_name: str):
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
-def render_gestione_utenti(conn, is_admin_fn) -> None:
+def render_gestione_utenti(conn, is_admin) -> None:
     """Entry point - blocca accesso se non admin."""
 
     # CONTROLLO ADMIN - doppio livello
-    if not is_admin_fn():
+    if not is_admin:
         st.error("Accesso negato. Questa sezione e' riservata agli amministratori.")
         st.stop()
         return
