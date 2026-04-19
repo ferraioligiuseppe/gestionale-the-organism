@@ -161,7 +161,7 @@ def render_form_nuovo_paziente(conn) -> None:
         canale_wa    = st.checkbox("WhatsApp", value=True,  key="np_ch_wa")
 
     note_priv = st.text_area("Note privacy (facoltative)", key="np_note_priv",
-                              height=60)
+                              height=80)
 
     st.markdown("---")
     if st.button("Salva paziente", type="primary", key="np_salva"):
