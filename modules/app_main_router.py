@@ -307,8 +307,17 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Modulo anamnesi non disponibile: {e}")
             return
         if sotto == "👁️ Valutazione visiva (VVF)":
-            from .sections.ui_cliniche import render_vision_section
-            render_vision_section(); return
+            try:
+                from .sections.ui_cliniche import render_vision_section
+                render_vision_section()
+            except Exception as e:
+                st.warning(
+                    "La sezione Valutazione Visiva e' temporaneamente in manutenzione. "
+                    "Stiamo aggiornando il database. Riprova tra qualche minuto o "
+                    "contatta il supporto se il problema persiste."
+                )
+                st.caption(f"Dettaglio tecnico: {type(e).__name__}")
+            return
         if sotto == "🧠 NPS — Neuropsicologica":
             try:
                 from .ui_nps_completo import render_nps_completo
