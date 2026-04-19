@@ -38,3 +38,5 @@ SECTION_SAAS_ADMIN  = "⚙️ Platform Admin"
 SECTION_MIO_STUDIO  = "🏥 Il mio studio"
 
 SECTION_SOMMINISTRAZIONE = "🖥️ Somministrazione Test"
+
+SECTION_QUESTIONARI    = "📋 Questionari Remoti"
