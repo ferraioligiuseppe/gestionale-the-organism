@@ -44,6 +44,7 @@ SOTTOSEZIONI = {
     ],
     AREA_VALUTAZIONE: [
         "🔬 PNEV",
+        "📋 Anamnesi The Organism",
         "👁️ Valutazione visiva (VVF)",
         "🧠 NPS — Neuropsicologica",
         "📚 DSA — Apprendimento",
