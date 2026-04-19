@@ -271,8 +271,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             _render_dashboard(conn)
             return
         if sotto == "👤 Anagrafica pazienti":
-            from .pazienti import render_pazienti_section
-            render_pazienti_section(); return
+            try:
+                from .ui_anagrafica import render_anagrafica
+                render_anagrafica(conn)
+            except ImportError:
+                from .pazienti import render_pazienti_section
+                render_pazienti_section()
+            return
         if sotto == "📅 Sedute / Terapie":
             from .sections.ui_cliniche import render_sedute_section
             render_sedute_section(); return
