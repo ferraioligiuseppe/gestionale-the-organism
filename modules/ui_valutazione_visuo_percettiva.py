@@ -308,10 +308,10 @@ def _sez_b(pid, stored):
     c7,c8 = st.columns(2)
     with c7:
         jv_16 = _num("#16 Jump 16BO/4BI (c/min)", s("jv_16"),
-                      d.get("jv_16",0), step=1, fmt="%.0f")
+                      d.get("jv_16",0), step=1.0, fmt="%.0f")
     with c8:
         jv_8  = _num("#17 Jump 8BO/8BI (c/min)",  s("jv_8"),
-                      d.get("jv_8",0), step=1, fmt="%.0f")
+                      d.get("jv_8",0), step=1.0, fmt="%.0f")
 
     # PPC
     st.markdown("#### PPC — Punto Prossimo di Convergenza")
@@ -398,9 +398,9 @@ def _sez_c(pid, stored):
     c1,c2 = st.columns(2)
     with c1:
         fl_od = _num("Flipper +/-2.00 OD (c/30sec)", s("fl_od"),
-                      d.get("fl_od",0), step=1, fmt="%.0f")
+                      d.get("fl_od",0), step=1.0, fmt="%.0f")
         fl_os = _num("Flipper +/-2.00 OS (c/30sec)", s("fl_os"),
-                      d.get("fl_os",0), step=1, fmt="%.0f")
+                      d.get("fl_os",0), step=1.0, fmt="%.0f")
     with c2:
         fl_diff_od = st.multiselect("Difficolta OD", ["Con +","Con -","Entrambi"],
                                      default=d.get("fl_diff_od",[]),
@@ -485,14 +485,14 @@ def _sez_d(pid, stored):
 
     st.markdown("#### Visual Tracking Test")
     c6,c7,c8 = st.columns(3)
-    with c6: vtt_tempo  = _num("Tempo (sec)", s("vtt_t"), d.get("vtt_t",0), step=1, fmt="%.0f")
+    with c6: vtt_tempo  = _num("Tempo (sec)", s("vtt_t"), d.get("vtt_t",0), step=1.0, fmt="%.0f")
     with c7: vtt_errori = st.number_input("Errori", value=int(d.get("vtt_e",0)),
                                            min_value=0, step=1, key=s("vtt_e"))
     with c8: vtt_score  = _txt("Score/Livello", s("vtt_s"), d.get("vtt_s",""))
 
     st.markdown("#### Test linee intrecciate (Tracking)")
     c9,c10 = st.columns(2)
-    with c9:  lin_tempo  = _num("Tempo (sec)", s("lin_t"), d.get("lin_t",0), step=1, fmt="%.0f")
+    with c9:  lin_tempo  = _num("Tempo (sec)", s("lin_t"), d.get("lin_t",0), step=1.0, fmt="%.0f")
     with c10: lin_errori = st.number_input("Errori", value=int(d.get("lin_e",0)),
                                             min_value=0, step=1, key=s("lin_e"))
 
