@@ -64,9 +64,14 @@ def _salva(conn, pid, dati):
         st.error(f"Errore: {e}")
 
 def _num(label, key, val=0.0, step=0.25, fmt="%.2f", mn=None, mx=None):
-    kw = {"value": float(val or 0), "step": step, "format": fmt, "key": key}
-    if mn is not None: kw["min_value"] = mn
-    if mx is not None: kw["max_value"] = mx
+    # Assicura coerenza di tipo tra value e step
+    if isinstance(step, int):
+        v = int(float(val or 0))
+    else:
+        v = float(val or 0)
+    kw = {"value": v, "step": step, "format": fmt, "key": key}
+    if mn is not None: kw["min_value"] = type(v)(mn)
+    if mx is not None: kw["max_value"] = type(v)(mx)
     return st.number_input(label, **kw)
 
 def _txt(label, key, val="", h=None):
