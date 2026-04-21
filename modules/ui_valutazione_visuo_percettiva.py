@@ -145,9 +145,7 @@ def _intestazione(pid, paziente, stored):
         data_vis = st.date_input("Data visita",
                                   value=datetime.date.today(), key=s("data"))
     with c4:
-        professionista = st.text_input("Professionista",
-                                        value=d.get("professionista") or _prof(),
-                                        key=s("prof"))
+        _prof_placeholder = d.get("professionista") or _prof()
 
     # Selettore professionista dal DB
     st.markdown("**Professionista che esegue la valutazione:**")
@@ -202,7 +200,7 @@ def _intestazione(pid, paziente, stored):
         # Fallback campo testo
         professionista = st.text_input(
             "Professionista", value=d.get("professionista") or _prof(),
-            key=s("prof"), label_visibility="collapsed")
+            key=s("prof_fb"), label_visibility="collapsed")
         titolo_sel = _titolo_prof()
 
     c5, c6, c7 = st.columns(3)
