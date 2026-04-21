@@ -1699,14 +1699,27 @@ def login(get_conn) -> bool:
 
         _audit(conn, user_id, "LOGIN_SUCCESS", meta={"roles": roles})
 
-        # Carica display_name da DB
+        # Carica display_name e profilo_json da DB
         _display_name = ""
+        _profilo = {}
         try:
             _dn_cur = conn.cursor()
-            _dn_cur.execute("SELECT display_name FROM auth_users WHERE id=%s", (user_id,))
+            _dn_cur.execute(
+                "SELECT display_name, profilo_json FROM auth_users WHERE id=%s",
+                (user_id,))
             _dn_row = _dn_cur.fetchone()
             if _dn_row:
-                _display_name = (_dn_row["display_name"] if isinstance(_dn_row,dict) else _dn_row[0]) or ""
+                if isinstance(_dn_row, dict):
+                    _display_name = _dn_row.get("display_name","") or ""
+                    _raw_profilo  = _dn_row.get("profilo_json") or {}
+                else:
+                    _display_name = _dn_row[0] or ""
+                    _raw_profilo  = _dn_row[1] or {}
+                import json as _json
+                _profilo = _raw_profilo if isinstance(_raw_profilo,dict) else _json.loads(_raw_profilo or "{}")
+                # display_name dal profilo se non impostato
+                if not _display_name and _profilo.get("display_name"):
+                    _display_name = _profilo["display_name"]
         except Exception:
             pass
 
@@ -1718,6 +1731,10 @@ def login(get_conn) -> bool:
             "roles": roles,
             "must_change_password": bool(must_change),
             "display_name": _display_name,
+            "specializzazioni": _profilo.get("specializzazioni",""),
+            "titolo": _profilo.get("titolo",""),
+            "nome": _profilo.get("nome",""),
+            "profilo": _profilo,
         }
         st.success("Accesso effettuato.")
         st.rerun()

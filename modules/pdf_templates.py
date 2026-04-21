@@ -92,11 +92,13 @@ def genera_carta_intestata(professionista, titolo,
     c.setFont("Helvetica-Bold", 10); c.setFillColor(colors.black)
     c.drawString(1.8*cm, y2, "Paziente:")
     c.setFont("Helvetica", 10)
-    c.drawString(4.0*cm, y2, paziente)
+    # Tronca paziente se troppo lungo
+    paz_display = paziente[:70] if len(paziente)>70 else paziente
+    c.drawString(4.0*cm, y2, paz_display)
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(W-5*cm, y2, "Data:")
+    c.drawString(W-4.5*cm, y2, "Data:")
     c.setFont("Helvetica", 10)
-    c.drawString(W-3.5*cm, y2, data)
+    c.drawString(W-3.2*cm, y2, data)
     c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.3)
     c.line(1.8*cm, y2-0.4*cm, W-1.8*cm, y2-0.4*cm)
 

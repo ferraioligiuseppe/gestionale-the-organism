@@ -31,9 +31,9 @@ def _prof():
     return username if username not in ("admin","") else "The Organism Studio"
 
 def _titolo_prof():
-    """Legge le specializzazioni dal profilo."""
     u = _get_user()
-    return u.get("specializzazioni","Optometrista Comportamentale")
+    spec = u.get("specializzazioni","") or u.get("profilo",{}).get("specializzazioni","")
+    return spec if spec else "Optometrista Comportamentale"
 
 def _fmt_data_it(iso_str):
     """Converte YYYY-MM-DD in GG/MM/AAAA."""
@@ -847,7 +847,7 @@ def _sez_g(conn, pid, d, paziente):
                 "lenti": rx.get("lenti_consigliate",[]),
                 "note": rx.get("note_rx",""),
             }
-            titolo_prof = rx.get("titolo_prof","Optometrista Comportamentale")
+            titolo_prof = _titolo_prof()
             pdf_rx = genera_ricetta(prof, titolo_prof, rx_pdf)
             st.download_button(
                 "Scarica Ricetta PDF",
@@ -881,7 +881,7 @@ def _sez_g(conn, pid, d, paziente):
                 try:
                     fv=float(v or 0); return f"+{fv:.2f}" if fv>=0 else f"{fv:.2f}"
                 except: return str(v or "nd")
-            paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}  |  {data_vis_fmt}"
+            paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}"
             corpo = f"""### Refrazione soggettiva
 OD: {_f(rs_od2.get("sf"))} / {_f(rs_od2.get("cil"))} x {rs_od2.get("ax",0)} gradi  -  Visus {rs_od2.get("acuita","nd")}
 OS: {_f(rs_os2.get("sf"))} / {_f(rs_os2.get("cil"))} x {rs_os2.get("ax",0)} gradi  -  Visus {rs_os2.get("acuita","nd")}
@@ -896,7 +896,7 @@ Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
 MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
             if diagnosi: corpo += f"\n\n### Diagnosi\n{diagnosi}"
             if piano:    corpo += f"\n\n### Piano terapeutico\n{piano}"
-            titolo_prof2 = rx.get("titolo_prof","Optometrista Comportamentale")
+            titolo_prof2 = _titolo_prof()
             pdf_rel = genera_carta_intestata(
                 professionista=prof, titolo=titolo_prof2,
                 paziente=paz_str, data=data_vis_fmt,
@@ -1029,7 +1029,7 @@ def _pdf_relazione(pid, cog, nom, dn, d, prof, diagnosi, piano):
             except: return str(v or "nd")
 
         sod = rx.get("rs_od",{}); sos = rx.get("rs_os",{})
-        paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}  |  {data_vis_fmt}"
+        paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}"
 
         corpo = f"""### Refrazione soggettiva
 OD: {_f(sod.get("sf"))} / {_f(sod.get("cil"))} x {sod.get("ax",0)} gradi  -  Visus {sod.get("acuita","nd")}
@@ -1056,7 +1056,7 @@ Pachimetria OD: {ob.get("pach_od","nd")}  /  OS: {ob.get("pach_os","nd")} um"""
             corpo += f"\n\n### Piano terapeutico\n{piano}"
 
         titolo = d.get("intestazione",{}).get("professionista") or prof
-        titolo_prof = rx.get("titolo_prof","Optometrista Comportamentale")
+        titolo_prof = _titolo_prof()
 
         pdf_bytes = genera_carta_intestata(
             professionista=prof,
