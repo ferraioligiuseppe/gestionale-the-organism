@@ -19,7 +19,21 @@ def _get_user():
     return st.session_state.get("user") or {}
 
 def _prof():
-    return _get_user().get("username", "The Organism")
+    u = _get_user()
+    # Prova display_name, poi email (prima parte), poi username
+    if u.get("display_name"): return u["display_name"]
+    email = u.get("email","")
+    if email and "@" in email: return email.split("@")[0].replace("."," ").title()
+    return u.get("username", "The Organism")
+
+def _fmt_data_it(iso_str):
+    """Converte YYYY-MM-DD in GG/MM/AAAA."""
+    if not iso_str: return ""
+    try:
+        d = datetime.date.fromisoformat(str(iso_str)[:10])
+        return d.strftime("%d/%m/%Y")
+    except Exception:
+        return str(iso_str)[:10]
 
 def _sk(sez, campo, pid):
     return f"vvp_{pid}_{sez}_{campo}"
@@ -819,96 +833,36 @@ def _sez_g(conn, pid, d, paziente):
     return {"sez_g": {"diag": diagnosi, "piano": piano}}
 
 
-def _pdf_ricetta(pid, cog, nom, dn, rx, prof):
+def _pdf_ricetta(pid, cog, nom, dn, rx_visita, prof):
     try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-        from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER
-        import io
+        from modules.pdf_templates import genera_ricetta
+        rs_od = rx_visita.get("rs_od",{}); rs_os = rx_visita.get("rs_os",{})
+        add_v = float(rx_visita.get("add_v") or 0)
+        add_i = float(rx_visita.get("add_i") or 0)
 
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=A4,
-                                rightMargin=56,leftMargin=56,topMargin=56,bottomMargin=56)
-        VERDE = colors.HexColor("#1D6B44")
-        sT = ParagraphStyle("t",fontSize=18,fontName="Helvetica-Bold",
-                             textColor=VERDE,alignment=TA_CENTER,spaceAfter=4)
-        sS = ParagraphStyle("s",fontSize=9,fontName="Helvetica",
-                             textColor=colors.gray,alignment=TA_CENTER,spaceAfter=2)
-        sH = ParagraphStyle("h",fontSize=12,fontName="Helvetica-Bold",
-                             textColor=VERDE,spaceAfter=4,spaceBefore=10)
-        sB = ParagraphStyle("b",fontSize=10,fontName="Helvetica",spaceAfter=4,leading=14)
+        def _sf_add(base_rx, add):
+            sf = float(base_rx.get("sf") or 0)
+            return {"sf": round(sf+add,2),
+                    "cil": base_rx.get("cil",0),
+                    "ax":  base_rx.get("ax",0)}
 
-        def _f(v): return f"+{v:.2f}" if float(v or 0)>=0 else f"{float(v or 0):.2f}"
-        sod = rx.get("rs_od",{}); sos = rx.get("rs_os",{})
-
-        story = [
-            Paragraph("The Organism", sT),
-            Paragraph("Studio di Optometria Comportamentale e Neuropsicologia", sS),
-            Paragraph(f"Professionista: {prof}", sS),
-            Spacer(1,15),
-            HRFlowable(width="100%",thickness=1.5,color=VERDE),
-            Spacer(1,10),
-            Paragraph("PRESCRIZIONE OTTICA", sH),
-            Paragraph(
-                f"Paziente: <b>{cog} {nom}</b> | Nato/a: {dn} | "
-                f"Data: {datetime.date.today().strftime('%d/%m/%Y')}", sB),
-            Spacer(1,12),
-        ]
-        tbl = Table([
-            ["","SF","CIL","AX","Acuita"],
-            ["OD",_f(sod.get("sf")),_f(sod.get("cil")),
-             str(sod.get("ax",0))+"g",sod.get("acuita","—")],
-            ["OS",_f(sos.get("sf")),_f(sos.get("cil")),
-             str(sos.get("ax",0))+"g",sos.get("acuita","—")],
-        ], colWidths=[50,70,70,60,80])
-        tbl.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),VERDE),
-            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-            ("ALIGN",(0,0),(-1,-1),"CENTER"),
-            ("FONTSIZE",(0,0),(-1,-1),10),
-            ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#D3D1C7")),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#F1EFE8")]),
-            ("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),
-        ]))
-        story.append(tbl)
-        if rx.get("add_v"):
-            story.append(Spacer(1,6))
-            story.append(Paragraph(f"ADD vicino: +{float(rx['add_v']):.2f} D", sB))
-        if rx.get("add_i"):
-            story.append(Paragraph(f"ADD intermedia: +{float(rx['add_i']):.2f} D", sB))
-        if rx.get("dp"):
-            story.append(Paragraph(f"Distanza pupillare: {float(rx['dp']):.1f} mm", sB))
-        # Acuita visiva selezionata
-        av_vals = rx.get("av", {})
-        av_riga = rx.get("av_riga_ricetta", "corr_l")
-        av_scala = rx.get("av_scala", "Decimale")
-        av_prof_val = rx.get("av_prof", prof)
-        if av_vals:
-            story.append(Spacer(1,8))
-            story.append(Paragraph("Acuita visiva", sH))
-            av_od  = av_vals.get(f"{av_riga}_od", "—") or "—"
-            av_os  = av_vals.get(f"{av_riga}_os", "—") or "—"
-            av_oo  = av_vals.get(f"{av_riga}_oo", "—") or "—"
-            story.append(Paragraph(
-                f"OD: <b>{av_od}</b> &nbsp;|&nbsp; OS: <b>{av_os}</b> &nbsp;|&nbsp; OO: <b>{av_oo}</b>"
-                f" &nbsp; ({av_scala})", sB))
-        if av_prof_val and av_prof_val != prof:
-            story.append(Paragraph(f"Valutazione eseguita da: {av_prof_val}", sB))
-        story.append(Spacer(1,30))
-        story.append(HRFlowable(width="100%",thickness=0.5,color=colors.gray))
-        story.append(Spacer(1,8))
-        story.append(Paragraph(f"Firma: _______________________  {prof}", sB))
-        doc.build(story)
-        buf.seek(0)
-        st.download_button("Scarica Ricetta PDF", data=buf,
+        rx = {
+            "lontano":    {"od": rs_od, "os": rs_os},
+            "intermedio": {"od": _sf_add(rs_od, add_i) if add_i else {},
+                           "os": _sf_add(rs_os, add_i) if add_i else {}},
+            "vicino":     {"od": _sf_add(rs_od, add_v) if add_v else {},
+                           "os": _sf_add(rs_os, add_v) if add_v else {}},
+            "dp":   str(rx_visita.get("dp","63")),
+            "lenti": rx_visita.get("lenti_consigliate",[]),
+            "note":  rx_visita.get("note_rx",""),
+        }
+        titolo = rx_visita.get("titolo_prof","Optometrista Comportamentale")
+        pdf_bytes = genera_ricetta(prof, titolo, rx)
+        st.download_button("Scarica Ricetta PDF", data=pdf_bytes,
             file_name=f"ricetta_{cog}_{nom}_{datetime.date.today()}.pdf",
             mime="application/pdf", key=f"dl_rx_{pid}")
     except Exception as e:
         st.error(f"Errore ricetta: {e}")
-
 
 def _pdf_lettera(pid, cog, nom, dn, ob, prof):
     try:
@@ -1001,8 +955,8 @@ def _pdf_relazione(pid, cog, nom, dn, d, prof, diagnosi, piano):
             HRFlowable(width="100%",thickness=1.5,color=VERDE),Spacer(1,8),
             Paragraph("RELAZIONE CLINICA VISUO-PERCETTIVA", sH),
             Paragraph(
-                f"Paziente: <b>{cog} {nom}</b> | Nato/a: {dn} | "
-                f"Data visita: {d.get('intestazione',{}).get('data_vis', datetime.date.today().strftime('%Y-%m-%d'))}", sB),
+                f"Paziente: <b>{cog} {nom}</b> | Nato/a: {_fmt_data_it(dn)} | "
+                f"Data visita: " + (lambda dv: datetime.date.fromisoformat(str(dv)[:10]).strftime("%d/%m/%Y") if dv else datetime.date.today().strftime("%d/%m/%Y"))(d.get("intestazione",{}).get("data_vis","")), sB),
             Spacer(1,10),
             Paragraph("Refrazione soggettiva", sH),
             Paragraph(
