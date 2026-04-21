@@ -20,11 +20,13 @@ def _get_user():
 
 def _prof():
     u = _get_user()
-    # Prova display_name, poi email (prima parte), poi username
     if u.get("display_name"): return u["display_name"]
+    if u.get("nome_completo"): return u["nome_completo"]
     email = u.get("email","")
-    if email and "@" in email: return email.split("@")[0].replace("."," ").title()
-    return u.get("username", "The Organism")
+    if email and "@" in email:
+        return email.split("@")[0].replace("."," ").replace("_"," ").title()
+    username = u.get("username","The Organism")
+    return username if username != "admin" else "The Organism Studio"
 
 def _fmt_data_it(iso_str):
     """Converte YYYY-MM-DD in GG/MM/AAAA."""

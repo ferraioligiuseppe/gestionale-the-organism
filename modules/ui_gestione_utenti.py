@@ -80,7 +80,7 @@ def _render_lista_utenti(conn) -> None:
         cur = conn.cursor()
         cur.execute("""
             SELECT u.id, u.username, u.email, u.is_active,
-                   u.created_at, u.last_login_at
+                   u.created_at, u.last_login_at, u.display_name
             FROM auth_users u
             ORDER BY u.username
         """)
@@ -103,9 +103,11 @@ def _render_lista_utenti(conn) -> None:
             attivo    = u.get("is_active", True)
             created   = u.get("created_at", "")
             last_log  = u.get("last_login_at", "")
+            disp_name = u.get("display_name", "") or ""
         else:
             uid, username, email, attivo = int(u[0]), u[1], u[2] or "", u[3]
             created, last_log = u[4], u[5]
+            disp_name = u[6] if len(u)>6 else ""
 
         ruoli = _get_ruoli_utente(conn, uid)
         ruoli_str = ", ".join(ruoli) if ruoli else "nessun ruolo"
@@ -118,6 +120,7 @@ def _render_lista_utenti(conn) -> None:
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown(f"**Username:** {username}")
+                st.markdown(f"**Nome documenti:** {disp_name or '— non impostato —'}")
                 st.markdown(f"**Email:** {email or '—'}")
                 st.markdown(f"**Stato:** {stato_txt}")
                 if created:
@@ -132,6 +135,16 @@ def _render_lista_utenti(conn) -> None:
                     st.markdown(f"- **{r}**: {desc}")
 
             st.markdown("---")
+
+            # Modifica display_name
+            st.markdown("**Nome per documenti:**")
+            new_display = st.text_input(
+                "Nome visualizzato",
+                value=disp_name,
+                key=f"disp_{uid}",
+                placeholder="Dott. Mario Rossi - Optometrista",
+                label_visibility="collapsed"
+            )
 
             # Modifica ruoli
             st.markdown("**Modifica ruoli:**")
@@ -155,7 +168,8 @@ def _render_lista_utenti(conn) -> None:
 
             with col_a:
                 if st.button("Salva modifiche", key=f"save_{uid}", type="primary"):
-                    _salva_modifiche_utente(conn, uid, username, nuovi_ruoli, new_pw)
+                    _salva_modifiche_utente(conn, uid, username, nuovi_ruoli, new_pw,
+                                             new_display=st.session_state.get(f"disp_{uid}",""))
 
             with col_b:
                 if attivo:
@@ -193,7 +207,8 @@ def _render_lista_utenti(conn) -> None:
 
 
 def _salva_modifiche_utente(conn, uid: int, username: str,
-                            nuovi_ruoli: list, new_pw: str) -> None:
+                            nuovi_ruoli: list, new_pw: str,
+                            new_display: str = "") -> None:
     try:
         cur = conn.cursor()
 
@@ -205,6 +220,13 @@ def _salva_modifiche_utente(conn, uid: int, username: str,
                 "INSERT INTO auth_user_roles(user_id, role_id) VALUES (%s,%s) "
                 "ON CONFLICT DO NOTHING",
                 (uid, rid)
+            )
+
+        # Aggiorna display_name
+        if new_display.strip():
+            cur.execute(
+                "UPDATE auth_users SET display_name=%s WHERE id=%s",
+                (new_display.strip(), uid)
             )
 
         # Aggiorna password se inserita
@@ -265,6 +287,13 @@ def _render_form_nuovo_utente(conn) -> None:
         email = st.text_input("Email", key="nu_email",
                               placeholder="mario@studio.it")
 
+    display_name = st.text_input(
+        "Nome completo per documenti *",
+        key="nu_display_name",
+        placeholder="Dott. Mario Rossi - Optometrista",
+        help="Questo nome appare su ricette, relazioni e PDF"
+    )
+
     c3, c4 = st.columns(2)
     with c3:
         pw1 = st.text_input("Password *", type="password", key="nu_pw1",
@@ -293,11 +322,12 @@ def _render_form_nuovo_utente(conn) -> None:
 
     st.markdown("---")
     if st.button("Crea utente", type="primary", key="nu_salva"):
-        _crea_utente(conn, username, email, pw1, pw2, ruoli_sel, must_change)
+        _crea_utente(conn, username, email, pw1, pw2, ruoli_sel, must_change,
+                     display_name=st.session_state.get("nu_display_name",""))
 
 
 def _crea_utente(conn, username: str, email: str, pw1: str, pw2: str,
-                 ruoli: list, must_change: bool) -> None:
+                 ruoli: list, must_change: bool, display_name: str = "") -> None:
 
     # Validazioni
     if not username.strip():

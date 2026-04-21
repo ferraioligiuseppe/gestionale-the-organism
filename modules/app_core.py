@@ -952,6 +952,7 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
 from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
+from pdf_templates import build_pdf
 # A5
 
 # A4 2×A5
@@ -1702,6 +1703,17 @@ def login(get_conn) -> bool:
 
         _audit(conn, user_id, "LOGIN_SUCCESS", meta={"roles": roles})
 
+        # Carica display_name da DB
+        _display_name = ""
+        try:
+            _dn_cur = conn.cursor()
+            _dn_cur.execute("SELECT display_name FROM auth_users WHERE id=%s", (user_id,))
+            _dn_row = _dn_cur.fetchone()
+            if _dn_row:
+                _display_name = (_dn_row["display_name"] if isinstance(_dn_row,dict) else _dn_row[0]) or ""
+        except Exception:
+            pass
+
         st.session_state["logged_in"] = True
         st.session_state["user"] = {
             "id": int(user_id),
@@ -1709,6 +1721,7 @@ def login(get_conn) -> bool:
             "email": email,
             "roles": roles,
             "must_change_password": bool(must_change),
+            "display_name": _display_name,
         }
         st.success("Accesso effettuato.")
         st.rerun()
