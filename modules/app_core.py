@@ -951,11 +951,7 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
 
 from datetime import date, datetime
 from typing import Optional, Dict
-from letterhead_pdf import build_pdf_with_letterhead
-from pdf_templates import build_pdf
-# A5
 
-# A4 2×A5
 
 
 
