@@ -1174,6 +1174,63 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
     stored = _carica(conn, paz_id)
     dati   = dict(stored)
 
+    # ── Selettore professionista in cima ─────────────────────────────
+    try:
+        cur_p = conn.cursor()
+        cur_p.execute(
+            "SELECT id, username, display_name, profilo_json "
+            "FROM auth_users WHERE is_active=TRUE ORDER BY username"
+        )
+        utenti_db = cur_p.fetchall() or []
+
+        def _parse_prof_row(u):
+            if isinstance(u, dict):
+                dn = u.get("display_name","") or ""
+                pj = u.get("profilo_json") or {}
+                un = u.get("username","")
+            else:
+                dn = u[2] or ""; pj = u[3] or {}; un = u[1]
+            if isinstance(pj, str):
+                import json as _j
+                try: pj = _j.loads(pj)
+                except: pj = {}
+            spec = (pj.get("specializzazioni","") if pj else "") or ""
+            if len(spec) <= 3 or spec.isupper(): spec = ""
+            nome = dn if dn else un
+            return nome, spec
+
+        opzioni   = [_parse_prof_row(u) for u in utenti_db]
+        labels    = [f"{n} — {s}" if s else n for n,s in opzioni]
+
+        # Default: utente loggato
+        prof_corrente = _prof()
+        default_idx = 0
+        for i,(n,s) in enumerate(opzioni):
+            if n == prof_corrente:
+                default_idx = i; break
+
+        col_prof, _ = st.columns([2,3])
+        with col_prof:
+            sel_idx = st.selectbox(
+                "Professionista che esegue la valutazione",
+                options=range(len(labels)),
+                format_func=lambda i: labels[i],
+                index=default_idx,
+                key=f"vvp_prof_sel_{paz_id}"
+            )
+
+        _prof_nome, _prof_spec = opzioni[sel_idx]
+        # Salva in dati per i PDF
+        if "intestazione" not in dati:
+            dati["intestazione"] = {}
+        dati["intestazione"]["professionista"] = _prof_nome
+        dati["intestazione"]["titolo_prof"]    = _prof_spec or "Optometrista Comportamentale"
+
+    except Exception:
+        _prof_nome = _prof()
+        _prof_spec = _titolo_prof()
+
+    st.markdown("---")
     tabs = st.tabs([
         "Intestazione",
         "A. Stato refrattivo",
