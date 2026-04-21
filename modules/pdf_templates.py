@@ -39,12 +39,12 @@ def draw_intestazione(c, professionista="", titolo=""):
                     width=lw, height=lh, preserveAspectRatio=True, mask="auto")
     c.setStrokeColor(VERDE)
     c.setLineWidth(3)
-    c.line(1.8*cm, H-2.6*cm, W-1.8*cm, H-2.6*cm)
+    c.line(1.8*cm, H-3.1*cm, W-1.8*cm, H-3.1*cm)
     c.setLineWidth(0.8)
-    c.line(1.8*cm, H-2.9*cm, W-1.8*cm, H-2.9*cm)
+    c.line(1.8*cm, H-3.4*cm, W-1.8*cm, H-3.4*cm)
     c.setFont("Helvetica", 7); c.setFillColor(GRIGIO)
-    c.drawCentredString(W/2, H-3.4*cm, INDIRIZZO)
-    c.drawCentredString(W/2, H-3.75*cm, CONTATTI)
+    c.drawCentredString(W/2, H-3.9*cm, INDIRIZZO)
+    c.drawCentredString(W/2, H-4.25*cm, CONTATTI)
 
 def draw_footer(c):
     c.setStrokeColor(VERDE); c.setLineWidth(0.8)

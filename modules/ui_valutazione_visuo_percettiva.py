@@ -925,78 +925,69 @@ def _pdf_lettera(pid, cog, nom, dn, ob, prof):
 
 def _pdf_relazione(pid, cog, nom, dn, d, prof, diagnosi, piano):
     try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-        from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER
-        import io
+        from modules.pdf_templates import genera_carta_intestata
+        import datetime as _dt
 
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=A4,
-                                rightMargin=56,leftMargin=56,topMargin=56,bottomMargin=56)
-        VERDE = colors.HexColor("#1D6B44")
-        sT = ParagraphStyle("t",fontSize=18,fontName="Helvetica-Bold",textColor=VERDE,alignment=TA_CENTER)
-        sS = ParagraphStyle("s",fontSize=9,fontName="Helvetica",textColor=colors.gray,alignment=TA_CENTER)
-        sH = ParagraphStyle("h",fontSize=12,fontName="Helvetica-Bold",textColor=VERDE,spaceAfter=4,spaceBefore=10)
-        sB = ParagraphStyle("b",fontSize=10,fontName="Helvetica",spaceAfter=4,leading=15)
+        rx   = d.get("sez_a",{})
+        bino = d.get("sez_b",{})
+        ob   = d.get("sez_e",{})
+        acc  = d.get("sez_c",{})
 
-        rx = d.get("sez_a",{}); b = d.get("sez_b",{})
-        ob = d.get("sez_e",{}); c = d.get("sez_c",{})
+        data_vis = d.get("intestazione",{}).get("data_vis","")
+        try:
+            data_vis_fmt = _dt.date.fromisoformat(str(data_vis)[:10]).strftime("%d/%m/%Y")
+        except Exception:
+            data_vis_fmt = _dt.date.today().strftime("%d/%m/%Y")
 
-        def _f(v): return f"+{float(v or 0):.2f}" if float(v or 0)>=0 else f"{float(v or 0):.2f}"
+        def _f(v):
+            try:
+                fv = float(v or 0)
+                return f"+{fv:.2f}" if fv>=0 else f"{fv:.2f}"
+            except: return str(v or "nd")
+
         sod = rx.get("rs_od",{}); sos = rx.get("rs_os",{})
+        paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}  |  {data_vis_fmt}"
 
-        story = [
-            Paragraph("The Organism", sT),
-            Paragraph("Studio di Optometria Comportamentale e Neuropsicologia", sS),
-            Paragraph(f"Professionista: {prof}", sS),
-            Spacer(1,15),
-            HRFlowable(width="100%",thickness=1.5,color=VERDE),Spacer(1,8),
-            Paragraph("RELAZIONE CLINICA VISUO-PERCETTIVA", sH),
-            Paragraph(
-                f"Paziente: <b>{cog} {nom}</b> | Nato/a: {_fmt_data_it(dn)} | "
-                f"Data visita: " + (lambda dv: datetime.date.fromisoformat(str(dv)[:10]).strftime("%d/%m/%Y") if dv else datetime.date.today().strftime("%d/%m/%Y"))(d.get("intestazione",{}).get("data_vis","")), sB),
-            Spacer(1,10),
-            Paragraph("Refrazione soggettiva", sH),
-            Paragraph(
-                f"OD: {_f(sod.get('sf'))} / {_f(sod.get('cil'))} x {sod.get('ax',0)}g — Visus {sod.get('acuita','nd')}<br/>"
-                f"OS: {_f(sos.get('sf'))} / {_f(sos.get('cil'))} x {sos.get('ax',0)}g — Visus {sos.get('acuita','nd')}", sB),
-            Paragraph("Equilibrio binoculare", sH),
-            Paragraph(
-                f"Cover test lontano: {b.get('ct_l','nd')} | Cover test vicino: {b.get('ct_v','nd')}<br/>"
-                f"PPC accomodativo: {b.get('ppc_acc_rot','nd')} / {b.get('ppc_acc_rec','nd')} cm | "
-                f"AC/A: {b.get('aca','nd')}", sB),
-            Paragraph("Accomodazione", sH),
-            Paragraph(
-                f"Push-Up OD: {c.get('pu_od','nd')} D | OS: {c.get('pu_os','nd')} D<br/>"
-                f"MEM OD: {c.get('mem_od','nd')} D | OS: {c.get('mem_os','nd')} D", sB),
-            Paragraph("Esame obiettivo", sH),
-            Paragraph(
-                f"IOP OD: {ob.get('iop_od','nd')} / OS: {ob.get('iop_os','nd')} mmHg | "
-                f"Pachimetria OD: {ob.get('pach_od','nd')} / OS: {ob.get('pach_os','nd')} um", sB),
-        ]
+        corpo = f"""### Refrazione soggettiva
+OD: {_f(sod.get("sf"))} / {_f(sod.get("cil"))} x {sod.get("ax",0)} gradi  -  Visus {sod.get("acuita","nd")}
+OS: {_f(sos.get("sf"))} / {_f(sos.get("cil"))} x {sos.get("ax",0)} gradi  -  Visus {sos.get("acuita","nd")}
+
+### Equilibrio binoculare
+Cover test lontano: {bino.get("ct_l","nd")}  |  Cover test vicino: {bino.get("ct_v","nd")}
+PPC accomodativo: {bino.get("ppc_acc_rot","nd")} / {bino.get("ppc_acc_rec","nd")} cm
+AC/A: {bino.get("aca","nd")}  |  Worth lontano: {bino.get("worth_l","nd")}
+Randot: {bino.get("randot","nd")} sec d arco
+
+### Accomodazione
+Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
+MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D
+Facilita accomodativa OD: {acc.get("fl_od","nd")} c/30sec  |  OS: {acc.get("fl_os","nd")} c/30sec
+
+### Esame obiettivo
+IOP OD: {ob.get("iop_od","nd")}  /  OS: {ob.get("iop_os","nd")} mmHg
+Pachimetria OD: {ob.get("pach_od","nd")}  /  OS: {ob.get("pach_os","nd")} um"""
+
         if diagnosi:
-            story += [Paragraph("Diagnosi", sH), Paragraph(diagnosi, sB)]
+            corpo += f"\n\n### Diagnosi\n{diagnosi}"
         if piano:
-            story += [Paragraph("Piano terapeutico", sH), Paragraph(piano, sB)]
-        story += [
-            Spacer(1,30),
-            HRFlowable(width="100%",thickness=0.5,color=colors.gray),Spacer(1,8),
-            Paragraph(f"Firma: _______________________  {prof}<br/>The Organism Studio", sB),
-        ]
-        doc.build(story)
-        buf.seek(0)
-        st.download_button("Scarica Relazione PDF", data=buf,
+            corpo += f"\n\n### Piano terapeutico\n{piano}"
+
+        titolo = d.get("intestazione",{}).get("professionista") or prof
+        titolo_prof = rx.get("titolo_prof","Optometrista Comportamentale")
+
+        pdf_bytes = genera_carta_intestata(
+            professionista=prof,
+            titolo=titolo_prof,
+            paziente=paz_str,
+            data=data_vis_fmt,
+            titolo_doc="RELAZIONE CLINICA VISUO-PERCETTIVA",
+            corpo_testo=corpo,
+        )
+        st.download_button("Scarica Relazione PDF", data=pdf_bytes,
             file_name=f"relazione_{cog}_{nom}_{datetime.date.today()}.pdf",
             mime="application/pdf", key=f"dl_rel_{pid}")
     except Exception as e:
         st.error(f"Errore relazione: {e}")
-
-
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE H — SPORTS VISION (placeholder)
-# ══════════════════════════════════════════════════════════════════════
 
 def _sez_h(pid, stored):
     st.markdown("### H — Sports Vision")
