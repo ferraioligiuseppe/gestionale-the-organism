@@ -32,7 +32,11 @@ def _prof():
 
 def _titolo_prof():
     u = _get_user()
-    spec = u.get("specializzazioni","") or u.get("profilo",{}).get("specializzazioni","")
+    spec = (u.get("specializzazioni","") or
+            u.get("profilo",{}).get("specializzazioni","") or "").strip()
+    # Scarta valori non validi (sigla provincia, troppo corti)
+    if len(spec) <= 3 or spec.isupper():
+        spec = ""
     return spec if spec else "Optometrista Comportamentale"
 
 def _fmt_data_it(iso_str):
@@ -825,6 +829,16 @@ def _sez_g(conn, pid, d, paziente):
 
     st.markdown("---")
     st.markdown("**Genera documenti:**")
+
+    # Campo titolo professionale per i PDF
+    titolo_pdf = st.text_input(
+        "Titolo/specializzazione per il PDF",
+        value=_titolo_prof(),
+        key=f"titolo_pdf_{pid}",
+        placeholder="Neuropsicologo - Optometrista Comportamentale",
+        help="Appare sotto il nome nell intestazione. Puoi modificarlo prima di stampare."
+    )
+
     rx = d.get("sez_a",{})
     ob = d.get("sez_e",{})
 
@@ -847,7 +861,7 @@ def _sez_g(conn, pid, d, paziente):
                 "lenti": rx.get("lenti_consigliate",[]),
                 "note": rx.get("note_rx",""),
             }
-            titolo_prof = _titolo_prof()
+            titolo_prof = st.session_state.get(f"titolo_pdf_{pid}", "") or _titolo_prof()
             pdf_rx = genera_ricetta(prof, titolo_prof, rx_pdf)
             st.download_button(
                 "Scarica Ricetta PDF",
@@ -896,7 +910,7 @@ Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
 MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
             if diagnosi: corpo += f"\n\n### Diagnosi\n{diagnosi}"
             if piano:    corpo += f"\n\n### Piano terapeutico\n{piano}"
-            titolo_prof2 = _titolo_prof()
+            titolo_prof2 = st.session_state.get(f"titolo_pdf_{pid}", "") or _titolo_prof()
             pdf_rel = genera_carta_intestata(
                 professionista=prof, titolo=titolo_prof2,
                 paziente=paz_str, data=data_vis_fmt,
