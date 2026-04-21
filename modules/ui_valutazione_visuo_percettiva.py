@@ -149,6 +149,62 @@ def _intestazione(pid, paziente, stored):
                                         value=d.get("professionista") or _prof(),
                                         key=s("prof"))
 
+    # Selettore professionista dal DB
+    st.markdown("**Professionista che esegue la valutazione:**")
+    try:
+        cur_p = conn.cursor()
+        cur_p.execute(
+            "SELECT id, username, display_name, profilo_json "
+            "FROM auth_users WHERE is_active=TRUE ORDER BY username"
+        )
+        utenti_db = cur_p.fetchall() or []
+        
+        def _build_prof_option(u):
+            if isinstance(u, dict):
+                dn = u.get("display_name","") or ""
+                pj = u.get("profilo_json") or {}
+                un = u.get("username","")
+            else:
+                dn = u[2] or ""
+                pj = u[3] or {}
+                un = u[1]
+            if isinstance(pj, str):
+                import json as _j
+                try: pj = _j.loads(pj)
+                except: pj = {}
+            spec = pj.get("specializzazioni","") if pj else ""
+            label = dn if dn else un
+            return label, spec, dn or un
+
+        opzioni_prof = [_build_prof_option(u) for u in utenti_db]
+        labels_prof  = [f"{l} — {s}" if s else l for l,s,_ in opzioni_prof]
+
+        # Default: utente loggato
+        prof_loggato = _prof()
+        default_idx  = 0
+        for i,(l,s,dn) in enumerate(opzioni_prof):
+            if dn == prof_loggato or l == prof_loggato:
+                default_idx = i; break
+
+        sel_idx = st.selectbox(
+            "Professionista",
+            options=range(len(labels_prof)),
+            format_func=lambda i: labels_prof[i],
+            index=default_idx,
+            key=s("prof_sel"),
+            label_visibility="collapsed"
+        )
+        prof_sel_label, prof_sel_spec, prof_sel_dn = opzioni_prof[sel_idx]
+        professionista = prof_sel_dn
+        titolo_sel     = prof_sel_spec
+
+    except Exception as e:
+        # Fallback campo testo
+        professionista = st.text_input(
+            "Professionista", value=d.get("professionista") or _prof(),
+            key=s("prof"), label_visibility="collapsed")
+        titolo_sel = _titolo_prof()
+
     c5, c6, c7 = st.columns(3)
     with c5:
         referente = _txt("Referente / Chi invia", s("referente"),
@@ -168,7 +224,9 @@ def _intestazione(pid, paziente, stored):
 
     return {"intestazione": {
         "eta_vis": eta_vis, "data_vis": str(data_vis),
-        "professionista": professionista, "referente": referente,
+        "professionista": professionista,
+        "titolo_prof": titolo_sel if "titolo_sel" in dir() else _titolo_prof(),
+        "referente": referente,
         "sesso": sesso, "occhio": occhio, "mano": mano, "piede": piede,
         "note": note_int,
     }}
@@ -861,7 +919,9 @@ def _sez_g(conn, pid, d, paziente):
                 "lenti": rx.get("lenti_consigliate",[]),
                 "note": rx.get("note_rx",""),
             }
-            titolo_prof = st.session_state.get(f"titolo_pdf_{pid}", "") or _titolo_prof()
+            titolo_prof = (d.get("intestazione",{}).get("titolo_prof","") or
+                        st.session_state.get(f"titolo_pdf_{pid}","") or
+                        _titolo_prof())
             pdf_rx = genera_ricetta(prof, titolo_prof, rx_pdf)
             st.download_button(
                 "Scarica Ricetta PDF",
@@ -910,7 +970,9 @@ Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
 MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
             if diagnosi: corpo += f"\n\n### Diagnosi\n{diagnosi}"
             if piano:    corpo += f"\n\n### Piano terapeutico\n{piano}"
-            titolo_prof2 = st.session_state.get(f"titolo_pdf_{pid}", "") or _titolo_prof()
+            titolo_prof2 = (d.get("intestazione",{}).get("titolo_prof","") or
+                         st.session_state.get(f"titolo_pdf_{pid}","") or
+                         _titolo_prof())
             pdf_rel = genera_carta_intestata(
                 professionista=prof, titolo=titolo_prof2,
                 paziente=paz_str, data=data_vis_fmt,
