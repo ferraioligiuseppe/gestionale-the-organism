@@ -465,6 +465,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📊 Dashboard incassi":
             from .sections.ui_cliniche import render_dashboard_section
             render_dashboard_section(); return
+        if sotto == "👤 Il mio profilo":
+            try:
+                from .ui_profilo_professionista import render_profilo_professionista
+                render_profilo_professionista(conn)
+            except Exception as e:
+                st.error(f"Errore profilo: {e}")
+            return
         if sotto == "🏥 Il mio studio":
             try:
                 from .saas_tenant import render_gestione_studio

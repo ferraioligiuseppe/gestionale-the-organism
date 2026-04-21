@@ -81,6 +81,7 @@ SOTTOSEZIONI = {
     AREA_STUDIO: [
         "📊 Dashboard incassi",
         "🏥 Il mio studio",
+        "👤 Il mio profilo",
         "👥 Utenti / Ruoli",
         "⚙️ Platform Admin",
         "🐛 Debug DB",

@@ -20,13 +20,20 @@ def _get_user():
 
 def _prof():
     u = _get_user()
+    # 1. display_name impostato nel profilo
     if u.get("display_name"): return u["display_name"]
-    if u.get("nome_completo"): return u["nome_completo"]
+    # 2. email formattata
     email = u.get("email","")
     if email and "@" in email:
         return email.split("@")[0].replace("."," ").replace("_"," ").title()
+    # 3. username (se non e admin)
     username = u.get("username","The Organism")
-    return username if username != "admin" else "The Organism Studio"
+    return username if username not in ("admin","") else "The Organism Studio"
+
+def _titolo_prof():
+    """Legge le specializzazioni dal profilo."""
+    u = _get_user()
+    return u.get("specializzazioni","Optometrista Comportamentale")
 
 def _fmt_data_it(iso_str):
     """Converte YYYY-MM-DD in GG/MM/AAAA."""
