@@ -20,13 +20,20 @@ def _get_user():
 
 def _prof():
     u = _get_user()
-    # 1. display_name impostato nel profilo
-    if u.get("display_name"): return u["display_name"]
-    # 2. email formattata
+    profilo = u.get("profilo",{}) or {}
+    # 1. Costruisce da profilo_json se compilato correttamente
+    titolo_p = profilo.get("titolo","").strip()
+    nome_p   = profilo.get("nome","").strip()
+    if nome_p:
+        return f"{titolo_p} {nome_p}".strip()
+    # 2. display_name dal DB
+    dn = u.get("display_name","")
+    if dn and len(dn) > 3: return dn
+    # 3. email formattata
     email = u.get("email","")
     if email and "@" in email:
         return email.split("@")[0].replace("."," ").replace("_"," ").title()
-    # 3. username (se non e admin)
+    # 4. username
     username = u.get("username","The Organism")
     return username if username not in ("admin","") else "The Organism Studio"
 
@@ -1194,10 +1201,30 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
                 import json as _j
                 try: pj = _j.loads(pj)
                 except: pj = {}
-            spec = (pj.get("specializzazioni","") if pj else "") or ""
-            if len(spec) <= 3 or spec.isupper(): spec = ""
-            nome = dn if dn else un
-            return nome, spec
+            if not isinstance(pj, dict): pj = {}
+
+            # Legge i campi separati dal profilo_json
+            titolo_pj = pj.get("titolo","").strip()
+            nome_pj   = pj.get("nome","").strip()
+            spec_pj   = pj.get("specializzazioni","").strip()
+
+            # Costruisce nome display
+            if nome_pj:
+                # Ha compilato il profilo correttamente
+                nome_display = f"{titolo_pj} {nome_pj}".strip()
+            elif dn:
+                # Usa display_name dal DB
+                nome_display = dn
+            else:
+                nome_display = un
+
+            # Specializzazioni valide
+            if spec_pj and len(spec_pj) > 3 and not spec_pj.isupper():
+                spec = spec_pj
+            else:
+                spec = ""
+
+            return nome_display, spec
 
         opzioni   = [_parse_prof_row(u) for u in utenti_db]
         labels    = [f"{n} — {s}" if s else n for n,s in opzioni]
