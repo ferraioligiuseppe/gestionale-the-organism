@@ -25,6 +25,13 @@ def _logo_path():
         return p
     return None
 
+def _pnev_logo_path():
+    base = os.path.dirname(os.path.abspath(__file__))
+    p = os.path.join(base, "assets", "pnev_logo.png")
+    if os.path.exists(p):
+        return p
+    return None
+
 def draw_intestazione(c, professionista="", titolo=""):
     logo = _logo_path()
     c.setFont("Helvetica-Bold", 11)
