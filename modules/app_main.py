@@ -56,115 +56,22 @@ def _seleziona_paziente(conn, key_suffix: str = "") -> tuple[int | None, str]:
 #  DASHBOARD HOME
 # ══════════════════════════════════════════════════════════════════════
 
-def _fmt_data(raw) -> str:
-    """Formatta data in italiano: 19 Apr 2026"""
-    try:
-        import datetime as _dt
-        s = str(raw)[:10]
-        d = _dt.date.fromisoformat(s)
-        mesi = ["","Gen","Feb","Mar","Apr","Mag","Giu",
-                "Lug","Ago","Set","Ott","Nov","Dic"]
-        return f"{d.day} {mesi[d.month]} {d.year}"
-    except Exception:
-        return str(raw)[:10] if raw else "—"
-
-
-def _seleziona_paziente_card(conn) -> tuple:
-    """Selettore paziente con formato pulito (solo Cognome Nome)."""
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT id, Cognome, Nome, Data_Nascita, Email "
-            "FROM Pazienti WHERE COALESCE(Stato_Paziente,'ATTIVO')='ATTIVO' "
-            "ORDER BY Cognome, Nome"
-        )
-        rows = cur.fetchall() or []
-    except Exception:
-        return None, "", {}
-
-    if not rows:
-        st.info("Nessun paziente registrato.")
-        return None, "", {}
-
-    def _label(r):
-        if isinstance(r, dict):
-            c = r.get("Cognome",""); n = r.get("Nome","")
-            dn = r.get("Data_Nascita","")
-        else:
-            c, n = r[1], r[2]
-            dn = r[3] if len(r) > 3 else ""
-        eta = ""
-        if dn:
-            try:
-                import datetime as _dt
-                anni = (_dt.date.today() - _dt.date.fromisoformat(str(dn)[:10])).days // 365
-                eta = f"  ({anni} anni)"
-            except Exception:
-                pass
-        return f"{c} {n}{eta}"
-
-    sel = st.selectbox(
-        "Seleziona paziente",
-        options=rows,
-        format_func=_label,
-        key="paz_home_card",
-        label_visibility="collapsed",
-    )
-    if isinstance(sel, dict):
-        pid = int(sel.get("id"))
-        info = sel
-    else:
-        pid = int(sel[0])
-        cols_names = ["id","Cognome","Nome","Data_Nascita","Email"]
-        info = dict(zip(cols_names, sel))
-    return pid, _label(sel), info
-
-
 def _render_dashboard(conn) -> None:
     """Dashboard home — riepilogo paziente corrente."""
+    st.title("🏠 The Organism — Gestionale")
 
-    # ── Intestazione ─────────────────────────────────────────────────
-    st.markdown(
-        "<h2 style='margin-bottom:4px'>🏠 The Organism</h2>"
-        "<p style='color:#8b949e;margin-top:0'>Seleziona un paziente</p>",
-        unsafe_allow_html=True
-    )
-
-    paz_id, paz_label, paz_info = _seleziona_paziente_card(conn)
+    paz_id, paz_label = _seleziona_paziente(conn, "home")
     if not paz_id:
         return
 
-    # ── Card paziente ────────────────────────────────────────────────
-    cognome  = paz_info.get("Cognome","")
-    nome     = paz_info.get("Nome","")
-    dn_raw   = paz_info.get("Data_Nascita","")
-    email    = paz_info.get("Email","") or "—"
-    dn_fmt   = _fmt_data(dn_raw)
+    st.markdown(f"### {paz_label}")
+    st.markdown("---")
 
-    try:
-        import datetime as _dt
-        eta = (_dt.date.today() - _dt.date.fromisoformat(str(dn_raw)[:10])).days // 365
-        eta_str = f"{eta} anni"
-    except Exception:
-        eta_str = ""
-
-    st.markdown(f"""
-<div style="background:var(--color-background-secondary);
-     border:1px solid var(--color-border-tertiary);
-     border-radius:12px;padding:20px 24px;margin:8px 0 20px 0">
-  <div style="font-size:1.6rem;font-weight:700;color:var(--color-text-primary)">
-    {cognome} {nome}
-  </div>
-  <div style="color:#8b949e;font-size:.95rem;margin-top:4px">
-    Nato il {dn_fmt} &nbsp;·&nbsp; {eta_str} &nbsp;·&nbsp; {email}
-  </div>
-</div>""", unsafe_allow_html=True)
-
-    # ── Tre colonne info ─────────────────────────────────────────────
     col1, col2, col3 = st.columns(3)
 
+    # ── Ultima seduta ─────────────────────────────────────────────────
     with col1:
-        st.markdown("**📅 Ultima seduta**")
+        st.markdown("#### 📅 Ultima seduta")
         try:
             cur = conn.cursor()
             cur.execute(
@@ -174,20 +81,21 @@ def _render_dashboard(conn) -> None:
             )
             s = cur.fetchone()
             if s:
-                data = _fmt_data(s[0] if not isinstance(s, dict) else s.get("Data_Ora",""))
-                tipo = (s[1] if not isinstance(s, dict) else s.get("Tipo","")) or "—"
-                st.info(f"**{data}** — {tipo}")
+                data = s[0] if not isinstance(s, dict) else s.get("Data_Ora","")
+                tipo = s[1] if not isinstance(s, dict) else s.get("Tipo","")
+                st.info(f"{str(data)[:10]}\n\n{tipo or '—'}")
             else:
-                st.caption("Nessuna seduta")
+                st.caption("Nessuna seduta registrata")
         except Exception:
             st.caption("—")
 
+    # ── Questionari in attesa ─────────────────────────────────────────
     with col2:
-        st.markdown("**📋 Questionari**")
+        st.markdown("#### 📋 Questionari")
         try:
             cur = conn.cursor()
             cur.execute(
-                "SELECT questionario, used_at, expires_at "
+                "SELECT questionario, created_at, used_at, expires_at "
                 "FROM questionari_links "
                 "WHERE paziente_id=%s ORDER BY created_at DESC LIMIT 5",
                 (paz_id,)
@@ -196,24 +104,21 @@ def _render_dashboard(conn) -> None:
             if links:
                 for lk in links:
                     if isinstance(lk, dict):
-                        q    = lk.get("questionario","")
+                        q = lk.get("questionario","")
                         used = lk.get("used_at")
-                        exp  = lk.get("expires_at","")
+                        exp  = str(lk.get("expires_at",""))[:10]
                     else:
-                        q, used, exp = lk[0], lk[1], lk[2]
-                    q_clean = q.replace("_"," ").title()
-                    if used:
-                        st.markdown(f"✅ &nbsp;{q_clean}", unsafe_allow_html=True)
-                    else:
-                        exp_fmt = _fmt_data(exp)
-                        st.markdown(f"⏳ {q_clean} — scade {exp_fmt}", unsafe_allow_html=True)
+                        q, _, used, exp = lk[0], lk[1], lk[2], str(lk[3])[:10]
+                    stato = "✅ compilato" if used else f"⏳ scade {exp}"
+                    st.caption(f"**{q}** — {stato}")
             else:
-                st.caption("Nessun link inviato")
+                st.caption("Nessun link generato")
         except Exception:
             st.caption("—")
 
+    # ── Ultimi test ───────────────────────────────────────────────────
     with col3:
-        st.markdown("**🔬 Ultimi test**")
+        st.markdown("#### 🔬 Ultimi test")
         try:
             cur = conn.cursor()
             cur.execute(
@@ -225,16 +130,17 @@ def _render_dashboard(conn) -> None:
             if tests:
                 for t in tests:
                     nome = t[0] if not isinstance(t, dict) else t.get("nome_test","")
-                    data = _fmt_data(t[1] if not isinstance(t, dict) else t.get("data_somm",""))
-                    st.markdown(f"**{nome}** — {data}")
+                    data = str(t[1] if not isinstance(t, dict) else t.get("data_somm",""))[:10]
+                    st.caption(f"**{nome}** — {data}")
             else:
                 st.caption("Nessun test registrato")
         except Exception:
             st.caption("—")
 
-    # ── Anamnesi ─────────────────────────────────────────────────────
     st.markdown("---")
-    st.markdown("**📊 Riepilogo valutazioni**")
+
+    # ── Anamnesi / questionari compilati ──────────────────────────────
+    st.markdown("#### 📊 Riepilogo valutazioni")
     try:
         cur = conn.cursor()
         cur.execute(
@@ -245,15 +151,15 @@ def _render_dashboard(conn) -> None:
         )
         an = cur.fetchone()
         if an:
-            data_an = _fmt_data(an[0] if not isinstance(an, dict) else an.get("data_anamnesi",""))
+            data_an = str(an[0] if not isinstance(an, dict) else an.get("data_anamnesi",""))[:10]
             motivo  = (an[1] if not isinstance(an, dict) else an.get("motivo","")) or "—"
             summary = (an[2] if not isinstance(an, dict) else an.get("pnev_summary","")) or ""
             st.success(f"Ultima anamnesi: **{data_an}** — {motivo}")
             if summary:
-                with st.expander("Leggi sintesi"):
+                with st.expander("Sintesi anamnesi"):
                     st.markdown(summary[:800] + ("…" if len(summary) > 800 else ""))
         else:
-            st.info("Nessuna anamnesi registrata.")
+            st.info("Nessuna anamnesi registrata per questo paziente.")
     except Exception:
         st.caption("—")
 
@@ -271,16 +177,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             _render_dashboard(conn)
             return
         if sotto == "👤 Anagrafica pazienti":
-            try:
-                from .ui_anagrafica import render_anagrafica
-                render_anagrafica(conn)
-            except Exception:
-                try:
-                    from .pazienti import render_pazienti_section
-                    render_pazienti_section()
-                except Exception as e2:
-                    st.error(f"Anagrafica non disponibile: {e2}")
-            return
+            from .pazienti import render_pazienti_section
+            render_pazienti_section(); return
         if sotto == "📅 Sedute / Terapie":
             from .sections.ui_cliniche import render_sedute_section
             render_sedute_section(); return
@@ -299,26 +197,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🔬 PNEV":
             from .pnev.ui_pnev import render_pnev_section
             render_pnev_section(); return
-        if sotto == "📋 Anamnesi The Organism":
-            try:
-                from .ui_anamnesi_the_organism import render_anamnesi_the_organism
-                render_anamnesi_the_organism(conn, paz_id)
-            except Exception as e:
-                st.error(f"Modulo anamnesi non disponibile: {e}")
-            return
-        if sotto == "👁️ Valutazione visuo-percettiva":
-            try:
-                from .ui_valutazione_visuo_percettiva import render_valutazione_visuo_percettiva
-                cur2 = conn.cursor()
-                cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
-                paz_rec = cur2.fetchone()
-                if paz_rec and not isinstance(paz_rec, dict):
-                    cols = [d[0] for d in cur2.description]
-                    paz_rec = dict(zip(cols, paz_rec))
-                render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
-            except Exception as e:
-                st.error(f"Errore valutazione visuo-percettiva: {e}")
-            return
+        if sotto == "👁️ Valutazione visiva (VVF)":
+            from .sections.ui_cliniche import render_vision_section
+            render_vision_section(); return
         if sotto == "🧠 NPS — Neuropsicologica":
             try:
                 from .ui_nps_completo import render_nps_completo
@@ -377,9 +258,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except ImportError as e:
                 st.error(f"Modulo somministrazione non disponibile: {e}")
             return
-        if sotto == "👁️ Eye tracking":
-            from .sections.ui_cliniche import render_gaze_section
-            render_gaze_section(); return
 
     # ── AREA QUESTIONARI ──────────────────────────────────────────────
     elif area == AREA_QUESTIONARI:
@@ -431,27 +309,38 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA AUDIOLOGIA ───────────────────────────────────────────────
     elif area == AREA_AUDIOLOGIA:
-        # I moduli audio gestiscono internamente il paziente
-        # Proviamo prima con conn, poi senza
-        _audio_map = {
-            "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
-            "🎵 Stimolazione passiva":   ("ui_stimolazione_passiva",  "ui_stimolazione_passiva"),
-            "🎧 Bilancio uditivo":       ("ui_bilancio_uditivo",      "ui_bilancio_uditivo"),
-            "📊 Audiometria funzionale": ("ui_audiometria_funzionale","ui_audiometria_funzionale"),
-        }
-        if sotto in _audio_map:
-            mod_name, fn_name = _audio_map[sotto]
+        if sotto == "🔉 Diagnostica uditiva":
             try:
-                import importlib
-                m  = importlib.import_module(f"modules.{mod_name}")
-                fn = getattr(m, fn_name)
-                try:
-                    fn(conn=conn)
-                except TypeError:
-                    fn()
-            except Exception as e_audio:
-                st.error(f"Errore {sotto}: {e_audio}")
+                from .ui_diagnostica_uditiva import ui_diagnostica_uditiva
+                ui_diagnostica_uditiva()
+            except ImportError:
+                from .sections.ui_cliniche import render_vision_section
+                st.info("Usa la sezione Diagnostica Uditiva dal menu originale.")
             return
+        if sotto == "🎵 Stimolazione passiva":
+            try:
+                from .ui_stimolazione_passiva import ui_stimolazione_passiva
+                ui_stimolazione_passiva()
+            except ImportError:
+                st.info("Modulo Stimolazione Passiva.")
+            return
+        if sotto == "🎧 Bilancio uditivo":
+            try:
+                from .ui_bilancio_uditivo import ui_bilancio_uditivo
+                ui_bilancio_uditivo()
+            except ImportError:
+                st.info("Modulo Bilancio Uditivo.")
+            return
+        if sotto == "📊 Audiometria funzionale":
+            try:
+                from .ui_audiometria_funzionale import ui_audiometria_funzionale
+                ui_audiometria_funzionale()
+            except ImportError:
+                st.info("Modulo Audiometria Funzionale.")
+            return
+        if sotto == "👁️ Eye tracking":
+            from .sections.ui_cliniche import render_gaze_section
+            render_gaze_section(); return
         if sotto == "📖 Lettura avanzata":
             try:
                 from .reading.ui_reading_dom import ui_reading_dom
@@ -465,13 +354,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📊 Dashboard incassi":
             from .sections.ui_cliniche import render_dashboard_section
             render_dashboard_section(); return
-        if sotto == "👤 Il mio profilo":
-            try:
-                from .ui_profilo_professionista import render_profilo_professionista
-                render_profilo_professionista(conn)
-            except Exception as e:
-                st.error(f"Errore profilo: {e}")
-            return
         if sotto == "🏥 Il mio studio":
             try:
                 from .saas_tenant import render_gestione_studio
@@ -482,12 +364,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Modulo Studio non disponibile: {e}")
             return
         if sotto == "👥 Utenti / Ruoli":
-            try:
-                from .ui_gestione_utenti import render_gestione_utenti
-                render_gestione_utenti(conn, is_admin)
-            except Exception as e:
-                st.error(f"Modulo gestione utenti non disponibile: {e}")
-            return
+            from .sections.ui_cliniche import render_utenti_section
+            render_utenti_section(lambda: conn); return
         if sotto == "⚙️ Platform Admin":
             try:
                 from .saas_tenant import render_admin_saas
@@ -565,7 +443,7 @@ def dispatch_main_section(*, sezione: str,
     _legacy_map = {
         "Pazienti":                      (AREA_PAZIENTI,    "👤 Anagrafica pazienti"),
         "Valutazione PNEV":              (AREA_VALUTAZIONE, "🔬 PNEV"),
-        "Valutazioni visive / oculistiche": (AREA_VALUTAZIONE, "👁️ Valutazione visuo-percettiva"),
+        "Valutazioni visive / oculistiche": (AREA_VALUTAZIONE, "👁️ Valutazione visiva (VVF)"),
         "Sedute / Terapie":              (AREA_PAZIENTI,    "📅 Sedute / Terapie"),
         "Osteopatia":                    (AREA_QUESTIONARI, "🦴 Osteopatia"),
         "Dashboard incassi":             (AREA_STUDIO,      "📊 Dashboard incassi"),

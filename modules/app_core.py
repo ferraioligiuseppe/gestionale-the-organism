@@ -426,9 +426,15 @@ def debug_secrets_auth():
 import sqlite3
 
 def _ai_enabled() -> bool:
-    """AI abilitata se [ai] ENABLED=true nei Secrets,
-    indipendentemente da APP_MODE."""
+    """Enable AI helper ONLY in TEST unless explicitly allowed.
+
+    Controlled via Streamlit Secrets:
+    [ai]
+    ENABLED = true
+    """
     try:
+        if str(APP_MODE).lower().strip() != "test":
+            return False
         a = st.secrets.get("ai", {})
         return bool(a.get("ENABLED", False))
     except Exception:
