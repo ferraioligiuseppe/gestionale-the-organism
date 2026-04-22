@@ -409,8 +409,12 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     # ── AREA REPORT & AI ──────────────────────────────────────────────
     elif area == AREA_REPORT_AI:
         if sotto == "🤖 Relazioni cliniche (AI)":
-            from .sections.ui_cliniche import render_relazioni_section
-            render_relazioni_section(); return
+            try:
+                from .ui_relazione_clinica import render_relazione_clinica
+                render_relazione_clinica(conn)
+            except Exception as e:
+                st.error(f"Errore relazione clinica: {e}")
+            return
         if sotto in ("🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
                      "📊 Export statistici", "🧪 Caso demo"):
             mappa = {
