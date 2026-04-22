@@ -426,15 +426,9 @@ def debug_secrets_auth():
 import sqlite3
 
 def _ai_enabled() -> bool:
-    """AI abilitata se [ai] ENABLED=true nei Secrets."""
+    """AI abilitata se [ai] ENABLED=true nei Secrets,
+    indipendentemente da APP_MODE."""
     try:
-        a = st.secrets.get("ai", {})
-        return bool(a.get("ENABLED", False))
-    except Exception:
-        return False
-    try:
-        if str(APP_MODE).lower().strip() != "test":
-            return False
         a = st.secrets.get("ai", {})
         return bool(a.get("ENABLED", False))
     except Exception:
@@ -5601,6 +5595,12 @@ def ui_anamnesi():
     with tab_pnev_m:
         motivo_m = st.text_area("Domanda clinica / motivo", rec["Motivo"] or "", key=f"motivo_edit_{an_id}")
         visita_snapshot_m = {"paziente_id": paz_id, "motivo": motivo_m}
+        # Applica valori pending dall IA prima del render widget
+        _pnev_pfx = f"pnev_edit_{an_id}"
+        for _pk in [k for k in st.session_state if k.startswith(f"__pending_{_pnev_pfx}")]:
+            _rk = _pk.replace("__pending_","",1)
+            try: st.session_state[_rk] = st.session_state.pop(_pk)
+            except Exception: pass
         pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(
             prefix=f"pnev_edit_{an_id}", visita=visita_snapshot_m, existing=pnev_existing
         )
