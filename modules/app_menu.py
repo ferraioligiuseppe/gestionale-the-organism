@@ -65,7 +65,7 @@ SOTTOSEZIONI = {
         "📸 Photoref AI",
     ],
     AREA_REPORT_AI: [
-        "🤖 Relazioni cliniche (AI)",
+        "📝 Relazione clinica",
         "🎯 Piano Vision Therapy",
         "📄 Report PDF con grafici",
         "📊 Export statistici",
