@@ -79,16 +79,20 @@ def _carica_dati_paziente(conn, paz_id: int) -> dict:
 
 
 def _ai_genera(prompt: str) -> str:
-    """Chiama Claude per generare il testo della relazione."""
-    import anthropic
+    """Chiama OpenAI per generare il testo della relazione."""
     try:
-        client = anthropic.Anthropic()
-        msg = client.messages.create(
-            model="claude-opus-4-5",
+        import openai, streamlit as _st
+        api_key = (
+            _st.secrets.get("OPENAI_API_KEY","") or
+            _st.secrets.get("db",{}).get("OPENAI_API_KEY","")
+        )
+        client = openai.OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model="gpt-4o",
             max_tokens=2000,
             messages=[{"role":"user","content": prompt}]
         )
-        return msg.content[0].text
+        return resp.choices[0].message.content
     except Exception as e:
         return f"[Errore AI: {e}]"
 
