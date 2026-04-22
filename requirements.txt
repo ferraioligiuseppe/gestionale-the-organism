@@ -48,3 +48,5 @@ aiortc>=1.9.0
 
 streamlit-javascript
 qrcode[pil]
+
+anthropic
