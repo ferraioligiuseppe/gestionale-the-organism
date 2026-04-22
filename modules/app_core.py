@@ -426,15 +426,9 @@ def debug_secrets_auth():
 import sqlite3
 
 def _ai_enabled() -> bool:
-    """Enable AI helper ONLY in TEST unless explicitly allowed.
-
-    Controlled via Streamlit Secrets:
-    [ai]
-    ENABLED = true
-    """
+    """AI abilitata se [ai] ENABLED=true nei Secrets,
+    indipendentemente da APP_MODE."""
     try:
-        if str(APP_MODE).lower().strip() != "test":
-            return False
         a = st.secrets.get("ai", {})
         return bool(a.get("ENABLED", False))
     except Exception:
@@ -951,11 +945,7 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
 
 from datetime import date, datetime
 from typing import Optional, Dict
-from letterhead_pdf import build_pdf_with_letterhead
-from pdf_templates import build_pdf
-# A5
 
-# A4 2×A5
 
 
 
@@ -1703,6 +1693,30 @@ def login(get_conn) -> bool:
 
         _audit(conn, user_id, "LOGIN_SUCCESS", meta={"roles": roles})
 
+        # Carica display_name e profilo_json da DB
+        _display_name = ""
+        _profilo = {}
+        try:
+            _dn_cur = conn.cursor()
+            _dn_cur.execute(
+                "SELECT display_name, profilo_json FROM auth_users WHERE id=%s",
+                (user_id,))
+            _dn_row = _dn_cur.fetchone()
+            if _dn_row:
+                if isinstance(_dn_row, dict):
+                    _display_name = _dn_row.get("display_name","") or ""
+                    _raw_profilo  = _dn_row.get("profilo_json") or {}
+                else:
+                    _display_name = _dn_row[0] or ""
+                    _raw_profilo  = _dn_row[1] or {}
+                import json as _json
+                _profilo = _raw_profilo if isinstance(_raw_profilo,dict) else _json.loads(_raw_profilo or "{}")
+                # display_name dal profilo se non impostato
+                if not _display_name and _profilo.get("display_name"):
+                    _display_name = _profilo["display_name"]
+        except Exception:
+            pass
+
         st.session_state["logged_in"] = True
         st.session_state["user"] = {
             "id": int(user_id),
@@ -1710,6 +1724,11 @@ def login(get_conn) -> bool:
             "email": email,
             "roles": roles,
             "must_change_password": bool(must_change),
+            "display_name": _display_name,
+            "specializzazioni": _profilo.get("specializzazioni",""),
+            "titolo": _profilo.get("titolo",""),
+            "nome": _profilo.get("nome",""),
+            "profilo": _profilo,
         }
         st.success("Accesso effettuato.")
         st.rerun()
@@ -2626,6 +2645,14 @@ def init_db() -> None:
         pass
     try:
         cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_summary TEXT;")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS visita_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE IF EXISTS valutazioni_visive ADD COLUMN IF NOT EXISTS visita_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
     except Exception:
         pass
 
@@ -11100,271 +11127,18 @@ def main():
     if not login(get_connection):
         return
 
-    # menu laterale
-    st.sidebar.title("Navigazione")
-    sections = build_sections(is_admin(), APP_MODE)
-
-    nav_key = "main_nav_sezione"
-    if nav_key not in st.session_state:
-        st.session_state[nav_key] = SECTION_DASHBOARD if SECTION_DASHBOARD in sections else sections[0]
-
-    if "go_section" in st.session_state:
-        target = st.session_state.pop("go_section")
-        if target in sections:
-            st.session_state[nav_key] = target
-
-    sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
-
-    if sezione == "🔉 Diagnostica Uditiva":
-        if _ui_diag_uditiva:
-            _ui_diag_uditiva(conn=get_connection())
-        return
-
-    if sezione == "🎵 Stimolazione Passiva":
-        if _ui_stim_passiva:
-            _ui_stim_passiva(conn=get_connection())
-        return
-
-    # routing moduli uditivi (estratti)
-    try:
-        _udito_handled = dispatch_udito_section(
-            sezione=sezione,
-            app_mode=APP_MODE,
-            get_connection=get_connection,
-            paziente_selector_fn=_select_paziente_minimal,
-            ui_orl_eq=ui_orl_eq,
-            ui_generatore_stimolazione=ui_generatore_stimolazione,
-            ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
-            ui_audiogramma_test=ui_audiogramma_test,
-            ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
-            ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
-            ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
-            ui_db_cleanup=ui_db_cleanup,
-        )
-    except Exception as _udito_err:
-        import traceback
-        st.error(f"Errore sezione uditiva: {type(_udito_err).__name__}: {_udito_err}")
-        st.code(traceback.format_exc())
-        return
-    if _udito_handled:
-        return
-
-    # routing Lenti a contatto
-    if sezione == SECTION_LENTI_CONTATTO:
-        ui_lenti_contatto()
-        return
-
-    # routing Esami Strumentali
-    if sezione == SECTION_ESAMI_STRUM:
-        ui_esami_strumentali()
-        return
-
-    # routing Bilancio Uditivo
-    if sezione == SECTION_BILANCIO_UDITIVO:
-        ui_bilancio_uditivo()
-        return
-
-    # routing Audiometria Funzionale
-    if sezione == SECTION_AUDIOMETRIA_FUN:
-        ui_audiometria_funzionale()
-        return
-
-    # routing principale (estratto)
-    if dispatch_main_section(
-        sezione=sezione,
+    # ── NUOVO MENU A 7 AREE ──────────────────────────────────────────
+    from modules.app_main_router import build_smart_menu, dispatch_smart_section
+    area, sotto = build_smart_menu(is_admin=is_admin())
+    dispatch_smart_section(
+        area=area,
+        sotto=sotto,
         get_connection=get_connection,
-    ):
-        return
+        is_admin=is_admin(),
+    )
+    return
 
 
-# ================================
-# RELAZIONI CLINICHE - THE ORGANISM
-# ================================
-import shutil as _shutil
-
-try:
-    from docxtpl import DocxTemplate
-except Exception:
-    DocxTemplate = None
-
-def _ensure_relazioni_cliniche_table(conn):
-    """Crea la tabella relazioni_cliniche con colonne AI: stato, contenuto_json, pdf_bytes."""
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS relazioni_cliniche (
-          id BIGSERIAL PRIMARY KEY,
-          paziente_id BIGINT NOT NULL,
-          tipo TEXT NOT NULL,
-          titolo TEXT NOT NULL,
-          data_relazione DATE NOT NULL,
-          docx_path TEXT DEFAULT '',
-          pdf_path TEXT DEFAULT '',
-          note TEXT,
-          stato TEXT DEFAULT 'bozza',
-          contenuto_json TEXT,
-          pdf_bytes BYTEA,
-          professionista TEXT,
-          fonte_dati TEXT,
-          approvata_il TIMESTAMP,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW()
-        )
-        """)
-        for col, defn in [
-            ("stato","TEXT DEFAULT 'bozza'"),("contenuto_json","TEXT"),
-            ("pdf_bytes","BYTEA"),("professionista","TEXT"),
-            ("fonte_dati","TEXT"),("approvata_il","TIMESTAMP"),
-        ]:
-            try: cur.execute(f"ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS {col} {defn}")
-            except Exception: pass
-        try:
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
-        except Exception:
-            pass
-        conn.commit()
-        return
-    except Exception:
-        # Fallback SQLite
-        pass
-
-    try:
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS relazioni_cliniche (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          paziente_id INTEGER NOT NULL,
-          tipo TEXT NOT NULL,
-          titolo TEXT NOT NULL,
-          data_relazione TEXT NOT NULL,
-          docx_path TEXT NOT NULL,
-          pdf_path TEXT NOT NULL,
-          note TEXT,
-          created_at TEXT NOT NULL
-        )
-        """)
-        try:
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
-        except Exception:
-            pass
-        conn.commit()
-    except Exception:
-        # ultima risorsa: non bloccare l'app
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
-def _render_docx_docxtpl(template_path, out_docx_path, context):
-    if DocxTemplate is None:
-        raise RuntimeError("Dipendenza mancante: docxtpl. Aggiungi a requirements.txt: docxtpl")
-    doc = DocxTemplate(template_path)
-    doc.render(context)
-    os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
-    doc.save(out_docx_path)
-
-def _convert_pdf_if_possible(docx_path, out_pdf_path):
-    # Streamlit Cloud: spesso NON disponibile. In locale funziona se LibreOffice è installato.
-    soffice_ok = _shutil.which("soffice") is not None
-    if not soffice_ok:
-        return False, ""
-    import subprocess, shutil
-    out_dir = os.path.dirname(out_pdf_path)
-    os.makedirs(out_dir, exist_ok=True)
-    cmd = [
-        "soffice","--headless","--nologo","--nolockcheck","--nodefault","--norestore",
-        "--convert-to","pdf","--outdir", out_dir, docx_path
-    ]
-    subprocess.run(cmd, check=True)
-    gen = os.path.join(out_dir, os.path.splitext(os.path.basename(docx_path))[0] + ".pdf")
-    if not os.path.exists(gen):
-        return False, ""
-    shutil.move(gen, out_pdf_path)
-    return True, out_pdf_path
-
-# ==========================
-# Bibliografia (PNEV / INPP- INPPS) — inserita automaticamente in TUTTE le relazioni cliniche
-# Nota: nei template .docx inserisci il placeholder: {{ BIBLIOGRAFIA }}
-# ==========================
-BIBLIOGRAFIA_PNEV = """
-BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI (selezione)
-
-INPP / INPPS – neuromotor readiness, riflessi primitivi e apprendimento
-• Demiy A, Kalemba A, Lorent M, Pecuch A, Wolańska E, Telenga M, Gieysztor EZ. (2020).
-  A Child’s Perception of Their Developmental Difficulties in Relation to Their Adult Assessment.
-  Analysis of the INPP Questionnaire. Journal of Personalized Medicine, 10(4), 156.
-
-• Goddard Blythe S. (2005). Reflexes, Learning and Behavior: A Window into the Child’s Mind. Fern Ridge Press.
-• Goddard Blythe S. (2009). Attention, Balance and Coordination: The A.B.C. of Learning Success. Wiley-Blackwell.
-• Goddard Blythe S. (2012). Assessing Neuromotor Readiness for Learning:
-  The INPP Developmental Screening Test and School Intervention Programme. Wiley-Blackwell.
-
-Nota clinica (screening):
-Nel protocollo PNEV/INPPS, un numero elevato di affermazioni positive ai questionari di screening
-è considerato indicativo di possibile immaturità neuromotoria e richiede conferma tramite valutazione clinica diretta.
-"""
-
-TEMPLATES = {
-  # Linguaggio (ospedaliero) - unico template
-  "linguaggio_invio_ospedaliero": {
-    "titolo": "Relazione Linguaggio – Invio Ospedaliero",
-    "files": {"std": "relazione_linguaggio_invio_ospedaliero.docx"}
-  },
-  # Neuropsicologica
-  "neuropsicologica_3_6": {
-    "titolo": "Relazione Neuropsicologica – Invio Ospedaliero (3–6)",
-    "files": {"std": "relazione_neuropsicologica_invio_ospedaliero_3_6.docx"}
-  },
-  "neuropsicologica_6_10": {
-    "titolo": "Relazione Neuropsicologica – Invio Ospedaliero (6–10)",
-    "files": {"std": "relazione_neuropsicologica_invio_ospedaliero_6_10.docx"}
-  },
-  # Neuroevolutiva integrata
-  "neuroevolutiva_3_6": {
-    "titolo": "Relazione Neuroevolutiva Integrata (3–6)",
-    "files": {"std": "relazione_neuroevolutiva_integrata_3_6.docx"}
-  },
-  "neuroevolutiva_6_10": {
-    "titolo": "Relazione Neuroevolutiva Integrata (6–10)",
-    "files": {"std": "relazione_neuroevolutiva_integrata_6_10.docx"}
-  },
-  # Scuola / ASL
-  "scuola_asl_3_6": {
-    "titolo": "Relazione Scuola / ASL (3–6)",
-    "files": {"std": "relazione_scuola_asl_3_6.docx"}
-  },
-  "scuola_asl_6_10": {
-    "titolo": "Relazione Scuola / ASL (6–10)",
-    "files": {"std": "relazione_scuola_asl_6_10.docx"}
-  },
-  # Sensori-motoria / Neuro-psico-motoria
-  "sensori_motorio_3_6": {
-    "titolo": "Relazione Sensori-motoria / Neuro-psico-motoria (3–6)",
-    "files": {"std": "relazione_sensori_motorio_neuropsicomotorio_3_6.docx"}
-  },
-  "sensori_motorio_6_10": {
-    "titolo": "Relazione Sensori-motoria / Neuro-psico-motoria (6–10)",
-    "files": {"std": "relazione_sensori_motorio_neuropsicomotorio_6_10.docx"}
-  },
-  # SMOF
-  "smof_3_6": {
-    "titolo": "Relazione SMOF / Oro-linguale (3–6)",
-    "files": {"std": "relazione_smof_oro_linguale_3_6.docx"}
-  },
-  "smof_6_10": {
-    "titolo": "Relazione SMOF / Oro-linguale (6–10)",
-    "files": {"std": "relazione_smof_oro_linguale_6_10.docx"}
-  },
-  # Follow-up
-  "followup_3_6": {
-    "titolo": "Relazione Follow-up (3–6)",
-    "files": {"std": "relazione_followup_3_6.docx"}
-  },
-  "followup_6_10": {
-    "titolo": "Relazione Follow-up (6–10)",
-    "files": {"std": "relazione_followup_6_10.docx"}
-  },
-}
 
 def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     import streamlit as st
