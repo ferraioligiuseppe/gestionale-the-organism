@@ -408,7 +408,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA REPORT & AI ──────────────────────────────────────────────
     elif area == AREA_REPORT_AI:
-        if sotto == "🤖 Relazioni cliniche (AI)":
+        if sotto in ("🤖 Relazioni cliniche (AI)", "📝 Relazione clinica"):
             try:
                 from .ui_relazione_clinica import render_relazione_clinica
                 render_relazione_clinica(conn)
