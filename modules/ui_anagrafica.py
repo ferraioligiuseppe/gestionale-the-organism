@@ -49,17 +49,17 @@ def _carica_pazienti(conn, cerca=""):
         if cerca.strip():
             q = f"%{cerca.strip().upper()}%"
             cur.execute(
-                "SELECT id, Cognome, Nome, Data_Nascita, Telefono, Email, "
-                "COALESCE(Stato_Paziente,'ATTIVO') as Stato_Paziente "
-                "FROM Pazienti WHERE UPPER(Cognome) LIKE %s OR UPPER(Nome) LIKE %s "
+                "SELECT id, cognome, nome, data_nascita, telefono, email, "
+                "COALESCE(stato_paziente,'ATTIVO') as stato_paziente "
+                "FROM pazienti WHERE UPPER(cognome) LIKE %s OR UPPER(nome) LIKE %s "
                 "OR CAST(id AS TEXT) = %s "
-                "ORDER BY Cognome, Nome LIMIT 100", (q, q, cerca.strip())
+                "ORDER BY cognome, nome LIMIT 100", (q, q, cerca.strip())
             )
         else:
             cur.execute(
-                "SELECT id, Cognome, Nome, Data_Nascita, Telefono, Email, "
-                "COALESCE(Stato_Paziente,'ATTIVO') as Stato_Paziente "
-                "FROM Pazienti ORDER BY Cognome, Nome LIMIT 300"
+                "SELECT id, cognome, nome, data_nascita, telefono, email, "
+                "COALESCE(stato_paziente,'ATTIVO') as stato_paziente "
+                "FROM pazienti ORDER BY cognome, nome LIMIT 300"
             )
         rows = cur.fetchall() or []
         result = []
@@ -86,9 +86,9 @@ def _salva_nuovo(conn, d: dict) -> int | None:
             data_iso = parsed.isoformat()
 
         cur.execute("""
-            INSERT INTO Pazienti
-            (Cognome, Nome, Data_Nascita, Sesso, Telefono, Email,
-             Indirizzo, CAP, Citta, Provincia, Codice_Fiscale, Stato_Paziente)
+            INSERT INTO pazienti
+            (cognome, nome, data_nascita, sesso, telefono, email,
+             indirizzo, cap, citta, provincia, codice_fiscale, stato_paziente)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'ATTIVO')
             RETURNING id
         """, (
@@ -137,11 +137,11 @@ def _salva_modifica(conn, paz_id: int, d: dict) -> bool:
             data_iso = parsed.isoformat()
 
         cur.execute("""
-            UPDATE Pazienti SET
-                Cognome=%s, Nome=%s, Data_Nascita=%s, Sesso=%s,
-                Telefono=%s, Email=%s, Indirizzo=%s, CAP=%s,
-                Citta=%s, Provincia=%s, Codice_Fiscale=%s,
-                Stato_Paziente=%s
+            UPDATE pazienti SET
+                cognome=%s, nome=%s, data_nascita=%s, sesso=%s,
+                telefono=%s, email=%s, indirizzo=%s, cap=%s,
+                citta=%s, provincia=%s, codice_fiscale=%s,
+                stato_paziente=%s
             WHERE id=%s
         """, (
             d["cognome"].strip().upper(),
@@ -171,47 +171,47 @@ def _form_paziente(conn, key_prefix: str, rec: dict | None = None) -> dict | Non
     st.markdown("##### Dati anagrafici")
     c1, c2 = st.columns(2)
     with c1:
-        cognome = st.text_input("Cognome *", value=r.get("Cognome",""),
+        cognome = st.text_input("Cognome *", value=r.get(cognome,""),
                                  key=f"{key_prefix}_cog")
     with c2:
-        nome = st.text_input("Nome *", value=r.get("Nome",""),
+        nome = st.text_input("Nome *", value=r.get(nome,""),
                               key=f"{key_prefix}_nom")
 
     c3, c4, c5 = st.columns(3)
     with c3:
-        dn_val = _fmt_dn(r.get("Data_Nascita",""))
+        dn_val = _fmt_dn(r.get(data_nascita,""))
         data_str = st.text_input("Data nascita (GG/MM/AAAA)",
                                   value=dn_val,
                                   key=f"{key_prefix}_dn",
                                   placeholder="es. 15/03/1990")
     with c4:
-        sesso = st.selectbox("Sesso", ["M","F","Altro"],
-                              index=["M","F","Altro"].index(r.get("Sesso","M"))
-                              if r.get("Sesso") in ["M","F","Altro"] else 0,
+        sesso = st.selectbox(sesso, ["M","F","Altro"],
+                              index=["M","F","Altro"].index(r.get(sesso,"M"))
+                              if r.get(sesso) in ["M","F","Altro"] else 0,
                               key=f"{key_prefix}_sex")
     with c5:
         cf = st.text_input("Codice fiscale",
-                            value=r.get("Codice_Fiscale","") or "",
+                            value=r.get(codice_fiscale,"") or "",
                             key=f"{key_prefix}_cf")
 
     st.markdown("##### Contatti")
     c6, c7 = st.columns(2)
     with c6:
-        tel = st.text_input("Telefono", value=r.get("Telefono","") or "",
+        tel = st.text_input(telefono, value=r.get(telefono,"") or "",
                              key=f"{key_prefix}_tel")
     with c7:
-        email = st.text_input("Email", value=r.get("Email","") or "",
+        email = st.text_input(email, value=r.get(email,"") or "",
                                key=f"{key_prefix}_email")
 
     st.markdown("##### Indirizzo")
     indirizzo = st.text_input("Via / Indirizzo",
-                               value=r.get("Indirizzo","") or "",
+                               value=r.get(indirizzo,"") or "",
                                key=f"{key_prefix}_ind")
 
     c8, c9, c10 = st.columns([1,2,1])
     with c8:
         cap_key = f"{key_prefix}_cap"
-        cap = st.text_input("CAP", value=r.get("CAP","") or "",
+        cap = st.text_input(cap, value=r.get(cap,"") or "",
                              key=cap_key, max_chars=5)
         # Auto-lookup CAP
         if cap and len(cap)==5 and cap.isdigit():
@@ -225,12 +225,12 @@ def _form_paziente(conn, key_prefix: str, rec: dict | None = None) -> dict | Non
 
     with c9:
         citta_default = st.session_state.get(f"{key_prefix}_citta_auto",
-                                              r.get("Citta","") or "")
+                                              r.get(citta,"") or "")
         citta = st.text_input("Città", value=citta_default,
                                key=f"{key_prefix}_citta")
     with c10:
         prov_default = st.session_state.get(f"{key_prefix}_prov_auto",
-                                             r.get("Provincia","") or "")
+                                             r.get(provincia,"") or "")
         prov = st.text_input("Prov.", value=prov_default, max_chars=2,
                               key=f"{key_prefix}_prov")
 
@@ -239,8 +239,8 @@ def _form_paziente(conn, key_prefix: str, rec: dict | None = None) -> dict | Non
         stato = st.selectbox("Stato paziente",
                               ["ATTIVO","DIMESSO","SOSPESO","ARCHIVIATO"],
                               index=["ATTIVO","DIMESSO","SOSPESO","ARCHIVIATO"].index(
-                                  r.get("Stato_Paziente","ATTIVO")
-                                  if r.get("Stato_Paziente") in
+                                  r.get(stato_paziente,"ATTIVO")
+                                  if r.get(stato_paziente) in
                                   ["ATTIVO","DIMESSO","SOSPESO","ARCHIVIATO"]
                                   else "ATTIVO"),
                               key=f"{key_prefix}_stato")
@@ -304,10 +304,10 @@ def render_anagrafica(conn) -> None:
             st.caption(f"{len(pazienti)} risultati")
             for p in pazienti:
                 pid = p.get("id")
-                cog = p.get("Cognome","")
-                nom = p.get("Nome","")
-                eta = _eta(p.get("Data_Nascita"))
-                stato = p.get("Stato_Paziente","ATTIVO") or "ATTIVO"
+                cog = p.get(cognome,"")
+                nom = p.get(nome,"")
+                eta = _eta(p.get(data_nascita))
+                stato = p.get(stato_paziente,"ATTIVO") or "ATTIVO"
 
                 # Badge stato
                 badge = "🟢" if stato=="ATTIVO" else ("🟡" if stato=="SOSPESO" else "⚫")
@@ -351,18 +351,18 @@ def render_anagrafica(conn) -> None:
             if paz_id:
                 try:
                     cur = conn.cursor()
-                    cur.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
+                    cur.execute("SELECT * FROM pazienti WHERE id=%s", (paz_id,))
                     row = cur.fetchone()
                     if row:
                         if not isinstance(row, dict):
                             cols = [d[0] for d in cur.description]
                             row = dict(zip(cols, row))
 
-                        cog = row.get("Cognome","")
-                        nom = row.get("Nome","")
-                        dn  = _fmt_dn(row.get("Data_Nascita"))
-                        tel = row.get("Telefono","") or ""
-                        eta = _eta(row.get("Data_Nascita"))
+                        cog = row.get(cognome,"")
+                        nom = row.get(nome,"")
+                        dn  = _fmt_dn(row.get(data_nascita))
+                        tel = row.get(telefono,"") or ""
+                        eta = _eta(row.get(data_nascita))
 
                         st.markdown(f"#### {cog} {nom}")
                         if dn: st.caption(f"Nato/a il {dn} · {eta}")
@@ -383,7 +383,7 @@ def render_anagrafica(conn) -> None:
                                      key=f"ana_arch_{paz_id}"):
                             try:
                                 cur.execute(
-                                    "UPDATE Pazienti SET Stato_Paziente='ARCHIVIATO' WHERE id=%s",
+                                    "UPDATE pazienti SET stato_paziente='ARCHIVIATO' WHERE id=%s",
                                     (paz_id,))
                                 conn.commit()
                                 st.success("Paziente archiviato.")
