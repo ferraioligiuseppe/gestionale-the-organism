@@ -49,13 +49,16 @@ def _carica_pazienti(conn, cerca=""):
         if cerca.strip():
             q = f"%{cerca.strip().upper()}%"
             cur.execute(
-                "SELECT id, Cognome, Nome, Data_Nascita, Telefono, Email, Stato_Paziente "
+                "SELECT id, Cognome, Nome, Data_Nascita, Telefono, Email, "
+                "COALESCE(Stato_Paziente,'ATTIVO') as Stato_Paziente "
                 "FROM Pazienti WHERE UPPER(Cognome) LIKE %s OR UPPER(Nome) LIKE %s "
-                "ORDER BY Cognome, Nome LIMIT 100", (q, q)
+                "OR CAST(id AS TEXT) = %s "
+                "ORDER BY Cognome, Nome LIMIT 100", (q, q, cerca.strip())
             )
         else:
             cur.execute(
-                "SELECT id, Cognome, Nome, Data_Nascita, Telefono, Email, Stato_Paziente "
+                "SELECT id, Cognome, Nome, Data_Nascita, Telefono, Email, "
+                "COALESCE(Stato_Paziente,'ATTIVO') as Stato_Paziente "
                 "FROM Pazienti ORDER BY Cognome, Nome LIMIT 300"
             )
         rows = cur.fetchall() or []
@@ -334,10 +337,13 @@ def render_anagrafica(conn) -> None:
                     st.success(f"✅ {dati['cognome']} {dati['nome']} salvato (ID: {paz_id})")
                     st.session_state["ana_paz_sel"] = paz_id
                     st.session_state["ana_modo"] = "modifica"
-                    # Pulisci cache CAP
+                    st.session_state["ana_cerca"] = ""
+                    # Pulisci cache CAP e form
                     for k in list(st.session_state.keys()):
-                        if k.startswith("np_"):
-                            del st.session_state[k]
+                        if k.startswith("np_") or k.startswith("ana_"):
+                            if k not in ("ana_paz_sel","ana_modo","ana_cerca"):
+                                del st.session_state[k]
+                    import time; time.sleep(0.3)  # lascia tempo al commit Neon
                     st.rerun()
 
         elif modo == "modifica":
