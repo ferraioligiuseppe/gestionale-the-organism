@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Anagrafica Pazienti - The Organism.
-Layout: lista sempre visibile a sinistra, form a destra.
-Salva e aggiorna immediatamente senza perdere la posizione.
+Layout a due colonne fisse: lista a sinistra, form a destra.
+Il form è sempre visibile — niente scroll.
 """
 from __future__ import annotations
 import datetime
@@ -24,11 +24,10 @@ def _fmt_dn(iso) -> str:
 def _eta(dn) -> str:
     try:
         anni = (datetime.date.today() - datetime.date.fromisoformat(str(dn)[:10])).days // 365
-        return f"{anni} anni"
+        return f"{anni}a"
     except: return ""
 
 def _cap_lookup(cap: str) -> dict:
-    cap = cap.strip()
     if len(cap) != 5 or not cap.isdigit(): return {}
     try:
         import requests
@@ -49,34 +48,39 @@ def _carica_pazienti(conn, cerca=""):
         if cerca.strip():
             q = f"%{cerca.strip().upper()}%"
             cur.execute(
-                "SELECT id, cognome, nome, data_nascita, telefono, email, "
-                "COALESCE(stato_paziente,'ATTIVO') as stato_paziente "
+                "SELECT id, cognome, nome, data_nascita, telefono, stato_paziente "
                 "FROM pazienti WHERE UPPER(cognome) LIKE %s OR UPPER(nome) LIKE %s "
                 "OR CAST(id AS TEXT) = %s "
                 "ORDER BY cognome, nome LIMIT 100", (q, q, cerca.strip())
             )
         else:
             cur.execute(
-                "SELECT id, cognome, nome, data_nascita, telefono, email, "
-                "COALESCE(stato_paziente,'ATTIVO') as stato_paziente "
+                "SELECT id, cognome, nome, data_nascita, telefono, stato_paziente "
                 "FROM pazienti ORDER BY cognome, nome LIMIT 300"
             )
         rows = cur.fetchall() or []
         result = []
         for r in rows:
-            if isinstance(r, dict):
-                result.append(r)
-            else:
-                cols = [d[0] for d in cur.description]
-                result.append(dict(zip(cols, r)))
+            result.append(r if isinstance(r,dict) else
+                          dict(zip([d[0] for d in cur.description], r)))
         return result
     except Exception as e:
-        st.error(f"Errore lista pazienti: {e}")
+        st.error(f"Errore lista: {e}")
         return []
 
-def _salva_nuovo(conn, d: dict) -> int | None:
+def _carica_paziente(conn, paz_id):
     try:
         cur = conn.cursor()
+        cur.execute("SELECT * FROM pazienti WHERE id=%s", (paz_id,))
+        row = cur.fetchone()
+        if not row: return None
+        if not isinstance(row, dict):
+            row = dict(zip([d[0] for d in cur.description], row))
+        return row
+    except: return None
+
+def _salva_nuovo(conn, d) -> int | None:
+    try:
         data_iso = None
         if d["data_str"].strip():
             parsed = _parse_data(d["data_str"])
@@ -84,7 +88,7 @@ def _salva_nuovo(conn, d: dict) -> int | None:
                 st.error("Data non valida. Usa GG/MM/AAAA")
                 return None
             data_iso = parsed.isoformat()
-
+        cur = conn.cursor()
         cur.execute("""
             INSERT INTO pazienti
             (cognome, nome, data_nascita, sesso, telefono, email,
@@ -92,42 +96,32 @@ def _salva_nuovo(conn, d: dict) -> int | None:
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'ATTIVO')
             RETURNING id
         """, (
-            d["cognome"].strip().upper(),
-            d["nome"].strip().title(),
-            data_iso,
-            d["sesso"],
-            d["tel"].strip(),
-            d["email"].strip().lower(),
-            d["indirizzo"].strip(),
-            d["cap"].strip(),
-            d["citta"].strip().title(),
-            d["prov"].strip().upper(),
+            d["cognome"].strip().upper(), d["nome"].strip().title(),
+            data_iso, d["sesso"],
+            d["tel"].strip(), d["email"].strip().lower(),
+            d["indirizzo"].strip(), d["cap"].strip(),
+            d["citta"].strip().title(), d["prov"].strip().upper(),
             d["cf"].strip().upper() or None,
         ))
         row = cur.fetchone()
-        paz_id = int(row["id"] if isinstance(row, dict) else row[0])
-
-        # Salva consenso privacy minimo
+        paz_id = int(row["id"] if isinstance(row,dict) else row[0])
         try:
             cur.execute("""
                 INSERT INTO consensi_privacy
                 (paziente_id, tipo_soggetto, consenso_trattamento, Data_Ora)
-                VALUES (%s, %s, 1, NOW())
+                VALUES (%s,%s,1,NOW())
             """, (paz_id, d.get("tipo_privacy","adulto")))
-        except Exception:
-            pass
-
+        except: pass
         conn.commit()
         return paz_id
     except Exception as e:
         try: conn.rollback()
         except: pass
-        st.error(f"Errore salvataggio: {e}")
+        st.error(f"Errore: {e}")
         return None
 
-def _salva_modifica(conn, paz_id: int, d: dict) -> bool:
+def _salva_modifica(conn, paz_id, d) -> bool:
     try:
-        cur = conn.cursor()
         data_iso = None
         if d["data_str"].strip():
             parsed = _parse_data(d["data_str"])
@@ -135,7 +129,7 @@ def _salva_modifica(conn, paz_id: int, d: dict) -> bool:
                 st.error("Data non valida. Usa GG/MM/AAAA")
                 return False
             data_iso = parsed.isoformat()
-
+        cur = conn.cursor()
         cur.execute("""
             UPDATE pazienti SET
                 cognome=%s, nome=%s, data_nascita=%s, sesso=%s,
@@ -144,268 +138,289 @@ def _salva_modifica(conn, paz_id: int, d: dict) -> bool:
                 stato_paziente=%s
             WHERE id=%s
         """, (
-            d["cognome"].strip().upper(),
-            d["nome"].strip().title(),
+            d["cognome"].strip().upper(), d["nome"].strip().title(),
             data_iso, d["sesso"],
             d["tel"].strip(), d["email"].strip().lower(),
             d["indirizzo"].strip(), d["cap"].strip(),
             d["citta"].strip().title(), d["prov"].strip().upper(),
             d["cf"].strip().upper() or None,
-            d["stato"],
-            paz_id,
+            d["stato"], paz_id,
         ))
         conn.commit()
         return True
     except Exception as e:
         try: conn.rollback()
         except: pass
-        st.error(f"Errore modifica: {e}")
+        st.error(f"Errore: {e}")
         return False
 
+def _form_fields(key, r=None):
+    """Campi del form. r=None per nuovo, r=dict per modifica."""
+    is_nuovo = r is None
+    r = r or {}
 
-def _form_paziente(conn, key_prefix: str, rec: dict | None = None) -> dict | None:
-    """Form unificato nuovo/modifica. Ritorna dict dati o None se non salvato."""
-    is_nuovo = rec is None
-    r = rec or {}
-
-    st.markdown("##### Dati anagrafici")
     c1, c2 = st.columns(2)
     with c1:
-        cognome = st.text_input("Cognome *", value=r.get(cognome,""),
-                                 key=f"{key_prefix}_cog")
+        cognome = st.text_input("Cognome *", value=r.get("cognome",""),
+                                 key=f"{key}_cog")
     with c2:
-        nome = st.text_input("Nome *", value=r.get(nome,""),
-                              key=f"{key_prefix}_nom")
+        nome = st.text_input("Nome *", value=r.get("nome",""),
+                              key=f"{key}_nom")
 
-    c3, c4, c5 = st.columns(3)
+    c3, c4, c5 = st.columns([2,1,1])
     with c3:
-        dn_val = _fmt_dn(r.get(data_nascita,""))
-        data_str = st.text_input("Data nascita (GG/MM/AAAA)",
-                                  value=dn_val,
-                                  key=f"{key_prefix}_dn",
-                                  placeholder="es. 15/03/1990")
+        data_str = st.text_input("Data nascita",
+                                  value=_fmt_dn(r.get("data_nascita","")),
+                                  key=f"{key}_dn",
+                                  placeholder="GG/MM/AAAA")
     with c4:
-        sesso = st.selectbox(sesso, ["M","F","Altro"],
-                              index=["M","F","Altro"].index(r.get(sesso,"M"))
-                              if r.get(sesso) in ["M","F","Altro"] else 0,
-                              key=f"{key_prefix}_sex")
+        sesso_opts = ["M","F","Altro"]
+        sesso = st.selectbox("Sesso",
+                              sesso_opts,
+                              index=sesso_opts.index(r.get("sesso","M"))
+                              if r.get("sesso") in sesso_opts else 0,
+                              key=f"{key}_sex")
     with c5:
-        cf = st.text_input("Codice fiscale",
-                            value=r.get(codice_fiscale,"") or "",
-                            key=f"{key_prefix}_cf")
+        cf = st.text_input("Cod. Fiscale",
+                            value=r.get("codice_fiscale","") or "",
+                            key=f"{key}_cf")
 
-    st.markdown("##### Contatti")
     c6, c7 = st.columns(2)
     with c6:
-        tel = st.text_input(telefono, value=r.get(telefono,"") or "",
-                             key=f"{key_prefix}_tel")
+        tel = st.text_input("Telefono",
+                             value=r.get("telefono","") or "",
+                             key=f"{key}_tel")
     with c7:
-        email = st.text_input(email, value=r.get(email,"") or "",
-                               key=f"{key_prefix}_email")
+        email = st.text_input("Email",
+                               value=r.get("email","") or "",
+                               key=f"{key}_email")
 
-    st.markdown("##### Indirizzo")
-    indirizzo = st.text_input("Via / Indirizzo",
-                               value=r.get(indirizzo,"") or "",
-                               key=f"{key_prefix}_ind")
+    indirizzo = st.text_input("Indirizzo",
+                               value=r.get("indirizzo","") or "",
+                               key=f"{key}_ind")
 
     c8, c9, c10 = st.columns([1,2,1])
     with c8:
-        cap_key = f"{key_prefix}_cap"
-        cap = st.text_input(cap, value=r.get(cap,"") or "",
-                             key=cap_key, max_chars=5)
-        # Auto-lookup CAP
+        cap = st.text_input("CAP", value=r.get("cap","") or "",
+                             key=f"{key}_cap", max_chars=5)
         if cap and len(cap)==5 and cap.isdigit():
-            last_cap = st.session_state.get(f"{key_prefix}_last_cap","")
-            if cap != last_cap:
-                st.session_state[f"{key_prefix}_last_cap"] = cap
-                lookup = _cap_lookup(cap)
-                if lookup:
-                    st.session_state[f"{key_prefix}_citta_auto"] = lookup.get("citta","")
-                    st.session_state[f"{key_prefix}_prov_auto"]  = lookup.get("provincia","")
-
+            if cap != st.session_state.get(f"{key}_last_cap",""):
+                st.session_state[f"{key}_last_cap"] = cap
+                lk = _cap_lookup(cap)
+                if lk:
+                    st.session_state[f"{key}_citta_v"] = lk["citta"]
+                    st.session_state[f"{key}_prov_v"]  = lk["provincia"]
     with c9:
-        citta_default = st.session_state.get(f"{key_prefix}_citta_auto",
-                                              r.get(citta,"") or "")
-        citta = st.text_input("Città", value=citta_default,
-                               key=f"{key_prefix}_citta")
+        citta = st.text_input("Città",
+                               value=st.session_state.get(f"{key}_citta_v",
+                                                           r.get("citta","") or ""),
+                               key=f"{key}_citta")
     with c10:
-        prov_default = st.session_state.get(f"{key_prefix}_prov_auto",
-                                             r.get(provincia,"") or "")
-        prov = st.text_input("Prov.", value=prov_default, max_chars=2,
-                              key=f"{key_prefix}_prov")
+        prov = st.text_input("Prov.",
+                              value=st.session_state.get(f"{key}_prov_v",
+                                                         r.get("provincia","") or ""),
+                              max_chars=2, key=f"{key}_prov")
 
     if not is_nuovo:
-        st.markdown("##### Stato")
-        stato = st.selectbox("Stato paziente",
-                              ["ATTIVO","DIMESSO","SOSPESO","ARCHIVIATO"],
-                              index=["ATTIVO","DIMESSO","SOSPESO","ARCHIVIATO"].index(
-                                  r.get(stato_paziente,"ATTIVO")
-                                  if r.get(stato_paziente) in
-                                  ["ATTIVO","DIMESSO","SOSPESO","ARCHIVIATO"]
-                                  else "ATTIVO"),
-                              key=f"{key_prefix}_stato")
+        stati = ["ATTIVO","DIMESSO","SOSPESO","ARCHIVIATO"]
+        stato = st.selectbox("Stato",
+                              stati,
+                              index=stati.index(r.get("stato_paziente","ATTIVO"))
+                              if r.get("stato_paziente") in stati else 0,
+                              key=f"{key}_stato")
     else:
         stato = "ATTIVO"
-        st.markdown("##### Privacy")
-        tipo_privacy = st.radio("Tipo soggetto",
-                                 ["adulto","minore"],
-                                 horizontal=True,
-                                 key=f"{key_prefix}_priv")
-        consenso = st.checkbox("Il paziente acconsente al trattamento dati *",
-                                key=f"{key_prefix}_cons")
+        c11, c12 = st.columns(2)
+        with c11:
+            tipo_privacy = st.selectbox("Tipo soggetto",
+                                         ["adulto","minore"],
+                                         key=f"{key}_priv")
+        with c12:
+            consenso = st.checkbox("Consenso dati *",
+                                    key=f"{key}_cons")
 
-    # Bottone salva
-    label_btn = "Salva nuovo paziente" if is_nuovo else "Salva modifiche"
-    if st.button(label_btn, type="primary", key=f"{key_prefix}_salva"):
-        if not cognome.strip() or not nome.strip():
-            st.error("Cognome e Nome sono obbligatori.")
-            return None
-        if is_nuovo and not consenso:
-            st.error("Il consenso privacy è obbligatorio.")
-            return None
-
-        return {
-            "cognome": cognome, "nome": nome, "data_str": data_str,
-            "sesso": sesso, "cf": cf, "tel": tel, "email": email,
-            "indirizzo": indirizzo, "cap": cap, "citta": citta, "prov": prov,
-            "stato": stato,
-            "tipo_privacy": locals().get("tipo_privacy","adulto"),
-        }
-    return None
+    return {
+        "cognome": cognome, "nome": nome, "data_str": data_str,
+        "sesso": sesso, "cf": cf, "tel": tel, "email": email,
+        "indirizzo": indirizzo, "cap": cap, "citta": citta, "prov": prov,
+        "stato": stato,
+        "tipo_privacy": locals().get("tipo_privacy","adulto"),
+        "_consenso": locals().get("consenso", True),
+        "_is_nuovo": is_nuovo,
+    }
 
 
 def render_anagrafica(conn) -> None:
-    st.subheader("Anagrafica Pazienti")
+    # Stato navigazione
+    if "ana_sel" not in st.session_state:
+        st.session_state["ana_sel"] = None  # paz_id selezionato
+    if "ana_nuovo" not in st.session_state:
+        st.session_state["ana_nuovo"] = False
 
-    # Stato: quale paziente è selezionato / modalità
-    if "ana_paz_sel" not in st.session_state:
-        st.session_state["ana_paz_sel"] = None
-    if "ana_modo" not in st.session_state:
-        st.session_state["ana_modo"] = "lista"  # lista | nuovo | modifica
+    # ── Header ────────────────────────────────────────────────────────
+    h1, h2 = st.columns([3,1])
+    with h1:
+        st.subheader("Anagrafica Pazienti")
+    with h2:
+        if st.button("➕ Nuovo paziente", type="primary",
+                     key="ana_btn_nuovo", use_container_width=True):
+            st.session_state["ana_nuovo"] = True
+            st.session_state["ana_sel"] = None
 
-    # ── Layout: colonna sinistra lista, destra form ───────────────────
-    col_lista, col_form = st.columns([1, 2])
+    # ── Layout principale ─────────────────────────────────────────────
+    col_l, col_r = st.columns([1, 2], gap="medium")
 
-    with col_lista:
-        st.markdown("**Pazienti**")
-        cerca = st.text_input("Cerca", placeholder="Cognome o nome...",
+    # ── COLONNA SINISTRA: lista ───────────────────────────────────────
+    with col_l:
+        cerca = st.text_input("🔍 Cerca", placeholder="Nome, cognome o ID...",
                                key="ana_cerca", label_visibility="collapsed")
-
-        if st.button("➕ Nuovo paziente", key="ana_btn_nuovo",
-                     use_container_width=True):
-            st.session_state["ana_modo"] = "nuovo"
-            st.session_state["ana_paz_sel"] = None
-
         pazienti = _carica_pazienti(conn, cerca)
+        st.caption(f"{len(pazienti)} pazienti")
 
-        if not pazienti:
-            st.info("Nessun paziente trovato.")
-        else:
-            st.caption(f"{len(pazienti)} risultati")
-            for p in pazienti:
-                pid = p.get("id")
-                cog = p.get(cognome,"")
-                nom = p.get(nome,"")
-                eta = _eta(p.get(data_nascita))
-                stato = p.get(stato_paziente,"ATTIVO") or "ATTIVO"
+        for p in pazienti:
+            pid    = p.get("id")
+            cog    = p.get("cognome","") or ""
+            nom    = p.get("nome","") or ""
+            dn     = p.get("data_nascita","")
+            tel    = p.get("telefono","") or ""
+            stato  = p.get("stato_paziente","ATTIVO") or "ATTIVO"
 
-                # Badge stato
-                badge = "🟢" if stato=="ATTIVO" else ("🟡" if stato=="SOSPESO" else "⚫")
+            eta    = _eta(dn)
+            badge  = "🟢" if stato=="ATTIVO" else ("🟡" if stato=="SOSPESO" else "⚫")
+            is_sel = st.session_state.get("ana_sel") == pid
 
-                # Bottone paziente
-                label = f"{badge} {cog} {nom}"
-                if eta: label += f" · {eta}"
+            # Riga paziente cliccabile
+            st.markdown(
+                f'<div style="padding:6px 10px;margin:2px 0;border-radius:8px;'
+                f'cursor:pointer;'
+                f'background:{"var(--color-background-info)" if is_sel else "var(--color-background-secondary)"};'
+                f'border:{"1.5px solid var(--color-border-info)" if is_sel else "0.5px solid var(--color-border-tertiary)"}">'
+                f'<div style="font-weight:500;font-size:13px">{badge} {cog} {nom}</div>'
+                f'<div style="font-size:11px;color:var(--color-text-secondary)">'
+                f'{_fmt_dn(dn)} {("· "+eta) if eta else ""}'
+                f'{(" · "+tel) if tel else ""}</div></div>',
+                unsafe_allow_html=True
+            )
+            if st.button("Apri", key=f"sel_{pid}",
+                         use_container_width=True,
+                         label_visibility="collapsed"):
+                st.session_state["ana_sel"] = pid
+                st.session_state["ana_nuovo"] = False
+                # Pulisci valori CAP del form precedente
+                for k in list(st.session_state.keys()):
+                    if k.startswith("mp_") and ("_citta_v" in k or "_prov_v" in k or "_last_cap" in k):
+                        del st.session_state[k]
+                st.rerun()
 
-                is_sel = st.session_state.get("ana_paz_sel") == pid
-                btn_type = "primary" if is_sel else "secondary"
+    # ── COLONNA DESTRA: form ──────────────────────────────────────────
+    with col_r:
 
-                if st.button(label, key=f"ana_sel_{pid}",
-                             use_container_width=True,
-                             type=btn_type):
-                    st.session_state["ana_paz_sel"] = pid
-                    st.session_state["ana_modo"] = "modifica"
-
-    with col_form:
-        modo = st.session_state.get("ana_modo","lista")
-
-        if modo == "nuovo":
+        # ── NUOVO PAZIENTE ────────────────────────────────────────────
+        if st.session_state.get("ana_nuovo"):
             st.markdown("#### Nuovo paziente")
-            dati = _form_paziente(conn, "np")
-            if dati is not None:
-                paz_id = _salva_nuovo(conn, dati)
-                if paz_id:
-                    st.success(f"✅ {dati['cognome']} {dati['nome']} salvato (ID: {paz_id})")
-                    st.session_state["ana_paz_sel"] = paz_id
-                    st.session_state["ana_modo"] = "modifica"
-                    st.session_state["ana_cerca"] = ""
-                    # Pulisci cache CAP e form
-                    for k in list(st.session_state.keys()):
-                        if k.startswith("np_") or k.startswith("ana_"):
-                            if k not in ("ana_paz_sel","ana_modo","ana_cerca"):
-                                del st.session_state[k]
-                    import time; time.sleep(0.3)  # lascia tempo al commit Neon
+            st.markdown("---")
+            dati = _form_fields("np")
+
+            col_s1, col_s2 = st.columns([1,1])
+            with col_s1:
+                salva = st.button("💾 Salva", type="primary",
+                                   key="np_salva_btn",
+                                   use_container_width=True)
+            with col_s2:
+                if st.button("✕ Annulla", key="np_ann",
+                              use_container_width=True):
+                    st.session_state["ana_nuovo"] = False
                     st.rerun()
 
-        elif modo == "modifica":
-            paz_id = st.session_state.get("ana_paz_sel")
-            if paz_id:
-                try:
-                    cur = conn.cursor()
-                    cur.execute("SELECT * FROM pazienti WHERE id=%s", (paz_id,))
-                    row = cur.fetchone()
-                    if row:
-                        if not isinstance(row, dict):
-                            cols = [d[0] for d in cur.description]
-                            row = dict(zip(cols, row))
+            if salva:
+                if not dati["cognome"].strip() or not dati["nome"].strip():
+                    st.error("Cognome e Nome sono obbligatori.")
+                elif not dati["_consenso"]:
+                    st.error("Il consenso privacy è obbligatorio.")
+                else:
+                    paz_id = _salva_nuovo(conn, dati)
+                    if paz_id:
+                        st.success(f"✅ {dati['cognome']} {dati['nome']} salvato")
+                        st.session_state["ana_nuovo"] = False
+                        st.session_state["ana_sel"] = paz_id
+                        # Pulisci form
+                        for k in list(st.session_state.keys()):
+                            if k.startswith("np_"):
+                                del st.session_state[k]
+                        import time; time.sleep(0.3)
+                        st.rerun()
 
-                        cog = row.get(cognome,"")
-                        nom = row.get(nome,"")
-                        dn  = _fmt_dn(row.get(data_nascita))
-                        tel = row.get(telefono,"") or ""
-                        eta = _eta(row.get(data_nascita))
+        # ── MODIFICA PAZIENTE ─────────────────────────────────────────
+        elif st.session_state.get("ana_sel"):
+            paz_id = st.session_state["ana_sel"]
+            rec = _carica_paziente(conn, paz_id)
 
-                        st.markdown(f"#### {cog} {nom}")
-                        if dn: st.caption(f"Nato/a il {dn} · {eta}")
-                        if tel: st.caption(f"Tel: {tel}")
-
-                        st.markdown("---")
-
-                        dati = _form_paziente(conn, f"mp_{paz_id}", row)
-                        if dati is not None:
-                            ok = _salva_modifica(conn, paz_id, dati)
-                            if ok:
-                                st.success("✅ Modifiche salvate.")
-                                st.rerun()
-
-                        # Bottone elimina/archivia
-                        st.markdown("---")
-                        if st.button("🗃️ Archivia paziente",
-                                     key=f"ana_arch_{paz_id}"):
-                            try:
-                                cur.execute(
-                                    "UPDATE pazienti SET stato_paziente='ARCHIVIATO' WHERE id=%s",
-                                    (paz_id,))
-                                conn.commit()
-                                st.success("Paziente archiviato.")
-                                st.session_state["ana_paz_sel"] = None
-                                st.session_state["ana_modo"] = "lista"
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Errore: {e}")
-                    else:
-                        st.warning("Paziente non trovato.")
-                except Exception as e:
-                    st.error(f"Errore caricamento: {e}")
+            if not rec:
+                st.warning("Paziente non trovato.")
             else:
-                st.info("Seleziona un paziente dalla lista oppure crea un nuovo paziente.")
+                cog = rec.get("cognome","")
+                nom = rec.get("nome","")
+                dn  = rec.get("data_nascita","")
+                eta = _eta(dn)
 
+                st.markdown(f"#### {cog} {nom}")
+                st.caption(f"ID: {paz_id} · {_fmt_dn(dn)} · {eta}")
+                st.markdown("---")
+
+                dati = _form_fields(f"mp_{paz_id}", rec)
+
+                col_s1, col_s2, col_s3 = st.columns([2,1,1])
+                with col_s1:
+                    salva = st.button("💾 Salva modifiche", type="primary",
+                                       key=f"mp_salva_{paz_id}",
+                                       use_container_width=True)
+                with col_s2:
+                    if st.button("✕ Chiudi", key=f"mp_close_{paz_id}",
+                                  use_container_width=True):
+                        st.session_state["ana_sel"] = None
+                        st.rerun()
+                with col_s3:
+                    if st.button("🗃️ Archivia", key=f"mp_arch_{paz_id}",
+                                  use_container_width=True):
+                        try:
+                            cur = conn.cursor()
+                            cur.execute(
+                                "UPDATE pazienti SET stato_paziente='ARCHIVIATO' WHERE id=%s",
+                                (paz_id,))
+                            conn.commit()
+                            st.success("Paziente archiviato.")
+                            st.session_state["ana_sel"] = None
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Errore: {e}")
+
+                if salva:
+                    if not dati["cognome"].strip() or not dati["nome"].strip():
+                        st.error("Cognome e Nome sono obbligatori.")
+                    else:
+                        ok = _salva_modifica(conn, paz_id, dati)
+                        if ok:
+                            st.success("✅ Modifiche salvate.")
+                            import time; time.sleep(0.2)
+                            st.rerun()
+
+        # ── NESSUNA SELEZIONE ─────────────────────────────────────────
         else:
-            # Schermata iniziale
-            n_paz = len(_carica_pazienti(conn))
-            st.markdown(f"""
-<div style="padding:2rem;text-align:center;color:var(--color-text-secondary)">
-    <div style="font-size:3rem;margin-bottom:1rem">👥</div>
-    <div style="font-size:1.1rem;font-weight:500;margin-bottom:0.5rem">{n_paz} pazienti nel database</div>
-    <div style="font-size:0.9rem">Cerca un paziente nella lista oppure creane uno nuovo</div>
-</div>
-""", unsafe_allow_html=True)
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM pazienti")
+                row = cur.fetchone()
+                n = int(row[0] if not isinstance(row,dict) else list(row.values())[0])
+            except: n = 0
+
+            st.markdown(
+                f"""<div style="display:flex;flex-direction:column;align-items:center;
+                justify-content:center;height:400px;color:var(--color-text-secondary)">
+                <div style="font-size:3rem;margin-bottom:1rem">👥</div>
+                <div style="font-size:1.2rem;font-weight:500;margin-bottom:0.5rem">
+                {n} pazienti registrati</div>
+                <div style="font-size:0.9rem">
+                Seleziona un paziente dalla lista oppure creane uno nuovo</div>
+                </div>""",
+                unsafe_allow_html=True
+            )
