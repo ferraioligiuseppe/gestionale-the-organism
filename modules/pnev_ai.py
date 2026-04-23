@@ -40,9 +40,18 @@ def generate_plan(visita_snapshot, pnev_json):
 def apply_to_session(prefix, suggestions):
     """
     Scrive i suggerimenti nei campi Streamlit.
-    Non salva nel DB automaticamente.
+    Usa chiave pending per evitare conflitto con widget gia istanziati.
     """
     import streamlit as st
 
     for key, value in suggestions.items():
-        st.session_state[f"{prefix}_{key}"] = value
+        widget_key = f"{prefix}_{key}"
+        # Se il widget e gia istanziato scrive in pending
+        # che verra applicato al prossimo rerun prima del render
+        pending_key = f"__pending_{widget_key}"
+        st.session_state[pending_key] = value
+        # Prova comunque scrittura diretta (funziona se widget non ancora renderizzato)
+        try:
+            st.session_state[widget_key] = value
+        except Exception:
+            pass

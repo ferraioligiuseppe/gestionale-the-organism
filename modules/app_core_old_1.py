@@ -182,13 +182,9 @@ def _get_columns(conn, table_name: str):
     except Exception:
         return []
 
+@st.cache_data(ttl=300, show_spinner=False)
 def _detect_patient_table_and_cols(conn):
-    """Rileva tabella pazienti — cache 5min session_state."""
-    import time
-    _ck = "_detect_table_cache"; _tk = "_detect_table_ts"
-    now = time.time()
-    if _ck in st.session_state and _tk in st.session_state and now - st.session_state[_tk] < 300:
-        return st.session_state[_ck]
+    """Rileva tabella pazienti — cache 5 minuti, cambia raramente."""
     table_candidates = [
         'pazienti','Pazienti','patients','Patients','patienti','Patienti',
         'anagrafica_pazienti','Anagrafica_Pazienti','tbl_pazienti','Tbl_Pazienti'
@@ -243,20 +239,12 @@ def _detect_patient_table_and_cols(conn):
         dnc = pick(cols, dn_cols)
         sc  = pick(cols, scuola_cols)
         ec  = pick(cols, eta_cols)
-        _r2 = table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
-        st.session_state[_ck] = _r2; st.session_state[_tk] = time.time()
-        return _r2
-    _r = None, {}
-    st.session_state[_ck] = _r; st.session_state[_tk] = time.time()
-    return _r
+        return table, {'id': idc, 'cognome': cc, 'nome': nc, 'data_nascita': dnc, 'scuola': sc, 'eta': ec}
+    return None, {}
 
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_pazienti_for_select(conn, limit=5000):
-    """Lista pazienti con cache 30s in session_state — evita query ripetute ad ogni click."""
-    import time
-    _ck2 = "_pazienti_cache"; _tk2 = "_pazienti_ts"
-    now = time.time()
-    if _ck2 in st.session_state and _tk2 in st.session_state and now - st.session_state[_tk2] < 30:
-        return st.session_state[_ck2]
+    """Lista pazienti con cache 30 secondi — evita query ripetute ad ogni click."""
     table, colmap = _detect_patient_table_and_cols(conn)
     if not table:
         return [], None, None
@@ -289,9 +277,7 @@ def fetch_pazienti_for_select(conn, limit=5000):
         while len(r) < 6:
             r.append('')
         out.append(tuple(r[:6]))
-    result2 = out, table, colmap
-    st.session_state[_ck2] = result2; st.session_state[_tk2] = time.time()
-    return result2
+    return out, table, colmap
 
 
 # ---------- DEBUG DB (non mostra credenziali) ----------
@@ -426,9 +412,15 @@ def debug_secrets_auth():
 import sqlite3
 
 def _ai_enabled() -> bool:
-    """AI abilitata se [ai] ENABLED=true nei Secrets,
-    indipendentemente da APP_MODE."""
+    """Enable AI helper ONLY in TEST unless explicitly allowed.
+
+    Controlled via Streamlit Secrets:
+    [ai]
+    ENABLED = true
+    """
     try:
+        if str(APP_MODE).lower().strip() != "test":
+            return False
         a = st.secrets.get("ai", {})
         return bool(a.get("ENABLED", False))
     except Exception:
@@ -515,16 +507,6 @@ def mark_token_used(cur, link_id: int):
         (datetime.now(timezone.utc).isoformat(), int(link_id)),
     )
 
-# Questionari supportati via link pubblico
-_QUESTIONARI_PUBBLICI = {
-    "INPPS":           "Questionario INPPS – Screening (Genitori)",
-    "MELILLO_ADULTI":  "Questionario Melillo – Stile Cognitivo (Adulti)",
-    "MELILLO_BAMBINI": "Questionario Melillo – Checklist Bambini",
-    "FISHER":          "Questionario Fisher – Problemi Uditivi (Bambini)",
-    "VISIONE_BAMBINI": "Questionario Visione – Bambino/a",
-    "VISIONE_ADULTI":  "Questionario Visione – Adulto",
-}
-
 def maybe_handle_public_questionario(get_conn) -> bool:
     """Gestisce pagina pubblica (senza login) per compilazione questionari via token."""
     if not _public_links_enabled():
@@ -539,13 +521,13 @@ def maybe_handle_public_questionario(get_conn) -> bool:
         q = (qp.get("q", "") or "").upper()
         t = (qp.get("t", "") or "")
 
-    if q not in _QUESTIONARI_PUBBLICI or not t:
+    if q != "INPPS" or not t:
         return False
 
     conn = get_conn()
     cur = conn.cursor()
 
-    link = validate_token(cur, t, q)
+    link = validate_token(cur, t, "INPPS")
     if not link:
         st.error("Link non valido, scaduto o già utilizzato.")
         try: conn.close()
@@ -553,66 +535,15 @@ def maybe_handle_public_questionario(get_conn) -> bool:
         return True
 
     paziente_id = int(link.get("paziente_id") if hasattr(link, "get") else link["paziente_id"])
-    titolo = _QUESTIONARI_PUBBLICI.get(q, "Questionario")
 
-    st.title(f"🏥 The Organism – {titolo}")
-    st.caption("Compila il questionario e premi INVIA. I dati verranno registrati nel gestionale.")
-    st.markdown("---")
+    st.title("Questionario INPPS – Compilazione Genitori")
+    st.caption("Compila e premi INVIA. Il questionario verrà registrato nel gestionale.")
 
-    # ── Render del questionario corretto in base a q ──────────────────────────
-    q_data = None
-    q_summary = ""
+    with st.form("public_inpps_form"):
+        inpps_data, inpps_summary = inpps_collect_ui(prefix="public_inpps", existing=None)
+        submitted = st.form_submit_button("INVIA QUESTIONARIO")
 
-    if q == "INPPS":
-        with st.form("public_q_form"):
-            q_data, q_summary = inpps_collect_ui(prefix="pub_inpps", existing=None)
-            submitted = st.form_submit_button("📤 INVIA QUESTIONARIO")
-        chiave_json = "inpps_screening_genitori"
-        motivo_label = "INPPS (genitori)"
-
-    elif q in ("MELILLO_ADULTI", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI", "VISIONE_ADULTI"):
-        try:
-            from modules.pnev.ui_questionari_pnev import (
-                melillo_adulti_ui,
-                melillo_bambini_ui,
-                fisher_auditivo_bambini_ui,
-                visione_bambini_ui,
-                visione_adulti_ui,
-            )
-        except Exception as _imp_err:
-            st.error(f"Modulo questionari non disponibile: {_imp_err}")
-            return True
-
-        fn_map = {
-            "MELILLO_ADULTI":  (melillo_adulti_ui,         "melillo_adulti"),
-            "MELILLO_BAMBINI": (melillo_bambini_ui,        "melillo_bambini"),
-            "FISHER":          (fisher_auditivo_bambini_ui,"fisher_auditivo_bambini"),
-            "VISIONE_BAMBINI": (visione_bambini_ui,        "visione_bambini"),
-            "VISIONE_ADULTI":  (visione_adulti_ui,         "visione_adulti"),
-        }
-        fn, chiave_json = fn_map[q]
-        motivo_label = titolo
-
-        # Questi questionari hanno widget interattivi — non possiamo usare st.form
-        # Usiamo session_state + pulsante normale
-        _pub_key = f"pub_q_{t[:16]}"
-        if _pub_key not in st.session_state:
-            st.session_state[_pub_key] = {}
-        try:
-            q_data, q_summary = fn(prefix=f"pub_{q.lower()}", existing=st.session_state[_pub_key])
-            st.session_state[_pub_key] = q_data
-        except Exception as _render_err:
-            st.error(f"Errore rendering questionario: {_render_err}")
-            return True
-
-        st.markdown("---")
-        submitted = st.button("📤 INVIA QUESTIONARIO", type="primary")
-    else:
-        st.error("Tipo questionario non riconosciuto.")
-        return True
-
-    # ── Salvataggio comune ────────────────────────────────────────────────────
-    if submitted and q_data is not None:
+    if submitted:
         try:
             cur.execute(
                 "SELECT id, pnev_json, pnev_summary FROM anamnesi WHERE paziente_id = %s ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
@@ -627,30 +558,29 @@ def maybe_handle_public_questionario(get_conn) -> bool:
                     pnev_obj = pnev.pnev_load(raw)
 
             pnev_obj.setdefault("questionari", {})
-            pnev_obj["questionari"][chiave_json] = q_data
+            pnev_obj["questionari"]["inpps_screening_genitori"] = inpps_data
 
             dump = pnev.pnev_dump(pnev_obj)
             prev_sum = ""
             if last:
                 prev_sum = (last.get("pnev_summary") if hasattr(last, "get") else last[2]) or ""
-            summary = (prev_sum.strip() + "\n" + q_summary).strip() if prev_sum.strip() else q_summary
+            summary = (prev_sum.strip() + "\n" + inpps_summary).strip() if prev_sum.strip() else inpps_summary
 
             if last:
                 an_id = int(last.get("id") if hasattr(last, "get") else last[0])
                 cur.execute(
-                    "UPDATE anamnesi SET pnev_json = %s, pnev_summary = %s WHERE id = %s",
+                    "UPDATE anamnesi SET pnev_json = ?, pnev_summary = ? WHERE id = ?",
                     (dump, summary, an_id),
                 )
             else:
                 cur.execute(
-                    "INSERT INTO anamnesi (paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                    (paziente_id, date.today().isoformat(), motivo_label, summary, "", dump, summary),
+                    "INSERT INTO anamnesi (paziente_id, data_anamnesi, motivo, storia, note, pnev_json, pnev_summary) VALUES (?,?,?,?,?,?,?)",
+                    (paziente_id, date.today().isoformat(), "INPPS (genitori)", summary, "", dump, summary),
                 )
 
             mark_token_used(cur, int(link.get("id") if hasattr(link, "get") else link["id"]))
             conn.commit()
-            st.success("✅ Grazie! Questionario inviato correttamente. Puoi chiudere questa pagina.")
-            st.balloons()
+            st.success("✅ Grazie! Questionario inviato correttamente.")
         except Exception as e:
             try: conn.rollback()
             except Exception: pass
@@ -945,7 +875,11 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
 
 from datetime import date, datetime
 from typing import Optional, Dict
+from letterhead_pdf import build_pdf_with_letterhead
+from pdf_templates import build_pdf
+# A5
 
+# A4 2×A5
 
 
 
@@ -1693,30 +1627,6 @@ def login(get_conn) -> bool:
 
         _audit(conn, user_id, "LOGIN_SUCCESS", meta={"roles": roles})
 
-        # Carica display_name e profilo_json da DB
-        _display_name = ""
-        _profilo = {}
-        try:
-            _dn_cur = conn.cursor()
-            _dn_cur.execute(
-                "SELECT display_name, profilo_json FROM auth_users WHERE id=%s",
-                (user_id,))
-            _dn_row = _dn_cur.fetchone()
-            if _dn_row:
-                if isinstance(_dn_row, dict):
-                    _display_name = _dn_row.get("display_name","") or ""
-                    _raw_profilo  = _dn_row.get("profilo_json") or {}
-                else:
-                    _display_name = _dn_row[0] or ""
-                    _raw_profilo  = _dn_row[1] or {}
-                import json as _json
-                _profilo = _raw_profilo if isinstance(_raw_profilo,dict) else _json.loads(_raw_profilo or "{}")
-                # display_name dal profilo se non impostato
-                if not _display_name and _profilo.get("display_name"):
-                    _display_name = _profilo["display_name"]
-        except Exception:
-            pass
-
         st.session_state["logged_in"] = True
         st.session_state["user"] = {
             "id": int(user_id),
@@ -1724,11 +1634,6 @@ def login(get_conn) -> bool:
             "email": email,
             "roles": roles,
             "must_change_password": bool(must_change),
-            "display_name": _display_name,
-            "specializzazioni": _profilo.get("specializzazioni",""),
-            "titolo": _profilo.get("titolo",""),
-            "nome": _profilo.get("nome",""),
-            "profilo": _profilo,
         }
         st.success("Accesso effettuato.")
         st.rerun()
@@ -2645,14 +2550,6 @@ def init_db() -> None:
         pass
     try:
         cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS pnev_summary TEXT;")
-    except Exception:
-        pass
-    try:
-        cur.execute("ALTER TABLE IF EXISTS Valutazioni_Visive ADD COLUMN IF NOT EXISTS visita_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
-    except Exception:
-        pass
-    try:
-        cur.execute("ALTER TABLE IF EXISTS valutazioni_visive ADD COLUMN IF NOT EXISTS visita_json JSONB NOT NULL DEFAULT '{}'::jsonb;")
     except Exception:
         pass
 
@@ -4672,7 +4569,7 @@ def ui_db_cleanup():
             except Exception as e:
                 try:
                     conn.rollback()
-                except Exception as e:
+                except Exception:
                     pass
                 st.error(f"Errore compattazione: {e}")
 
@@ -4716,7 +4613,7 @@ def ui_db_cleanup():
                 except Exception as e:
                     try:
                         conn.rollback()
-                    except Exception as e:
+                    except Exception:
                         pass
                     st.warning(f"Merge ok, ma non sono riuscito a compattare i consensi privacy: {e}")
                 if rep["moved"]:
@@ -4728,7 +4625,7 @@ def ui_db_cleanup():
             except Exception as e:
                 try:
                     conn.rollback()
-                except Exception as e:
+                except Exception:
                     pass
                 st.error(f"Merge fallito: {e}")
 
@@ -4971,7 +4868,7 @@ def ui_pazienti():
         except Exception as e:
             try:
                 conn.rollback()
-            except Exception as e:
+            except Exception:
                 pass
             st.error("Errore durante il salvataggio del paziente/privacy.")
             st.write(str(e))
@@ -5236,39 +5133,25 @@ def ui_anamnesi():
     sel = st.selectbox("Seleziona paziente", options)
     paz_id = int(sel.split(" - ", 1)[0])
 
-    # --- Link pubblici questionari (genitori/paziente) ---
-    with st.expander("🔗 Genera link questionari per il paziente/genitore", expanded=False):
+    # --- Link pubblico per INPPS (genitori) ---
+    with st.expander("Link INPPS (genitori)", expanded=False):
         if not _public_links_enabled():
             st.info("Link pubblici disattivati. Abilita in Secrets: [public_links] ENABLED=true")
-        elif not _public_base_url():
-            st.warning("BASE_URL mancante in Secrets: [public_links] BASE_URL='https://...streamlit.app'")
         else:
-            st.caption("Genera un link da inviare via WhatsApp/email. Ogni link è monouso e scade dopo 7 giorni.")
-            _base = _public_base_url()
-
-            _ql_configs = [
-                ("INPPS",           "📋 INPPS Screening (Genitori)",         "gen_link_inpps"),
-                ("MELILLO_BAMBINI", "🧒 Melillo Bambini (Genitori)",          "gen_link_melb"),
-                ("MELILLO_ADULTI",  "🧠 Melillo Adulti (Paziente)",           "gen_link_mela"),
-                ("FISHER",          "👂 Fisher Auditivo (Genitori/Paziente)", "gen_link_fish"),
-                ("VISIONE_BAMBINI", "👁️ Visione Bambini (Genitori)",          "gen_link_visb"),
-                ("VISIONE_ADULTI",  "👁️ Visione Adulti (Paziente)",           "gen_link_visa"),
-            ]
-
-            cols = st.columns(2)
-            for i, (q_code, q_label, btn_key) in enumerate(_ql_configs):
-                with cols[i % 2]:
-                    if st.button(f"Genera link — {q_label}", key=btn_key):
-                        try:
-                            token = create_questionario_link(cur, paz_id, q_code)
-                            conn.commit()
-                            url = f"{_base}/?q={q_code}&t={token}"
-                            st.code(url, language="text")
-                            st.success(f"✅ Link {q_label} creato. Valido 7 giorni, monouso.")
-                        except Exception as e:
-                            try: conn.rollback()
-                            except Exception: pass
-                            st.error(f"Errore: {e}")
+            if not _public_base_url():
+                st.warning("BASE_URL mancante in Secrets: [public_links] BASE_URL='https://...streamlit.app'")
+            else:
+                if st.button("Genera link INPPS", key="gen_link_inpps"):
+                    try:
+                        token = create_questionario_link(cur, paz_id, "INPPS")
+                        conn.commit()
+                        url = f"{_public_base_url()}/?q=INPPS&t={token}"
+                        st.code(url, language="text")
+                        st.success("Link creato. Invia questo link al genitore (valido per i giorni configurati).")
+                    except Exception as e:
+                        try: conn.rollback()
+                        except Exception: pass
+                        st.error(f"Errore creazione link: {e}")
 
 
     # --- Migrazione legacy -> PNEV (sicura, non sovrascrive) ---
@@ -5293,7 +5176,7 @@ def ui_anamnesi():
             except Exception as e:
                 try:
                     conn.rollback()
-                except Exception as e:
+                except Exception:
                     pass
                 st.error(f"Errore migrazione: {e}")
 
@@ -5305,11 +5188,10 @@ def ui_anamnesi():
     st.subheader("Nuova Valutazione PNEV")
 
     # ── TAB: Anamnesi Catagnini vs PNEV clinico ──────────────────────────────
-    tab_cat, tab_pnev_cl, tab_inpps, tab_quest = st.tabs([
+    tab_cat, tab_pnev_cl, tab_inpps = st.tabs([
         "📋 Anamnesi Catagnini (0–2 anni)",
         "🧠 Valutazione PNEV clinica",
         "📊 Questionario INPPS",
-        "📝 Questionari PNEV",
     ])
 
     # Stato temporaneo dell'anamnesi Catagnini (fuori dal form per supportare
@@ -5349,83 +5231,22 @@ def ui_anamnesi():
             prefix="inpps_new", existing=_inpps_existing_new
         )
 
-    with tab_quest:
-        _q_key_new = f"questionari_new_{paz_id}"
-        if _q_key_new not in st.session_state:
-            st.session_state[_q_key_new] = {}
-        # Fascia età dal paziente (se disponibile)
-        # Ricava data nascita dal record paziente già caricato
-        _paz_rec_new = next((p for p in pazienti if p["id"] == paz_id), None)
-        _dn_new = (_paz_rec_new or {}).get("Data_Nascita") or ""
-        try:
-            from datetime import date as _date_cls
-            _eta_new = (_date_cls.today().year - int(_dn_new[:4])) if len(_dn_new) >= 4 else 0
-        except Exception:
-            _eta_new = 0
-        _fascia_new_default = "adulto" if _eta_new >= 18 else "bambino"
-        _fascia_new = st.radio(
-            "Fascia età", ["bambino", "adulto"],
-            index=0 if _fascia_new_default == "bambino" else 1,
-            key=f"fascia_new_{paz_id}", horizontal=True
-        )
-        try:
-            from modules.pnev.ui_questionari_pnev import render_questionari_pnev
-            _q_json_new, _q_summary_new = render_questionari_pnev(
-                pnev_json=st.session_state[_q_key_new],
-                prefix=f"qpnev_new_{paz_id}",
-                fascia_eta=_fascia_new,
-            )
-            st.session_state[_q_key_new] = _q_json_new
-        except Exception as e:
-            st.error(f"Errore questionari PNEV: {e}")
-            _q_summary_new = ""
-
-    # ── INPP Neuromotorio (nuova valutazione) ────────────────────────────────
-    _inpp_key_new = f"inpp_new_{paz_id}"
-    if _inpp_key_new not in st.session_state:
-        st.session_state[_inpp_key_new] = {}
-    try:
-        from modules.pnev.ui_inpp_neuromotorio import render_inpp_neuromotorio
-        _inpp_data_new, _inpp_sum_new = render_inpp_neuromotorio(
-            data_json=st.session_state[_inpp_key_new],
-            prefix=f"inpp_new_{paz_id}",
-        )
-        st.session_state[_inpp_key_new] = _inpp_data_new
-    except Exception as e:
-        st.error(f"Errore modulo INPP: {e}")
-        _inpp_data_new = {}
-
-    # ── Miofunzionale (nuova valutazione) ───────────────────────────────────
-    _mft_key_new = f"mft_new_{paz_id}"
-    if _mft_key_new not in st.session_state:
-        st.session_state[_mft_key_new] = {}
-    try:
-        from modules.pnev.ui_miofunzionale import render_miofunzionale
-        _mft_data_new, _mft_sum_new = render_miofunzionale(
-            data_json=st.session_state[_mft_key_new],
-            prefix=f"mft_new_{paz_id}",
-        )
-        st.session_state[_mft_key_new] = _mft_data_new
-    except Exception as e:
-        st.error(f"Errore modulo Miofunzionale: {e}")
-        _mft_data_new = {}
-
     # ── Scenario clinico (calcolato in tempo reale dai dati Catagnini) ────────
     st.markdown("---")
-    st.markdown("#### 🧠 Scenario clinico (dal profilo anamnestico)")
-    try:
-        from modules.pnev.scenario_engine import render_scenario_ui
-        _cat_for_scenario = st.session_state.get(_cat_pnev_key, {})
-        if _cat_for_scenario:
-            render_scenario_ui(
-                pnev_json=_cat_for_scenario,
-                data_nascita=None,
-                eta_mesi_override=None,
-            )
-        else:
-            st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
-    except Exception as _sc_err:
-        st.warning(f"Scenario non disponibile: {_sc_err}")
+    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
+        try:
+            from modules.pnev.scenario_engine import render_scenario_ui
+            _cat_for_scenario = st.session_state.get(_cat_pnev_key, {})
+            if _cat_for_scenario:
+                render_scenario_ui(
+                    pnev_json=_cat_for_scenario,
+                    data_nascita=None,
+                    eta_mesi_override=None,
+                )
+            else:
+                st.info("Compila l'anamnesi Catagnini per visualizzare lo scenario clinico.")
+        except Exception as _sc_err:
+            st.warning(f"Scenario non disponibile: {_sc_err}")
 
     # ── Form di salvataggio (solo campi non-interattivi + bottone) ───────────
     with st.form("nuova_pnev"):
@@ -5438,23 +5259,6 @@ def ui_anamnesi():
             pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
         except Exception:
             pass
-        # merge INPP neuromotorio
-        _inpp_state_new = st.session_state.get(f"inpp_new_{paz_id}", {})
-        if _inpp_state_new:
-            pnev_data_new["inpp_neuromotorio"] = _inpp_state_new
-
-        # merge Miofunzionale
-        _mft_state_new = st.session_state.get(f"mft_new_{paz_id}", {})
-        if _mft_state_new:
-            pnev_data_new["miofunzionale"] = _mft_state_new
-
-        # merge questionari PNEV (Melillo, Fisher, Visione)
-        _q_state_new = st.session_state.get(f"questionari_new_{paz_id}", {})
-        if isinstance(_q_state_new, dict) and _q_state_new.get("questionari"):
-            pnev_data_new.setdefault("questionari", {}).update(
-                _q_state_new.get("questionari", {})
-            )
-
         # merge anamnesi Catagnini
         try:
             cat_data = st.session_state.get(_cat_pnev_key, {})
@@ -5572,11 +5376,10 @@ def ui_anamnesi():
     if _cat_edit_key not in st.session_state:
         st.session_state[_cat_edit_key] = dict(pnev_existing)
 
-    tab_cat_m, tab_pnev_m, tab_inpps_m, tab_quest_m = st.tabs([
+    tab_cat_m, tab_pnev_m, tab_inpps_m = st.tabs([
         "📋 Anamnesi Catagnini (0–2 anni)",
         "🧠 Valutazione PNEV clinica",
         "📊 Questionario INPPS",
-        "📝 Questionari PNEV",
     ])
 
     with tab_cat_m:
@@ -5595,12 +5398,6 @@ def ui_anamnesi():
     with tab_pnev_m:
         motivo_m = st.text_area("Domanda clinica / motivo", rec["Motivo"] or "", key=f"motivo_edit_{an_id}")
         visita_snapshot_m = {"paziente_id": paz_id, "motivo": motivo_m}
-        # Applica valori pending dall IA prima del render widget
-        _pnev_pfx = f"pnev_edit_{an_id}"
-        for _pk in [k for k in st.session_state if k.startswith(f"__pending_{_pnev_pfx}")]:
-            _rk = _pk.replace("__pending_","",1)
-            try: st.session_state[_rk] = st.session_state.pop(_pk)
-            except Exception: pass
         pnev_data_m, pnev_summary_m = pnev.pnev_collect_ui(
             prefix=f"pnev_edit_{an_id}", visita=visita_snapshot_m, existing=pnev_existing
         )
@@ -5612,30 +5409,6 @@ def ui_anamnesi():
         inpps_data_m, inpps_summary_m2 = inpps_collect_ui(
             prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m
         )
-
-    with tab_quest_m:
-        _q_key_m = f"questionari_edit_{an_id}"
-        if _q_key_m not in st.session_state:
-            # precarica questionari esistenti da pnev_existing
-            _q_init_m = dict(pnev_existing)
-            st.session_state[_q_key_m] = _q_init_m
-        _fascia_m_default = pnev_existing.get("fascia_eta", "bambino")
-        _fascia_m = st.radio(
-            "Fascia età", ["bambino", "adulto"],
-            index=0 if _fascia_m_default == "bambino" else 1,
-            key=f"fascia_edit_{an_id}", horizontal=True
-        )
-        try:
-            from modules.pnev.ui_questionari_pnev import render_questionari_pnev
-            _q_json_m, _q_summary_m = render_questionari_pnev(
-                pnev_json=st.session_state[_q_key_m],
-                prefix=f"qpnev_edit_{an_id}",
-                fascia_eta=_fascia_m,
-            )
-            st.session_state[_q_key_m] = _q_json_m
-        except Exception as e:
-            st.error(f"Errore questionari PNEV: {e}")
-            _q_summary_m = ""
 
     # Visualizzazione risposte INPPS già compilate (se presenti)
     _inpps_saved = (pnev_existing.get("questionari", {}) or {}).get("inpps_screening_genitori")
@@ -5657,13 +5430,13 @@ def ui_anamnesi():
                 st.success(f"✅ Screening negativo ({_tot} < cut-off {_cut}).")
             _items_pos = [k for k, v in (_inpps_saved.get("items", {}) or {}).items() if v]
             if _items_pos:
-                st.markdown(f"**Domande positive ({len(_items_pos)}):**")
-                st.markdown(" · ".join(f"`{_it}`" for _it in _items_pos))
+                with st.expander(f"Domande positive ({len(_items_pos)})", expanded=False):
+                    for _it in _items_pos:
+                        st.markdown(f"- `{_it}`")
 
     # ── Scenario clinico (modifica) ──────────────────────────────────────────
     st.markdown("---")
-    st.markdown("#### 🧠 Scenario clinico (dal profilo anamnestico)")
-    if True:  # blocco inline invece di expander
+    with st.expander("🧠 Scenario clinico (dal profilo anamnestico)", expanded=True):
         try:
             from modules.pnev.scenario_engine import render_scenario_ui
             _cat_for_sc_edit = st.session_state.get(_cat_edit_key, {})
@@ -5686,36 +5459,6 @@ def ui_anamnesi():
         except Exception as _sc_edit_err:
             st.warning(f"Scenario non disponibile: {_sc_edit_err}")
 
-    # ── Miofunzionale (modifica) ─────────────────────────────────────────────
-    _mft_key_m = f"mft_edit_{an_id}"
-    if _mft_key_m not in st.session_state:
-        st.session_state[_mft_key_m] = pnev_existing.get("miofunzionale", {})
-    try:
-        from modules.pnev.ui_miofunzionale import render_miofunzionale
-        _mft_data_m, _mft_sum_m = render_miofunzionale(
-            data_json=st.session_state[_mft_key_m],
-            prefix=f"mft_{an_id}",
-        )
-        st.session_state[_mft_key_m] = _mft_data_m
-    except Exception as e:
-        st.error(f"Errore modulo Miofunzionale: {e}")
-        _mft_data_m = {}
-
-    # ── INPP Neuromotorio (modifica) ─────────────────────────────────────────
-    _inpp_key_m = f"inpp_edit_{an_id}"
-    if _inpp_key_m not in st.session_state:
-        st.session_state[_inpp_key_m] = pnev_existing.get("inpp_neuromotorio", {})
-    try:
-        from modules.pnev.ui_inpp_neuromotorio import render_inpp_neuromotorio
-        _inpp_data_m, _inpp_sum_m = render_inpp_neuromotorio(
-            data_json=st.session_state[_inpp_key_m],
-            prefix=f"inpp_{an_id}",
-        )
-        st.session_state[_inpp_key_m] = _inpp_data_m
-    except Exception as e:
-        st.error(f"Errore modulo INPP: {e}")
-        _inpp_data_m = {}; _inpp_sum_m = ""
-
     # ── Form di salvataggio ───────────────────────────────────────────────────
     with st.form("modifica_pnev"):
         data_m = st.text_input(
@@ -5732,23 +5475,6 @@ def ui_anamnesi():
             pass
         try:
             _cat_state = st.session_state.get(_cat_edit_key, {})
-            # merge questionari PNEV nella modifica
-            _q_state_m = st.session_state.get(f"questionari_edit_{an_id}", {})
-            if isinstance(_q_state_m, dict) and _q_state_m.get("questionari"):
-                pnev_data_m.setdefault("questionari", {}).update(
-                    _q_state_m.get("questionari", {})
-                )
-
-            # merge Miofunzionale
-            _mft_state = st.session_state.get(f"mft_edit_{an_id}", {})
-            if _mft_state:
-                pnev_data_m["miofunzionale"] = _mft_state
-
-            # merge INPP neuromotorio
-            _inpp_state = st.session_state.get(f"inpp_edit_{an_id}", {})
-            if _inpp_state:
-                pnev_data_m["inpp_neuromotorio"] = _inpp_state
-
             if isinstance(_cat_state, dict) and _cat_state.get("anamnesi_catagnini"):
                 pnev_data_m["anamnesi_catagnini"] = _cat_state["anamnesi_catagnini"]
         except Exception:
@@ -6167,179 +5893,6 @@ ESAMI STRUTTURALI / FUNZIONALI
         )
         conn.commit()
         st.success("Valutazione visiva salvata.")
-
-    # ── Valutazione Visiva Funzionale — Batteria Completa ───────────────────
-    st.markdown("---")
-    st.subheader("🧪 Valutazione Visiva Funzionale — Batteria Completa")
-
-    def _load_vvf_from_db():
-        try:
-            cur.execute(
-                "SELECT visita_json FROM valutazioni_visive WHERE paziente_id = %s "
-                "ORDER BY data_visita DESC, id DESC LIMIT 1", (paz_id,)
-            )
-            lv = cur.fetchone()
-            if lv:
-                import json as _jvvf
-                vj = lv.get("visita_json") if hasattr(lv,"get") else lv[0]
-                vj_d = _jvvf.loads(vj) if isinstance(vj, str) else (vj or {})
-                return vj_d.get("valutazione_visiva_funzionale", {})
-        except Exception:
-            pass
-        return {}
-
-    _vvf_key = f"vvf_{paz_id}"
-    if _vvf_key not in st.session_state:
-        st.session_state[_vvf_key] = _load_vvf_from_db()
-
-    try:
-        from modules.pnev.ui_valutazione_visiva_funzionale import render_valutazione_visiva_funzionale
-        _vvf_data, _vvf_summary = render_valutazione_visiva_funzionale(
-            data_json=st.session_state[_vvf_key],
-            prefix=f"vvf_{paz_id}",
-        )
-        st.session_state[_vvf_key] = _vvf_data
-
-        if st.button("💾 Salva Valutazione Visiva Funzionale", key=f"save_vvf_{paz_id}"):
-            try:
-                import json as _jvvf
-                cur.execute(
-                    "SELECT id, visita_json FROM valutazioni_visive WHERE paziente_id = %s "
-                    "ORDER BY data_visita DESC, id DESC LIMIT 1", (paz_id,)
-                )
-                last_vvf = cur.fetchone()
-                if last_vvf:
-                    vid = int(last_vvf.get("id") if hasattr(last_vvf,"get") else last_vvf[0])
-                    vjr = last_vvf.get("visita_json") if hasattr(last_vvf,"get") else last_vvf[1]
-                    vjd = _jvvf.loads(vjr) if isinstance(vjr, str) else (vjr or {})
-                    vjd["valutazione_visiva_funzionale"] = _vvf_data
-                    cur.execute("UPDATE valutazioni_visive SET visita_json = %s WHERE id = %s",
-                                (_jvvf.dumps(vjd), vid))
-                    conn.commit()
-                    st.success("✅ Valutazione visiva funzionale salvata.")
-                else:
-                    st.warning("Crea prima una valutazione visiva (modulo superiore).")
-            except Exception as e:
-                try: conn.rollback()
-                except Exception: pass
-                st.error(f"Errore salvataggio VVF: {e}")
-    except Exception as e:
-        st.error(f"Errore modulo VVF: {e}")
-
-    # ── Test Vocali (DEM, K-D, VT, Groffman, VADS) ──────────────────────────
-    st.markdown("---")
-    st.subheader("🎤 Test di Lettura Orale — Registrazione Vocale")
-    _voc_key = f"test_vocali_{paz_id}"
-    if _voc_key not in st.session_state:
-        try:
-            cur.execute(
-                "SELECT visita_json FROM valutazioni_visive WHERE paziente_id = %s "
-                "ORDER BY data_visita DESC, id DESC LIMIT 1", (paz_id,)
-            )
-            _lv3 = cur.fetchone()
-            if _lv3:
-                import json as _jvoc
-                _vj3 = _lv3.get("visita_json") if hasattr(_lv3,"get") else _lv3[0]
-                _vj3d = _jvoc.loads(_vj3) if isinstance(_vj3, str) else (_vj3 or {})
-                st.session_state[_voc_key] = _vj3d.get("test_vocali", {})
-            else:
-                st.session_state[_voc_key] = {}
-        except Exception:
-            st.session_state[_voc_key] = {}
-
-    try:
-        from modules.pnev.ui_test_vocali import render_test_vocali
-        _voc_data, _voc_summary = render_test_vocali(
-            data_json=st.session_state[_voc_key],
-            prefix=f"voc_{paz_id}",
-        )
-        st.session_state[_voc_key] = _voc_data
-
-        if st.button("💾 Salva Test Vocali", key=f"save_voc_{paz_id}"):
-            try:
-                import json as _jvoc
-                cur.execute(
-                    "SELECT id, visita_json FROM valutazioni_visive WHERE paziente_id = %s "
-                    "ORDER BY data_visita DESC, id DESC LIMIT 1", (paz_id,)
-                )
-                _lv_v = cur.fetchone()
-                if _lv_v:
-                    _vid_v = int(_lv_v.get("id") if hasattr(_lv_v,"get") else _lv_v[0])
-                    _vjr_v = _lv_v.get("visita_json") if hasattr(_lv_v,"get") else _lv_v[1]
-                    _vjd_v = _jvoc.loads(_vjr_v) if isinstance(_vjr_v, str) else (_vjr_v or {})
-                    _vjd_v["test_vocali"] = _voc_data
-                    cur.execute("UPDATE valutazioni_visive SET visita_json = %s WHERE id = %s",
-                                (_jvoc.dumps(_vjd_v), _vid_v))
-                    conn.commit()
-                    st.success("✅ Test vocali salvati.")
-                else:
-                    st.warning("Crea prima una valutazione visiva.")
-            except Exception as e:
-                try: conn.rollback()
-                except Exception: pass
-                st.error(f"Errore salvataggio test vocali: {e}")
-    except Exception as e:
-        st.error(f"Errore modulo test vocali: {e}")
-
-    # ── Optometria Comportamentale ──────────────────────────────────────────
-    st.markdown("---")
-    st.subheader("🧠 Optometria Comportamentale")
-    _optom_key = f"optom_{paz_id}"
-    if _optom_key not in st.session_state:
-        try:
-            cur.execute(
-                "SELECT visita_json FROM valutazioni_visive WHERE paziente_id = %s "
-                "ORDER BY data_visita DESC, id DESC LIMIT 1",
-                (paz_id,)
-            )
-            _last_vis = cur.fetchone()
-            if _last_vis:
-                import json as _json
-                _vj = _last_vis.get("visita_json") if hasattr(_last_vis,"get") else _last_vis[0]
-                _vj_dict = _json.loads(_vj) if isinstance(_vj, str) else (_vj or {})
-                st.session_state[_optom_key] = _vj_dict.get("optometria_comportamentale", {})
-            else:
-                st.session_state[_optom_key] = {}
-        except Exception:
-            st.session_state[_optom_key] = {}
-
-    try:
-        from modules.pnev.ui_optometria_comportamentale import render_optometria_comportamentale
-        _optom_data, _optom_summary = render_optometria_comportamentale(
-            optom_json=st.session_state[_optom_key],
-            prefix=f"optom_{paz_id}",
-            readonly=False,
-        )
-        st.session_state[_optom_key] = _optom_data
-
-        if st.button("💾 Salva Optometria Comportamentale", key=f"save_optom_{paz_id}"):
-            try:
-                import json as _json
-                cur.execute(
-                    "SELECT id, visita_json FROM valutazioni_visive WHERE paziente_id = %s "
-                    "ORDER BY data_visita DESC, id DESC LIMIT 1",
-                    (paz_id,)
-                )
-                _last = cur.fetchone()
-                if _last:
-                    _vid = int(_last.get("id") if hasattr(_last,"get") else _last[0])
-                    _vj_raw = _last.get("visita_json") if hasattr(_last,"get") else _last[1]
-                    _vj_dict = _json.loads(_vj_raw) if isinstance(_vj_raw, str) else (_vj_raw or {})
-                    _vj_dict["optometria_comportamentale"] = _optom_data
-                    cur.execute(
-                        "UPDATE valutazioni_visive SET visita_json = %s WHERE id = %s",
-                        (_json.dumps(_vj_dict), _vid)
-                    )
-                    conn.commit()
-                    st.success("✅ Optometria comportamentale salvata.")
-                else:
-                    st.warning("Nessuna visita visiva trovata. Crea prima una valutazione visiva.")
-            except Exception as e:
-                try: conn.rollback()
-                except Exception: pass
-                st.error(f"Errore salvataggio optometria: {e}")
-    except Exception as e:
-        st.error(f"Errore modulo optometria: {e}")
 
     # -------- Strumenti optometrici/oculistici stand-alone --------
     st.markdown("---")
@@ -7982,7 +7535,7 @@ def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"
                 code = err.get("Code", "ClientError")
                 msg = err.get("Message", "")
                 return False, f"{code}: {msg}"
-        except Exception as e:
+        except Exception:
             pass
         return False, f"{type(e).__name__}: {e}"
 
@@ -8004,7 +7557,7 @@ def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"
             if isinstance(e, botocore.exceptions.ClientError):
                 err = getattr(e, "response", {}).get("Error", {})
                 return False, f"{err.get('Code','ClientError')}: {err.get('Message','')}"
-        except Exception as e:
+        except Exception:
             pass
         return False, f"{type(e).__name__}: {e}"
 
@@ -10586,7 +10139,7 @@ def ui_esami_orl_tonali_test():
         except Exception as e:
             try:
                 conn.rollback()
-            except Exception as e:
+            except Exception:
                 pass
             st.error(f"Errore salvataggio: {e}")
         finally:
@@ -10793,7 +10346,7 @@ def ui_eq_stimolazione_uditiva_test():
         except Exception as e:
             try:
                 conn.rollback()
-            except Exception as e:
+            except Exception:
                 pass
             st.error(f"Errore salvataggio EQ: {e}")
         finally:
@@ -11133,18 +10686,259 @@ def main():
     if not login(get_connection):
         return
 
-    # ── NUOVO MENU A 7 AREE ──────────────────────────────────────────
-    from modules.app_main_router import build_smart_menu, dispatch_smart_section
-    area, sotto = build_smart_menu(is_admin=is_admin())
-    dispatch_smart_section(
-        area=area,
-        sotto=sotto,
+    # menu laterale
+    st.sidebar.title("Navigazione")
+    sections = build_sections(is_admin(), APP_MODE)
+
+    nav_key = "main_nav_sezione"
+    if nav_key not in st.session_state:
+        st.session_state[nav_key] = SECTION_DASHBOARD if SECTION_DASHBOARD in sections else sections[0]
+
+    if "go_section" in st.session_state:
+        target = st.session_state.pop("go_section")
+        if target in sections:
+            st.session_state[nav_key] = target
+
+    sezione = st.sidebar.radio("Vai a", sections, key=nav_key)
+
+    if sezione == "🔉 Diagnostica Uditiva":
+        if _ui_diag_uditiva:
+            _ui_diag_uditiva(conn=get_connection())
+        return
+
+    if sezione == "🎵 Stimolazione Passiva":
+        if _ui_stim_passiva:
+            _ui_stim_passiva(conn=get_connection())
+        return
+
+    # routing moduli uditivi (estratti)
+    try:
+        _udito_handled = dispatch_udito_section(
+            sezione=sezione,
+            app_mode=APP_MODE,
+            get_connection=get_connection,
+            paziente_selector_fn=_select_paziente_minimal,
+            ui_orl_eq=ui_orl_eq,
+            ui_generatore_stimolazione=ui_generatore_stimolazione,
+            ui_sessione_stimolazione_uditiva_test=ui_sessione_stimolazione_uditiva_test,
+            ui_audiogramma_test=ui_audiogramma_test,
+            ui_esami_orl_tonali_test=ui_esami_orl_tonali_test,
+            ui_eq_stimolazione_uditiva_test=ui_eq_stimolazione_uditiva_test,
+            ui_calibrazione_cuffie_test=ui_calibrazione_cuffie_test,
+            ui_db_cleanup=ui_db_cleanup,
+        )
+    except Exception as _udito_err:
+        import traceback
+        st.error(f"Errore sezione uditiva: {type(_udito_err).__name__}: {_udito_err}")
+        st.code(traceback.format_exc())
+        return
+    if _udito_handled:
+        return
+
+    # routing Lenti a contatto
+    if sezione == SECTION_LENTI_CONTATTO:
+        ui_lenti_contatto()
+        return
+
+    # routing Esami Strumentali
+    if sezione == SECTION_ESAMI_STRUM:
+        ui_esami_strumentali()
+        return
+
+    # routing Bilancio Uditivo
+    if sezione == SECTION_BILANCIO_UDITIVO:
+        ui_bilancio_uditivo()
+        return
+
+    # routing Audiometria Funzionale
+    if sezione == SECTION_AUDIOMETRIA_FUN:
+        ui_audiometria_funzionale()
+        return
+
+    # routing principale (estratto)
+    if dispatch_main_section(
+        sezione=sezione,
         get_connection=get_connection,
-        is_admin=is_admin(),
-    )
-    return
+    ):
+        return
 
 
+# ================================
+# RELAZIONI CLINICHE - THE ORGANISM
+# ================================
+import shutil as _shutil
+
+try:
+    from docxtpl import DocxTemplate
+except Exception:
+    DocxTemplate = None
+
+def _ensure_relazioni_cliniche_table(conn):
+    """Crea la tabella relazioni_cliniche sia su SQLite che su PostgreSQL (Neon)."""
+    cur = conn.cursor()
+    # Prova prima sintassi PostgreSQL (psycopg2)
+    try:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS relazioni_cliniche (
+          id BIGSERIAL PRIMARY KEY,
+          paziente_id BIGINT NOT NULL,
+          tipo TEXT NOT NULL,
+          titolo TEXT NOT NULL,
+          data_relazione DATE NOT NULL,
+          docx_path TEXT NOT NULL,
+          pdf_path TEXT NOT NULL,
+          note TEXT,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+        """)
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
+        except Exception:
+            pass
+        conn.commit()
+        return
+    except Exception:
+        # Fallback SQLite
+        pass
+
+    try:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS relazioni_cliniche (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          paziente_id INTEGER NOT NULL,
+          tipo TEXT NOT NULL,
+          titolo TEXT NOT NULL,
+          data_relazione TEXT NOT NULL,
+          docx_path TEXT NOT NULL,
+          pdf_path TEXT NOT NULL,
+          note TEXT,
+          created_at TEXT NOT NULL
+        )
+        """)
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
+        except Exception:
+            pass
+        conn.commit()
+    except Exception:
+        # ultima risorsa: non bloccare l'app
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+def _render_docx_docxtpl(template_path, out_docx_path, context):
+    if DocxTemplate is None:
+        raise RuntimeError("Dipendenza mancante: docxtpl. Aggiungi a requirements.txt: docxtpl")
+    doc = DocxTemplate(template_path)
+    doc.render(context)
+    os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
+    doc.save(out_docx_path)
+
+def _convert_pdf_if_possible(docx_path, out_pdf_path):
+    # Streamlit Cloud: spesso NON disponibile. In locale funziona se LibreOffice è installato.
+    soffice_ok = _shutil.which("soffice") is not None
+    if not soffice_ok:
+        return False, ""
+    import subprocess, shutil
+    out_dir = os.path.dirname(out_pdf_path)
+    os.makedirs(out_dir, exist_ok=True)
+    cmd = [
+        "soffice","--headless","--nologo","--nolockcheck","--nodefault","--norestore",
+        "--convert-to","pdf","--outdir", out_dir, docx_path
+    ]
+    subprocess.run(cmd, check=True)
+    gen = os.path.join(out_dir, os.path.splitext(os.path.basename(docx_path))[0] + ".pdf")
+    if not os.path.exists(gen):
+        return False, ""
+    shutil.move(gen, out_pdf_path)
+    return True, out_pdf_path
+
+# ==========================
+# Bibliografia (PNEV / INPP- INPPS) — inserita automaticamente in TUTTE le relazioni cliniche
+# Nota: nei template .docx inserisci il placeholder: {{ BIBLIOGRAFIA }}
+# ==========================
+BIBLIOGRAFIA_PNEV = """
+BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI (selezione)
+
+INPP / INPPS – neuromotor readiness, riflessi primitivi e apprendimento
+• Demiy A, Kalemba A, Lorent M, Pecuch A, Wolańska E, Telenga M, Gieysztor EZ. (2020).
+  A Child’s Perception of Their Developmental Difficulties in Relation to Their Adult Assessment.
+  Analysis of the INPP Questionnaire. Journal of Personalized Medicine, 10(4), 156.
+
+• Goddard Blythe S. (2005). Reflexes, Learning and Behavior: A Window into the Child’s Mind. Fern Ridge Press.
+• Goddard Blythe S. (2009). Attention, Balance and Coordination: The A.B.C. of Learning Success. Wiley-Blackwell.
+• Goddard Blythe S. (2012). Assessing Neuromotor Readiness for Learning:
+  The INPP Developmental Screening Test and School Intervention Programme. Wiley-Blackwell.
+
+Nota clinica (screening):
+Nel protocollo PNEV/INPPS, un numero elevato di affermazioni positive ai questionari di screening
+è considerato indicativo di possibile immaturità neuromotoria e richiede conferma tramite valutazione clinica diretta.
+"""
+
+TEMPLATES = {
+  # Linguaggio (ospedaliero) - unico template
+  "linguaggio_invio_ospedaliero": {
+    "titolo": "Relazione Linguaggio – Invio Ospedaliero",
+    "files": {"std": "relazione_linguaggio_invio_ospedaliero.docx"}
+  },
+  # Neuropsicologica
+  "neuropsicologica_3_6": {
+    "titolo": "Relazione Neuropsicologica – Invio Ospedaliero (3–6)",
+    "files": {"std": "relazione_neuropsicologica_invio_ospedaliero_3_6.docx"}
+  },
+  "neuropsicologica_6_10": {
+    "titolo": "Relazione Neuropsicologica – Invio Ospedaliero (6–10)",
+    "files": {"std": "relazione_neuropsicologica_invio_ospedaliero_6_10.docx"}
+  },
+  # Neuroevolutiva integrata
+  "neuroevolutiva_3_6": {
+    "titolo": "Relazione Neuroevolutiva Integrata (3–6)",
+    "files": {"std": "relazione_neuroevolutiva_integrata_3_6.docx"}
+  },
+  "neuroevolutiva_6_10": {
+    "titolo": "Relazione Neuroevolutiva Integrata (6–10)",
+    "files": {"std": "relazione_neuroevolutiva_integrata_6_10.docx"}
+  },
+  # Scuola / ASL
+  "scuola_asl_3_6": {
+    "titolo": "Relazione Scuola / ASL (3–6)",
+    "files": {"std": "relazione_scuola_asl_3_6.docx"}
+  },
+  "scuola_asl_6_10": {
+    "titolo": "Relazione Scuola / ASL (6–10)",
+    "files": {"std": "relazione_scuola_asl_6_10.docx"}
+  },
+  # Sensori-motoria / Neuro-psico-motoria
+  "sensori_motorio_3_6": {
+    "titolo": "Relazione Sensori-motoria / Neuro-psico-motoria (3–6)",
+    "files": {"std": "relazione_sensori_motorio_neuropsicomotorio_3_6.docx"}
+  },
+  "sensori_motorio_6_10": {
+    "titolo": "Relazione Sensori-motoria / Neuro-psico-motoria (6–10)",
+    "files": {"std": "relazione_sensori_motorio_neuropsicomotorio_6_10.docx"}
+  },
+  # SMOF
+  "smof_3_6": {
+    "titolo": "Relazione SMOF / Oro-linguale (3–6)",
+    "files": {"std": "relazione_smof_oro_linguale_3_6.docx"}
+  },
+  "smof_6_10": {
+    "titolo": "Relazione SMOF / Oro-linguale (6–10)",
+    "files": {"std": "relazione_smof_oro_linguale_6_10.docx"}
+  },
+  # Follow-up
+  "followup_3_6": {
+    "titolo": "Relazione Follow-up (3–6)",
+    "files": {"std": "relazione_followup_3_6.docx"}
+  },
+  "followup_6_10": {
+    "titolo": "Relazione Follow-up (6–10)",
+    "files": {"std": "relazione_followup_6_10.docx"}
+  },
+}
 
 def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     import streamlit as st
