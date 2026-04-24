@@ -281,6 +281,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 except Exception as e2:
                     st.error(f"Anagrafica non disponibile: {e2}")
             return
+        if sotto == "🎟️ Coupon OF / SDS":
+            try:
+                from modules import app_core
+                app_core.ui_coupons()
+            except Exception as e:
+                st.error(f"Errore coupon: {e}")
+            return
         if sotto == "📅 Sedute / Terapie":
             from .sections.ui_cliniche import render_sedute_section
             render_sedute_section(); return
