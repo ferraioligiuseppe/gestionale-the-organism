@@ -274,12 +274,11 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             try:
                 from .ui_anagrafica import render_anagrafica
                 render_anagrafica(conn)
-            except Exception:
-                try:
-                    from .pazienti import render_pazienti_section
-                    render_pazienti_section()
-                except Exception as e2:
-                    st.error(f"Anagrafica non disponibile: {e2}")
+            except Exception as e:
+                import traceback
+                st.error(f"Errore anagrafica: {e}")
+                with st.expander("Dettagli tecnici"):
+                    st.code(traceback.format_exc())
             return
         if sotto == "📅 Sedute / Terapie":
             from .sections.ui_cliniche import render_sedute_section
