@@ -89,8 +89,11 @@ def _cf_helpers():
 #  QUERY DB
 # ════════════════════════════════════════════════════════════════════
 
-def _carica_pazienti(conn, cerca: str = "", filtro_stato: str = "Attivi"):
-    """Lista pazienti con filtro ricerca + filtro stato."""
+@st.cache_data(ttl=30, show_spinner=False)
+def _carica_pazienti(_conn, cerca: str = "", filtro_stato: str = "Attivi"):
+    """Lista pazienti con filtro ricerca + filtro stato.
+    Cached 30s. _conn ignorato dall'hash (underscore prefix)."""
+    conn = _conn
     try:
         cur = conn.cursor()
         params: list = []
@@ -136,7 +139,9 @@ def _carica_pazienti(conn, cerca: str = "", filtro_stato: str = "Attivi"):
         return []
 
 
-def _carica_paziente(conn, paz_id):
+@st.cache_data(ttl=30, show_spinner=False)
+def _carica_paziente(_conn, paz_id):
+    conn = _conn
     try:
         cur = conn.cursor()
         cur.execute("SELECT * FROM pazienti WHERE id=%s", (paz_id,))
@@ -151,8 +156,10 @@ def _carica_paziente(conn, paz_id):
         return None
 
 
-def _carica_ultimo_consenso(conn, paz_id):
+@st.cache_data(ttl=30, show_spinner=False)
+def _carica_ultimo_consenso(_conn, paz_id):
     """Carica l'ultimo record di consenso privacy del paziente. None se non esiste."""
+    conn = _conn
     try:
         cur = conn.cursor()
         cur.execute(
@@ -169,6 +176,16 @@ def _carica_ultimo_consenso(conn, paz_id):
         return dict(zip(cols, row))
     except Exception:
         return None
+
+
+def _invalida_cache():
+    """Pulisce la cache delle query di lettura. Da chiamare dopo ogni scrittura."""
+    try:
+        _carica_pazienti.clear()
+        _carica_paziente.clear()
+        _carica_ultimo_consenso.clear()
+    except Exception:
+        pass
 
 
 def _conta_pazienti(conn) -> int:
@@ -225,6 +242,7 @@ def _salva_nuovo(conn, d: dict):
             pass
 
         conn.commit()
+        _invalida_cache()
         return paz_id
     except Exception as e:
         try:
@@ -264,6 +282,7 @@ def _salva_modifica(conn, paz_id, d: dict) -> bool:
             d["stato"], paz_id,
         ))
         conn.commit()
+        _invalida_cache()
         return True
     except Exception as e:
         try:
@@ -302,6 +321,7 @@ def _salva_consenso(conn, paz_id, c: dict) -> bool:
             c.get("note", "") or None,
         ))
         conn.commit()
+        _invalida_cache()
         return True
     except Exception as e:
         try:
@@ -317,6 +337,7 @@ def _archivia(conn, paz_id) -> bool:
         cur = conn.cursor()
         cur.execute("UPDATE pazienti SET stato_paziente='ARCHIVIATO' WHERE id=%s", (paz_id,))
         conn.commit()
+        _invalida_cache()
         return True
     except Exception as e:
         st.error(f"Errore archiviazione: {e}")
@@ -328,6 +349,7 @@ def _riattiva(conn, paz_id) -> bool:
         cur = conn.cursor()
         cur.execute("UPDATE pazienti SET stato_paziente='ATTIVO' WHERE id=%s", (paz_id,))
         conn.commit()
+        _invalida_cache()
         return True
     except Exception as e:
         st.error(f"Errore riattivazione: {e}")
@@ -358,6 +380,7 @@ def _elimina_definitivo(conn, paz_id) -> bool:
     try:
         cur.execute("DELETE FROM pazienti WHERE id=%s", (paz_id,))
         conn.commit()
+        _invalida_cache()
         return True
     except Exception as e:
         try:
@@ -493,9 +516,14 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
             max_chars=2,
         )
 
-    # Lookup CAP automatico (solo se CAP cambia)
+    # Lookup CAP automatico (solo quando l'utente cambia il CAP, NON al primo render)
     last_cap_key = f"{key}_last_cap"
-    if cap and cap != st.session_state.get(last_cap_key, ""):
+    # Per pazienti esistenti: pre-popolo il "CAP precedente" col valore del DB,
+    # così la prima apertura non fa scattare il lookup.
+    if not is_nuovo and last_cap_key not in st.session_state:
+        st.session_state[last_cap_key] = r.get("cap", "") or ""
+    prev_cap = st.session_state.get(last_cap_key, "")
+    if cap and cap != prev_cap:
         info = _cap_lookup(cap)
         if info:
             st.session_state[f"{key}_citta_v"] = info["citta"]
