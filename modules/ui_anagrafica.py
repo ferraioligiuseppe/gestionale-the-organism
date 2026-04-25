@@ -1,506 +1,1003 @@
 # -*- coding: utf-8 -*-
-"""UI Anagrafica Paziente - form nuovo/modifica con CAP autocomplete."""
+"""Anagrafica Pazienti v2.0 - The Organism.
+
+Layout a due colonne fisse: lista cliccabile a sinistra, form a destra.
+Click diretto sulla riga del paziente per aprire la scheda.
+Tasto Elimina con conferma a doppio step.
+Generatore + validatore Codice Fiscale integrati.
+Sezione Privacy/GDPR completa (consensi, canali, tutore minore, marketing).
+"""
 from __future__ import annotations
 import datetime
 import streamlit as st
 
 
+# ════════════════════════════════════════════════════════════════════
+#  HELPERS GENERICI
+# ════════════════════════════════════════════════════════════════════
+
 def _parse_data(s: str):
-    s = s.strip()
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
         try:
-            return datetime.datetime.strptime(s, fmt).date()
+            return datetime.datetime.strptime(s.strip(), fmt).date()
         except ValueError:
             continue
     return None
 
 
-def _fmt_data_it(iso) -> str:
+def _fmt_dn(iso) -> str:
     if not iso:
         return ""
     try:
-        d = datetime.date.fromisoformat(str(iso)[:10])
-        return d.strftime("%d/%m/%Y")
+        return datetime.date.fromisoformat(str(iso)[:10]).strftime("%d/%m/%Y")
     except Exception:
         return str(iso)[:10]
 
 
+def _eta(dn) -> str:
+    try:
+        anni = (datetime.date.today() - datetime.date.fromisoformat(str(dn)[:10])).days // 365
+        return f"{anni}a"
+    except Exception:
+        return ""
+
+
 def _cap_lookup(cap: str) -> dict:
-    cap = cap.strip()
     if len(cap) != 5 or not cap.isdigit():
         return {}
     try:
         import requests
-        r = requests.get(
-            f"https://api.zippopotam.us/it/{cap}",
-            timeout=3
-        )
+        r = requests.get(f"https://api.zippopotam.us/it/{cap}", timeout=3)
         if r.status_code == 200:
-            data = r.json()
-            places = data.get("places", [])
+            places = r.json().get("places", [])
             if places:
-                city  = places[0].get("place name", "")
-                state = places[0].get("state abbreviation", "")
-                return {"citta": city.title(), "provincia": state.upper()}
+                return {
+                    "citta": places[0].get("place name", "").title(),
+                    "provincia": places[0].get("state abbreviation", "").upper(),
+                }
     except Exception:
         pass
     return {}
 
 
-def render_form_nuovo_paziente(conn) -> None:
-    st.subheader("Nuovo paziente")
-
-    if "cap_lookup_result" not in st.session_state:
-        st.session_state["cap_lookup_result"] = {}
-
-    c1, c2 = st.columns(2)
-    with c1:
-        cognome = st.text_input("Cognome *", key="np_cognome",
-                                placeholder="Rossi")
-    with c2:
-        nome = st.text_input("Nome *", key="np_nome",
-                             placeholder="Mario")
-
-    c3, c4, c5 = st.columns([2, 1, 2])
-    with c3:
-        data_str = st.text_input(
-            "Data di nascita",
-            key="np_data",
-            placeholder="GG/MM/AAAA",
-            help="Formato: 15/03/1990"
-        )
-        if data_str:
-            d = _parse_data(data_str)
-            if d:
-                anni = (datetime.date.today() - d).days // 365
-                st.caption(f"{d.strftime('%d %b %Y')} - {anni} anni")
-            else:
-                st.caption("Formato non valido - usa GG/MM/AAAA")
-    with c4:
-        sesso = st.selectbox("Sesso", ["", "M", "F", "Altro"],
-                             key="np_sesso")
-    with c5:
-        cf = st.text_input("Codice fiscale", key="np_cf",
-                           placeholder="RSSMRA90A15...").upper()
-
-    indirizzo = st.text_input("Indirizzo", key="np_indirizzo",
-                              placeholder="Via Roma, 1")
-
-    c6, c7, c8 = st.columns([1, 2, 1])
-    with c6:
-        cap_val = st.text_input("CAP", key="np_cap",
-                                placeholder="84100", max_chars=5)
-        if len(cap_val) == 5 and cap_val.isdigit():
-            if st.session_state.get("_last_cap") != cap_val:
-                st.session_state["_last_cap"] = cap_val
-                with st.spinner(""):
-                    result = _cap_lookup(cap_val)
-                    st.session_state["cap_lookup_result"] = result
-
-    lookup = st.session_state.get("cap_lookup_result", {})
-
-    with c7:
-        citta = st.text_input("Citta", key="np_citta",
-                              value=lookup.get("citta", ""),
-                              placeholder="Salerno")
-    with c8:
-        provincia = st.text_input("Provincia", key="np_prov",
-                                  value=lookup.get("provincia", ""),
-                                  placeholder="SA", max_chars=2).upper()
-
-    c9, c10 = st.columns(2)
-    with c9:
-        telefono = st.text_input("Telefono", key="np_tel",
-                                 placeholder="+39 089 000000")
-    with c10:
-        email = st.text_input("Email", key="np_email",
-                              placeholder="mario.rossi@email.it")
-
-    st.markdown("---")
-    st.markdown("### Privacy e Consensi (GDPR)")
-    st.caption(
-        "I consensi vengono registrati nel gestionale. "
-        "Potrai generare il link di firma digitale dopo il salvataggio."
-    )
-
-    tipo_privacy = st.radio("Tipo", ["Adulto", "Minore"],
-                            horizontal=True, key="np_tipo_privacy")
-
-    tutore_nome = tutore_cf = tutore_tel = tutore_email = ""
-    if tipo_privacy == "Minore":
-        st.markdown("**Dati genitore / tutore**")
-        t1, t2 = st.columns(2)
-        with t1:
-            tutore_nome = st.text_input("Nome e cognome tutore", key="np_t_nome")
-            tutore_tel  = st.text_input("Telefono tutore", key="np_t_tel")
-        with t2:
-            tutore_cf    = st.text_input("CF tutore", key="np_t_cf").upper()
-            tutore_email = st.text_input("Email tutore", key="np_t_email")
-
-    st.markdown("**Consensi**")
-    consenso_dati = st.checkbox(
-        "Consenso al trattamento dei dati per finalita cliniche (obbligatorio)",
-        value=False, key="np_cons_dati"
-    )
-    consenso_comm = st.checkbox(
-        "Consenso a comunicazioni di servizio (appuntamenti, promemoria)",
-        value=True, key="np_cons_comm"
-    )
-    consenso_mkt = st.checkbox(
-        "Consenso a comunicazioni promozionali / offerte",
-        value=False, key="np_cons_mkt"
-    )
-
-    st.markdown("**Canali di comunicazione**")
-    cc1, cc2, cc3 = st.columns(3)
-    with cc1:
-        canale_email = st.checkbox("Email",    value=True,  key="np_ch_email")
-    with cc2:
-        canale_sms   = st.checkbox("SMS",      value=True,  key="np_ch_sms")
-    with cc3:
-        canale_wa    = st.checkbox("WhatsApp", value=True,  key="np_ch_wa")
-
-    note_priv = st.text_area("Note privacy (facoltative)", key="np_note_priv",
-                              height=80)
-
-    st.markdown("---")
-    if st.button("Salva paziente", type="primary", key="np_salva"):
-        _salva_nuovo_paziente(
-            conn=conn,
-            cognome=cognome, nome=nome,
-            data_str=data_str, sesso=sesso, cf=cf,
-            indirizzo=indirizzo, cap=cap_val, citta=citta,
-            provincia=provincia, telefono=telefono, email=email,
-            tipo_privacy=tipo_privacy,
-            tutore_nome=tutore_nome, tutore_cf=tutore_cf,
-            tutore_tel=tutore_tel, tutore_email=tutore_email,
-            consenso_dati=consenso_dati, consenso_comm=consenso_comm,
-            consenso_mkt=consenso_mkt,
-            canale_email=canale_email, canale_sms=canale_sms,
-            canale_wa=canale_wa, note_priv=note_priv,
-        )
+def _safe_get(rec, key, default=""):
+    """Legge un campo da dict-row o tuple-row in modo robusto."""
+    if rec is None:
+        return default
+    if isinstance(rec, dict):
+        # Tenta varianti maiuscole/minuscole
+        for k in (key, key.lower(), key.upper(), key.title()):
+            if k in rec:
+                return rec[k] if rec[k] is not None else default
+    return default
 
 
-def _salva_nuovo_paziente(conn, *, cognome, nome, data_str, sesso, cf,
-                          indirizzo, cap, citta, provincia, telefono, email,
-                          tipo_privacy, tutore_nome, tutore_cf,
-                          tutore_tel, tutore_email, consenso_dati,
-                          consenso_comm, consenso_mkt, canale_email,
-                          canale_sms, canale_wa, note_priv) -> None:
+# ════════════════════════════════════════════════════════════════════
+#  CF: import lazy delle funzioni da app_core
+# ════════════════════════════════════════════════════════════════════
 
-    if not cognome.strip() or not nome.strip():
-        st.error("Cognome e Nome sono obbligatori.")
-        return
-    if not consenso_dati:
-        st.error("Il consenso al trattamento dati e' obbligatorio.")
-        return
+def _cf_helpers():
+    """Importa lazy le funzioni CF da app_core. Ritorna (genera, valida) o (None, None)."""
+    try:
+        from modules.app_core import genera_codice_fiscale, valida_codice_fiscale
+        return genera_codice_fiscale, valida_codice_fiscale
+    except Exception:
+        return None, None
 
-    data_iso = None
-    if data_str.strip():
-        d = _parse_data(data_str.strip())
-        if not d:
-            st.error("Data non valida - usa GG/MM/AAAA (es. 15/03/1990).")
-            return
-        data_iso = d.isoformat()
 
-    cf_clean = cf.strip().upper() or None
+# ════════════════════════════════════════════════════════════════════
+#  QUERY DB
+# ════════════════════════════════════════════════════════════════════
 
+def _carica_pazienti(conn, cerca: str = "", filtro_stato: str = "Attivi"):
+    """Lista pazienti con filtro ricerca + filtro stato."""
     try:
         cur = conn.cursor()
+        params: list = []
+        where = []
+
+        # Filtro stato
+        if filtro_stato == "Attivi":
+            where.append("(stato_paziente IS NULL OR stato_paziente = 'ATTIVO')")
+        elif filtro_stato == "Sospesi":
+            where.append("stato_paziente = 'SOSPESO'")
+        elif filtro_stato == "Archiviati":
+            where.append("stato_paziente = 'ARCHIVIATO'")
+        # "Tutti" → nessun filtro
+
+        # Filtro ricerca
+        if cerca.strip():
+            q = f"%{cerca.strip().upper()}%"
+            where.append(
+                "(UPPER(cognome) LIKE %s OR UPPER(nome) LIKE %s "
+                "OR UPPER(COALESCE(codice_fiscale,'')) LIKE %s "
+                "OR CAST(id AS TEXT) = %s)"
+            )
+            params.extend([q, q, q, cerca.strip()])
+
+        sql = (
+            "SELECT id, cognome, nome, data_nascita, telefono, "
+            "stato_paziente, codice_fiscale "
+            "FROM pazienti"
+        )
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY cognome, nome LIMIT 500"
+
+        cur.execute(sql, params)
+        rows = cur.fetchall() or []
+        result = []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        for r in rows:
+            result.append(r if isinstance(r, dict) else dict(zip(cols, r)))
+        return result
+    except Exception as e:
+        st.error(f"Errore lista: {e}")
+        return []
+
+
+def _carica_paziente(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM pazienti WHERE id=%s", (paz_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        if isinstance(row, dict):
+            return row
+        cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
+    except Exception:
+        return None
+
+
+def _carica_ultimo_consenso(conn, paz_id):
+    """Carica l'ultimo record di consenso privacy del paziente. None se non esiste."""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM consensi_privacy WHERE paziente_id=%s "
+            "ORDER BY data_ora DESC NULLS LAST, id DESC LIMIT 1",
+            (paz_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        if isinstance(row, dict):
+            return row
+        cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
+    except Exception:
+        return None
+
+
+def _conta_pazienti(conn) -> int:
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM pazienti")
+        row = cur.fetchone()
+        if isinstance(row, dict):
+            return int(list(row.values())[0])
+        return int(row[0])
+    except Exception:
+        return 0
+
+
+def _salva_nuovo(conn, d: dict):
+    """Inserisce nuovo paziente + record consenso iniziale. Ritorna paz_id o None."""
+    try:
+        data_iso = None
+        if d["data_str"].strip():
+            parsed = _parse_data(d["data_str"])
+            if not parsed:
+                st.error("Data nascita non valida. Usa GG/MM/AAAA")
+                return None
+            data_iso = parsed.isoformat()
+
+        cur = conn.cursor()
         cur.execute("""
-            INSERT INTO Pazienti
-            (Cognome, Nome, Data_Nascita, Sesso, Telefono, Email,
-             Indirizzo, CAP, Citta, Provincia, Codice_Fiscale, Stato_Paziente)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            INSERT INTO pazienti
+            (cognome, nome, data_nascita, sesso, telefono, email,
+             indirizzo, cap, citta, provincia, codice_fiscale, stato_paziente)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'ATTIVO')
             RETURNING id
         """, (
-            cognome.strip(), nome.strip(), data_iso, sesso,
-            telefono.strip(), email.strip(), indirizzo.strip(),
-            cap.strip(), citta.strip(),
-            provincia.strip().upper(), cf_clean, "ATTIVO",
+            d["cognome"].strip().upper(), d["nome"].strip().title(),
+            data_iso, d["sesso"],
+            d["tel"].strip(), d["email"].strip().lower(),
+            d["indirizzo"].strip(), d["cap"].strip(),
+            d["citta"].strip().title(), d["prov"].strip().upper(),
+            d["cf"].strip().upper() or None,
         ))
         row = cur.fetchone()
         paz_id = int(row["id"] if isinstance(row, dict) else row[0])
 
-        # Salva consenso
+        # Record consenso iniziale
         try:
             cur.execute("""
                 INSERT INTO consensi_privacy
-                (paziente_id, tipo_soggetto, consenso_trattamento,
-                 consenso_comunicazioni, consenso_marketing,
-                 Canale_Email, Canale_SMS, Canale_WhatsApp,
-                 Tutore_Nome, Tutore_CF, Tutore_Telefono, Tutore_Email,
-                 Note, Data_Ora)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
-            """, (
-                paz_id, tipo_privacy,
-                1 if consenso_dati  else 0,
-                1 if consenso_comm  else 0,
-                1 if consenso_mkt   else 0,
-                1 if canale_email   else 0,
-                1 if canale_sms     else 0,
-                1 if canale_wa      else 0,
-                tutore_nome, tutore_cf, tutore_tel, tutore_email,
-                note_priv,
-            ))
+                (paziente_id, tipo, consenso_trattamento,
+                 consenso_comunicazioni, canale_email, canale_whatsapp,
+                 data_ora)
+                VALUES (%s,%s,1,1,1,1,NOW())
+            """, (paz_id, d.get("tipo_privacy", "adulto")))
         except Exception:
-            pass  # consensi non bloccanti
+            pass
 
         conn.commit()
-
-        st.success(f"Paziente {cognome} {nome} salvato (ID: {paz_id})")
-
-        # Link privacy immediato
-        st.markdown("---")
-        st.markdown("### Link firma privacy")
-        st.caption(
-            "Il paziente apre il link sul telefono, firma con il dito "
-            "e invia. La firma viene salvata automaticamente."
-        )
-        _genera_link_privacy(conn, paz_id, tipo_privacy,
-                             email.strip(), tutore_email.strip(),
-                             cognome, nome)
-
-        st.session_state["cap_lookup_result"] = {}
-        st.session_state.pop("_last_cap", None)
-
+        return paz_id
     except Exception as e:
         try:
             conn.rollback()
         except Exception:
             pass
         st.error(f"Errore salvataggio: {e}")
+        return None
 
 
-def _genera_link_privacy(conn, paz_id: int, doc_type: str,
-                         email_paz: str, email_tut: str,
-                         cognome: str, nome: str) -> None:
+def _salva_modifica(conn, paz_id, d: dict) -> bool:
+    """Aggiorna i dati anagrafici di un paziente esistente."""
     try:
-        import hashlib, hmac, secrets as _sec, base64 as _b64
-        from zoneinfo import ZoneInfo
+        data_iso = None
+        if d["data_str"].strip():
+            parsed = _parse_data(d["data_str"])
+            if not parsed:
+                st.error("Data nascita non valida. Usa GG/MM/AAAA")
+                return False
+            data_iso = parsed.isoformat()
 
-        token_secret = st.secrets.get("privacy", {}).get("TOKEN_SECRET", "fallback")
-        expire_sec   = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
-        base_url     = st.secrets.get("public_links", {}).get("BASE_URL", "").rstrip("/")
-
-        if not base_url:
-            st.warning("BASE_URL non configurata nei Secrets.")
-            return
-
-        token = _sec.token_urlsafe(32)
-        now   = datetime.datetime.now(ZoneInfo("Europe/Rome"))
-        exp   = now + datetime.timedelta(seconds=expire_sec)
-
-        key     = token_secret.encode() if isinstance(token_secret, str) else token_secret
-        payload = f"{paz_id}:{doc_type}:{int(exp.timestamp())}"
-        sig     = hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()
-        encoded = _b64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
-        url     = f"{base_url}/?sign={encoded}"
-
-        st.code(url, language="text")
-
-        testo = f"Gentile {cognome} {nome}, ecco il link per firmare il consenso privacy: {url}"
-        wa    = f"https://wa.me/?text={testo.replace(' ','%20')}"
-        st.markdown(f"[Invia via WhatsApp]({wa})")
-
-        dest = email_tut or email_paz
-        if dest:
-            subj   = "Consenso privacy - Studio The Organism"
-            corpo  = f"Apri questo link per firmare il consenso:\n{url}"
-            mailto = (f"mailto:{dest}?subject={subj.replace(' ','%20')}"
-                      f"&body={corpo.replace(' ','%20').replace(chr(10),'%0A')}")
-            st.markdown(f"[Apri in client email]({mailto})")
-
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE pazienti SET
+                cognome=%s, nome=%s, data_nascita=%s, sesso=%s,
+                telefono=%s, email=%s, indirizzo=%s, cap=%s,
+                citta=%s, provincia=%s, codice_fiscale=%s,
+                stato_paziente=%s
+            WHERE id=%s
+        """, (
+            d["cognome"].strip().upper(), d["nome"].strip().title(),
+            data_iso, d["sesso"],
+            d["tel"].strip(), d["email"].strip().lower(),
+            d["indirizzo"].strip(), d["cap"].strip(),
+            d["citta"].strip().title(), d["prov"].strip().upper(),
+            d["cf"].strip().upper() or None,
+            d["stato"], paz_id,
+        ))
+        conn.commit()
+        return True
     except Exception as e:
-        st.warning(f"Link privacy non disponibile: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.error(f"Errore: {e}")
+        return False
 
 
-def render_form_modifica_paziente(conn, paz_id: int, rec: dict) -> None:
-    st.subheader(f"Modifica - {rec.get('Cognome','')} {rec.get('Nome','')}")
+def _salva_consenso(conn, paz_id, c: dict) -> bool:
+    """Inserisce un nuovo record di consenso (storico immutabile)."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO consensi_privacy
+            (paziente_id, data_ora, tipo,
+             tutore_nome, tutore_cf, tutore_telefono, tutore_email,
+             consenso_trattamento, consenso_comunicazioni, consenso_marketing,
+             canale_email, canale_sms, canale_whatsapp,
+             usa_klaviyo, note)
+            VALUES (%s,NOW(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            paz_id, c.get("tipo", "adulto"),
+            c.get("tutore_nome", "") or None,
+            c.get("tutore_cf", "") or None,
+            c.get("tutore_tel", "") or None,
+            c.get("tutore_email", "") or None,
+            1 if c.get("consenso_tratt") else 0,
+            1 if c.get("consenso_com") else 0,
+            1 if c.get("consenso_mkt") else 0,
+            1 if c.get("can_email") else 0,
+            1 if c.get("can_sms") else 0,
+            1 if c.get("can_wa") else 0,
+            1 if c.get("usa_klaviyo") else 0,
+            c.get("note", "") or None,
+        ))
+        conn.commit()
+        return True
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.error(f"Errore consenso: {e}")
+        return False
 
-    key_cap = f"cap_lookup_{paz_id}"
-    if key_cap not in st.session_state:
-        st.session_state[key_cap] = {}
 
+def _archivia(conn, paz_id) -> bool:
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE pazienti SET stato_paziente='ARCHIVIATO' WHERE id=%s", (paz_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        st.error(f"Errore archiviazione: {e}")
+        return False
+
+
+def _riattiva(conn, paz_id) -> bool:
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE pazienti SET stato_paziente='ATTIVO' WHERE id=%s", (paz_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        st.error(f"Errore riattivazione: {e}")
+        return False
+
+
+def _elimina_definitivo(conn, paz_id) -> bool:
+    """Cancella paziente + tutti i dati associati. Operazione irreversibile."""
+    cur = conn.cursor()
+    # Tabelle correlate: tento ogni cancellazione separatamente.
+    # Se una tabella non esiste o non ha record, ignoro l'errore e continuo.
+    tabelle_correlate = [
+        "consensi_privacy", "anamnesi", "valutazioni_visive",
+        "sedute", "coupons", "relazioni_cliniche",
+        "valutazioni_neuropsicologiche", "stimolazioni_uditive",
+        "calibrazioni_cuffie", "test_audiologici", "pnev_risposte",
+        "tokens_pnev",
+    ]
+    for tab in tabelle_correlate:
+        try:
+            cur.execute(f"DELETE FROM {tab} WHERE paziente_id=%s", (paz_id,))
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    # Eliminazione finale paziente
+    try:
+        cur.execute("DELETE FROM pazienti WHERE id=%s", (paz_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.error(f"Errore eliminazione: {e}")
+        return False
+
+
+# ════════════════════════════════════════════════════════════════════
+#  FORM CAMPI ANAGRAFICI
+# ════════════════════════════════════════════════════════════════════
+
+def _form_anagrafici(key: str, r: dict | None = None) -> dict:
+    """Renderizza i campi anagrafici. r=None per nuovo, r=dict per modifica."""
+    is_nuovo = r is None
+    r = r or {}
+
+    # Riga 1: cognome, nome
     c1, c2 = st.columns(2)
     with c1:
-        cognome = st.text_input("Cognome *", rec.get("Cognome",""),
-                                key=f"mp_cog_{paz_id}")
+        cognome = st.text_input(
+            "Cognome *",
+            value=r.get("cognome", "") or "",
+            key=f"{key}_cog",
+        )
     with c2:
-        nome = st.text_input("Nome *", rec.get("Nome",""),
-                             key=f"mp_nom_{paz_id}")
+        nome = st.text_input(
+            "Nome *",
+            value=r.get("nome", "") or "",
+            key=f"{key}_nom",
+        )
 
+    # Riga 2: data nascita, sesso, CF
     c3, c4, c5 = st.columns([2, 1, 2])
     with c3:
         data_str = st.text_input(
-            "Data di nascita",
-            value=_fmt_data_it(rec.get("Data_Nascita","")),
-            key=f"mp_dat_{paz_id}",
-            placeholder="GG/MM/AAAA"
+            "Data nascita",
+            value=_fmt_dn(r.get("data_nascita", "")),
+            key=f"{key}_dn",
+            placeholder="GG/MM/AAAA",
         )
-        if data_str:
-            d = _parse_data(data_str)
-            if d:
-                anni = (datetime.date.today() - d).days // 365
-                st.caption(f"{d.strftime('%d %b %Y')} - {anni} anni")
-            else:
-                st.caption("Formato non valido")
     with c4:
-        opts = ["","M","F","Altro"]
-        idx  = opts.index(rec.get("Sesso","") or "") if (rec.get("Sesso","") or "") in opts else 0
-        sesso = st.selectbox("Sesso", opts, index=idx, key=f"mp_ses_{paz_id}")
+        sesso_opts = ["M", "F", "Altro"]
+        sesso_val = r.get("sesso", "M") or "M"
+        sesso = st.selectbox(
+            "Sesso",
+            sesso_opts,
+            index=sesso_opts.index(sesso_val) if sesso_val in sesso_opts else 0,
+            key=f"{key}_sex",
+        )
     with c5:
-        cf = st.text_input("Codice fiscale",
-                           rec.get("Codice_Fiscale","") or "",
-                           key=f"mp_cf_{paz_id}").upper()
+        # Se è stato generato un CF dal tool, lo prendo dal session_state
+        cf_default = st.session_state.pop(f"{key}_cf_generato", None)
+        if cf_default is None:
+            cf_default = r.get("codice_fiscale", "") or ""
+        cf = st.text_input(
+            "Codice fiscale",
+            value=cf_default,
+            key=f"{key}_cf",
+            placeholder="Lascia vuoto se non disponibile",
+        ).upper()
 
-    indirizzo = st.text_input("Indirizzo", rec.get("Indirizzo","") or "",
-                              key=f"mp_ind_{paz_id}")
+    # Validazione CF live
+    if cf.strip():
+        _, valida = _cf_helpers()
+        if valida is not None:
+            if valida(cf.strip()):
+                st.markdown(
+                    "<div style='color:var(--color-text-success);font-size:11px;margin-top:-8px'>"
+                    "✓ Codice fiscale valido</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    "<div style='color:var(--color-text-warning);font-size:11px;margin-top:-8px'>"
+                    "⚠️ Codice fiscale non riconosciuto dall'algoritmo (puoi salvarlo comunque)</div>",
+                    unsafe_allow_html=True,
+                )
 
-    c6, c7, c8 = st.columns([1, 2, 1])
+    # Tool generatore CF
+    _genera_cf_expander(key, cognome, nome, data_str, sesso)
+
+    # Riga 3: telefono, email
+    c6, c7 = st.columns(2)
     with c6:
-        cap_val = st.text_input("CAP", rec.get("CAP","") or "",
-                                key=f"mp_cap_{paz_id}", max_chars=5)
-        if len(cap_val) == 5 and cap_val.isdigit():
-            last_key = f"_last_cap_{paz_id}"
-            if st.session_state.get(last_key) != cap_val:
-                st.session_state[last_key] = cap_val
-                result = _cap_lookup(cap_val)
-                if result:
-                    st.session_state[key_cap] = result
-
-    lookup = st.session_state.get(key_cap, {})
+        tel = st.text_input(
+            "Telefono",
+            value=r.get("telefono", "") or "",
+            key=f"{key}_tel",
+        )
     with c7:
-        citta = st.text_input("Citta",
-                              lookup.get("citta","") or rec.get("Citta","") or "",
-                              key=f"mp_cit_{paz_id}")
+        email = st.text_input(
+            "Email",
+            value=r.get("email", "") or "",
+            key=f"{key}_email",
+        )
+
+    # Riga 4: indirizzo
+    indirizzo = st.text_input(
+        "Indirizzo (via, civico)",
+        value=r.get("indirizzo", "") or "",
+        key=f"{key}_ind",
+    )
+
+    # Riga 5: CAP, città, provincia con lookup automatico
+    c8, c9, c10 = st.columns([1, 2, 1])
     with c8:
-        provincia = st.text_input("Provincia",
-                                  lookup.get("provincia","") or rec.get("Provincia","") or "",
-                                  key=f"mp_prv_{paz_id}", max_chars=2).upper()
-
-    c9, c10 = st.columns(2)
+        cap = st.text_input(
+            "CAP",
+            value=r.get("cap", "") or "",
+            key=f"{key}_cap",
+            max_chars=5,
+        )
     with c9:
-        telefono = st.text_input("Telefono", rec.get("Telefono","") or "",
-                                 key=f"mp_tel_{paz_id}")
+        citta_default = st.session_state.pop(f"{key}_citta_v", None)
+        if citta_default is None:
+            citta_default = r.get("citta", "") or ""
+        citta = st.text_input(
+            "Città",
+            value=citta_default,
+            key=f"{key}_citta",
+        )
     with c10:
-        email = st.text_input("Email", rec.get("Email","") or "",
-                              key=f"mp_eml_{paz_id}")
+        prov_default = st.session_state.pop(f"{key}_prov_v", None)
+        if prov_default is None:
+            prov_default = r.get("provincia", "") or ""
+        prov = st.text_input(
+            "Prov.",
+            value=prov_default,
+            key=f"{key}_prov",
+            max_chars=2,
+        )
 
-    st.markdown("---")
+    # Lookup CAP automatico (solo se CAP cambia)
+    last_cap_key = f"{key}_last_cap"
+    if cap and cap != st.session_state.get(last_cap_key, ""):
+        info = _cap_lookup(cap)
+        if info:
+            st.session_state[f"{key}_citta_v"] = info["citta"]
+            st.session_state[f"{key}_prov_v"] = info["provincia"]
+            st.session_state[last_cap_key] = cap
+            st.rerun()
+        st.session_state[last_cap_key] = cap
 
-    if st.button("Salva modifiche", type="primary", key=f"mp_salva_{paz_id}"):
-        data_iso = None
-        if data_str.strip():
-            d = _parse_data(data_str.strip())
-            if not d:
-                st.error("Data non valida - usa GG/MM/AAAA.")
-                return
-            data_iso = d.isoformat()
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE Pazienti SET
-                  Cognome=%s, Nome=%s, Data_Nascita=%s, Sesso=%s,
-                  Telefono=%s, Email=%s, Indirizzo=%s,
-                  CAP=%s, Citta=%s, Provincia=%s, Codice_Fiscale=%s
-                WHERE id=%s
-            """, (
-                cognome.strip(), nome.strip(), data_iso, sesso,
-                telefono.strip(), email.strip(), indirizzo.strip(),
-                cap_val.strip(), citta.strip(),
-                provincia.strip().upper(),
-                cf.strip().upper() or None,
-                paz_id,
-            ))
-            conn.commit()
-            st.success("Modifiche salvate.")
-        except Exception as e:
-            try: conn.rollback()
-            except Exception: pass
-            st.error(f"Errore: {e}")
+    # Stato paziente (solo in modifica)
+    if not is_nuovo:
+        stati = ["ATTIVO", "SOSPESO", "ARCHIVIATO"]
+        stato_val = r.get("stato_paziente", "ATTIVO") or "ATTIVO"
+        stato = st.selectbox(
+            "Stato",
+            stati,
+            index=stati.index(stato_val) if stato_val in stati else 0,
+            key=f"{key}_stato",
+        )
+    else:
+        stato = "ATTIVO"
 
-    st.markdown("---")
-    st.markdown("### Link firma privacy")
-    if st.button("Genera link firma privacy", key=f"mp_priv_{paz_id}"):
-        tipo = "Minore" if (rec.get("Tutore_Nome") or "") else "Adulto"
-        _genera_link_privacy(conn, paz_id, tipo, email, "", cognome, nome)
+    return {
+        "cognome": cognome, "nome": nome, "data_str": data_str,
+        "sesso": sesso, "cf": cf, "tel": tel, "email": email,
+        "indirizzo": indirizzo, "cap": cap, "citta": citta, "prov": prov,
+        "stato": stato,
+        "_is_nuovo": is_nuovo,
+    }
 
 
-def _render_lista(conn) -> None:
-    cerca = st.text_input("Cerca per cognome o nome",
-                          placeholder="es. Rossi", key="ana_cerca")
-    try:
-        cur = conn.cursor()
-        if cerca:
-            q = f"%{cerca.upper()}%"
-            cur.execute(
-                "SELECT id, Cognome, Nome, Data_Nascita, Telefono, Email "
-                "FROM Pazienti WHERE UPPER(Cognome) LIKE %s OR UPPER(Nome) LIKE %s "
-                "ORDER BY Cognome, Nome LIMIT 100",
-                (q, q)
-            )
-        else:
-            cur.execute(
-                "SELECT id, Cognome, Nome, Data_Nascita, Telefono, Email "
-                "FROM Pazienti WHERE COALESCE(Stato_Paziente,'ATTIVO')='ATTIVO' "
-                "ORDER BY Cognome, Nome LIMIT 200"
-            )
-        rows = cur.fetchall() or []
-    except Exception as e:
-        st.error(f"Errore: {e}")
+def _genera_cf_expander(key: str, cognome: str, nome: str,
+                         data_str: str, sesso: str) -> None:
+    """Expander con il generatore di codice fiscale di supporto."""
+    genera, _ = _cf_helpers()
+    if genera is None:
         return
 
-    if not rows:
-        st.info("Nessun paziente trovato.")
-        return
+    with st.expander("🛠️ Genera codice fiscale (se il paziente non lo ricorda)"):
+        st.caption(
+            "Usa cognome, nome, data e sesso dal form sopra. "
+            "Aggiungi qui comune e provincia di nascita."
+        )
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            comune = st.text_input(
+                "Comune di nascita",
+                key=f"{key}_cf_comune",
+                placeholder="Es. Pagani",
+            )
+        with c2:
+            prov_n = st.text_input(
+                "Sigla prov.",
+                key=f"{key}_cf_prov",
+                placeholder="Es. SA",
+                max_chars=2,
+            )
 
-    st.caption(f"{len(rows)} pazienti")
+        if st.button("Genera CF", key=f"{key}_cf_btn", use_container_width=True):
+            cf_gen = genera(
+                cognome=cognome, nome=nome,
+                data_nascita_str=data_str, sesso=sesso,
+                comune_nascita=comune, provincia_nascita=prov_n,
+            )
+            if cf_gen is None:
+                st.error(
+                    "Impossibile generare il CF. Controlla i dati anagrafici "
+                    "e che il comune sia presente in archivio."
+                )
+            else:
+                # Salvo il CF generato in session_state perché il form
+                # lo riprenda al prossimo render
+                st.session_state[f"{key}_cf_generato"] = cf_gen
+                st.success(f"CF generato: **{cf_gen}** — inserito automaticamente nel campo.")
+                st.rerun()
 
-    for r in rows:
-        if isinstance(r, dict):
-            pid = r.get("id"); cog = r.get("Cognome",""); nom = r.get("Nome","")
-            dn  = r.get("Data_Nascita",""); tel = r.get("Telefono","") or ""
-            eml = r.get("Email","") or ""
-        else:
-            pid, cog, nom, dn, tel, eml = r[0],r[1],r[2],r[3],r[4],r[5]
 
-        eta_str = ""
-        if dn:
-            try:
-                anni = (datetime.date.today() - datetime.date.fromisoformat(str(dn)[:10])).days // 365
-                eta_str = f" ({anni} anni)"
-            except Exception:
-                pass
+# ════════════════════════════════════════════════════════════════════
+#  FORM PRIVACY E CONSENSI
+# ════════════════════════════════════════════════════════════════════
 
-        dn_fmt = _fmt_data_it(dn)
+def _form_privacy(key: str, c: dict | None = None) -> dict:
+    """Sezione consensi privacy/GDPR. c=None per nuovo, c=dict ultimo consenso per modifica."""
+    c = c or {}
 
-        with st.expander(f"{cog} {nom}{eta_str}", expanded=False):
-            col_a, col_b = st.columns([3, 1])
-            with col_a:
-                st.markdown(f"Data: {dn_fmt} | Tel: {tel} | Email: {eml}")
-            with col_b:
-                if st.button("Modifica", key=f"btn_mod_{pid}"):
-                    st.session_state[f"modifica_paz_{pid}"] = True
+    # Tipo soggetto
+    tipo_val = (c.get("tipo") or "adulto").lower()
+    tipo = st.radio(
+        "Tipo soggetto",
+        ["Adulto", "Minore"],
+        index=0 if tipo_val == "adulto" else 1,
+        horizontal=True,
+        key=f"{key}_priv_tipo",
+    )
 
-            if st.session_state.get(f"modifica_paz_{pid}"):
-                try:
-                    cur2 = conn.cursor()
-                    cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (pid,))
-                    rec = cur2.fetchone()
-                    if rec:
-                        if not isinstance(rec, dict):
-                            cols = [d[0] for d in cur2.description]
-                            rec  = dict(zip(cols, rec))
-                        render_form_modifica_paziente(conn, pid, rec)
-                except Exception as e:
-                    st.error(f"Errore: {e}")
+    # Dati tutore (solo se Minore)
+    tutore_nome = tutore_cf = tutore_tel = tutore_email = ""
+    if tipo == "Minore":
+        st.markdown("**Dati genitore / tutore**")
+        ct1, ct2 = st.columns(2)
+        with ct1:
+            tutore_nome = st.text_input(
+                "Nome e cognome tutore",
+                value=c.get("tutore_nome", "") or "",
+                key=f"{key}_tut_n",
+            )
+            tutore_tel = st.text_input(
+                "Telefono tutore",
+                value=c.get("tutore_telefono", "") or "",
+                key=f"{key}_tut_t",
+            )
+        with ct2:
+            tutore_cf = st.text_input(
+                "CF tutore",
+                value=c.get("tutore_cf", "") or "",
+                key=f"{key}_tut_cf",
+            ).upper()
+            tutore_email = st.text_input(
+                "Email tutore",
+                value=c.get("tutore_email", "") or "",
+                key=f"{key}_tut_e",
+            )
 
+    st.markdown("**Consensi**")
+    consenso_tratt = st.checkbox(
+        "Consenso al trattamento dati per finalità cliniche/gestionali (obbligatorio)",
+        value=bool(c.get("consenso_trattamento", 1)) if c else False,
+        key=f"{key}_c_tratt",
+    )
+    consenso_com = st.checkbox(
+        "Consenso a comunicazioni di servizio (appuntamenti, referti, promemoria)",
+        value=bool(c.get("consenso_comunicazioni", 1)) if c else True,
+        key=f"{key}_c_com",
+    )
+
+    st.markdown("**Canali autorizzati**")
+    cc1, cc2, cc3 = st.columns(3)
+    with cc1:
+        can_email = st.checkbox(
+            "Email",
+            value=bool(c.get("canale_email", 1)) if c else True,
+            key=f"{key}_can_e",
+        )
+    with cc2:
+        can_sms = st.checkbox(
+            "SMS",
+            value=bool(c.get("canale_sms", 0)) if c else False,
+            key=f"{key}_can_s",
+        )
+    with cc3:
+        can_wa = st.checkbox(
+            "WhatsApp",
+            value=bool(c.get("canale_whatsapp", 1)) if c else True,
+            key=f"{key}_can_w",
+        )
+
+    st.markdown("**Marketing (facoltativo)**")
+    consenso_mkt = st.checkbox(
+        "Consenso a comunicazioni promozionali e contenuti informativi",
+        value=bool(c.get("consenso_marketing", 0)) if c else False,
+        key=f"{key}_c_mkt",
+    )
+    usa_klaviyo = st.checkbox(
+        "Autorizzo l'uso di Klaviyo per newsletter/SMS marketing",
+        value=bool(c.get("usa_klaviyo", 0)) if c else False,
+        key=f"{key}_klav",
+    )
+
+    note = st.text_area(
+        "Note privacy (facoltative)",
+        value=c.get("note", "") or "",
+        key=f"{key}_note",
+        height=68,
+    )
+
+    return {
+        "tipo": tipo.lower(),
+        "tutore_nome": tutore_nome, "tutore_cf": tutore_cf,
+        "tutore_tel": tutore_tel, "tutore_email": tutore_email,
+        "consenso_tratt": consenso_tratt,
+        "consenso_com": consenso_com,
+        "consenso_mkt": consenso_mkt,
+        "can_email": can_email, "can_sms": can_sms, "can_wa": can_wa,
+        "usa_klaviyo": usa_klaviyo,
+        "note": note,
+    }
+
+
+# ════════════════════════════════════════════════════════════════════
+#  CARDS LISTA
+# ════════════════════════════════════════════════════════════════════
+
+def _label_card(p: dict) -> str:
+    """Etichetta del bottone-card paziente nella lista a sinistra."""
+    cog = p.get("cognome", "") or ""
+    nom = p.get("nome", "") or ""
+    dn = p.get("data_nascita", "")
+    tel = p.get("telefono", "") or ""
+    stato = p.get("stato_paziente", "ATTIVO") or "ATTIVO"
+
+    badge = "🟢" if stato == "ATTIVO" else ("🟡" if stato == "SOSPESO" else "⚫")
+    eta = _eta(dn)
+    riga2_parts = []
+    if dn:
+        riga2_parts.append(_fmt_dn(dn))
+    if eta:
+        riga2_parts.append(eta)
+    if tel:
+        riga2_parts.append(tel)
+    riga2 = " · ".join(riga2_parts)
+
+    # I bottoni Streamlit supportano \n\n nel label per andare a capo
+    label = f"{badge} {cog} {nom}"
+    if riga2:
+        label += f"\n\n{riga2}"
+    return label
+
+
+# ════════════════════════════════════════════════════════════════════
+#  ENTRY POINT
+# ════════════════════════════════════════════════════════════════════
 
 def render_anagrafica(conn) -> None:
-    st.title("Anagrafica Pazienti")
-    tab_lista, tab_nuovo = st.tabs(["Lista pazienti", "Nuovo paziente"])
-    with tab_nuovo:
-        render_form_nuovo_paziente(conn)
-    with tab_lista:
-        _render_lista(conn)
+    """Render principale dell'anagrafica pazienti v2.0."""
+
+    # ── Stato navigazione ─────────────────────────────────────────
+    st.session_state.setdefault("ana_sel", None)        # paz_id selezionato
+    st.session_state.setdefault("ana_nuovo", False)     # modalità nuovo paziente
+    st.session_state.setdefault("ana_filtro", "Attivi") # filtro stato lista
+    st.session_state.setdefault("ana_conf_del", None)   # paz_id da confermare elimina
+
+    # ── CSS leggero per compattare i bottoni-card della lista ─────
+    st.markdown("""
+        <style>
+        /* Bottoni nella prima colonna: aspetto card compatto */
+        div[data-testid="column"]:first-child div.stButton > button {
+            text-align: left;
+            justify-content: flex-start;
+            padding: 8px 12px;
+            min-height: 0;
+            line-height: 1.3;
+            font-weight: 500;
+            white-space: pre-wrap;
+        }
+        div[data-testid="column"]:first-child div.stButton > button p {
+            text-align: left;
+            margin: 0;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # ── Header ────────────────────────────────────────────────────
+    h1, h2 = st.columns([3, 1])
+    with h1:
+        st.subheader("Anagrafica Pazienti")
+    with h2:
+        if st.button("➕ Nuovo paziente", type="primary",
+                     key="ana_btn_nuovo", use_container_width=True):
+            st.session_state["ana_nuovo"] = True
+            st.session_state["ana_sel"] = None
+            st.session_state["ana_conf_del"] = None
+            st.rerun()
+
+    # ── Layout principale 2 colonne ───────────────────────────────
+    col_l, col_r = st.columns([1, 2], gap="medium")
+
+    # ════════════════════════════════════════════════════════════
+    #  COLONNA SINISTRA: ricerca + filtro + lista
+    # ════════════════════════════════════════════════════════════
+    with col_l:
+        cerca = st.text_input(
+            "Cerca",
+            placeholder="🔍 Cognome, nome, ID o CF...",
+            key="ana_cerca",
+            label_visibility="collapsed",
+        )
+
+        filtro = st.segmented_control(
+            "Stato",
+            ["Attivi", "Sospesi", "Archiviati", "Tutti"],
+            default=st.session_state["ana_filtro"],
+            key="ana_filtro_sc",
+            label_visibility="collapsed",
+        )
+        if filtro and filtro != st.session_state["ana_filtro"]:
+            st.session_state["ana_filtro"] = filtro
+            st.rerun()
+
+        pazienti = _carica_pazienti(conn, cerca, st.session_state["ana_filtro"])
+        st.caption(f"{len(pazienti)} paziente/i")
+
+        # Container scrollabile per la lista
+        for p in pazienti:
+            pid = p.get("id")
+            is_sel = (st.session_state.get("ana_sel") == pid
+                      and not st.session_state.get("ana_nuovo"))
+            if st.button(
+                _label_card(p),
+                key=f"ana_card_{pid}",
+                use_container_width=True,
+                type="primary" if is_sel else "secondary",
+            ):
+                st.session_state["ana_sel"] = pid
+                st.session_state["ana_nuovo"] = False
+                st.session_state["ana_conf_del"] = None
+                # Pulisci campi del form precedente
+                for k in list(st.session_state.keys()):
+                    if k.startswith("mp_") and (
+                        "_citta_v" in k or "_prov_v" in k or "_last_cap" in k
+                    ):
+                        del st.session_state[k]
+                st.rerun()
+
+    # ════════════════════════════════════════════════════════════
+    #  COLONNA DESTRA: form (nuovo / modifica / vuoto)
+    # ════════════════════════════════════════════════════════════
+    with col_r:
+
+        # ── NUOVO PAZIENTE ────────────────────────────────────────
+        if st.session_state.get("ana_nuovo"):
+            st.markdown("#### ➕ Nuovo paziente")
+            st.markdown("---")
+
+            dati = _form_anagrafici("np")
+
+            st.markdown("##### Privacy e consensi")
+            consenso_dati = _form_privacy("np_priv")
+
+            st.markdown("---")
+            cs1, cs2 = st.columns([1, 1])
+            with cs1:
+                salva = st.button(
+                    "💾 Salva paziente",
+                    type="primary", key="np_salva",
+                    use_container_width=True,
+                )
+            with cs2:
+                if st.button("✕ Annulla", key="np_annulla",
+                              use_container_width=True):
+                    st.session_state["ana_nuovo"] = False
+                    # Pulisco i campi
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("np_") or k.startswith("np_priv_"):
+                            del st.session_state[k]
+                    st.rerun()
+
+            if salva:
+                if not dati["cognome"].strip() or not dati["nome"].strip():
+                    st.error("Cognome e Nome sono obbligatori.")
+                elif not consenso_dati["consenso_tratt"]:
+                    st.error("Il consenso al trattamento dati è obbligatorio.")
+                else:
+                    dati["tipo_privacy"] = consenso_dati["tipo"]
+                    paz_id = _salva_nuovo(conn, dati)
+                    if paz_id:
+                        # Sostituisco il record consenso minimal con quello completo
+                        _salva_consenso(conn, paz_id, consenso_dati)
+                        st.success(f"✅ {dati['cognome']} {dati['nome']} salvato")
+                        st.session_state["ana_nuovo"] = False
+                        st.session_state["ana_sel"] = paz_id
+                        for k in list(st.session_state.keys()):
+                            if k.startswith("np_"):
+                                del st.session_state[k]
+                        import time
+                        time.sleep(0.3)
+                        st.rerun()
+
+        # ── MODIFICA PAZIENTE ─────────────────────────────────────
+        elif st.session_state.get("ana_sel"):
+            paz_id = st.session_state["ana_sel"]
+            rec = _carica_paziente(conn, paz_id)
+
+            if not rec:
+                st.warning("Paziente non trovato.")
+                st.session_state["ana_sel"] = None
+                return
+
+            cog = rec.get("cognome", "")
+            nom = rec.get("nome", "")
+            dn = rec.get("data_nascita", "")
+            eta = _eta(dn)
+
+            # Header paziente
+            st.markdown(f"#### {cog} {nom}")
+            st.caption(f"ID: {paz_id} · {_fmt_dn(dn)}{(' · '+eta) if eta else ''}")
+
+            # Conferma eliminazione (in cima, ben visibile)
+            if st.session_state.get("ana_conf_del") == paz_id:
+                st.error(
+                    "⚠️ **Eliminazione definitiva**\n\n"
+                    f"Stai per cancellare **{cog} {nom}** e TUTTI i dati associati: "
+                    "anamnesi, valutazioni, sedute, coupon, consensi privacy, relazioni cliniche. "
+                    "**L'operazione è irreversibile.**"
+                )
+                cd1, cd2 = st.columns(2)
+                with cd1:
+                    if st.button(
+                        "🗑️ SÌ, ELIMINA DEFINITIVAMENTE",
+                        key=f"conf_del_{paz_id}",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        if _elimina_definitivo(conn, paz_id):
+                            st.success(f"Paziente {cog} {nom} eliminato.")
+                            st.session_state["ana_sel"] = None
+                            st.session_state["ana_conf_del"] = None
+                            import time
+                            time.sleep(0.5)
+                            st.rerun()
+                with cd2:
+                    if st.button("✕ Annulla", key=f"ann_del_{paz_id}",
+                                  use_container_width=True):
+                        st.session_state["ana_conf_del"] = None
+                        st.rerun()
+                return
+
+            st.markdown("---")
+
+            # Form anagrafici
+            dati = _form_anagrafici(f"mp_{paz_id}", rec)
+
+            # Sezione privacy collassabile
+            ultimo = _carica_ultimo_consenso(conn, paz_id)
+            with st.expander(
+                "🔒 Privacy e consensi",
+                expanded=False,
+            ):
+                if ultimo and ultimo.get("data_ora"):
+                    st.caption(f"Ultimo aggiornamento: {ultimo.get('data_ora')}")
+                consenso_dati = _form_privacy(f"mp_priv_{paz_id}", ultimo)
+                salva_priv = st.button(
+                    "💾 Salva consenso",
+                    key=f"mp_priv_save_{paz_id}",
+                    use_container_width=True,
+                )
+                if salva_priv:
+                    if not consenso_dati["consenso_tratt"]:
+                        st.error("Il consenso al trattamento dati è obbligatorio.")
+                    elif _salva_consenso(conn, paz_id, consenso_dati):
+                        st.success("✅ Consenso aggiornato.")
+                        import time
+                        time.sleep(0.3)
+                        st.rerun()
+
+            st.markdown("---")
+
+            # Bottoni azione
+            ba1, ba2, ba3, ba4 = st.columns([2, 1, 1, 1])
+            with ba1:
+                salva = st.button(
+                    "💾 Salva modifiche",
+                    type="primary",
+                    key=f"mp_salva_{paz_id}",
+                    use_container_width=True,
+                )
+            with ba2:
+                if st.button("✕ Chiudi", key=f"mp_close_{paz_id}",
+                              use_container_width=True):
+                    st.session_state["ana_sel"] = None
+                    st.rerun()
+            with ba3:
+                stato_corrente = (rec.get("stato_paziente") or "ATTIVO")
+                if stato_corrente == "ARCHIVIATO":
+                    if st.button("♻️ Riattiva", key=f"mp_riatt_{paz_id}",
+                                  use_container_width=True):
+                        if _riattiva(conn, paz_id):
+                            st.success("Paziente riattivato.")
+                            st.rerun()
+                else:
+                    if st.button("🗃️ Archivia", key=f"mp_arch_{paz_id}",
+                                  use_container_width=True):
+                        if _archivia(conn, paz_id):
+                            st.success("Paziente archiviato.")
+                            st.rerun()
+            with ba4:
+                if st.button("🗑️ Elimina", key=f"mp_del_{paz_id}",
+                              use_container_width=True):
+                    st.session_state["ana_conf_del"] = paz_id
+                    st.rerun()
+
+            # Salvataggio modifiche
+            if salva:
+                if not dati["cognome"].strip() or not dati["nome"].strip():
+                    st.error("Cognome e Nome sono obbligatori.")
+                elif _salva_modifica(conn, paz_id, dati):
+                    st.success("✅ Modifiche salvate.")
+                    import time
+                    time.sleep(0.2)
+                    st.rerun()
+
+        # ── NESSUNA SELEZIONE ─────────────────────────────────────
+        else:
+            n = _conta_pazienti(conn)
+            st.markdown(
+                f"""<div style="display:flex;flex-direction:column;
+                    align-items:center;justify-content:center;
+                    height:400px;color:var(--color-text-secondary)">
+                <div style="font-size:3rem;margin-bottom:1rem">👥</div>
+                <div style="font-size:1.2rem;font-weight:500;margin-bottom:0.5rem">
+                {n} pazienti registrati</div>
+                <div style="font-size:0.9rem;text-align:center">
+                Clicca un paziente nella lista a sinistra<br>
+                oppure crea un nuovo paziente</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
