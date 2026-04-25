@@ -753,6 +753,9 @@ def render_anagrafica(conn) -> None:
     st.session_state.setdefault("ana_nuovo", False)     # modalità nuovo paziente
     st.session_state.setdefault("ana_filtro", "Attivi") # filtro stato lista
     st.session_state.setdefault("ana_conf_del", None)   # paz_id da confermare elimina
+    st.session_state.setdefault("ana_pagina", 0)        # pagina lista (0-based)
+
+    PAGE_SIZE = 30  # pazienti per pagina, riduce il rendering
 
     # ── CSS leggero per compattare i bottoni-card della lista ─────
     st.markdown("""
@@ -800,6 +803,11 @@ def render_anagrafica(conn) -> None:
             label_visibility="collapsed",
         )
 
+        # Reset pagina se cambia la ricerca
+        if cerca != st.session_state.get("ana_cerca_prev", ""):
+            st.session_state["ana_pagina"] = 0
+            st.session_state["ana_cerca_prev"] = cerca
+
         filtro = st.segmented_control(
             "Stato",
             ["Attivi", "Sospesi", "Archiviati", "Tutti"],
@@ -809,13 +817,52 @@ def render_anagrafica(conn) -> None:
         )
         if filtro and filtro != st.session_state["ana_filtro"]:
             st.session_state["ana_filtro"] = filtro
+            st.session_state["ana_pagina"] = 0  # reset pagina
             st.rerun()
 
         pazienti = _carica_pazienti(conn, cerca, st.session_state["ana_filtro"])
-        st.caption(f"{len(pazienti)} paziente/i")
+        totale = len(pazienti)
+
+        # Paginazione
+        n_pagine = max(1, (totale + PAGE_SIZE - 1) // PAGE_SIZE)
+        pagina = max(0, min(st.session_state["ana_pagina"], n_pagine - 1))
+        st.session_state["ana_pagina"] = pagina
+        start = pagina * PAGE_SIZE
+        end = start + PAGE_SIZE
+        pazienti_pag = pazienti[start:end]
+
+        # Riga conteggio + paginazione
+        if totale > PAGE_SIZE:
+            st.caption(
+                f"{totale} paziente/i · pagina {pagina+1}/{n_pagine} "
+                f"(visualizzati {start+1}–{min(end, totale)})"
+            )
+            cp1, cp2, cp3 = st.columns([1, 1, 1])
+            with cp1:
+                if st.button("‹ Prec",
+                              key="ana_prec",
+                              disabled=(pagina == 0),
+                              use_container_width=True):
+                    st.session_state["ana_pagina"] = max(0, pagina - 1)
+                    st.rerun()
+            with cp2:
+                st.markdown(
+                    f"<div style='text-align:center;padding-top:6px;font-size:12px;"
+                    f"color:var(--color-text-secondary)'>{pagina+1}/{n_pagine}</div>",
+                    unsafe_allow_html=True,
+                )
+            with cp3:
+                if st.button("Succ ›",
+                              key="ana_succ",
+                              disabled=(pagina >= n_pagine - 1),
+                              use_container_width=True):
+                    st.session_state["ana_pagina"] = min(n_pagine - 1, pagina + 1)
+                    st.rerun()
+        else:
+            st.caption(f"{totale} paziente/i")
 
         # Container scrollabile per la lista
-        for p in pazienti:
+        for p in pazienti_pag:
             pid = p.get("id")
             is_sel = (st.session_state.get("ana_sel") == pid
                       and not st.session_state.get("ana_nuovo"))
