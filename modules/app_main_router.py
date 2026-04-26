@@ -300,7 +300,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA VALUTAZIONE ──────────────────────────────────────────────
     elif area == AREA_VALUTAZIONE:
-        paz_id, _ = _seleziona_paziente(conn, "val")
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
         if not paz_id:
             return
         if sotto == "🔬 PNEV":
@@ -360,7 +361,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA TEST LIVE ────────────────────────────────────────────────
     elif area == AREA_TEST_LIVE:
-        paz_id, _ = _seleziona_paziente(conn, "test")
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
         if not paz_id:
             return
         if sotto == "🔢 DEM interattivo":
@@ -391,7 +393,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     # ── AREA QUESTIONARI ──────────────────────────────────────────────
     elif area == AREA_QUESTIONARI:
         if sotto == "📋 Questionari remoti":
-            paz_id, _ = _seleziona_paziente(conn, "qrem")
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
             if paz_id:
                 try:
                     from .ui_questionari import render_questionari_section
@@ -416,6 +419,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     # ── AREA REPORT & AI ──────────────────────────────────────────────
     elif area == AREA_REPORT_AI:
         if sotto in ("🤖 Relazioni cliniche (AI)", "📝 Relazione clinica"):
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             try:
                 from .ui_relazione_clinica import render_relazione_clinica
                 render_relazione_clinica(conn)
@@ -434,7 +441,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 from .gestionale_new_modules import render_nuovi_moduli
                 paz_id = None
                 if sotto in ("🎯 Piano Vision Therapy", "📄 Report PDF con grafici"):
-                    paz_id, _ = _seleziona_paziente(conn, "rep")
+                    from .paziente_attivo import header_paziente_attivo
+                    paz_id = header_paziente_attivo(conn)
+                    if not paz_id:
+                        return
                 render_nuovi_moduli(conn, mappa[sotto], paziente_id=paz_id)
             except ImportError as e:
                 st.error(f"Modulo non disponibile: {e}")
@@ -442,8 +452,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA AUDIOLOGIA ───────────────────────────────────────────────
     elif area == AREA_AUDIOLOGIA:
-        # I moduli audio gestiscono internamente il paziente
-        # Proviamo prima con conn, poi senza
+        from .paziente_attivo import header_paziente_attivo
+        # L'header serve solo per i moduli che richiedono un paziente
         _audio_map = {
             "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
             "🎵 Stimolazione passiva":   ("ui_stimolazione_passiva",  "ui_stimolazione_passiva"),
@@ -451,6 +461,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             "📊 Audiometria funzionale": ("ui_audiometria_funzionale","ui_audiometria_funzionale"),
         }
         if sotto in _audio_map:
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             mod_name, fn_name = _audio_map[sotto]
             try:
                 import importlib

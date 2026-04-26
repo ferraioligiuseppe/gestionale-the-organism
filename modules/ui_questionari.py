@@ -97,30 +97,47 @@ def render_genera_link_email(conn, paziente_id: int) -> None:
     st.subheader("🔗 Questionari per genitore / paziente")
 
     # Leggi email e dati paziente
+    cur = conn.cursor()
     try:
-        cur = conn.cursor()
         cur.execute(
-            "SELECT Cognome, Nome, Email, Tutore_Email FROM Pazienti WHERE id = %s",
+            "SELECT Cognome, Nome, Email FROM Pazienti WHERE id = %s",
             (paziente_id,)
         )
         row = cur.fetchone()
-    except Exception:
-        row = None
+    except Exception as e:
+        st.error(f"Errore lettura paziente: {e}")
+        return
 
     if not row:
         st.warning("Paziente non trovato.")
         return
 
     if isinstance(row, dict):
-        cognome      = row.get("Cognome", "")
-        nome         = row.get("Nome", "")
-        email_paz    = (row.get("Email") or "").strip()
-        email_tutore = (row.get("Tutore_Email") or "").strip()
+        cognome      = row.get("Cognome", "") or row.get("cognome", "")
+        nome         = row.get("Nome", "") or row.get("nome", "")
+        email_paz    = (row.get("Email") or row.get("email") or "").strip()
     else:
         cognome      = row[0] or ""
         nome         = row[1] or ""
         email_paz    = (row[2] or "").strip()
-        email_tutore = (row[3] or "").strip() if len(row) > 3 else ""
+
+    # Email tutore: cercata nel record di consenso privacy più recente
+    email_tutore = ""
+    try:
+        cur.execute(
+            "SELECT Tutore_Email FROM Consensi_Privacy "
+            "WHERE Paziente_ID = %s "
+            "ORDER BY Data_Ora DESC NULLS LAST, ID DESC LIMIT 1",
+            (paziente_id,)
+        )
+        rt = cur.fetchone()
+        if rt:
+            if isinstance(rt, dict):
+                email_tutore = (rt.get("Tutore_Email") or rt.get("tutore_email") or "").strip()
+            else:
+                email_tutore = (rt[0] or "").strip()
+    except Exception:
+        email_tutore = ""
 
     nome_completo = f"{cognome} {nome}".strip()
 
