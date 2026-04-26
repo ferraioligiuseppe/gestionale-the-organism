@@ -282,6 +282,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                     st.error(f"Anagrafica non disponibile: {e2}")
             return
         if sotto == "🎟️ Coupon OF / SDS":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             try:
                 from modules import app_core
                 app_core.ui_coupons()
@@ -289,9 +293,17 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Errore coupon: {e}")
             return
         if sotto == "📅 Sedute / Terapie":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             from .sections.ui_cliniche import render_sedute_section
             render_sedute_section(); return
         if sotto == "🔒 Privacy & Consensi":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             from .privacy.ui_privacy_section import render_privacy_section
             render_privacy_section(); return
         if sotto == "📥 Import pazienti":
