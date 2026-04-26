@@ -237,6 +237,31 @@ def _dialog_seleziona(conn):
 #  HEADER PAZIENTE ATTIVO
 # ════════════════════════════════════════════════════════════════════
 
+def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
+    """Solo lettura: ritorna l'id del paziente attivo o None.
+
+    Da usare nei moduli che vengono raggiunti DOPO che il router ha già
+    mostrato l'header. Non mostra alcuna UI tranne (opzionalmente) un
+    warning se nessun paziente è selezionato.
+    """
+    pid = paziente_attivo_id()
+    if pid:
+        # Verifico che il record sia caricato (cache miss recuperata)
+        if not paziente_attivo_record():
+            rec = _carica_paziente_record(conn, pid)
+            if rec:
+                st.session_state[KEY_REC] = rec
+            else:
+                reset_paziente_attivo()
+                pid = None
+    if not pid and show_warning:
+        st.warning(
+            "⚠️ Nessun paziente selezionato. "
+            "Torna al menu principale e selezionane uno per continuare."
+        )
+    return pid
+
+
 def header_paziente_attivo(conn) -> int | None:
     """Mostra l'header del paziente attivo (banner + bottone Cambia).
 

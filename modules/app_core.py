@@ -5234,8 +5234,8 @@ def ui_anamnesi():
 
     options = [_paz_label_an(p) for p in pazienti]
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    paz_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    paz_id = get_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -5882,8 +5882,8 @@ def ui_valutazioni_visive():
 
     options = [_paz_label_vis(p) for p in pazienti]
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    paz_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    paz_id = get_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -6936,8 +6936,8 @@ def ui_sedute():
 
     options = [_paz_label_sed(p) for p in pazienti]
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    paz_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    paz_id = get_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -7108,8 +7108,8 @@ def ui_coupons():
 
     opt_paz = [_paz_label_coup(p) for p in pazienti]
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    paz_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    paz_id = get_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -7590,8 +7590,8 @@ def ui_osteopatia_section():
     sel = None  # Disabilitato: paziente attivo da session_state
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo, paziente_attivo_record
-    paziente_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo, paziente_attivo_record
+    paziente_id = get_paziente_attivo(conn)
     if not paziente_id:
         return
     _rec = paziente_attivo_record() or {}
@@ -7662,8 +7662,8 @@ def ui_dashboard_evolutiva():
     sel = None  # Disabilitato: paziente attivo da session_state
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    paziente_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    paziente_id = get_paziente_attivo(conn)
     if not paziente_id:
         return
     # === fine fix ===
@@ -8468,8 +8468,8 @@ def ui_privacy_pdf():
 
     options = {f"{cognome} {nome} (id {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    pid = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    pid = get_paziente_attivo(conn)
     if not pid:
         return
     # === fine fix ===
@@ -9645,8 +9645,8 @@ def ui_audiogramma_test():
 
     sel = None  # Disabilitato
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    paz_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    paz_id = get_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -10571,8 +10571,8 @@ def ui_esami_orl_tonali_test():
 
     sel = None  # Disabilitato
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    paz_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    paz_id = get_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -10699,8 +10699,8 @@ def ui_eq_stimolazione_uditiva_test():
 
     sel = None  # Disabilitato
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo
-    paz_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo
+    paz_id = get_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -11229,8 +11229,8 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     sel = None  # Disabilitato
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import header_paziente_attivo, paziente_attivo_record
-    paziente_id = header_paziente_attivo(conn)
+    from modules.paziente_attivo import get_paziente_attivo, paziente_attivo_record
+    paziente_id = get_paziente_attivo(conn)
     if not paziente_id:
         return
     _rec = paziente_attivo_record() or {}

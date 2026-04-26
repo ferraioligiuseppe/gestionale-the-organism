@@ -419,6 +419,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     # ── AREA REPORT & AI ──────────────────────────────────────────────
     elif area == AREA_REPORT_AI:
         if sotto in ("🤖 Relazioni cliniche (AI)", "📝 Relazione clinica"):
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             try:
                 from .ui_relazione_clinica import render_relazione_clinica
                 render_relazione_clinica(conn)
@@ -448,8 +452,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA AUDIOLOGIA ───────────────────────────────────────────────
     elif area == AREA_AUDIOLOGIA:
-        # I moduli audio gestiscono internamente il paziente
-        # Proviamo prima con conn, poi senza
+        from .paziente_attivo import header_paziente_attivo
+        # L'header serve solo per i moduli che richiedono un paziente
         _audio_map = {
             "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
             "🎵 Stimolazione passiva":   ("ui_stimolazione_passiva",  "ui_stimolazione_passiva"),
@@ -457,6 +461,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             "📊 Audiometria funzionale": ("ui_audiometria_funzionale","ui_audiometria_funzionale"),
         }
         if sotto in _audio_map:
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             mod_name, fn_name = _audio_map[sotto]
             try:
                 import importlib
