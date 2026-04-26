@@ -90,7 +90,7 @@ try:
 except Exception:
     PSYCOPG2_AVAILABLE = False
 
-USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
+USE_S3 = False  # Disabilitato: archiviamo su Postgres (BYTEA) e/o altri canali
 
 
 
@@ -2001,7 +2001,7 @@ class _PgCursor:
 class _PgConn:
     """Connection wrapper to emulate the minimal sqlite3 API used by the app.
     
-    Aggiunge keepalive automatico: se la connessione Neon è scaduta/ibernata,
+    Aggiunge keepalive automatico: se la connessione Postgres è scaduta/ibernata,
     la ricrea trasparentemente prima di restituire il cursore.
     """
     def __init__(self, conn):
@@ -2202,12 +2202,12 @@ def _sidebar_db_indicator():
     try:
         if _is_streamlit_cloud():
             if _DB_BACKEND == "postgres" and _DB_URL:
-                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
+                st.sidebar.success("🟢 DB: PostgreSQL (OVH)")
             else:
-                st.sidebar.error("🔴 DB: PostgreSQL (Neon) NON configurato")
+                st.sidebar.error("🔴 DB: PostgreSQL (OVH) NON configurato")
         else:
             if _DB_BACKEND == "postgres" and _DB_URL:
-                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
+                st.sidebar.success("🟢 DB: PostgreSQL (OVH)")
             else:
                 # locale / test
                 db_path = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_TEST.db")
@@ -2219,7 +2219,7 @@ def _require_postgres_on_cloud():
     # Mostra sempre l'indicatore, anche in caso di errore
     _sidebar_db_indicator()
     if _is_streamlit_cloud() and _DB_BACKEND != "postgres":
-        st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
+        st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (OVH).")
         diag = _secrets_diagnostics()
         st.write("Diagnostica Secrets (senza valori):")
         st.write({
@@ -2266,7 +2266,7 @@ def _connect_cached():
         except Exception:
             # Non-leak diagnostics (does not print the URL)
             u = _DB_URL or ""
-            st.error("❌ Errore connessione PostgreSQL (Neon). La DATABASE_URL non sembra in un formato valido per psycopg2.")
+            st.error("❌ Errore connessione PostgreSQL (OVH). La DATABASE_URL non sembra in un formato valido per psycopg2.")
             st.write({
                 "db_url_len": len(u),
                 "db_url_has_whitespace": any(ch.isspace() for ch in u),
@@ -2549,7 +2549,7 @@ def init_db() -> None:
         return
 
     # -------------------------
-    # PostgreSQL (Neon) init
+    # PostgreSQL (OVH) init
     # -------------------------
     # Nota: usiamo tipi compatibili e vincoli FK corretti.
         # Anamnesi (Valutazione PNEV) – tabella centrale (PostgreSQL)
@@ -7574,7 +7574,7 @@ def ui_osteopatia_section():
     paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
     if not paz_list:
         st.error("Nessun paziente trovato nel database (AUTO).")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
+        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su OVH.")
         if paz_table or paz_colmap:
             st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
         return
@@ -7646,7 +7646,7 @@ def ui_dashboard_evolutiva():
     paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
     if not paz_list:
         st.error("Nessun paziente trovato nel database (AUTO).")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
+        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su OVH.")
         if paz_table or paz_colmap:
             st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
         return
@@ -7694,7 +7694,7 @@ def ui_dashboard_evolutiva():
         )
         rows = cur.fetchall()
     except Exception:
-        # se la tabella non esiste ancora (cloud/Neon), la creo e riprovo
+        # se la tabella non esiste ancora (cloud), la creo e riprovo
         _ensure_relazioni_cliniche_table(conn)
         try:
             cur.execute(
@@ -7759,7 +7759,7 @@ def ui_dashboard_evolutiva():
 def ui_debug_db():
     import streamlit as st
     st.header("🛠️ Debug DB (The Organism)")
-    st.caption("Questa schermata NON mostra credenziali. Serve solo a capire tabelle/colonne presenti su Neon.")
+    st.caption("Questa schermata NON mostra credenziali. Serve solo a capire tabelle/colonne presenti su OVH.")
 
     conn = get_connection()
     tables = _debug_list_tables(conn)
@@ -7797,11 +7797,11 @@ def ui_debug_db():
 
 def ui_import_pazienti():
     import streamlit as st
-    st.header("Import Pazienti su Neon (Cloud)")
-    st.caption("Carica un file CSV o Excel con almeno: Cognome, Nome (consigliato anche Data_Nascita). I dati verranno inseriti su Neon.")
+    st.header("Import Pazienti su OVH (Cloud)")
+    st.caption("Carica un file CSV o Excel con almeno: Cognome, Nome (consigliato anche Data_Nascita). I dati verranno inseriti su OVH.")
 
     if _DB_BACKEND != "postgres":
-        st.error("Import disponibile solo con PostgreSQL (Neon). Configura [db].DATABASE_URL nei Secrets.")
+        st.error("Import disponibile solo con PostgreSQL (OVH). Configura [db].DATABASE_URL nei Secrets.")
         return
 
     up = st.file_uploader("Carica CSV / XLSX", type=["csv", "xlsx"])
@@ -7847,7 +7847,7 @@ def ui_import_pazienti():
     st.subheader("Mapping (auto)")
     st.write({"Cognome": col_cognome, "Nome": col_nome, "Data_Nascita": col_dn})
 
-    if st.button("Importa su Neon"):
+    if st.button("Importa su OVH"):
         try:
             init_db()
         except Exception:
@@ -11211,7 +11211,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
     if not paz_list:
         st.error("Nessun paziente trovato nel database (AUTO).")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
+        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su OVH.")
         if paz_table or paz_colmap:
             st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
         return
