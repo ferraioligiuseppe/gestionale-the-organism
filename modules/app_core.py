@@ -5233,8 +5233,12 @@ def ui_anamnesi():
         return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
 
     options = [_paz_label_an(p) for p in pazienti]
-    sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
+    if not paz_id:
+        return
+    # === fine fix ===
 
     # --- Link pubblici questionari (genitori/paziente) ---
     with st.expander("🔗 Genera link questionari per il paziente/genitore", expanded=False):
@@ -5877,8 +5881,12 @@ def ui_valutazioni_visive():
         return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
 
     options = [_paz_label_vis(p) for p in pazienti]
-    sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
+    if not paz_id:
+        return
+    # === fine fix ===
     # Recupero anagrafica completa del paziente (serve per referti e prescrizioni)
     cur.execute("SELECT * FROM Pazienti WHERE id = %s", (paz_id,))
     paziente = cur.fetchone()
@@ -6927,8 +6935,12 @@ def ui_sedute():
         return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
 
     options = [_paz_label_sed(p) for p in pazienti]
-    sel = st.selectbox("Seleziona paziente", options)
-    paz_id = int(sel.split(" - ", 1)[0])
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
+    if not paz_id:
+        return
+    # === fine fix ===
 
     with st.form("nuova_seduta"):
         st.subheader("Nuova seduta")
@@ -7095,8 +7107,12 @@ def ui_coupons():
         return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
 
     opt_paz = [_paz_label_coup(p) for p in pazienti]
-    sel = st.selectbox("Seleziona paziente", opt_paz)
-    paz_id = int(sel.split(" - ", 1)[0])
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
+    if not paz_id:
+        return
+    # === fine fix ===
 
     st.markdown("### Aggiungi nuovo coupon")
 
@@ -7571,21 +7587,32 @@ def ui_osteopatia_section():
         if scuola: extra += f" • {scuola}"
         return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
-    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
+    sel = None  # Disabilitato: paziente attivo da session_state
 
-    if isinstance(sel, dict):
-        paziente_id = sel.get("id") or sel.get("paziente_id")
-        cognome = sel.get("cognome") or ""
-        nome = sel.get("nome") or ""
-    else:
-        try:
-            paziente_id = sel[0]
-            cognome = sel[1] if len(sel) > 1 else ""
-            nome = sel[2] if len(sel) > 2 else ""
-        except Exception:
-            paziente_id = None
-            cognome = ""
-            nome = ""
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo, paziente_attivo_record
+    paziente_id = header_paziente_attivo(conn)
+    if not paziente_id:
+        return
+    _rec = paziente_attivo_record() or {}
+    cognome = _rec.get("cognome") or _rec.get("Cognome") or ""
+    nome = _rec.get("nome") or _rec.get("Nome") or ""
+    # === fine fix ===
+
+    if False:  # vecchio parsing disabilitato
+        if isinstance(sel, dict):
+            paziente_id = sel.get("id") or sel.get("paziente_id")
+            cognome = sel.get("cognome") or ""
+            nome = sel.get("nome") or ""
+        else:
+            try:
+                paziente_id = sel[0]
+                cognome = sel[1] if len(sel) > 1 else ""
+                nome = sel[2] if len(sel) > 2 else ""
+            except Exception:
+                paziente_id = None
+                cognome = ""
+                nome = ""
 
     if not paziente_id:
         st.error("Errore: id paziente non determinabile.")
@@ -7632,19 +7659,28 @@ def ui_dashboard_evolutiva():
         if scuola: extra += f" • {scuola}"
         return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
-    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
-    # robust handling for dict / tuple / sqlite Row
-    if isinstance(sel, dict):
-        paziente_id = sel.get("id") or sel.get("paziente_id")
-    else:
-        try:
-            paziente_id = sel[0]
-        except Exception:
-            paziente_id = None
+    sel = None  # Disabilitato: paziente attivo da session_state
 
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    paziente_id = header_paziente_attivo(conn)
     if not paziente_id:
-        st.error("Errore: id paziente non determinabile dalla selezione.")
         return
+    # === fine fix ===
+
+    if False:
+        # robust handling for dict / tuple / sqlite Row
+        if isinstance(sel, dict):
+            paziente_id = sel.get("id") or sel.get("paziente_id")
+        else:
+            try:
+                paziente_id = sel[0]
+            except Exception:
+                paziente_id = None
+
+        if not paziente_id:
+            st.error("Errore: id paziente non determinabile dalla selezione.")
+            return
     # Carica relazioni (PostgreSQL/SQLite)
     try:
         cur.execute(
@@ -8431,8 +8467,12 @@ def ui_privacy_pdf():
         return
 
     options = {f"{cognome} {nome} (id {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
-    sel = st.selectbox("Seleziona paziente", list(options.keys()))
-    pid = options[sel]
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    pid = header_paziente_attivo(conn)
+    if not pid:
+        return
+    # === fine fix ===
 
     doc_type = st.radio("Tipo consenso", ["adulto", "minore"], horizontal=True)
     template = PDF_PRIVACY_ADULTO_TEMPLATE if doc_type == "adulto" else PDF_PRIVACY_MINORE_TEMPLATE
@@ -9603,8 +9643,13 @@ def ui_audiogramma_test():
         if dn: base += f" • {dn}"
         return base
 
-    sel = st.selectbox("Seleziona paziente", pazienti, format_func=_lab)
-    paz_id = int(sel[0])
+    sel = None  # Disabilitato
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
+    if not paz_id:
+        return
+    # === fine fix ===
 
     st.markdown("### Profilo calibrazione (dB SPL stimati)")
     try:
@@ -10524,8 +10569,13 @@ def ui_esami_orl_tonali_test():
         if dn: base += f" • {dn}"
         return base
 
-    sel = st.selectbox("Seleziona paziente", pazienti, format_func=_lab, key="orl_paz_sel")
-    paz_id = int(sel[0])
+    sel = None  # Disabilitato
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
+    if not paz_id:
+        return
+    # === fine fix ===
 
     exam_date = st.date_input("Data esame", value=_date.today(), key="orl_exam_date")
     source_label = st.text_input("Fonte (ORL / struttura / professionista)", value="ORL", key="orl_source_label")
@@ -10647,8 +10697,13 @@ def ui_eq_stimolazione_uditiva_test():
         if dn: base += f" • {dn}"
         return base
 
-    sel = st.selectbox("Seleziona paziente", pazienti, format_func=_lab, key="eq_paz_sel")
-    paz_id = int(sel[0])
+    sel = None  # Disabilitato
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
+    if not paz_id:
+        return
+    # === fine fix ===
 
     # esami ORL disponibili
     try:
@@ -11171,17 +11226,35 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
         if scuola: extra += f" • {scuola}"
         return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
 
-    sel = st.selectbox("Seleziona paziente", paz_list, format_func=_label)
-    try:
-        paziente_id = sel[0]
-    except Exception:
-        paziente_id = None
-    if not paziente_id:
-        st.error("Errore: id paziente non determinabile.")
-        return
+    sel = None  # Disabilitato
 
-    # carica dati base paziente (nome/cognome/data nascita) per template
-    paziente = {"id": paziente_id, "cognome": sel[1], "nome": sel[2], "data_nascita": sel[3], "scuola": sel[4], "eta": sel[5]}
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import header_paziente_attivo, paziente_attivo_record
+    paziente_id = header_paziente_attivo(conn)
+    if not paziente_id:
+        return
+    _rec = paziente_attivo_record() or {}
+    paziente = {
+        "id": paziente_id,
+        "cognome": _rec.get("cognome") or _rec.get("Cognome") or "",
+        "nome": _rec.get("nome") or _rec.get("Nome") or "",
+        "data_nascita": _rec.get("data_nascita") or _rec.get("Data_Nascita") or "",
+        "scuola": _rec.get("scuola") or _rec.get("Scuola") or "",
+        "eta": "",
+    }
+    # === fine fix ===
+
+    if False:
+        try:
+            paziente_id = sel[0]
+        except Exception:
+            paziente_id = None
+        if not paziente_id:
+            st.error("Errore: id paziente non determinabile.")
+            return
+
+        # carica dati base paziente (nome/cognome/data nascita) per template
+        paziente = {"id": paziente_id, "cognome": sel[1], "nome": sel[2], "data_nascita": sel[3], "scuola": sel[4], "eta": sel[5]}
 
     _ensure_relazioni_cliniche_table(conn)
 

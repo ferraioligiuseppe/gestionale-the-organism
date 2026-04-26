@@ -274,11 +274,19 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             try:
                 from .ui_anagrafica import render_anagrafica
                 render_anagrafica(conn)
+            except Exception:
+                try:
+                    from .pazienti import render_pazienti_section
+                    render_pazienti_section()
+                except Exception as e2:
+                    st.error(f"Anagrafica non disponibile: {e2}")
+            return
+        if sotto == "🎟️ Coupon OF / SDS":
+            try:
+                from modules import app_core
+                app_core.ui_coupons()
             except Exception as e:
-                import traceback
-                st.error(f"Errore anagrafica: {e}")
-                with st.expander("Dettagli tecnici"):
-                    st.code(traceback.format_exc())
+                st.error(f"Errore coupon: {e}")
             return
         if sotto == "📅 Sedute / Terapie":
             from .sections.ui_cliniche import render_sedute_section
@@ -292,7 +300,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA VALUTAZIONE ──────────────────────────────────────────────
     elif area == AREA_VALUTAZIONE:
-        paz_id, _ = _seleziona_paziente(conn, "val")
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
         if not paz_id:
             return
         if sotto == "🔬 PNEV":
@@ -352,7 +361,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA TEST LIVE ────────────────────────────────────────────────
     elif area == AREA_TEST_LIVE:
-        paz_id, _ = _seleziona_paziente(conn, "test")
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
         if not paz_id:
             return
         if sotto == "🔢 DEM interattivo":
@@ -383,7 +393,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     # ── AREA QUESTIONARI ──────────────────────────────────────────────
     elif area == AREA_QUESTIONARI:
         if sotto == "📋 Questionari remoti":
-            paz_id, _ = _seleziona_paziente(conn, "qrem")
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
             if paz_id:
                 try:
                     from .ui_questionari import render_questionari_section
@@ -426,7 +437,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 from .gestionale_new_modules import render_nuovi_moduli
                 paz_id = None
                 if sotto in ("🎯 Piano Vision Therapy", "📄 Report PDF con grafici"):
-                    paz_id, _ = _seleziona_paziente(conn, "rep")
+                    from .paziente_attivo import header_paziente_attivo
+                    paz_id = header_paziente_attivo(conn)
+                    if not paz_id:
+                        return
                 render_nuovi_moduli(conn, mappa[sotto], paziente_id=paz_id)
             except ImportError as e:
                 st.error(f"Modulo non disponibile: {e}")
