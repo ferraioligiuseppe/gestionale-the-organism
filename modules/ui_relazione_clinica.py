@@ -191,6 +191,12 @@ def _tpl_followup(dati, prof, spec, fascia, note, biblio, scuola, periodo, progr
     nome = f"{paz.get('Cognome','')} {paz.get('Nome','')}".strip()
     dn   = paz.get("Data_Nascita","")
 
+    # Fallback con newline pre-calcolati (Python 3.11 non supporta \n in f-string expr)
+    _progressi_default = "Nel periodo considerato si evidenziano progressi in:\n- ___________________________\n- ___________________________"
+    _difficolta_default = "Permangono difficoltà in:\n- ___________________________\n- ___________________________"
+    _progressi_txt = progressi if progressi else _progressi_default
+    _difficolta_txt = difficolta if difficolta else _difficolta_default
+
     return _intestazione(prof,spec) + f"""RELAZIONE DI FOLLOW-UP ({fascia})
 {"BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI" if biblio else ""}
 {BIBLIO if biblio else ""}
@@ -215,10 +221,10 @@ AREE DI OSSERVAZIONE
 - Integrazione riflessi primitivi
 
 PROGRESSI OSSERVATI
-{progressi if progressi else "Nel periodo considerato si evidenziano progressi in:\n- ___________________________\n- ___________________________"}
+{_progressi_txt}
 
 AREE CON MAGGIORI DIFFICOLTÀ
-{difficolta if difficolta else "Permangono difficoltà in:\n- ___________________________\n- ___________________________"}
+{_difficolta_txt}
 
 CONSIDERAZIONI CLINICHE
 L'evoluzione osservata è coerente con il percorso terapeutico in atto.
@@ -404,6 +410,9 @@ def _tpl_genitori(dati, prof, spec, note, progressi, piano):
     sez_g  = visiva.get("sez_g",{})
     diag   = sez_g.get("diag","") or ""
 
+    # Pre-calcolo la sezione visione (no backslash in f-string expr per Python 3.11)
+    _visione_txt = ("VISIONE FUNZIONALE\n" + diag) if diag else ""
+
     return _intestazione(prof,spec) + f"""LETTERA AI GENITORI
 Relazione clinica — Metodo PNEV
 {_oggi()}
@@ -422,7 +431,7 @@ corpo e sensi insieme.
 COSA ABBIAMO OSSERVATO
 {pnev if pnev else "Il profilo emerso evidenzia alcune fragilità nelle aree della regolazione sensoriale, dell'attenzione e/o della coordinazione visuo-motoria."}
 
-{("VISIONE FUNZIONALE\\n" + diag) if diag else ""}
+{_visione_txt}
 
 COSA SIGNIFICA IN PRATICA
 Le difficoltà che osservate a casa e a scuola — come fatica nella lettura,
