@@ -7754,6 +7754,70 @@ def ui_debug_db():
     else:
         st.info("Nessuna colonna letta (schema diverso o permessi).")
 
+    # ── SQL LIBERA (protetta da password) ───────────────────────────
+    st.markdown("---")
+    st.subheader("🔓 Esegui SQL (avanzato)")
+    st.caption(
+        "⚠️ Funzionalità per amministratori. Scrivi SOLO query SELECT in lettura. "
+        "Per query distruttive (UPDATE/DELETE/DROP) inserire prima la password admin."
+    )
+    pwd = st.text_input("Password (lascia vuoto per sole SELECT)",
+                          type="password", key="dbg_sql_pwd")
+    sql = st.text_area(
+        "Query SQL",
+        height=120,
+        placeholder="SELECT id, paziente_id, motivo FROM anamnesi WHERE paziente_id = 344 LIMIT 5;",
+        key="dbg_sql_text",
+    )
+    if st.button("Esegui query", type="primary", key="dbg_sql_exec"):
+        if not sql.strip():
+            st.warning("Inserisci una query.")
+        else:
+            sql_norm = sql.strip().rstrip(";").strip()
+            sql_lower = sql_norm.lower()
+            # Lista parole "pericolose"
+            pericolose = ["delete", "drop", "truncate", "alter",
+                          "update", "insert", "create", "grant", "revoke"]
+            is_destructive = any(
+                sql_lower.startswith(p) or f" {p} " in f" {sql_lower} "
+                for p in pericolose
+            )
+            try:
+                expected_pwd = st.secrets.get("EXPORT_PASSWORD", "theorganism2026")
+            except Exception:
+                expected_pwd = "theorganism2026"
+            if is_destructive and pwd != expected_pwd:
+                st.error("⛔ Query distruttiva: serve la password admin.")
+            else:
+                try:
+                    cur = conn.cursor()
+                    cur.execute(sql_norm)
+                    if cur.description:
+                        rows = cur.fetchall()
+                        cols_names = [d[0] for d in cur.description]
+                        # Converti rows (potrebbe essere dict o tuple)
+                        out = []
+                        for r in rows:
+                            if isinstance(r, dict):
+                                out.append(r)
+                            else:
+                                out.append(dict(zip(cols_names, r)))
+                        st.success(f"✅ {len(out)} riga/he")
+                        if out:
+                            st.dataframe(out, use_container_width=True)
+                        else:
+                            st.info("Nessuna riga.")
+                    else:
+                        # Era una query senza risultato (es. UPDATE)
+                        conn.commit()
+                        st.success(f"✅ Eseguita. Righe affette: {cur.rowcount}")
+                except Exception as e:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    st.error(f"Errore SQL: {e}")
+
 
 
 
