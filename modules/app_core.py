@@ -8422,13 +8422,6 @@ def ui_privacy_pdf():
     except Exception:
         pass
 
-    # Selezione paziente (solo ATTIVI)
-    paz, _ptab, _pcolmap = fetch_pazienti_for_select(conn)
-    if not paz:
-        st.info("Nessun paziente presente.")
-        return
-
-    options = {f"{cognome} {nome} (id {pid})": pid for (pid, cognome, nome, _dn, _sc, _eta) in paz}
     # === FIX paziente attivo globale ===
     from modules.paziente_attivo import get_paziente_attivo
     pid = get_paziente_attivo(conn)
