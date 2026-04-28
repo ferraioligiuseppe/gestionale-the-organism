@@ -82,7 +82,17 @@ def _carica_lista_pazienti(_conn):
         )
         rows = cur.fetchall() or []
         cols = [d[0] for d in cur.description] if cur.description else []
-        return [r if isinstance(r, dict) else dict(zip(cols, r)) for r in rows]
+        # Forza dict Python puri (non DictRow / RealDictRow / sqlite Row)
+        # altrimenti st.cache_data fallisce con UnserializableReturnValueError
+        result = []
+        for r in rows:
+            if isinstance(r, dict):
+                result.append({k: (v if not hasattr(v, 'isoformat') else v.isoformat())
+                               for k, v in r.items()})
+            else:
+                result.append({c: (v if not hasattr(v, 'isoformat') else v.isoformat())
+                               for c, v in zip(cols, r)})
+        return result
     except Exception:
         return []
 
