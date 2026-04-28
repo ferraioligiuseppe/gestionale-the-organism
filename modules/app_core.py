@@ -8428,11 +8428,15 @@ def _parse_sign_token(tok: str) -> dict:
         return {}
 
 def _public_sign_url(token: str) -> str:
-    # usa base url configurabile, altrimenti prova a ricostruire dal browser
-    base = st.secrets.get("privacy", {}).get("PUBLIC_BASE_URL", "")
+    # usa base url configurabile dalla sezione [privacy] o, in fallback,
+    # da [public_links] (che è già configurata per i link dei questionari)
+    base = (
+        st.secrets.get("privacy", {}).get("PUBLIC_BASE_URL", "")
+        or st.secrets.get("public_links", {}).get("BASE_URL", "")
+    )
     if base:
         return base.rstrip("/") + "/?sign=" + _urlparse.quote(token)
-    # fallback: url relativo
+    # fallback estremo: url relativo (non cliccabile in email/chat)
     return "?sign=" + _urlparse.quote(token)
 
 # --- EMAIL (invio a entrambi) ---
