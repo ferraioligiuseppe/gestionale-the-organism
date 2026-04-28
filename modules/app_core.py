@@ -7489,60 +7489,22 @@ def ui_gaze_tracking_section():
         return
 
     conn = get_connection()
-    paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
-    if not paz_list:
-        st.error("Nessun paziente trovato nel database.")
-        if paz_table or paz_colmap:
-            st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
-        return
 
-    st.caption(f"Pazienti rilevati: {len(paz_list)} • tabella: {paz_table or 'n/d'}")
-    search = st.text_input("Filtra paziente per nome, cognome o id", key="gaze_tracking_patient_filter").strip().lower()
-
-    def _label(p):
-        pid, cogn, nome, dn, scuola, eta = p
-        dn_s = dn or ""
-        extra = ""
-        if eta:
-            extra += f" • {eta} anni"
-        if scuola:
-            extra += f" • {scuola}"
-        return f"{cogn} {nome} (id {pid}) {dn_s}{extra}".strip()
-
-    filtered = []
-    for p in paz_list:
-        lbl = _label(p)
-        if not search or search in lbl.lower():
-            filtered.append(p)
-
-    if not filtered:
-        st.warning("Nessun paziente corrisponde al filtro inserito.")
-        return
-
-    sel = st.selectbox(
-        "Seleziona paziente",
-        filtered,
-        format_func=_label,
-        key="gaze_tracking_patient_select",
-    )
-
-    if isinstance(sel, dict):
-        paziente_id = sel.get("id") or sel.get("paziente_id")
-        cognome = sel.get("cognome") or ""
-        nome = sel.get("nome") or ""
-    else:
-        try:
-            paziente_id = sel[0]
-            cognome = sel[1] if len(sel) > 1 else ""
-            nome = sel[2] if len(sel) > 2 else ""
-        except Exception:
-            paziente_id = None
-            cognome = ""
-            nome = ""
-
+    # === FIX paziente attivo globale ===
+    from modules.paziente_attivo import get_paziente_attivo, paziente_attivo_record
+    paziente_id = get_paziente_attivo(conn)
     if not paziente_id:
-        st.error("Errore: id paziente non determinabile.")
         return
+    _rec = paziente_attivo_record() or {}
+    cognome = _rec.get("cognome") or _rec.get("Cognome") or ""
+    nome = _rec.get("nome") or _rec.get("Nome") or ""
+    # === fine fix ===
+
+    if False:  # vecchio codice disabilitato
+        paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
+        if not paz_list:
+            st.error("Nessun paziente trovato nel database.")
+            return
 
     paziente_label = f"{cognome} {nome}".strip() or f"Paziente id {paziente_id}"
     ui_gaze_tracking(
