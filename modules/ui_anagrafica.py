@@ -85,6 +85,30 @@ def _cf_helpers():
 #  QUERY DB
 # ════════════════════════════════════════════════════════════════════
 
+def _row_to_plain_dict(row, cols):
+    """Converte una riga DB (DictRow/RealDictRow/tuple) in dict Python serializzabile.
+
+    Necessario perché st.cache_data usa pickle e i tipi nativi del driver
+    (psycopg2 DictRow, sqlite Row) non sempre sono pickle-friendly.
+    Inoltre converte date/datetime in ISO string per la stessa ragione.
+    """
+    if row is None:
+        return None
+    d = row if isinstance(row, dict) else dict(zip(cols, row))
+    out = {}
+    for k, v in d.items():
+        if hasattr(v, "isoformat"):
+            out[k] = v.isoformat()
+        elif isinstance(v, (bytes, bytearray, memoryview)):
+            try:
+                out[k] = bytes(v).decode("utf-8", errors="replace")
+            except Exception:
+                out[k] = None
+        else:
+            out[k] = v
+    return out
+
+
 @st.cache_data(ttl=30, show_spinner=False)
 def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi"):
     conn = _conn
@@ -108,7 +132,7 @@ def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi"):
         cur.execute(sql)
         rows = cur.fetchall() or []
         cols = [d[0] for d in cur.description] if cur.description else []
-        return [r if isinstance(r, dict) else dict(zip(cols, r)) for r in rows]
+        return [_row_to_plain_dict(r, cols) for r in rows]
     except Exception as e:
         st.error(f"Errore lista: {e}")
         return []
@@ -123,10 +147,8 @@ def _carica_paziente(_conn, paz_id):
         row = cur.fetchone()
         if not row:
             return None
-        if isinstance(row, dict):
-            return row
-        cols = [d[0] for d in cur.description]
-        return dict(zip(cols, row))
+        cols = [d[0] for d in cur.description] if cur.description else []
+        return _row_to_plain_dict(row, cols)
     except Exception:
         return None
 
@@ -144,10 +166,8 @@ def _carica_ultimo_consenso(_conn, paz_id):
         row = cur.fetchone()
         if not row:
             return None
-        if isinstance(row, dict):
-            return row
-        cols = [d[0] for d in cur.description]
-        return dict(zip(cols, row))
+        cols = [d[0] for d in cur.description] if cur.description else []
+        return _row_to_plain_dict(row, cols)
     except Exception:
         return None
 
