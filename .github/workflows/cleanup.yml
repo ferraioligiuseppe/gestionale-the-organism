@@ -1,1 +1,231 @@
+name: 🧹 Ripulitura repository
 
+# Questa action si lancia MANUALMENTE da GitHub:
+# Repository -> Actions -> "Ripulitura repository" -> Run workflow
+on:
+  workflow_dispatch:
+    inputs:
+      branch_destinazione:
+        description: 'Nome del branch dove salvare la ripulitura'
+        required: true
+        default: 'cleanup'
+      dry_run:
+        description: 'Modalità simulazione (true = mostra cosa farebbe SENZA cancellare)'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  pulisci:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write       # serve per creare il branch e committare
+
+    steps:
+      - name: 📥 Scarico il repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # serve per poter creare un branch nuovo
+
+      - name: 🌿 Creo (o riuso) il branch di ripulitura
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          BRANCH="${{ inputs.branch_destinazione }}"
+          # Se il branch esiste già, ci spostiamo sopra; altrimenti lo creiamo dal branch corrente
+          if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+            echo "Branch ${BRANCH} esiste già su origin, ci sposto."
+            git checkout -B "${BRANCH}" "origin/${BRANCH}"
+          else
+            echo "Creo nuovo branch ${BRANCH}."
+            git checkout -b "${BRANCH}"
+          fi
+
+      - name: 🧹 Eseguo la ripulitura
+        run: |
+          set -e
+
+          # Sanity check
+          if [ ! -f "app.py" ] || [ ! -d "modules" ]; then
+            echo "❌ ERRORE: questo non sembra il repo del gestionale (manca app.py o modules/)"
+            exit 1
+          fi
+
+          # Selettore per dry run vs vera esecuzione
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            CMD="echo [DRY RUN] cancellerei: "
+            CMDR="echo [DRY RUN] cancellerei cartella: "
+          else
+            CMD="rm -f "
+            CMDR="rm -rf "
+          fi
+
+          echo ""
+          echo "============================================="
+          echo "  Ripulitura The Organism - Step 1"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "  ⚠️  MODALITÀ SIMULAZIONE (nulla viene cancellato)"
+          else
+            echo "  🔥 MODALITÀ REALE - cancellazione effettiva"
+          fi
+          echo "============================================="
+          echo ""
+
+          # ---------- A) Cartella _archive e file di backup ----------
+          echo ""
+          echo "→ A) _archive/ e file di backup..."
+          $CMDR _archive 2>/dev/null || true
+
+          $CMD "app_core_patched (1).py" 2>/dev/null || true
+          $CMD app_patched.py 2>/dev/null || true
+          $CMD "app_pre_variazione _moduli.py" 2>/dev/null || true
+          $CMD app_core_patch_snippet.py 2>/dev/null || true
+          $CMD pnev_pubblico_CORRETTO.py 2>/dev/null || true
+
+          $CMD modules/app_core_old.py 2>/dev/null || true
+          $CMD modules/app_core_old2.py 2>/dev/null || true
+          $CMD modules/app_core_old3.py 2>/dev/null || true
+          $CMD modules/app_core_old_1.py 2>/dev/null || true
+          $CMD modules/app_patched.py 2>/dev/null || true
+          $CMD "modules/app_pre_variazione _moduli.py" 2>/dev/null || true
+          $CMDR "modules/modules" 2>/dev/null || true
+          $CMD modules/photoref_ai/ui_photoref_old.py 2>/dev/null || true
+          $CMD modules/reading/ui_reading_patch_snippet.txt 2>/dev/null || true
+          $CMD modules/reading/ui_reading_visualization_patch_snippet.txt 2>/dev/null || true
+          $CMD modules/ui_lenti_contatto._OLDpy 2>/dev/null || true
+          $CMD modules/ui_lenti_contatto_OLD1.py 2>/dev/null || true
+          $CMD modules/ui_valutazione_visuo_percettiva_old.py 2>/dev/null || true
+
+          # ---------- B) File orfani nella root ----------
+          echo ""
+          echo "→ B) File orfani nella root..."
+          $CMD app_core.py 2>/dev/null || true
+          $CMD pdf_prescrizione.py 2>/dev/null || true
+          $CMD pdf_referto_oculistica.py 2>/dev/null || true
+          $CMD pdf_layout_the_organism.py 2>/dev/null || true
+
+          # ---------- C) File temporanei e cache ----------
+          echo ""
+          echo "→ C) File temporanei e __pycache__..."
+          $CMD tmp_a5_no.png 2>/dev/null || true
+          $CMD modules/tmp_a5_no.png 2>/dev/null || true
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "[DRY RUN] cancellerei tutte le cartelle __pycache__ e file *.pyc"
+            find . -type d -name "__pycache__" 2>/dev/null | head -20
+          else
+            find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+            find . -type f -name "*.pyc" -delete 2>/dev/null || true
+          fi
+
+          # ---------- D) README ridondanti ----------
+          echo ""
+          echo "→ D) README duplicati (tengo solo README.md)..."
+          for f in README.txt README_HARDENING_SAFE.txt README_INTEGRAZIONE_OSTEOPATIA.md \
+                   README_MODULARIZZAZIONE.txt README_STEP5.txt README_STEP6.txt \
+                   README_STEP7.txt README_V5.md; do
+            $CMD "$f" 2>/dev/null || true
+            $CMD "modules/$f" 2>/dev/null || true
+          done
+
+          # ---------- E) Dati duplicati ----------
+          echo ""
+          echo "→ E) CSV duplicati..."
+          $CMD modules/codici_catastali_comuni.csv 2>/dev/null || true
+
+          # ---------- F) Cartella vision_manager/ orfana ----------
+          echo ""
+          echo "→ F) vision_manager/ orfana (con backup degli asset unici)..."
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "[DRY RUN] copierei vision_manager/assets/letterhead_cirillo_A4.jpeg in assets/_legacy_vision_manager/"
+            echo "[DRY RUN] cancellerei tutta la cartella vision_manager/"
+          else
+            if [ -d "vision_manager/assets" ]; then
+              mkdir -p assets/_legacy_vision_manager
+              [ -f "vision_manager/assets/letterhead_cirillo_A4.jpeg" ] && \
+                cp vision_manager/assets/letterhead_cirillo_A4.jpeg assets/_legacy_vision_manager/
+              [ -f "vision_manager/assets/letterhead_the_organism_clean_A4.jpg" ] && \
+                cp vision_manager/assets/letterhead_the_organism_clean_A4.jpg \
+                   assets/_legacy_vision_manager/letterhead_the_organism_clean_A4_VM.jpg
+            fi
+            rm -rf vision_manager
+          fi
+
+          echo ""
+          echo "============================================="
+          echo "✅ Ripulitura terminata."
+          echo "   Dimensione: $(du -sh . | cut -f1)"
+          echo "   File .py:   $(find . -type f -name '*.py' 2>/dev/null | wc -l)"
+          echo "============================================="
+
+      - name: ✅ Verifica sintattica dei file principali
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          echo "Verifico che i file principali compilino ancora..."
+          python3 -c "
+          import ast, sys
+          files = ['app.py', 'modules/app_core.py', 'modules/app_menu.py',
+                  'modules/app_main_router.py']
+          for f in files:
+              try:
+                  with open(f) as fp:
+                      ast.parse(fp.read())
+                  print(f'OK   {f}')
+              except FileNotFoundError:
+                  print(f'MISS {f}')
+                  sys.exit(1)
+              except SyntaxError as e:
+                  print(f'FAIL {f}: {e}')
+                  sys.exit(1)
+          print()
+          print('Tutti i file principali compilano.')
+          "
+
+      - name: 💾 Commit e push del branch
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          git config user.name  "GitHub Action - Ripulitura"
+          git config user.email "actions@github.com"
+
+          # Aggiungo TUTTO (incluse le cancellazioni)
+          git add -A
+
+          # Se non c'è nulla da committare, esco senza errore
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da committare (forse il repo era già pulito)."
+            exit 0
+          fi
+
+          git commit -m "🧹 Ripulitura: rimossi duplicati, file old, _archive, vision_manager orfano
+
+          Eseguito automaticamente via GitHub Action.
+          - Eliminata cartella _archive/
+          - Eliminati file *_old, *_patched, *_backup, *_pre_variazione, *_CORRETTO
+          - Eliminati README duplicati (mantenuto solo README.md)
+          - Eliminate copie duplicate di app_core.py nella root
+          - Eliminata cartella vision_manager/ orfana (asset salvati in assets/_legacy_vision_manager/)
+          - Eliminati __pycache__ e file temporanei"
+
+          git push origin "${{ inputs.branch_destinazione }}"
+
+          echo ""
+          echo "🎉 Push completato sul branch '${{ inputs.branch_destinazione }}'"
+          echo ""
+          echo "🔗 Prossimi passi:"
+          echo "   1. Vai su GitHub -> Pull requests -> New pull request"
+          echo "   2. Compare: ${{ inputs.branch_destinazione }} into main (o test)"
+          echo "   3. Verifica i file cancellati e fai merge"
+
+      - name: 🔍 Riepilogo finale
+        run: |
+          echo ""
+          echo "==================================================="
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "  ⚠️  ERA UNA SIMULAZIONE - nulla è stato modificato"
+            echo "  Per fare la ripulitura vera, rilancia il workflow"
+            echo "  con dry_run = false"
+          else
+            echo "  ✅ RIPULITURA COMPLETATA E PUSHATA SU GITHUB"
+            echo "  Vai su Pull requests per fare il merge."
+          fi
+          echo "==================================================="
