@@ -44,7 +44,6 @@ SOTTOSEZIONI = {
         "📥 Import pazienti",
     ],
     AREA_VALUTAZIONE: [
-        "🔬 PNEV",
         "📋 Anamnesi The Organism",
         "👁️ Valutazione visuo-percettiva",
         "🧠 NPS — Neuropsicologica",
