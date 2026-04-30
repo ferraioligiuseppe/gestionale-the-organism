@@ -1,7 +1,0 @@
-# In modules/reading/ui_reading.py, dopo la UI principale puoi aggiungere:
-from .ui_reading_advanced import ui_reading_advanced
-
-ui_reading_advanced(
-    paziente_id=paziente_id,
-    paziente_label=paziente_label
-)
