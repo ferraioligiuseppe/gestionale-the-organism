@@ -48,8 +48,6 @@ SOTTOSEZIONI = {
         "👁️ Valutazione visuo-percettiva",
         "🧠 NPS — Neuropsicologica",
         "📚 DSA — Apprendimento",
-        "🔬 Test psicologici",
-        "⚡ Funzioni esecutive",
         "👓 Optometria comportamentale",
     ],
     AREA_TEST_LIVE: [
