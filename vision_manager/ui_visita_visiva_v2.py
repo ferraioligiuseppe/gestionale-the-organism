@@ -1861,8 +1861,10 @@ def ui_visita_visiva_v2(conn):
         if st.button("Carica questa visita", key=f"vm_load_h_{sel_vid}"):
             if st.session_state.get("vm_form_dirty"):
                 maybe_autosave(conn, paziente_id, reason="prima di caricare storico")
-            payload_load = json.loads(sel_raw) if isinstance(sel_raw, str) else sel_raw
-            load_visit_payload(payload_load, visit_id=sel_vid)
+            st.session_state["vm_pending_load"] = {
+                "dati_json": sel_raw,
+                "visit_id": sel_vid,
+            }
             st.rerun()
     with ha2:
         if sel_preview is not None:
