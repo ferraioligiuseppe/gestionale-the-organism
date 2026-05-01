@@ -19,6 +19,35 @@ from datetime import datetime
 
 
 # =============================================================================
+#  HELPER COMPATIBILITA' CURSOR
+# =============================================================================
+# Vision Manager usa RealDictCursor (cur.fetchone() ritorna dict).
+# Altri moduli del gestionale usano cursori normali (ritornano tuple).
+# Queste funzioni gestiscono entrambi i casi in modo trasparente.
+
+def _row_to_dict(row, cur) -> Optional[Dict[str, Any]]:
+    """Converte una riga di cursor in dict, supportando RealDictCursor e cursori normali."""
+    if row is None:
+        return None
+    # RealDictCursor: row è già un dict (o un RealDictRow che si comporta come dict)
+    if hasattr(row, 'keys'):
+        return dict(row)
+    # Cursore normale: row è una tupla, costruisco il dict da cur.description
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row))
+
+
+def _rows_to_dicts(rows, cur) -> List[Dict[str, Any]]:
+    """Versione list di _row_to_dict."""
+    if not rows:
+        return []
+    if hasattr(rows[0], 'keys'):
+        return [dict(r) for r in rows]
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+# =============================================================================
 #  LETTURE
 # =============================================================================
 
@@ -66,8 +95,8 @@ def list_professionisti(
 
     with conn.cursor() as cur:
         cur.execute(sql, params)
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
+        rows = cur.fetchall()
+        return _rows_to_dicts(rows, cur)
 
 
 def get_professionista(conn, professionista_id: int, *, includi_firma: bool = False) -> Optional[Dict[str, Any]]:
@@ -96,12 +125,9 @@ def get_professionista(conn, professionista_id: int, *, includi_firma: bool = Fa
     """
 
     with conn.cursor() as cur:
-        cur.execute(sql, (professionista_id,))
+        cur.execute(sql, (int(professionista_id),))
         row = cur.fetchone()
-        if not row:
-            return None
-        cols = [d[0] for d in cur.description]
-        return dict(zip(cols, row))
+        return _row_to_dict(row, cur)
 
 
 def get_professionista_default(conn, studio_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -126,10 +152,7 @@ def get_professionista_default(conn, studio_id: Optional[int] = None) -> Optiona
     with conn.cursor() as cur:
         cur.execute(sql, params)
         row = cur.fetchone()
-        if not row:
-            return None
-        cols = [d[0] for d in cur.description]
-        return dict(zip(cols, row))
+        return _row_to_dict(row, cur)
 
 
 # =============================================================================
@@ -194,7 +217,9 @@ def crea_professionista(
             bool(attivo), bool(is_default), int(ordine_visualizzazione or 0),
             created_by, created_by,
         ))
-        new_id = cur.fetchone()[0]
+        # gestisce sia RealDictCursor (dict con chiave 'id') sia cursore normale (tupla)
+        _r = cur.fetchone()
+        new_id = _r['id'] if hasattr(_r, 'keys') else _r[0]
         conn.commit()
         return int(new_id)
 
@@ -247,17 +272,18 @@ def aggiorna_professionista(
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT studio_id FROM professionisti WHERE id = %s
-            """, (professionista_id,))
+            """, (int(professionista_id),))
             row = cur.fetchone()
             if row:
-                target_studio = row[0]
+                # supporto sia RealDictCursor che cursore normale
+                target_studio = row['studio_id'] if hasattr(row, 'keys') else row[0]
                 cur.execute("""
                     UPDATE professionisti
                     SET is_default = FALSE
                     WHERE is_default = TRUE
                     AND id <> %s
                     AND COALESCE(studio_id, 0) = COALESCE(%s, 0)
-                """, (professionista_id, target_studio))
+                """, (int(professionista_id), target_studio))
         _add("is_default", True)
     elif is_default is False:
         _add("is_default", False)
@@ -266,7 +292,7 @@ def aggiorna_professionista(
         return False  # nulla da aggiornare
 
     sql = f"UPDATE professionisti SET {', '.join(sets)} WHERE id = %s"
-    params.append(professionista_id)
+    params.append(int(professionista_id))
 
     with conn.cursor() as cur:
         cur.execute(sql, params)
@@ -323,7 +349,7 @@ def carica_firma(
             psycopg2_bytea(png_bytes),
             filename,
             updated_by,
-            professionista_id,
+            int(professionista_id),
         ))
         ok = cur.rowcount > 0
     conn.commit()
@@ -333,12 +359,16 @@ def carica_firma(
 def get_firma(conn, professionista_id: int) -> Optional[bytes]:
     """Ritorna i bytes della firma, oppure None se non c'è."""
     with conn.cursor() as cur:
-        cur.execute("SELECT firma_immagine FROM professionisti WHERE id = %s", (professionista_id,))
+        cur.execute("SELECT firma_immagine FROM professionisti WHERE id = %s", (int(professionista_id),))
         row = cur.fetchone()
-        if not row or row[0] is None:
+        if not row:
+            return None
+        # supporto sia RealDictCursor che cursore normale
+        firma_data = row['firma_immagine'] if hasattr(row, 'keys') else row[0]
+        if firma_data is None:
             return None
         # psycopg2 ritorna memoryview per bytea: convertiamo a bytes
-        return bytes(row[0])
+        return bytes(firma_data)
 
 
 def cancella_firma(conn, professionista_id: int, updated_by: Optional[int] = None) -> bool:
@@ -351,7 +381,7 @@ def cancella_firma(conn, professionista_id: int, updated_by: Optional[int] = Non
                 firma_caricata_at = NULL,
                 updated_by = %s
             WHERE id = %s
-        """, (updated_by, professionista_id))
+        """, (updated_by, int(professionista_id)))
         ok = cur.rowcount > 0
     conn.commit()
     return ok
@@ -373,10 +403,11 @@ def cancella_professionista(conn, professionista_id: int) -> tuple[bool, str]:
     with conn.cursor() as cur:
         # Controllo riferimenti
         cur.execute("""
-            SELECT count(*) FROM prescrizioni_occhiali
+            SELECT count(*) AS n FROM prescrizioni_occhiali
             WHERE professionista_id = %s
-        """, (professionista_id,))
-        n_ref = cur.fetchone()[0]
+        """, (int(professionista_id),))
+        _r = cur.fetchone()
+        n_ref = _r['n'] if hasattr(_r, 'keys') else _r[0]
 
         if n_ref > 0:
             return (False,
@@ -384,7 +415,7 @@ def cancella_professionista(conn, professionista_id: int) -> tuple[bool, str]:
                     f"che fanno riferimento a questo professionista. "
                     f"Disattivalo invece di eliminarlo.")
 
-        cur.execute("DELETE FROM professionisti WHERE id = %s", (professionista_id,))
+        cur.execute("DELETE FROM professionisti WHERE id = %s", (int(professionista_id),))
         ok = cur.rowcount > 0
     conn.commit()
     return (ok, "" if ok else "Prescrittore non trovato")
