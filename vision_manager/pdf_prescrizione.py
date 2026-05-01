@@ -42,6 +42,38 @@ def _fmt_add(x: Any) -> str:
     return f"ADD {v:+.2f}"
 
 
+def _fmt_date_it(s: Any) -> str:
+    """Formatta una data in italiano (DD/MM/YYYY).
+
+    Accetta:
+      - stringhe ISO 'YYYY-MM-DD' (con o senza orario)
+      - oggetti datetime/date
+      - stringhe gia` italiane 'DD/MM/YYYY' (le lascia invariate)
+      - qualsiasi altra cosa: ritorna la stringa originale
+    """
+    if not s:
+        return ""
+    # datetime/date object
+    if hasattr(s, "strftime"):
+        try:
+            return s.strftime("%d/%m/%Y")
+        except Exception:
+            return str(s)
+    txt = str(s).strip()
+    if not txt:
+        return ""
+    # Gia` formato italiano DD/MM/YYYY o DD-MM-YYYY?
+    import re
+    if re.match(r"^\d{1,2}[/-]\d{1,2}[/-]\d{4}", txt):
+        return txt.replace("-", "/")
+    # Formato ISO YYYY-MM-DD (con eventuale orario dopo)
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", txt)
+    if m:
+        anno, mese, giorno = m.group(1), m.group(2), m.group(3)
+        return f"{int(giorno):02d}/{int(mese):02d}/{anno}"
+    return txt
+
+
 def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Optional[str] = None) -> bytes:
     """
     Genera PDF A4 "Prescrizione occhiali" su carta intestata / stile The Organism.
@@ -111,7 +143,7 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
     else:
         line_y = H - 18 * mm - header_h
 
-    date_str = str(data.get("data") or "").strip()
+    date_str = _fmt_date_it(data.get("data"))
     paziente = str(data.get("paziente") or "").strip()
     y = line_y - 24
 
