@@ -101,7 +101,12 @@ def _render_riga_professionista(conn, p: dict, current_user_id: Optional[int]):
     with st.form(key=f"form_edit_{pid}", clear_on_submit=False):
         c1, c2 = st.columns(2)
         nome = c1.text_input("Nome completo *", value=p["nome_completo"], key=f"nome_{pid}")
-        ord_v = c2.number_input("Ordine in lista", min_value=0, value=p["ordine_visualizzazione"] or 0,
+        # gestione robusta del tipo: garantisco un int
+        try:
+            _ord_default = int(p["ordine_visualizzazione"]) if p["ordine_visualizzazione"] is not None else 0
+        except (TypeError, ValueError):
+            _ord_default = 0
+        ord_v = c2.number_input("Ordine in lista", min_value=0, value=_ord_default,
                                 step=1, key=f"ord_{pid}")
 
         c1, c2 = st.columns(2)
