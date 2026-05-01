@@ -170,7 +170,38 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         c.setFillColor(dark)
         c.setStrokeColor(dark)
 
-    def draw_semicircle(cx, cy, r, show_tabo=False):
+    def _draw_axis_arrow(cx, cy, r, axis_deg):
+        """Disegna freccia direzione asse cilindro su TABO. axis_deg 0..180.
+
+        La freccia parte dal centro del semicerchio (centro pupilla) e va
+        verso il bordo del semicerchio, all'angolo TABO indicato.
+        """
+        try:
+            ax = int(round(float(axis_deg)))
+        except (TypeError, ValueError):
+            return
+        if ax < 0 or ax > 180:
+            return
+
+        c.saveState()
+        c.setStrokeColor(dark)
+        c.setLineWidth(1.2)
+        rad = math.radians(ax)
+        # punta della freccia poco prima del bordo
+        end_r = r - 2 * mm
+        x2 = cx + end_r * math.cos(rad)
+        y2 = cy + end_r * math.sin(rad)
+        # asta
+        c.line(cx, cy, x2, y2)
+        # punta (due segmenti angolati a ~25° dalla direzione)
+        head = 3.5 * mm
+        ang1 = rad + math.radians(155)
+        ang2 = rad - math.radians(155)
+        c.line(x2, y2, x2 + head * math.cos(ang1), y2 + head * math.sin(ang1))
+        c.line(x2, y2, x2 + head * math.cos(ang2), y2 + head * math.sin(ang2))
+        c.restoreState()
+
+    def draw_semicircle(cx, cy, r, show_tabo=False, axis_deg=None):
         c.line(cx - r, cy, cx + r, cy)
         _filled_band(cx, cy, r * 0.20, r * 0.38, midgray)
         _filled_band(cx, cy, r * 0.38, r * 0.56, lightgray)
@@ -193,9 +224,30 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         if show_tabo:
             c.setFont("Times-Bold", 10)
             c.drawCentredString(cx, cy + r * 0.55, "TABO")
+        # freccia dell'asse cilindro (se valorizzato)
+        if axis_deg is not None:
+            _draw_axis_arrow(cx, cy, r, axis_deg)
 
-    draw_semicircle(left_cx, cy, r, show_tabo=False)
-    draw_semicircle(right_cx, cy, r, show_tabo=True)
+    # Estraggo l'asse del cilindro per OD e OS dalla correzione "lontano"
+    # (da disegnare sui semicerchi TABO con frecce direzionali)
+    _lont = data.get("lontano") or {}
+    _lont_od = _lont.get("od") or {}
+    _lont_os = _lont.get("os") or {}
+    # Disegno la freccia solo se c'e' un cilindro non nullo (axis ha senso solo con cyl)
+    def _axis_if_cyl(rx):
+        try:
+            cyl = float(rx.get("cyl") or 0)
+        except (TypeError, ValueError):
+            cyl = 0.0
+        if abs(cyl) < 1e-9:
+            return None
+        return rx.get("ax")
+
+    axis_od = _axis_if_cyl(_lont_od)
+    axis_os = _axis_if_cyl(_lont_os)
+
+    draw_semicircle(left_cx,  cy, r, show_tabo=False, axis_deg=axis_od)
+    draw_semicircle(right_cx, cy, r, show_tabo=True,  axis_deg=axis_os)
     c.setFont("Times-Bold", 10)
     c.drawCentredString(left_cx, cy - 12, "Occhio Destro")
     c.drawCentredString(right_cx, cy - 12, "Occhio Sinistro")
