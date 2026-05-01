@@ -131,30 +131,36 @@ def build_prescrizione_occhiali_a4(
         except Exception:
             has_letterhead = False
 
-    if not has_letterhead:
-        # Estraggo nome e qualifiche dal professionista (con fallback storico)
-        if professionista:
-            _nome    = (professionista.get("nome_completo") or "").strip()
-            _qual_1  = (professionista.get("qualifica_riga_1") or "").strip()
-            _qual_2  = (professionista.get("qualifica_riga_2") or "").strip()
-        else:
-            _nome    = "Dott. Salvatore Adriano Cirillo"
-            _qual_1  = "Medico Chirurgo"
-            _qual_2  = "Oculista"
+    # ---------------------------------------------------------------
+    # Nome + qualifiche del professionista (in alto a sinistra)
+    # Viene SEMPRE disegnato, sopra al letterhead se presente.
+    # Il letterhead "neutro" ha lo spazio in alto a sinistra vuoto
+    # apposta per ospitare questo blocco.
+    # ---------------------------------------------------------------
+    if professionista:
+        _nome    = (professionista.get("nome_completo") or "").strip()
+        _qual_1  = (professionista.get("qualifica_riga_1") or "").strip()
+        _qual_2  = (professionista.get("qualifica_riga_2") or "").strip()
+    else:
+        _nome    = "Dott. Salvatore Adriano Cirillo"
+        _qual_1  = "Medico Chirurgo"
+        _qual_2  = "Oculista"
 
-        c.setFillColor(dark)
-        c.setFont("Times-Bold", 12)
-        if _nome:
-            c.drawString(margin_x, top_y, _nome)
-        c.setFont("Times-Bold", 11)
-        # disegno le qualifiche solo se presenti (cosi` se il professionista
-        # non ha qualifica_riga_2, il layout si adatta)
-        _y_q = top_y - 14
-        if _qual_1:
-            c.drawString(margin_x, _y_q, _qual_1)
-            _y_q -= 14
-        if _qual_2:
-            c.drawString(margin_x, _y_q, _qual_2)
+    c.setFillColor(dark)
+    c.setFont("Times-Bold", 12)
+    if _nome:
+        c.drawString(margin_x, top_y, _nome)
+    c.setFont("Times-Bold", 11)
+    _y_q = top_y - 14
+    if _qual_1:
+        c.drawString(margin_x, _y_q, _qual_1)
+        _y_q -= 14
+    if _qual_2:
+        c.drawString(margin_x, _y_q, _qual_2)
+
+    if not has_letterhead:
+        # Senza letterhead, disegno anche il logo "THE ORGANISM" in alto a destra
+        # (con il letterhead invece il logo e' gia` nell'immagine).
 
         c.setFillColor(green)
         c.setFont("Helvetica", 10)

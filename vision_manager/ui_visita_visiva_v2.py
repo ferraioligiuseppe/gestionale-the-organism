@@ -33,7 +33,7 @@ from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
 from vision_manager.professionisti_db import get_professionista_default
 
-LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
+LETTERHEAD = "vision_manager/assets/letterhead_neutral_A4.jpg"
 
 STATO_BOZZA    = "BOZZA"
 STATO_COMPLETA = "COMPLETA"
