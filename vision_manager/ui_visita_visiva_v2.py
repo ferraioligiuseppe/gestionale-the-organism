@@ -31,6 +31,7 @@ from streamlit.errors import StreamlitAPIException
 from vision_manager.db import get_conn
 from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
+from vision_manager.professionisti_db import get_professionista_default
 
 LETTERHEAD = "vision_manager/assets/letterhead_cirillo_A4.jpeg"
 
@@ -818,7 +819,7 @@ def _rx_add(rx, add_value):
             "cyl": _safe_float(rx.get("cyl",0.0)), "ax": _safe_int(rx.get("ax",0))}
 
 
-def _build_prescrizione_pdf(payload, patient_label="Paziente"):
+def _build_prescrizione_pdf(payload, patient_label="Paziente", conn=None):
     cfin = payload.get("correzione_finale", {}) or {}
     od, os_ = cfin.get("od", {}) or {}, cfin.get("os", {}) or {}
     add_v = _safe_float(cfin.get("add_vicino", 0.0))
@@ -839,7 +840,14 @@ def _build_prescrizione_pdf(payload, patient_label="Paziente"):
         "lenti": [], "add": add_v if en_v else 0.0,
         "add_od": add_v if en_v else 0.0, "add_os": add_v if en_v else 0.0,
     }
-    return build_prescrizione_occhiali_a4(data_pdf, LETTERHEAD)
+    # leggo il professionista di default dal DB (se conn disponibile)
+    professionista = None
+    if conn is not None:
+        try:
+            professionista = get_professionista_default(conn)
+        except Exception:
+            professionista = None
+    return build_prescrizione_occhiali_a4(data_pdf, LETTERHEAD, professionista=professionista)
 
 
 # =========================================================
@@ -1450,7 +1458,10 @@ def ui_visita_visiva_v2(conn):
                          key="vm_btn_riprendi", type="primary"):
                 raw = _row_get(bozza_row, "dati_json", 2)
                 try:
-                    load_visit_payload(json.loads(raw) if isinstance(raw, str) else raw, visit_id=bozza_id)
+                    st.session_state["vm_pending_load"] = {
+                        "dati_json": raw,
+                        "visit_id": bozza_id,
+                    }
                     st.session_state["vm_flash_message"] = ("success",
                         f"Visita #{bozza_id} riaperta. Compila il fondo oculare.")
                     st.rerun()
@@ -1464,7 +1475,10 @@ def ui_visita_visiva_v2(conn):
                 try:
                     p = json.loads(raw) if isinstance(raw, str) else raw
                     if isinstance(p, dict) and p.get("stato_visita") == STATO_COMPLETA:
-                        load_visit_payload(p, visit_id=_row_get(v,"id",0))
+                        st.session_state["vm_pending_load"] = {
+                            "dati_json": raw,
+                            "visit_id": _row_get(v, "id", 0),
+                        }
                         st.rerun()
                         break
                 except Exception:
@@ -1724,7 +1738,7 @@ def ui_visita_visiva_v2(conn):
 
     with sv4:
         try:
-            pdf_p = _build_prescrizione_pdf(payload_now, patient_label=current_label)
+            pdf_p = _build_prescrizione_pdf(payload_now, patient_label=current_label, conn=conn)
             st.download_button("PDF Prescrizione", data=pdf_p,
                                file_name=f"prescrizione_{current_label.replace(' ','_')}.pdf",
                                mime="application/pdf", key="vm_dl_pr")
@@ -1877,7 +1891,7 @@ def ui_visita_visiva_v2(conn):
     with ha3:
         if sel_preview is not None:
             try:
-                pdf_ph = _build_prescrizione_pdf(sel_preview, patient_label=current_label)
+                pdf_ph = _build_prescrizione_pdf(sel_preview, patient_label=current_label, conn=conn)
                 st.download_button("PDF Prescrizione", data=pdf_ph,
                                    file_name=f"prescrizione_{sel_vid}_{current_label.replace(' ','_')}.pdf",
                                    mime="application/pdf", key=f"vm_pr_h_{sel_vid}")
