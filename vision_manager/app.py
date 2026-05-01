@@ -10,8 +10,8 @@ if REPO_ROOT not in sys.path:
 # moduli Vision Manager
 from vision_manager.ui_visita_visiva_v2 import ui_visita_visiva
 from vision_manager.ui_dashboard_paziente import ui_dashboard_paziente
+from vision_manager.ui_professionisti import render_professionisti
 from vision_manager.db import get_conn, init_db
-
 
 # configurazione pagina
 st.set_page_config(
@@ -27,6 +27,7 @@ pagina = st.sidebar.radio(
     [
         "Dashboard paziente",
         "Visita visiva",
+        "🩺 Professionisti",
     ],
 )
 
@@ -43,3 +44,6 @@ if pagina == "Dashboard paziente":
 
 elif pagina == "Visita visiva":
     ui_visita_visiva()
+
+elif pagina == "🩺 Professionisti":
+    render_professionisti(get_conn())
