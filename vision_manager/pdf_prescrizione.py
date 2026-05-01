@@ -74,12 +74,16 @@ def _fmt_date_it(s: Any) -> str:
     return txt
 
 
-def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Optional[str] = None) -> bytes:
+def build_prescrizione_occhiali_a4(
+    data: Dict[str, Any],
+    letterhead_path: Optional[str] = None,
+    professionista: Optional[Dict[str, Any]] = None,
+) -> bytes:
     """
     Genera PDF A4 "Prescrizione occhiali" su carta intestata / stile The Organism.
 
     Input atteso:
-      {
+      data = {
         "data": "YYYY-MM-DD",
         "paziente": "Cognome Nome",
         "lontano": {"od": {...}, "os": {...}},
@@ -90,6 +94,16 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         "add_od": 1.50,            # opzionale
         "add_os": 1.50,            # opzionale
       }
+
+      professionista = {
+        "nome_completo":     "Dott. ...",
+        "qualifica_riga_1":  "Medico Chirurgo",   # opzionale
+        "qualifica_riga_2":  "Oculista",          # opzionale
+        "firma_immagine":    bytes (PNG opzionale),
+      }
+      Se professionista=None, usa il valore di default (Cirillo) per
+      retrocompatibilita' con il codice che chiamava la funzione senza il
+      nuovo parametro.
     """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -118,12 +132,29 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
             has_letterhead = False
 
     if not has_letterhead:
+        # Estraggo nome e qualifiche dal professionista (con fallback storico)
+        if professionista:
+            _nome    = (professionista.get("nome_completo") or "").strip()
+            _qual_1  = (professionista.get("qualifica_riga_1") or "").strip()
+            _qual_2  = (professionista.get("qualifica_riga_2") or "").strip()
+        else:
+            _nome    = "Dott. Salvatore Adriano Cirillo"
+            _qual_1  = "Medico Chirurgo"
+            _qual_2  = "Oculista"
+
         c.setFillColor(dark)
         c.setFont("Times-Bold", 12)
-        c.drawString(margin_x, top_y, "Dott. Salvatore Adriano Cirillo")
+        if _nome:
+            c.drawString(margin_x, top_y, _nome)
         c.setFont("Times-Bold", 11)
-        c.drawString(margin_x, top_y - 14, "Medico Chirurgo")
-        c.drawString(margin_x, top_y - 28, "Oculista")
+        # disegno le qualifiche solo se presenti (cosi` se il professionista
+        # non ha qualifica_riga_2, il layout si adatta)
+        _y_q = top_y - 14
+        if _qual_1:
+            c.drawString(margin_x, _y_q, _qual_1)
+            _y_q -= 14
+        if _qual_2:
+            c.drawString(margin_x, _y_q, _qual_2)
 
         c.setFillColor(green)
         c.setFont("Helvetica", 10)
