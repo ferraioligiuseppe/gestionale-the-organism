@@ -31,7 +31,11 @@ from streamlit.errors import StreamlitAPIException
 from vision_manager.db import get_conn
 from vision_manager.pdf_referto_oculistica import build_referto_oculistico_a4
 from vision_manager.pdf_prescrizione import build_prescrizione_occhiali_a4
-from vision_manager.professionisti_db import get_professionista_default
+from vision_manager.professionisti_db import (
+    get_professionista_default,
+    list_professionisti,
+    get_professionista,
+)
 
 LETTERHEAD = "vision_manager/assets/letterhead_neutral_A4.jpg"
 
@@ -819,7 +823,7 @@ def _rx_add(rx, add_value):
             "cyl": _safe_float(rx.get("cyl",0.0)), "ax": _safe_int(rx.get("ax",0))}
 
 
-def _build_prescrizione_pdf(payload, patient_label="Paziente", conn=None):
+def _build_prescrizione_pdf(payload, patient_label="Paziente", conn=None, professionista_id=None):
     cfin = payload.get("correzione_finale", {}) or {}
     od, os_ = cfin.get("od", {}) or {}, cfin.get("os", {}) or {}
     add_v = _safe_float(cfin.get("add_vicino", 0.0))
@@ -840,11 +844,18 @@ def _build_prescrizione_pdf(payload, patient_label="Paziente", conn=None):
         "lenti": [], "add": add_v if en_v else 0.0,
         "add_od": add_v if en_v else 0.0, "add_os": add_v if en_v else 0.0,
     }
-    # leggo il professionista di default dal DB (se conn disponibile)
+    # Determino quale professionista mostrare nell'header del PDF.
+    # Priorita`:
+    #   1. professionista_id esplicito (selettore della sessione)
+    #   2. professionista marcato come default nel DB
+    #   3. None -> fallback Cirillo hardcoded nel generatore PDF
     professionista = None
     if conn is not None:
         try:
-            professionista = get_professionista_default(conn)
+            if professionista_id is not None:
+                professionista = get_professionista(conn, int(professionista_id))
+            if professionista is None:
+                professionista = get_professionista_default(conn)
         except Exception:
             professionista = None
     return build_prescrizione_occhiali_a4(data_pdf, LETTERHEAD, professionista=professionista)
@@ -1355,6 +1366,72 @@ def ui_visita_visiva_v2(conn):
                             st.error(str(e))
             st.markdown("---")
 
+    # ── SELETTORE PROFESSIONISTA (firma di) ──────────────────
+    # Vale per tutta la sessione: la scelta si propaga a tutte le
+    # prescrizioni generate fino al cambio successivo.
+    try:
+        _proflist = list_professionisti(conn) or []
+    except Exception:
+        _proflist = []
+
+    if _proflist:
+        # Determino il professionista corrente:
+        # - se l'utente ha gia` scelto in questa sessione, uso quella scelta
+        # - altrimenti, uso il professionista marcato come default
+        _current_id = st.session_state.get("vm_professionista_id")
+        if _current_id is None:
+            try:
+                _def = get_professionista_default(conn)
+                if _def:
+                    _current_id = _def.get("id")
+            except Exception:
+                _current_id = None
+            # Se ancora non l'ho trovato, prendo il primo della lista
+            if _current_id is None:
+                _current_id = _proflist[0].get("id")
+            st.session_state["vm_professionista_id"] = _current_id
+
+        # Costruisco le opzioni per la tendina
+        _id_to_label = {}
+        _options = []
+        for _p in _proflist:
+            _pid = _p.get("id")
+            _label = _p.get("nome_completo") or "(senza nome)"
+            _q1 = _p.get("qualifica_riga_1") or ""
+            if _q1:
+                _label = f"{_label} — {_q1}"
+            _id_to_label[_pid] = _label
+            _options.append(_pid)
+
+        # indice corrente
+        try:
+            _idx = _options.index(_current_id)
+        except ValueError:
+            _idx = 0
+            st.session_state["vm_professionista_id"] = _options[0]
+
+        sel_col1, sel_col2 = st.columns([2, 5])
+        with sel_col1:
+            st.markdown(
+                "<div style='font-size:13px;color:#6b7280;font-weight:600;"
+                "padding-top:6px;'>Firma di:</div>",
+                unsafe_allow_html=True,
+            )
+        with sel_col2:
+            _new_id = st.selectbox(
+                "Professionista che firma le prescrizioni di questa sessione",
+                options=_options,
+                index=_idx,
+                format_func=lambda x: _id_to_label.get(x, str(x)),
+                key="vm_sel_professionista",
+                label_visibility="collapsed",
+            )
+            if _new_id != _current_id:
+                st.session_state["vm_professionista_id"] = _new_id
+                st.rerun()
+        st.caption("La firma vale per tutte le prescrizioni generate finché non la cambi.")
+        st.markdown("---")
+
     # ── PAZIENTE NON SELEZIONATO ─────────────────────────────
     paziente_id = st.session_state.get("vm_current_patient_id")
     if paziente_id is None:
@@ -1738,7 +1815,7 @@ def ui_visita_visiva_v2(conn):
 
     with sv4:
         try:
-            pdf_p = _build_prescrizione_pdf(payload_now, patient_label=current_label, conn=conn)
+            pdf_p = _build_prescrizione_pdf(payload_now, patient_label=current_label, conn=conn, professionista_id=st.session_state.get("vm_professionista_id"))
             st.download_button("PDF Prescrizione", data=pdf_p,
                                file_name=f"prescrizione_{current_label.replace(' ','_')}.pdf",
                                mime="application/pdf", key="vm_dl_pr")
@@ -1891,7 +1968,7 @@ def ui_visita_visiva_v2(conn):
     with ha3:
         if sel_preview is not None:
             try:
-                pdf_ph = _build_prescrizione_pdf(sel_preview, patient_label=current_label, conn=conn)
+                pdf_ph = _build_prescrizione_pdf(sel_preview, patient_label=current_label, conn=conn, professionista_id=st.session_state.get("vm_professionista_id"))
                 st.download_button("PDF Prescrizione", data=pdf_ph,
                                    file_name=f"prescrizione_{sel_vid}_{current_label.replace(' ','_')}.pdf",
                                    mime="application/pdf", key=f"vm_pr_h_{sel_vid}")
