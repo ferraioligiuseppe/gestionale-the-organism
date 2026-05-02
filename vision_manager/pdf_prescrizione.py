@@ -42,12 +42,48 @@ def _fmt_add(x: Any) -> str:
     return f"ADD {v:+.2f}"
 
 
-def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Optional[str] = None) -> bytes:
+def _fmt_date_it(s: Any) -> str:
+    """Formatta una data in italiano (DD/MM/YYYY).
+
+    Accetta:
+      - stringhe ISO 'YYYY-MM-DD' (con o senza orario)
+      - oggetti datetime/date
+      - stringhe gia` italiane 'DD/MM/YYYY' (le lascia invariate)
+      - qualsiasi altra cosa: ritorna la stringa originale
+    """
+    if not s:
+        return ""
+    # datetime/date object
+    if hasattr(s, "strftime"):
+        try:
+            return s.strftime("%d/%m/%Y")
+        except Exception:
+            return str(s)
+    txt = str(s).strip()
+    if not txt:
+        return ""
+    # Gia` formato italiano DD/MM/YYYY o DD-MM-YYYY?
+    import re
+    if re.match(r"^\d{1,2}[/-]\d{1,2}[/-]\d{4}", txt):
+        return txt.replace("-", "/")
+    # Formato ISO YYYY-MM-DD (con eventuale orario dopo)
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", txt)
+    if m:
+        anno, mese, giorno = m.group(1), m.group(2), m.group(3)
+        return f"{int(giorno):02d}/{int(mese):02d}/{anno}"
+    return txt
+
+
+def build_prescrizione_occhiali_a4(
+    data: Dict[str, Any],
+    letterhead_path: Optional[str] = None,
+    professionista: Optional[Dict[str, Any]] = None,
+) -> bytes:
     """
     Genera PDF A4 "Prescrizione occhiali" su carta intestata / stile The Organism.
 
     Input atteso:
-      {
+      data = {
         "data": "YYYY-MM-DD",
         "paziente": "Cognome Nome",
         "lontano": {"od": {...}, "os": {...}},
@@ -58,6 +94,16 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         "add_od": 1.50,            # opzionale
         "add_os": 1.50,            # opzionale
       }
+
+      professionista = {
+        "nome_completo":     "Dott. ...",
+        "qualifica_riga_1":  "Medico Chirurgo",   # opzionale
+        "qualifica_riga_2":  "Oculista",          # opzionale
+        "firma_immagine":    bytes (PNG opzionale),
+      }
+      Se professionista=None, usa il valore di default (Cirillo) per
+      retrocompatibilita' con il codice che chiamava la funzione senza il
+      nuovo parametro.
     """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -85,13 +131,36 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         except Exception:
             has_letterhead = False
 
+    # ---------------------------------------------------------------
+    # Nome + qualifiche del professionista (in alto a sinistra)
+    # Viene SEMPRE disegnato, sopra al letterhead se presente.
+    # Il letterhead "neutro" ha lo spazio in alto a sinistra vuoto
+    # apposta per ospitare questo blocco.
+    # ---------------------------------------------------------------
+    if professionista:
+        _nome    = (professionista.get("nome_completo") or "").strip()
+        _qual_1  = (professionista.get("qualifica_riga_1") or "").strip()
+        _qual_2  = (professionista.get("qualifica_riga_2") or "").strip()
+    else:
+        _nome    = "Dott. Salvatore Adriano Cirillo"
+        _qual_1  = "Medico Chirurgo"
+        _qual_2  = "Oculista"
+
+    c.setFillColor(dark)
+    c.setFont("Times-Bold", 12)
+    if _nome:
+        c.drawString(margin_x, top_y, _nome)
+    c.setFont("Times-Bold", 11)
+    _y_q = top_y - 14
+    if _qual_1:
+        c.drawString(margin_x, _y_q, _qual_1)
+        _y_q -= 14
+    if _qual_2:
+        c.drawString(margin_x, _y_q, _qual_2)
+
     if not has_letterhead:
-        c.setFillColor(dark)
-        c.setFont("Times-Bold", 12)
-        c.drawString(margin_x, top_y, "Dott. Salvatore Adriano Cirillo")
-        c.setFont("Times-Bold", 11)
-        c.drawString(margin_x, top_y - 14, "Medico Chirurgo")
-        c.drawString(margin_x, top_y - 28, "Oculista")
+        # Senza letterhead, disegno anche il logo "THE ORGANISM" in alto a destra
+        # (con il letterhead invece il logo e' gia` nell'immagine).
 
         c.setFillColor(green)
         c.setFont("Helvetica", 10)
@@ -111,7 +180,7 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
     else:
         line_y = H - 18 * mm - header_h
 
-    date_str = str(data.get("data") or "").strip()
+    date_str = _fmt_date_it(data.get("data"))
     paziente = str(data.get("paziente") or "").strip()
     y = line_y - 24
 
@@ -170,7 +239,38 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         c.setFillColor(dark)
         c.setStrokeColor(dark)
 
-    def draw_semicircle(cx, cy, r, show_tabo=False):
+    def _draw_axis_arrow(cx, cy, r, axis_deg):
+        """Disegna freccia direzione asse cilindro su TABO. axis_deg 0..180.
+
+        La freccia parte dal centro del semicerchio (centro pupilla) e va
+        verso il bordo del semicerchio, all'angolo TABO indicato.
+        """
+        try:
+            ax = int(round(float(axis_deg)))
+        except (TypeError, ValueError):
+            return
+        if ax < 0 or ax > 180:
+            return
+
+        c.saveState()
+        c.setStrokeColor(dark)
+        c.setLineWidth(1.2)
+        rad = math.radians(ax)
+        # punta della freccia poco prima del bordo
+        end_r = r - 2 * mm
+        x2 = cx + end_r * math.cos(rad)
+        y2 = cy + end_r * math.sin(rad)
+        # asta
+        c.line(cx, cy, x2, y2)
+        # punta (due segmenti angolati a ~25° dalla direzione)
+        head = 3.5 * mm
+        ang1 = rad + math.radians(155)
+        ang2 = rad - math.radians(155)
+        c.line(x2, y2, x2 + head * math.cos(ang1), y2 + head * math.sin(ang1))
+        c.line(x2, y2, x2 + head * math.cos(ang2), y2 + head * math.sin(ang2))
+        c.restoreState()
+
+    def draw_semicircle(cx, cy, r, show_tabo=False, axis_deg=None):
         c.line(cx - r, cy, cx + r, cy)
         _filled_band(cx, cy, r * 0.20, r * 0.38, midgray)
         _filled_band(cx, cy, r * 0.38, r * 0.56, lightgray)
@@ -193,9 +293,30 @@ def build_prescrizione_occhiali_a4(data: Dict[str, Any], letterhead_path: Option
         if show_tabo:
             c.setFont("Times-Bold", 10)
             c.drawCentredString(cx, cy + r * 0.55, "TABO")
+        # freccia dell'asse cilindro (se valorizzato)
+        if axis_deg is not None:
+            _draw_axis_arrow(cx, cy, r, axis_deg)
 
-    draw_semicircle(left_cx, cy, r, show_tabo=False)
-    draw_semicircle(right_cx, cy, r, show_tabo=True)
+    # Estraggo l'asse del cilindro per OD e OS dalla correzione "lontano"
+    # (da disegnare sui semicerchi TABO con frecce direzionali)
+    _lont = data.get("lontano") or {}
+    _lont_od = _lont.get("od") or {}
+    _lont_os = _lont.get("os") or {}
+    # Disegno la freccia solo se c'e' un cilindro non nullo (axis ha senso solo con cyl)
+    def _axis_if_cyl(rx):
+        try:
+            cyl = float(rx.get("cyl") or 0)
+        except (TypeError, ValueError):
+            cyl = 0.0
+        if abs(cyl) < 1e-9:
+            return None
+        return rx.get("ax")
+
+    axis_od = _axis_if_cyl(_lont_od)
+    axis_os = _axis_if_cyl(_lont_os)
+
+    draw_semicircle(left_cx,  cy, r, show_tabo=False, axis_deg=axis_od)
+    draw_semicircle(right_cx, cy, r, show_tabo=True,  axis_deg=axis_os)
     c.setFont("Times-Bold", 10)
     c.drawCentredString(left_cx, cy - 12, "Occhio Destro")
     c.drawCentredString(right_cx, cy - 12, "Occhio Sinistro")
