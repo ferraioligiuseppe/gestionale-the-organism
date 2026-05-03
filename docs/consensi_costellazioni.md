@@ -1,8 +1,7 @@
 # MODULISTICA PRIVACY – COSTELLAZIONI FAMILIARI
-## Studio The Organism – Dr. Giuseppe Ferraioli
+## Studio The Organism – Dott. Giuseppe Ferraioli
 
 > **Note d'uso**
-> – I segnaposto `[___]` vanno completati con i dati specifici dello studio prima dell'utilizzo.
 > – Ogni documento è versionato (`v1.0 – aprile 2026`); ogni revisione sostanziale deve incrementare la versione e generare nuova accettazione.
 > – Ogni consenso è autonomo: se il paziente accetta solo l'individuale e non il gruppo, l'altro non è valido.
 > – Conservare originale firmato in cartella clinica (cartacea o digitale con firma elettronica avanzata).
@@ -18,15 +17,17 @@
 ## A. INFORMATIVA AI SENSI DEGLI ARTT. 13-14 DEL REGOLAMENTO UE 2016/679 (GDPR)
 
 ### A.1 Titolare del trattamento
-**Dr. Giuseppe Ferraioli** – Studio The Organism
-Sede: [___indirizzo___]
-PEC: [___]   Email: [___]
-Tel: [___]
-Iscritto all'Ordine degli Psicologi della Regione [___] al n° [___]
-P.IVA / C.F.: [___]
+**Dott. Giuseppe Ferraioli** – Studio The Organism
+Sede principale: presso Studio Autorino, Via Gennaro Niglio 45, 84016 Pagani (SA)
+PEC: ferraioli@psypec.it   Email: dr.ferraioligiuseppe@gmail.com
+Tel: 081 5152334
+Iscritto all'Ordine degli Psicologi della Regione Campania al n° 9267
+P.IVA: 05900970657 — C.F.: FRRGPP70M10G230K
+
+*Le sessioni possono svolgersi presso la sede principale o presso altre sedi convenzionate; in tal caso il setting e gli adempimenti privacy sono i medesimi indicati nel presente documento.*
 
 ### A.2 Responsabile della Protezione dei Dati (DPO)
-[___ Nominativo e contatti, oppure: "Non nominato in quanto non ricorrono i presupposti dell'art. 37 GDPR" ___]
+Non nominato in quanto non ricorrono i presupposti dell'art. 37 GDPR (l'attività non costituisce trattamento sistematico su larga scala di dati di categoria particolare ai sensi dell'art. 37.1.c GDPR). Per qualsiasi richiesta in materia di protezione dei dati, l'interessato può rivolgersi direttamente al Titolare del trattamento ai contatti indicati al punto A.1.
 
 ### A.3 Finalità del trattamento e descrizione dell'intervento
 I dati personali sono raccolti e trattati per le seguenti finalità:
@@ -65,7 +66,7 @@ I dati **non sono diffusi**. Possono essere comunicati esclusivamente:
 - alle autorità giudiziarie, sanitarie o tributarie ove previsto da obblighi di legge.
 
 ### A.8 Trasferimento extra-UE
-Eventuali trasferimenti verso paesi extra-UE avvengono solo verso paesi con decisione di adeguatezza della Commissione Europea o sulla base di clausole contrattuali standard. [___ Specificare se utilizzi servizi cloud con server extra-UE: es. fornitori americani con SCC ___]
+Eventuali trasferimenti verso paesi extra-UE avvengono solo verso paesi con decisione di adeguatezza della Commissione Europea o sulla base di clausole contrattuali standard (Standard Contractual Clauses, SCC) approvate dalla Commissione Europea ai sensi dell'art. 46 GDPR. In particolare, il Titolare utilizza i seguenti servizi cloud con possibili trasferimenti negli Stati Uniti d'America: Google LLC (Google Drive, Google Workspace) e Dropbox Inc., entrambi aderenti al Data Privacy Framework UE-USA e vincolati da clausole contrattuali standard. L'interessato può richiedere copia delle clausole o ulteriori informazioni ai contatti indicati al punto A.1.
 
 ### A.9 Periodo di conservazione
 - **Cartella clinica e documentazione professionale**: 10 anni dalla chiusura del rapporto professionale (in conformità all'orientamento del CNOP e alla giurisprudenza civile). Per pazienti minori: 10 anni dal compimento della maggiore età.
