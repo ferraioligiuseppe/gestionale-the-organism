@@ -47,11 +47,20 @@ GRAY = colors.HexColor("#666666")
 LIGHTGRAY = colors.HexColor("#CCCCCC")
 
 # Path letterhead (best effort, fallback graceful se manca)
+# Priorità: letterhead_neutral (pulita, senza nomi professionisti pre-stampati)
+# Fallback: letterhead_the_organism_clean (ha già Dr. Cirillo, da evitare)
 LETTERHEAD_CANDIDATES = [
-    "vision_manager/assets/letterhead_the_organism_clean_A4.jpg",
-    "assets/letterhead_the_organism_clean_A4.jpg",
-    "modules/assets/letterhead_the_organism_clean_A4.jpg",
+    "vision_manager/letterhead_neutral_A4.jpg",
+    "vision_manager/assets/letterhead_neutral_A4.jpg",
+    "assets/letterhead_neutral_A4.jpg",
 ]
+
+# Dati del professionista che firma i consensi costellazioni (fisso: Dr. Ferraioli)
+PROFESSIONISTA_COSTELLAZIONI = {
+    "riga_1": "Dott. Giuseppe Ferraioli",
+    "riga_2": "Psicologo",
+    "riga_3": "Studio The Organism",
+}
 
 
 def _find_letterhead() -> Optional[str]:
@@ -71,6 +80,39 @@ def _draw_letterhead(c: canvas.Canvas, letterhead_path: Optional[str] = None) ->
         c.drawImage(path, 0, 0, width=width, height=height, mask='auto')
     except Exception as e:
         logger.warning(f"Letterhead non caricato: {e}")
+
+
+def _draw_professional_block(c: canvas.Canvas, professional: Optional[dict] = None) -> None:
+    """
+    Disegna il blocco del professionista che firma, in alto a sinistra.
+    Replica esattamente il pattern di vision_manager/pdf_layout_the_organism.py
+    per mantenere coerenza grafica con il resto del gestionale.
+    """
+    if not professional:
+        return
+
+    riga_1 = str(professional.get("riga_1") or "").strip()
+    riga_2 = str(professional.get("riga_2") or "").strip()
+    riga_3 = str(professional.get("riga_3") or "").strip()
+
+    if not riga_1:
+        return
+
+    # Stesse coordinate di vision_manager per coerenza
+    x = 38
+    y = 785
+
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(x, y, riga_1)
+
+    if riga_2:
+        c.setFont("Helvetica", 11)
+        c.drawString(x, y - 16, riga_2)
+
+    if riga_3:
+        c.setFont("Helvetica", 11)
+        c.drawString(x, y - 30, riga_3)
 
 
 # =============================================================================
@@ -480,6 +522,7 @@ def genera_pdf_consenso(
     # === FOOTER PAGINA ===
     def _on_page(c, doc_):
         _draw_letterhead(c, None)
+        _draw_professional_block(c, PROFESSIONISTA_COSTELLAZIONI)
         c.setFillColor(GRAY)
         c.setFont("Helvetica", 7)
         footer_y = 10 * mm
@@ -548,6 +591,7 @@ def genera_pdf_revoca(
 
     def _on_page(c, doc_):
         _draw_letterhead(c, None)
+        _draw_professional_block(c, PROFESSIONISTA_COSTELLAZIONI)
 
     doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
     return buf.getvalue()
