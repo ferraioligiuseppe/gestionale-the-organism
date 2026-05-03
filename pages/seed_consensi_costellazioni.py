@@ -171,6 +171,56 @@ try:
                     f"- ✅ **{c}** v{tpl['versione']} — "
                     f"{len(tpl.get('voci') or [])} voci"
                 )
+
+            # Permetti comunque il re-seed con sovrascrittura (utile se cambia il file MD)
+            st.divider()
+            st.markdown("##### 🔄 Aggiorna i template esistenti")
+            st.caption(
+                "Se hai modificato il file `docs/consensi_costellazioni.md` e vuoi "
+                "aggiornare i template nel database con il nuovo testo, esegui un re-seed "
+                "con sovrascrittura."
+            )
+
+            if st.button("🔄 Re-seed con sovrascrittura", type="secondary",
+                         use_container_width=True, key="reseed_force"):
+                try:
+                    from modules.consensi_costellazioni.seeders.costellazioni import seed_template
+
+                    candidati_md = [
+                        "docs/consensi_costellazioni.md",
+                        os.path.join(_ROOT, "docs/consensi_costellazioni.md"),
+                    ]
+                    percorso = next((p for p in candidati_md if os.path.exists(p)), None)
+
+                    if not percorso:
+                        st.error("⚠️ File `docs/consensi_costellazioni.md` non trovato.")
+                        st.stop()
+
+                    st.info(f"📄 Sorgente testi: `{percorso}`")
+
+                    with st.spinner("Aggiornamento template..."):
+                        risultati = seed_template(
+                            conn,
+                            percorso_md=percorso,
+                            sovrascrivi=True,
+                        )
+
+                    st.success("✅ Template aggiornati!")
+                    st.json(risultati)
+                    st.balloons()
+
+                    st.markdown("### Verifica")
+                    for c in codici:
+                        tpl = services.template_attivo_per_codice(conn, c)
+                        if tpl:
+                            st.markdown(
+                                f"- ✅ **{c}** v{tpl['versione']} — "
+                                f"{len(tpl.get('voci') or [])} voci"
+                            )
+                except Exception as e:
+                    st.error(f"Errore re-seed: {e}")
+                    st.code(traceback.format_exc())
+
         else:
             if presenti_tpl:
                 st.info(f"Già caricati: {', '.join(presenti_tpl)}")
