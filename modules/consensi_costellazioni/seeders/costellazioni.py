@@ -168,8 +168,8 @@ def _carica_testo_md(percorso: str, sottocategoria: str) -> str:
 # =============================================================================
 
 def _is_postgres(conn: Any) -> bool:
-    """Heuristic: il wrapper _PgConn del gestionale ha attributo .conn (psycopg2)."""
-    return hasattr(conn, "conn") or "psycopg" in str(type(conn)).lower()
+    """Heuristic: il wrapper _PgConn del gestionale ha attributo ._conn (psycopg2)."""
+    return hasattr(conn, "_conn") or "psycopg" in str(type(conn)).lower()
 
 
 def _placeholder(conn: Any) -> str:
