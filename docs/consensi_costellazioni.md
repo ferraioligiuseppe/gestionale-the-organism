@@ -18,13 +18,13 @@
 
 ### A.1 Titolare del trattamento
 **Dott. Giuseppe Ferraioli** – Studio The Organism
-Sede principale: presso Studio Autorino, Via Gennaro Niglio 45, 84016 Pagani (SA)
+Sede: Via De Rosa 46, 84016 Pagani (SA)
 PEC: ferraioli@psypec.it   Email: dr.ferraioligiuseppe@gmail.com
 Tel: 081 5152334
 Iscritto all'Ordine degli Psicologi della Regione Campania al n° 9267
 P.IVA: 05900970657 — C.F.: FRRGPP70M10G230K
 
-*Le sessioni possono svolgersi presso la sede principale o presso altre sedi convenzionate; in tal caso il setting e gli adempimenti privacy sono i medesimi indicati nel presente documento.*
+*Le sessioni di costellazioni familiari si svolgono presso la sede di Pagani; eventuali sedi alternative saranno concordate caso per caso e saranno oggetto di firma cartacea separata.*
 
 ### A.2 Responsabile della Protezione dei Dati (DPO)
 Non nominato in quanto non ricorrono i presupposti dell'art. 37 GDPR (l'attività non costituisce trattamento sistematico su larga scala di dati di categoria particolare ai sensi dell'art. 37.1.c GDPR). Per qualsiasi richiesta in materia di protezione dei dati, l'interessato può rivolgersi direttamente al Titolare del trattamento ai contatti indicati al punto A.1.
