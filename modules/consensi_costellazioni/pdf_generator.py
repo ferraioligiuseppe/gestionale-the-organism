@@ -467,8 +467,8 @@ def genera_pdf_consenso(
         pagesize=A4,
         leftMargin=18 * mm,
         rightMargin=18 * mm,
-        topMargin=22 * mm,
-        bottomMargin=18 * mm,
+        topMargin=38 * mm,
+        bottomMargin=30 * mm,
         title=template.get("nome", "Consenso"),
     )
 
@@ -551,7 +551,7 @@ def genera_pdf_revoca(
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
         leftMargin=18 * mm, rightMargin=18 * mm,
-        topMargin=22 * mm, bottomMargin=18 * mm,
+        topMargin=38 * mm, bottomMargin=30 * mm,
         title="Revoca consenso",
     )
 
