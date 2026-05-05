@@ -731,7 +731,7 @@ def firma_attiva_per_codice(
     try:
         cur.execute(
             f"""
-            SELECT id, template_versione, data_accettazione, SELECT id, paziente_id, template_versione, data_accettazione, modalita_firma, stato, stato
+            SELECT id, paziente_id, template_versione, data_accettazione, modalita_firma, stato
             FROM cf_firme
             WHERE paziente_id = {ph}
               AND template_codice = {ph}
