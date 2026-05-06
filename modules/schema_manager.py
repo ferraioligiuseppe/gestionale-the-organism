@@ -15,7 +15,9 @@ Usage (recommended):
 from __future__ import annotations
 
 from typing import Literal, Optional
-
+from modules.consensi_costellazioni.db_schema import (
+    apply_schema as _apply_consensi_costellazioni_schema,
+)
 
 Backend = Literal["postgres", "sqlite"]
 
@@ -30,6 +32,7 @@ def ensure_all_schemas(conn, backend: Backend = "postgres") -> None:
     # Placeholders: keep separated so future refactors are easy.
     ensure_vision_schema(conn, backend=backend)
     ensure_osteo_schema(conn, backend=backend)
+    ensure_consensi_costellazioni_schema(conn, backend=backend)  # ← QUESTA
 
 
 def ensure_auth_schema(conn, backend: Backend = "postgres") -> None:
@@ -126,6 +129,9 @@ def ensure_auth_schema(conn, backend: Backend = "postgres") -> None:
         except Exception:
             pass
 
+def ensure_consensi_costellazioni_schema(conn, backend: Backend = "postgres") -> None:
+    """Schema del modulo consensi costellazioni familiari."""
+    _apply_consensi_costellazioni_schema(conn, db_backend=backend)
 
 def ensure_core_schema(conn, backend: Backend = "postgres") -> None:
     """
