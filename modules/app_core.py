@@ -2028,6 +2028,7 @@ class _PgConn:
                     keepalives_interval=10,
                     keepalives_count=5,
                     connect_timeout=10,
+                    options="-c statement_timeout=30000",
                 )
             except Exception as e:
                 raise RuntimeError(f"Impossibile riconnettersi al DB: {e}") from e
@@ -2262,6 +2263,7 @@ def _connect_cached():
                 keepalives_interval=10,
                 keepalives_count=5,
                 connect_timeout=10,
+                options="-c statement_timeout=30000",
             )
         except Exception:
             # Non-leak diagnostics (does not print the URL)
