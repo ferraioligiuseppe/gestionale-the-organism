@@ -2312,7 +2312,10 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
         ],
     },
     # =========================================================================
-    # SEZIONE 8 — LATERALITÀ (preferenza laterale, no scoring numerico)
+    # SEZIONE 8 — TESTS DI LATERALITÀ (a partire dei 8 anni)
+    # Manuale 2019-2020 pp. 51-52. Indicare nel apposito formulario che lato
+    # viene utilizzato per ognuno dei test. Test orecchio non descritti nel
+    # manuale (struttura presa dal Formulario INPPA01IT rev. 01/22).
     # =========================================================================
     {
         "id": "lateralita",
@@ -2324,42 +2327,153 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "lat_piede",
                 "label": "Lateralità di piede",
                 "prove": [
-                    {"id": "lat_piede_palla", "label": "Calciare la palla", "scoring": "lateralita"},
-                    {"id": "lat_piede_calcio", "label": "Calcio sul pavimento", "scoring": "lateralita"},
-                    {"id": "lat_piede_sedia", "label": "Salire sulla sedia", "scoring": "lateralita"},
-                    {"id": "lat_piede_saltell", "label": "Saltellare su una gamba", "scoring": "lateralita"},
+                    {
+                        "id": "lat_piede_palla",
+                        "label": "Calciare la palla",
+                        "scoring": "lateralita",
+                        "istruzioni": "Osservare con che piede calcia una palla collocata centralmente.",
+                    },
+                    {
+                        "id": "lat_piede_calcio",
+                        "label": "Calcio sul pavimento",
+                        "scoring": "lateralita",
+                        "istruzioni": "Osservare il piede utilizzato per battere giù.",
+                    },
+                    {
+                        "id": "lat_piede_sedia",
+                        "label": "Salire sulla sedia",
+                        "scoring": "lateralita",
+                        "istruzioni": (
+                            "Il piede dominante sarebbe quello che viene appoggiato sulla "
+                            "sedia per salire, e quello che rimane su di essa tenendo il peso "
+                            "per scendere."
+                        ),
+                        "osservazioni": "Potrebbe esserci discrepanza tra il piede di salita e quello di discesa.",
+                    },
+                    {
+                        "id": "lat_piede_saltell",
+                        "label": "Saltellare su una gamba",
+                        "scoring": "lateralita",
+                        "istruzioni": "Osservare il piede che viene usato per mantenere il peso.",
+                    },
                 ],
             },
             {
                 "id": "lat_mano",
                 "label": "Lateralità di mano",
                 "prove": [
-                    {"id": "lat_mano_palla", "label": "Prendere una palla", "scoring": "lateralita"},
-                    {"id": "lat_mano_applauso", "label": "Applauso", "scoring": "lateralita"},
-                    {"id": "lat_mano_scrittura", "label": "Scrittura", "scoring": "lateralita"},
-                    {"id": "lat_mano_telescopio", "label": "Telescopio", "scoring": "lateralita"},
+                    {
+                        "id": "lat_mano_palla",
+                        "label": "Prendere una palla",
+                        "scoring": "lateralita",
+                        "istruzioni": (
+                            "Lanciare una palla centralmente. Osservare con che mano prende "
+                            "la palla al volo."
+                        ),
+                    },
+                    {
+                        "id": "lat_mano_applauso",
+                        "label": "Applauso",
+                        "scoring": "lateralita",
+                        "istruzioni": (
+                            "Spiegare come fare l'applauso con una mano ferma (magari "
+                            "seguendo un ritmo). Osservare la mano che \"applaude\"."
+                        ),
+                    },
+                    {
+                        "id": "lat_mano_scrittura",
+                        "label": "Scrittura",
+                        "scoring": "lateralita",
+                        "istruzioni": "Che mano viene utilizzata per scrivere?",
+                    },
+                    {
+                        "id": "lat_mano_telescopio",
+                        "label": "Telescopio",
+                        "scoring": "lateralita",
+                        "istruzioni": (
+                            "Chiedere al bambino di prendere un telescopio con una mano e "
+                            "utilizzarlo per guardare un oggetto nella distanza. Indicare "
+                            "che mano viene utilizzata per tenere il telescopio."
+                        ),
+                    },
                 ],
             },
             {
                 "id": "lat_occhio_lontano",
                 "label": "Lateralità di occhio (da lontano)",
                 "prove": [
-                    {"id": "lat_occ_lont_telescopio", "label": "Telescopio", "scoring": "lateralita"},
-                    {"id": "lat_occ_lont_anello", "label": "Anello", "scoring": "lateralita"},
+                    {
+                        "id": "lat_occ_lont_telescopio",
+                        "label": "Telescopio",
+                        "scoring": "lateralita",
+                        "istruzioni": (
+                            "Su che occhio appoggia il telescopio per guardare? Con che "
+                            "mano lo tiene? (dominanza manuale)."
+                        ),
+                    },
+                    {
+                        "id": "lat_occ_lont_anello",
+                        "label": "Anello",
+                        "scoring": "lateralita",
+                        "istruzioni": (
+                            "Tenere l'anello con entrambe le mani a distanza della "
+                            "lunghezza delle braccia. Trovare un oggetto a circa 80-100 cm "
+                            "di distanza e centrarlo nell'anello. L'esaminatore coprirà un "
+                            "occhio. Rimane l'oggetto all'interno dell'anello o si sposta?"
+                        ),
+                        "osservazioni": (
+                            "Se si sposta, l'occhio che era stato coperto quando si è "
+                            "spostato è l'occhio dominante a lunga distanza."
+                        ),
+                    },
                 ],
             },
             {
                 "id": "lat_occhio_vicino",
                 "label": "Lateralità di occhio (da vicino)",
                 "prove": [
-                    {"id": "lat_occ_vic_buco", "label": "Buco nella carta", "scoring": "lateralita"},
-                    {"id": "lat_occ_vic_anello", "label": "Anello", "scoring": "lateralita"},
+                    {
+                        "id": "lat_occ_vic_buco",
+                        "label": "Buco nella carta",
+                        "scoring": "lateralita",
+                        "istruzioni": (
+                            "Fare un piccolo foro al centro di un foglio A4. Tenendolo con "
+                            "entrambe le mani, fissare un oggetto sul tavolo nel centro del "
+                            "foro. Chiedere al soggetto di — senza mai smettere di vedere "
+                            "l'oggetto — avvicinare il foglio al viso."
+                        ),
+                        "osservazioni": (
+                            "L'occhio che resta a fissare l'oggetto attraverso il foro è "
+                            "l'occhio dominante da vicino."
+                        ),
+                    },
+                    {
+                        "id": "lat_occ_vic_anello",
+                        "label": "Anello",
+                        "scoring": "lateralita",
+                        "istruzioni": (
+                            "Ripetere il test dell'anello, ma questa volta avvicinare "
+                            "l'anello al viso (circa 12-15 cm). Centrare l'oggetto "
+                            "all'interno dell'anello e coprire un occhio alla volta."
+                        ),
+                        "osservazioni": (
+                            "Se l'oggetto \"si sposta\" fuori dal centro dell'anello, "
+                            "l'occhio coperto è l'occhio dominante \"da vicino\"."
+                        ),
+                    },
                 ],
             },
             {
                 "id": "lat_orecchio",
                 "label": "Lateralità di orecchio",
                 "prove": [
+                    # Il manuale 2019-2020 non descrive i test specifici di lateralità
+                    # auricolare nelle pagine teoriche; struttura presa dal Formulario
+                    # INPPA01IT rev. 01/22. Il manuale (pag. 51) suggerisce: "Oltre i
+                    # test semplici presenti nel formulario (che spesso hanno una
+                    # componente motoria), potrebbe essere utile integrarli con una
+                    # valutazione binaurale e un test di ascolto dicotico se si hanno
+                    # le competenze."
                     {"id": "lat_or_conchiglia", "label": "Conchiglia", "scoring": "lateralita"},
                     {"id": "lat_or_chiamata", "label": "Chiamata da dietro", "scoring": "lateralita"},
                     {"id": "lat_or_ascolto", "label": "Ascolto sotto il tavolo", "scoring": "lateralita"},
