@@ -1308,110 +1308,819 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "rtl",
                 "label": "Riflesso Tonico Labirintico del Collo (RTL)",
                 "prove": [
-                    {"id": "rtl_std", "label": "Test Standard", "scoring": "0-4"},
-                    {"id": "rtl_piedi_aperti_flex", "label": "In piedi (occhi aperti) — Flessione", "scoring": "0-4"},
-                    {"id": "rtl_piedi_aperti_ext", "label": "In piedi (occhi aperti) — Estensione", "scoring": "0-4"},
-                    {"id": "rtl_piedi_chiusi_flex", "label": "In piedi (occhi chiusi) — Flessione", "scoring": "0-4"},
-                    {"id": "rtl_piedi_chiusi_ext", "label": "In piedi (occhi chiusi) — Estensione", "scoring": "0-4"},
-                    {"id": "rtl_ayres", "label": "Test di Ayres", "scoring": "0-4"},
-                    {"id": "rtl_fiorentino", "label": "Test di Fiorentino", "scoring": "0-4"},
+                    {
+                        "id": "rtl_std",
+                        "label": "Test Standard",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test Standard in posizione supina. Collocare il soggetto nella "
+                            "posizione del test e spiegare:\n\n"
+                            "\"Fra qualche istante abbasserò la tua testa di qualche centimetro "
+                            "senza mai lasciarla cadere o colpire il pavimento; per favore rimani "
+                            "il più rilassato possibile.\"\n\n"
+                            "Lentamente estendere il collo abbassando la testa finché sarà "
+                            "soltanto appena oltre il livello della spina, e mantenere questa "
+                            "posizione durante 5-10 secondi."
+                        ),
+                        "osservazioni": (
+                            "Osservare le gambe e la parte inferiore del corpo come risultato "
+                            "dell'estensione della testa."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento (o aumento del tono muscolare) nella parte inferiore del corpo come risultato dell'estensione della testa",
+                            1: "Leggero movimento delle gambe quando si abbassa la testa",
+                            2: "Movimento evidente delle gambe",
+                            3: "Estensione parziale delle gambe",
+                            4: "Completa estensione delle gambe",
+                        },
+                    },
+                    {
+                        "id": "rtl_piedi_aperti_flex",
+                        "label": "In piedi (occhi aperti) — Flessione",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test in piedi per il RTL (dai 6 anni — Blythe P).\n\n"
+                            "\"Mantenendo il resto del corpo fermo, alza lentamente la testa come "
+                            "per guardare il soffitto. Fai una pausa (5-10 secondi). Adesso, "
+                            "lentamente abbassa la testa come per guardare in giù. Fai una pausa\" "
+                            "(5-10 secondi).\n\n"
+                            "Ripetere 2-3 volte. Prima fare il test con gli occhi aperti."
+                        ),
+                        "osservazioni": (
+                            "Segnalare qualsiasi cambiamento del tono muscolare in particolare "
+                            "della sezione inferiore del corpo (gambe) come effetto della "
+                            "estensione o flessione della testa. Annotare specificamente il "
+                            "punteggio per estensione o flessione."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessuna reazione del corpo come risposta alla flessione, estensione della testa o allo spostamento attraverso il piano frontale",
+                            1: "Lieve dondolio o cambiamento nel tono muscolare della parte posteriore delle gambe",
+                            2: "Evidente dondolio o cambiamento del tono muscolare delle gambe per compensare l'equilibrio",
+                            3: "Vicino a perdere l'equilibrio, aggiustamento posturale a livello del bacino e/o cambiamento nel tono muscolare. Notare se c'è prensione con le dita dei piedi",
+                            4: "Perdita dell'equilibrio come conseguenza del movimento della testa",
+                        },
+                    },
+                    {
+                        "id": "rtl_piedi_aperti_ext",
+                        "label": "In piedi (occhi aperti) — Estensione",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test, valutare la fase di estensione (testa alzata verso il soffitto).",
+                        "osservazioni": "Stesse osservazioni del test in flessione.",
+                        "scoring_specifico": {
+                            0: "Nessuna reazione del corpo come risposta alla flessione, estensione della testa o allo spostamento attraverso il piano frontale",
+                            1: "Lieve dondolio o cambiamento nel tono muscolare della parte posteriore delle gambe",
+                            2: "Evidente dondolio o cambiamento del tono muscolare delle gambe per compensare l'equilibrio",
+                            3: "Vicino a perdere l'equilibrio, aggiustamento posturale a livello del bacino e/o cambiamento nel tono muscolare",
+                            4: "Perdita dell'equilibrio come conseguenza del movimento della testa",
+                        },
+                    },
+                    {
+                        "id": "rtl_piedi_chiusi_flex",
+                        "label": "In piedi (occhi chiusi) — Flessione",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Ripetere il test in piedi con gli occhi chiusi. Osservare se "
+                            "appaiono i riflessi come compensazione per un insufficiente "
+                            "aggiustamento vestibolare."
+                        ),
+                        "osservazioni": "Stesse osservazioni del test a occhi aperti.",
+                        "scoring_specifico": {
+                            0: "Nessuna reazione del corpo",
+                            1: "Lieve dondolio o cambiamento nel tono muscolare delle gambe",
+                            2: "Evidente dondolio o cambiamento del tono muscolare delle gambe",
+                            3: "Vicino a perdere l'equilibrio, aggiustamento posturale del bacino",
+                            4: "Perdita dell'equilibrio",
+                        },
+                    },
+                    {
+                        "id": "rtl_piedi_chiusi_ext",
+                        "label": "In piedi (occhi chiusi) — Estensione",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test a occhi chiusi, valutare la fase di estensione.",
+                        "osservazioni": "Stesse osservazioni del test precedente.",
+                        "scoring_specifico": {
+                            0: "Nessuna reazione del corpo",
+                            1: "Lieve dondolio o cambiamento nel tono muscolare delle gambe",
+                            2: "Evidente dondolio o cambiamento del tono muscolare delle gambe",
+                            3: "Vicino a perdere l'equilibrio, aggiustamento posturale del bacino",
+                            4: "Perdita dell'equilibrio",
+                        },
+                    },
+                    {
+                        "id": "rtl_ayres",
+                        "label": "Test di Ayres",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test di Ayres per il RTL in flessione (opzionale).\n\n"
+                            "Utilizzando uno sgabello basso, chiedere al soggetto di distendersi "
+                            "prono con l'addome supportato dallo stesso sgabello, e sollevare la "
+                            "testa mentre mantiene braccia e gambe in estensione."
+                        ),
+                        "osservazioni": (
+                            "Riescono a mantenere l'estensione degli arti durante alcuni secondi "
+                            "oppure qualche parte del corpo inizia a flettersi? Se il RTL in "
+                            "flessione è molto presente, il soggetto farà molta fatica a "
+                            "mantenere il tono estensore contro la forza della gravità, e testa, "
+                            "braccia e/o gambe inizieranno a flettersi.\n\n"
+                            "Questo test si punteggia soltanto 0 o 4."
+                        ),
+                        "scoring_specifico": {
+                            0: "Mantiene l'estensione degli arti — RTL in flessione assente",
+                            4: "Testa, braccia e/o gambe iniziano a flettersi — RTL in flessione presente",
+                        },
+                    },
+                    {
+                        "id": "rtl_fiorentino",
+                        "label": "Test di Fiorentino",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test di Fiorentino per il RTL (in flessione).\n\n"
+                            "\"Solleva la testa come per guardarti i piedi.\"\n\n"
+                            "L'esaminatore poggia un braccio sotto le ginocchia del soggetto in "
+                            "modo da poter percepire se c'è qualche cambiamento (aumento della "
+                            "flessione) nelle ginocchia."
+                        ),
+                        "osservazioni": (
+                            "Notare se si piegano le ginocchia dopo la flessione della testa, o "
+                            "rigidità dopo l'estensione. Osservare se ci sono cambiamenti di tono "
+                            "muscolare nella parte posteriore della testa quando si flettono o "
+                            "estendono le ginocchia."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun cambiamento nel tono muscolare",
+                            1: "Graduale aumento della flessione delle ginocchia (lieve)",
+                            2: "Graduale aumento della flessione delle ginocchia (moderato)",
+                            3: "Graduale aumento della flessione delle ginocchia (marcato)",
+                            4: "Flessione completa delle ginocchia",
+                        },
+                    },
                 ],
             },
             {
                 "id": "moro",
                 "label": "Riflesso di Moro",
                 "prove": [
-                    {"id": "moro_std", "label": "Test Standard", "scoring": "0-4"},
-                    {"id": "moro_piede", "label": "Test in piede", "scoring": "0-4"},
+                    {
+                        "id": "moro_std",
+                        "label": "Test Standard",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test Standard per il riflesso di Moro (adattamento di Goddard "
+                            "Blythe per popolazione adulta).\n\n"
+                            "\"Fra qualche istante, lascerò cadere leggermente la tua testa "
+                            "all'indietro. Non ti preoccupare perché ti prometto che non "
+                            "picchierai con il pavimento ne ti farai male. Voglio che tu "
+                            "mantenga il resto del corpo il più fermo possibile nella posizione "
+                            "attuale.\"\n\n"
+                            "La valutazione è come per il test standard del RTL ma con le "
+                            "braccia sollevate e flesse. La testa viene lasciata andare "
+                            "velocemente e in modo inatteso in questo test."
+                        ),
+                        "osservazioni": (
+                            "Riescono a mantenere la posizione delle braccia quando la testa va "
+                            "indietro o c'è abduzione degli arti superiori?\n\n"
+                            "Se il soggetto è incapace di rilassarsi e \"lasciare andare\" la "
+                            "testa all'indietro, questo potrebbe considerarsi un indicatore che "
+                            "il riflesso di Moro è presente."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento delle braccia, nessun indicatore di stress o disagio",
+                            1: "Lieve movimento delle braccia verso l'esterno o blocco momentaneo",
+                            2: "Evidente movimento delle braccia. Si sente \"scomodo\" dopo il test",
+                            3: "Abduzione parziale e sensazione di fastidio per il test",
+                            4: "Abduzione delle braccia e/o evidente stress causato dal test",
+                        },
+                    },
+                    {
+                        "id": "moro_piede",
+                        "label": "Test in piede",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test in piedi per il Riflesso di Moro (Bennett, R., Clarke, S. & "
+                            "Rowston, J.).\n\n"
+                            "Nota: questo test in piedi non è un test genericamente accettato "
+                            "(dal punto di vista medico). Medicamente il riflesso di Moro viene "
+                            "valutato in posizione supina, solitamente da neonato. Il test in "
+                            "piedi è stato elaborato da terapisti formati con INPP quando è "
+                            "diventato evidente che il test standard spesso non era sufficiente "
+                            "per elicitare un riflesso di Moro attivo in individui adulti.\n\n"
+                            "In bambini più grandi e adulti che presentano problemi posturali, "
+                            "il riflesso di Moro potrebbe risultare evidente soltanto nel test "
+                            "in piedi, in una condizione di maggiore stress posturale.\n\n"
+                            "\"Collocarsi in posizione per il test. Quando ti farò il segnale, "
+                            "voglio che ti lasci cadere all'indietro come un tronco in modo che "
+                            "io possa prenderti con le mie braccia; ti assicuro che non ti farò "
+                            "cadere.\""
+                        ),
+                        "osservazioni": (
+                            "In bambini più grandi e adulti, la ritenzione del riflesso di Moro "
+                            "potrebbe essere secondaria a difficoltà posturali sottostanti, e "
+                            "quando l'equilibrio e la postura migliorano, il riflesso di Moro "
+                            "diminuisce."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessuna reazione, le braccia rimangono nella posizione del test",
+                            1: "Minima abduzione delle braccia",
+                            2: "Evidente apertura parziale delle braccia, cambiamento nel ritmo respiratorio",
+                            3: "Le braccia si aprono un 75%, e/o si sente \"scosso\" dal test",
+                            4: "Completa apertura delle braccia e/o forte stress provocato dal test",
+                        },
+                    },
                 ],
             },
             {
                 "id": "sostegno_oculare",
-                "label": "Riflesso di Sostegno Cefalico Oculare",
+                "label": "Riflesso di Sostegno Cefalico Oculare (Raddrizzamento Cervicale)",
                 "prove": [
-                    {"id": "sost_oc_sx", "label": "A sinistra", "scoring": "0-4"},
-                    {"id": "sost_oc_dx", "label": "A destra", "scoring": "0-4"},
-                    {"id": "sost_oc_indietro", "label": "All'indietro", "scoring": "0-4"},
-                    {"id": "sost_oc_avanti", "label": "In avanti", "scoring": "0-4"},
+                    {
+                        "id": "sost_oc_sx",
+                        "label": "A sinistra",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": (
+                            "Posizionare il soggetto (seduto con le gambe allungate davanti) ad "
+                            "alcuni passi di distanza di un oggetto collocato all'altezza degli "
+                            "occhi. L'esaminatore poggia i palmi delle mani sugli omoplati e "
+                            "suggerisce:\n\n"
+                            "\"Guarda l'oggetto (collocato in posizione centrale e al livello "
+                            "degli occhi) davanti a te. Fra qualche istante ti sposterò da un "
+                            "lato all'altro e anche in avanti e indietro. Voglio che per favore "
+                            "tu guardi l'oggetto durante tutto il tempo.\"\n\n"
+                            "Lentamente inclinare il corpo in 3 tappe verso uno dei lati, "
+                            "procedendo in spostamenti di 10-15 gradi. Non andare oltre i 45 "
+                            "gradi. Fare una pausa di 2 secondi dopo ogni movimento. Ritornare "
+                            "alla posizione centrale sempre in 3 tappe e facendo pause di 2 "
+                            "secondi. Ripetere verso il lato opposto. Ripetere l'intera "
+                            "procedura avanti e indietro."
+                        ),
+                        "osservazioni": (
+                            "La testa dovrebbe correggere automaticamente la posizione "
+                            "mantenendosi sulla linea mediana a prescindere dell'alterazione "
+                            "della posizione del corpo, ovvero la testa si sposta verso il lato "
+                            "opposto del corpo per mantenersi nella posizione centrale."
+                        ),
+                        "scoring_specifico": {
+                            0: "La testa si muove nella stessa proporzione e opposta direzione rispetto allo spostamento del corpo (raddrizzamento cervicale presente)",
+                            1: "Leggero spostamento della testa nella stessa direzione del corpo o eccessiva compensazione nel recupero della linea mediana",
+                            2: "La testa rimane in linea con il corpo, o \"sovracompensa\"",
+                            3: "La testa supera lievemente al di là della linea del corpo",
+                            4: "La testa cade al di là della linea del corpo come una \"bambola di pezza\"",
+                        },
+                    },
+                    {
+                        "id": "sost_oc_dx",
+                        "label": "A destra",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test, inclinazione verso destra. Stessa procedura in 3 tappe.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "La testa si muove nella stessa proporzione e opposta direzione rispetto allo spostamento del corpo",
+                            1: "Leggero spostamento della testa nella stessa direzione del corpo o eccessiva compensazione",
+                            2: "La testa rimane in linea con il corpo, o \"sovracompensa\"",
+                            3: "La testa supera lievemente al di là della linea del corpo",
+                            4: "La testa cade al di là della linea del corpo come una \"bambola di pezza\"",
+                        },
+                    },
+                    {
+                        "id": "sost_oc_indietro",
+                        "label": "All'indietro",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test, inclinazione del corpo all'indietro in 3 tappe.",
+                        "osservazioni": "Stesse osservazioni laterali, applicate alla direzione antero-posteriore.",
+                        "scoring_specifico": {
+                            0: "La testa si muove nella stessa proporzione e opposta direzione rispetto allo spostamento del corpo",
+                            1: "Leggero spostamento della testa nella stessa direzione del corpo",
+                            2: "La testa rimane in linea con il corpo, o \"sovracompensa\"",
+                            3: "La testa supera lievemente al di là della linea del corpo",
+                            4: "La testa cade al di là della linea del corpo come una \"bambola di pezza\"",
+                        },
+                    },
+                    {
+                        "id": "sost_oc_avanti",
+                        "label": "In avanti",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test, inclinazione del corpo in avanti in 3 tappe.",
+                        "osservazioni": "Stesse osservazioni precedenti.",
+                        "scoring_specifico": {
+                            0: "La testa si muove nella stessa proporzione e opposta direzione rispetto allo spostamento del corpo",
+                            1: "Leggero spostamento della testa nella stessa direzione del corpo",
+                            2: "La testa rimane in linea con il corpo, o \"sovracompensa\"",
+                            3: "La testa supera lievemente al di là della linea del corpo",
+                            4: "La testa cade al di là della linea del corpo come una \"bambola di pezza\"",
+                        },
+                    },
                 ],
             },
             {
                 "id": "sostegno_labirintico",
-                "label": "Riflesso di Sostegno Cefalico Labirintico",
+                "label": "Riflesso di Sostegno Cefalico Labirintico (Raddrizzamento Cervicale)",
                 "prove": [
-                    {"id": "sost_lb_sx", "label": "A sinistra", "scoring": "0-4"},
-                    {"id": "sost_lb_dx", "label": "A destra", "scoring": "0-4"},
-                    {"id": "sost_lb_indietro", "label": "All'indietro", "scoring": "0-4"},
-                    {"id": "sost_lb_avanti", "label": "In avanti", "scoring": "0-4"},
+                    {
+                        "id": "sost_lb_sx",
+                        "label": "A sinistra",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": (
+                            "\"Adesso ripeteremmo il test precedente. Questa volta voglio che tu "
+                            "ricordi dove sta l'oggetto, chiuda gli occhi ed immagini che stai "
+                            "sempre guardandolo.\"\n\n"
+                            "Stessa procedura del test oculare ma con occhi chiusi. Inclinazione "
+                            "verso sinistra in 3 tappe."
+                        ),
+                        "osservazioni": (
+                            "Senza il supporto visivo, il sistema vestibolare-labirintico è "
+                            "l'unico riferimento. Il raddrizzamento cervicale dovrebbe "
+                            "comunque mantenere la testa allineata."
+                        ),
+                        "scoring_specifico": {
+                            0: "La testa si muove nella stessa proporzione e opposta direzione rispetto allo spostamento del corpo",
+                            1: "Leggero spostamento della testa nella stessa direzione del corpo o eccessiva compensazione",
+                            2: "La testa rimane in linea con il corpo, o \"sovracompensa\"",
+                            3: "La testa supera lievemente al di là della linea del corpo",
+                            4: "La testa cade al di là della linea del corpo come una \"bambola di pezza\"",
+                        },
+                    },
+                    {
+                        "id": "sost_lb_dx",
+                        "label": "A destra",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test ad occhi chiusi, inclinazione verso destra.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "La testa si muove nella stessa proporzione e opposta direzione rispetto allo spostamento del corpo",
+                            1: "Leggero spostamento della testa nella stessa direzione del corpo",
+                            2: "La testa rimane in linea con il corpo, o \"sovracompensa\"",
+                            3: "La testa supera lievemente al di là della linea del corpo",
+                            4: "La testa cade al di là della linea del corpo come una \"bambola di pezza\"",
+                        },
+                    },
+                    {
+                        "id": "sost_lb_indietro",
+                        "label": "All'indietro",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test ad occhi chiusi, inclinazione del corpo all'indietro.",
+                        "osservazioni": "Stesse osservazioni precedenti.",
+                        "scoring_specifico": {
+                            0: "La testa si muove nella stessa proporzione e opposta direzione rispetto allo spostamento del corpo",
+                            1: "Leggero spostamento della testa nella stessa direzione del corpo",
+                            2: "La testa rimane in linea con il corpo, o \"sovracompensa\"",
+                            3: "La testa supera lievemente al di là della linea del corpo",
+                            4: "La testa cade al di là della linea del corpo come una \"bambola di pezza\"",
+                        },
+                    },
+                    {
+                        "id": "sost_lb_avanti",
+                        "label": "In avanti",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test ad occhi chiusi, inclinazione del corpo in avanti.",
+                        "osservazioni": "Stesse osservazioni precedenti.",
+                        "scoring_specifico": {
+                            0: "La testa si muove nella stessa proporzione e opposta direzione rispetto allo spostamento del corpo",
+                            1: "Leggero spostamento della testa nella stessa direzione del corpo",
+                            2: "La testa rimane in linea con il corpo, o \"sovracompensa\"",
+                            3: "La testa supera lievemente al di là della linea del corpo",
+                            4: "La testa cade al di là della linea del corpo come una \"bambola di pezza\"",
+                        },
+                    },
                 ],
             },
             {
                 "id": "anfibio",
                 "label": "Riflesso Anfibio",
                 "prove": [
-                    {"id": "anf_prono_sx", "label": "Prono — Lato sinistro", "scoring": "0-4"},
-                    {"id": "anf_prono_dx", "label": "Prono — Lato destro", "scoring": "0-4"},
-                    {"id": "anf_supino_sx", "label": "Supino — Lato sinistro", "scoring": "0-4"},
-                    {"id": "anf_supino_dx", "label": "Supino — Lato destro", "scoring": "0-4"},
+                    {
+                        "id": "anf_prono_sx",
+                        "label": "Prono — Lato sinistro",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": (
+                            "Valutare in posizione prona e supina. Lentamente sollevare dalla "
+                            "parte inferiore uno dei lati del bacino. La gamba dovrebbe flettersi "
+                            "a livello del ginocchio quando si alza leggermente il bacino dello "
+                            "stesso lato. Ripetere sull'altro lato."
+                        ),
+                        "osservazioni": (
+                            "Può risultare difficile differenziare un punteggio di 2 o 3 nella "
+                            "valutazione di questo riflesso. Trattandosi di un riflesso "
+                            "POSTURALE: 0 vuole dire che il riflesso è presente (gamba si flette "
+                            "correttamente), 4 che è assente (gamba rigida)."
+                        ),
+                        "scoring_specifico": {
+                            0: "Flessione della gamba a livello del ginocchio nel lato stimolato (riflesso presente)",
+                            1: "La gamba non si flette",
+                            2: "Rotola come un tronco",
+                            3: "Rotola come un tronco (più marcato)",
+                            4: "La gamba si stende rigida (riflesso assente)",
+                        },
+                    },
+                    {
+                        "id": "anf_prono_dx",
+                        "label": "Prono — Lato destro",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test in posizione prona, sollevamento del bacino dal lato destro.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro. Riflesso posturale.",
+                        "scoring_specifico": {
+                            0: "Flessione della gamba a livello del ginocchio nel lato stimolato (riflesso presente)",
+                            1: "La gamba non si flette",
+                            2: "Rotola come un tronco",
+                            3: "Rotola come un tronco (più marcato)",
+                            4: "La gamba si stende rigida (riflesso assente)",
+                        },
+                    },
+                    {
+                        "id": "anf_supino_sx",
+                        "label": "Supino — Lato sinistro",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test in posizione supina. Sollevamento del bacino dal lato sinistro.",
+                        "osservazioni": "Stesse osservazioni del test in posizione prona.",
+                        "scoring_specifico": {
+                            0: "Flessione della gamba a livello del ginocchio nel lato stimolato (riflesso presente)",
+                            1: "La gamba non si flette",
+                            2: "Rotola come un tronco",
+                            3: "Rotola come un tronco (più marcato)",
+                            4: "La gamba si stende rigida (riflesso assente)",
+                        },
+                    },
+                    {
+                        "id": "anf_supino_dx",
+                        "label": "Supino — Lato destro",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": "Stesso test in posizione supina, sollevamento del bacino dal lato destro.",
+                        "osservazioni": "Stesse osservazioni precedenti.",
+                        "scoring_specifico": {
+                            0: "Flessione della gamba a livello del ginocchio nel lato stimolato (riflesso presente)",
+                            1: "La gamba non si flette",
+                            2: "Rotola come un tronco",
+                            3: "Rotola come un tronco (più marcato)",
+                            4: "La gamba si stende rigida (riflesso assente)",
+                        },
+                    },
                 ],
             },
             {
                 "id": "rotazione_seg",
-                "label": "Riflesso di rotazione segmentaria",
+                "label": "Riflessi di Rotazione Segmentaria",
                 "prove": [
-                    {"id": "rot_anche_sx", "label": "Dalle anche — Lato sinistro", "scoring": "0-4"},
-                    {"id": "rot_anche_dx", "label": "Dalle anche — Lato destro", "scoring": "0-4"},
-                    {"id": "rot_spalle_sx", "label": "Dalle spalle — Lato sinistro", "scoring": "0-4"},
-                    {"id": "rot_spalle_dx", "label": "Dalle spalle — Lato destro", "scoring": "0-4"},
+                    {
+                        "id": "rot_anche_sx",
+                        "label": "Dalle anche — Lato sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Dal Bacino. Lentamente flettere una gamba a livello del ginocchio "
+                            "e spostarla attraverso il corpo in angolo retto. Fermarsi nel caso "
+                            "ci sia una risposta di dolore o resistenza.\n\n"
+                            "Il movimento di rotazione della parte inferiore del corpo dovrebbe "
+                            "attivare un movimento della parte superiore del corpo che risulta "
+                            "nella rotazione completa del tronco."
+                        ),
+                        "osservazioni": "Osservare la sequenzialità della rotazione e l'attivazione della parte superiore del corpo come risposta al movimento del bacino.",
+                        "scoring_specifico": {
+                            0: "Il corpo rotola in un movimento segmentato e sequenziale",
+                            1: "Si alza la spalla ma non c'è la completa rotazione di tutta la parte superiore del corpo",
+                            2: "Reazione inadeguata della parte superiore del corpo",
+                            3: "Rotola come un tronco",
+                            4: "Nessuna attivazione della parte superiore del corpo",
+                        },
+                    },
+                    {
+                        "id": "rot_anche_dx",
+                        "label": "Dalle anche — Lato destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test, gamba destra spostata attraverso il corpo.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "Il corpo rotola in un movimento segmentato e sequenziale",
+                            1: "Si alza la spalla ma non c'è la completa rotazione di tutta la parte superiore del corpo",
+                            2: "Reazione inadeguata della parte superiore del corpo",
+                            3: "Rotola come un tronco",
+                            4: "Nessuna attivazione della parte superiore del corpo",
+                        },
+                    },
+                    {
+                        "id": "rot_spalle_sx",
+                        "label": "Dalle spalle — Lato sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Dalle Spalle. In posizione supina, con le braccia lungo il corpo e "
+                            "le gambe distese, chiedere al soggetto di flettere il braccio del "
+                            "lato opposto all'esaminatore. Lentamente sollevare da sotto la "
+                            "spalla del braccio flesso e portare il corpo fino alla linea "
+                            "mediana. Tutto ciò dovrebbe far iniziare un movimento del bacino e "
+                            "la flessione del ginocchio dello stesso lato per iniziare il "
+                            "movimento di rotazione."
+                        ),
+                        "osservazioni": "Osservare la sequenzialità della rotazione dall'alto verso il basso.",
+                        "scoring_specifico": {
+                            0: "Il corpo inizia la rotazione (parte inferiore si attiva e segue)",
+                            1: "Attivazione della parte inferiore del corpo ma rotola solo parzialmente",
+                            2: "Attivazione della parte inferiore del corpo ma non inizia il movimento",
+                            3: "Rotola come un tronco",
+                            4: "Nessuna risposta nella parte inferiore del corpo",
+                        },
+                    },
+                    {
+                        "id": "rot_spalle_dx",
+                        "label": "Dalle spalle — Lato destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test, sollevamento dalla spalla del lato destro.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "Il corpo inizia la rotazione",
+                            1: "Attivazione della parte inferiore del corpo ma rotola solo parzialmente",
+                            2: "Attivazione della parte inferiore del corpo ma non inizia il movimento",
+                            3: "Rotola come un tronco",
+                            4: "Nessuna risposta nella parte inferiore del corpo",
+                        },
+                    },
                 ],
             },
             {
                 "id": "babinsky",
                 "label": "Riflesso di Babinsky",
                 "prove": [
-                    {"id": "bab_sx", "label": "Piede sinistro", "scoring": "0-4"},
-                    {"id": "bab_dx", "label": "Piede destro", "scoring": "0-4"},
+                    {
+                        "id": "bab_sx",
+                        "label": "Piede sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Stimolare la pianta del piede sinistro lungo il bordo laterale "
+                            "dalla calcagno verso le dita.\n\n"
+                            "Raramente questo test può elicitare la risposta di chiusura "
+                            "primitiva (withdrawal) o flessione durante la valutazione (la "
+                            "gamba opposta si flette in corrispondenza alla stimolazione del "
+                            "piede — prima fase del riflesso di estensione crociata)."
+                        ),
+                        "osservazioni": (
+                            "La risposta infantile (primitiva) al test del Babinski sarebbe "
+                            "l'estensione dell'alluce e l'apertura del resto delle dita. La sua "
+                            "presenza è sempre stata considerata un segno di disfunzione "
+                            "cerebrale per il suo collegamento con i neuroni motori del tratto "
+                            "piramidale superiore. Riappare nella Sclerosi Multipla, è molto "
+                            "frequente fra i cerebrolesi ed è molto spesso presente nella "
+                            "popolazione con Disturbi specifici dell'apprendimento. Non dovrebbe "
+                            "essere evidente sopra l'anno di età \"quando si è raggiunto "
+                            "l'equilibrio del sistema vestibolare (Wilkinson)\".\n\n"
+                            "Bisogna essere consapevoli che la risposta primitiva del riflesso "
+                            "di Babinsky può ri-emergere in condizioni di ipoglicemia — questo "
+                            "può essere un fattore da considerare nei diabetici o soggetti con "
+                            "disturbi dell'alimentazione."
+                        ),
+                        "scoring_specifico": {
+                            0: "Flessione molto lieve delle dita del piede (alluce) verso lo stimolo",
+                            1: "Nessuna risposta, riflesso adulto non presente",
+                            2: "Lieve apertura delle dita",
+                            3: "Evidente apertura delle dita",
+                            4: "Apertura delle dita ed estensione dell'alluce",
+                        },
+                    },
+                    {
+                        "id": "bab_dx",
+                        "label": "Piede destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test sul piede destro.",
+                        "osservazioni": "Stesse osservazioni del piede sinistro.",
+                        "scoring_specifico": {
+                            0: "Flessione molto lieve delle dita del piede (alluce) verso lo stimolo",
+                            1: "Nessuna risposta, riflesso adulto non presente",
+                            2: "Lieve apertura delle dita",
+                            3: "Evidente apertura delle dita",
+                            4: "Apertura delle dita ed estensione dell'alluce",
+                        },
+                    },
                 ],
             },
             {
                 "id": "addominale_landau",
                 "label": "Riflessi Addominale e Landau",
                 "prove": [
-                    {"id": "addominale", "label": "Riflesso Addominale", "scoring": "0-4"},
-                    {"id": "landau", "label": "Riflesso di Landau", "scoring": "0-4"},
+                    {
+                        "id": "addominale",
+                        "label": "Riflesso Addominale",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Questo test non viene utilizzato routinariamente, giacché la sua "
+                            "accuratezza è limitata da molti fattori diversi: interventi "
+                            "chirurgici pregressi in zona addominale, gravidanze, sovrappeso o "
+                            "ipersensibilità. Può tornare utile nel caso di un riflesso di "
+                            "Babinsky primitivo completamente presente ed esiste il sospetto di "
+                            "un problema a livello del tratto cortico-spinale.\n\n"
+                            "Implica la contrazione dei muscoli della parete addominale come "
+                            "risposta alla stimolazione dei quadranti intorno all'ombelico. "
+                            "L'ASSENZA di questo riflesso si associa con lesioni nel tratto "
+                            "cortico-spinale, ma può essere anche il risultato di lesioni nei "
+                            "nervi periferici o dei centri rilessi della zona toracica del "
+                            "midollo spinale o di Sclerosi Multipla. Il punteggio dipende dai "
+                            "quadranti in cui non c'è risposta.\n\n"
+                            "Utilizzando un pennello morbido e stretto, stimolare con dei "
+                            "movimenti lievi ma vivaci a circa 2 cm di distanza dell'ombelico:\n"
+                            "i. movimenti verticali ai lati\n"
+                            "ii. movimenti orizzontali sopra e sotto l'ombelico\n"
+                            "iii. movimenti in diagonale negli angoli determinati dai movimenti "
+                            "precedenti."
+                        ),
+                        "osservazioni": "Il punteggio dipende dal numero di quadranti in cui non si osserva risposta.",
+                        "scoring_specifico": {
+                            0: "Risposta adeguata in tutti i 4 quadranti",
+                            1: "Risposta in 3 quadranti",
+                            2: "Risposta in 2 quadranti",
+                            3: "Risposta in 1 quadrante",
+                            4: "Nessuna risposta",
+                        },
+                    },
+                    {
+                        "id": "landau",
+                        "label": "Riflesso di Landau",
+                        "scoring": "0-4",
+                        "posturale": True,
+                        "istruzioni": (
+                            "Chiedere al soggetto di distendersi sul pavimento in posizione "
+                            "prona con le braccia ad angolo retto rispetto al corpo.\n\n"
+                            "\"Solleva la parte superiore del corpo ma mantieni piedi e gambe "
+                            "sul pavimento. Mantieni la posizione per 5 secondi se ti riesce.\""
+                        ),
+                        "osservazioni": (
+                            "Si sollevano i piedi del pavimento mentre rimane nella posizione "
+                            "di estensione, nell'alzarsi o scendere?"
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun spostamento dei piedi (riflesso integrato correttamente)",
+                            1: "Lieve, momentaneo sollevamento dei piedi",
+                            2: "Netto spostamento rispetto al pavimento di 2-3 cm",
+                            3: "Movimento di circa 3-5 cm",
+                            4: "Risposta di Landau completa",
+                        },
+                    },
                 ],
             },
             {
                 "id": "rooting",
                 "label": "Riflesso di Ricerca / punti cardinali (Rooting)",
                 "prove": [
-                    {"id": "rooting_sx", "label": "Sinistra", "scoring": "0-4"},
-                    {"id": "rooting_dx", "label": "Destra", "scoring": "0-4"},
+                    {
+                        "id": "rooting_sx",
+                        "label": "Sinistra",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Utilizzando un pennello morbido, stimolare delicatamente intorno "
+                            "alle labbra verso il basso nei quattro angoli della bocca."
+                        ),
+                        "osservazioni": (
+                            "Si osserva qualche movimento della bocca come risposta allo "
+                            "stimolo, rictus o rimane una sensazione spiacevole alla fine del "
+                            "test?"
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento delle labbra, bocca o guance in risposta allo stimolo",
+                            1: "Lieve movimento della bocca sul lato dove si stimola",
+                            2: "Movimento controllato o ritardato (\"sensazione disturbata dopo\")",
+                            3: "Movimento evidente",
+                            4: "Completa reazione di ricerca verso lo stimolo",
+                        },
+                    },
+                    {
+                        "id": "rooting_dx",
+                        "label": "Destra",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test sul lato destro della bocca.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "Nessun movimento delle labbra, bocca o guance in risposta allo stimolo",
+                            1: "Lieve movimento della bocca sul lato dove si stimola",
+                            2: "Movimento controllato o ritardato",
+                            3: "Movimento evidente",
+                            4: "Completa reazione di ricerca verso lo stimolo",
+                        },
+                    },
                 ],
             },
             {
                 "id": "suzione",
                 "label": "Riflessi di suzione",
                 "prove": [
-                    {"id": "suzione", "label": "Riflesso di suzione", "scoring": "0-4"},
-                    {"id": "suzione_adulta", "label": "Riflesso di suzione adulta", "scoring": "scelta",
-                     "opzioni": ["assente", "debole", "presente"]},
+                    {
+                        "id": "suzione",
+                        "label": "Riflesso di suzione",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Stimolare delicatamente la piega naso-labiale centralmente appena "
+                            "sopra il labbro superiore con un dito. Quando si tocca la parte "
+                            "superiore del labbro, si spostano essi in avanti come per iniziare "
+                            "la suzione?"
+                        ),
+                        "osservazioni": (
+                            "Il manuale specifica solo i livelli 0, 2 e 4. I livelli 1 e 3 "
+                            "rappresentano gradi intermedi di reazione."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessuna reazione",
+                            1: "(grado intermedio)",
+                            2: "Lieve reazione",
+                            3: "(grado intermedio)",
+                            4: "Sposta le labbra in avanti, apertura della bocca",
+                        },
+                    },
+                    {
+                        "id": "suzione_adulta",
+                        "label": "Riflesso di suzione adulta",
+                        "scoring": "scelta",
+                        "opzioni": ["assente", "debole", "presente"],
+                        "istruzioni": "Chiedere se è in grado di lanciare un bacio all'aria. Provare.",
+                        "osservazioni": (
+                            "Il manuale assegna direttamente: 0 = sì (riflesso adulto presente), "
+                            "2 = movimento debole delle labbra, 4 = riflesso di suzione adulta non "
+                            "presente. Per coerenza con il modulo si usa il campo descrittivo "
+                            "(assente / debole / presente)."
+                        ),
+                    },
                 ],
             },
             {
                 "id": "prensile_mano",
-                "label": "Riflesso Prensile (mano)",
+                "label": "Riflesso Prensile (Palmare)",
                 "prove": [
-                    {"id": "prens_mano_sx", "label": "Mano sinistra", "scoring": "0-4"},
-                    {"id": "prens_mano_dx", "label": "Mano destra", "scoring": "0-4"},
+                    {
+                        "id": "prens_mano_sx",
+                        "label": "Mano sinistra",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Utilizzando un pennello morbido, stimolare longitudinalmente e "
+                            "delicatamente il palmo di ognuna delle mani."
+                        ),
+                        "osservazioni": "Notare anche eventuali sensazioni di disagio dopo il test.",
+                        "scoring_specifico": {
+                            0: "Nessuna risposta",
+                            1: "Leggero e breve movimento del pollice verso l'interno o lieve flessione delle dita",
+                            2: "Movimento del pollice verso il palmo della mano",
+                            3: "Movimento evidente del pollice e delle dita",
+                            4: "Chiusura del pollice e delle dita \"a pugno\"",
+                        },
+                    },
+                    {
+                        "id": "prens_mano_dx",
+                        "label": "Mano destra",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test sul palmo della mano destra.",
+                        "osservazioni": "Stesse osservazioni della mano sinistra.",
+                        "scoring_specifico": {
+                            0: "Nessuna risposta",
+                            1: "Leggero e breve movimento del pollice verso l'interno o lieve flessione delle dita",
+                            2: "Movimento del pollice verso il palmo della mano",
+                            3: "Movimento evidente del pollice e delle dita",
+                            4: "Chiusura del pollice e delle dita \"a pugno\"",
+                        },
+                    },
                 ],
             },
             {
                 "id": "prensile_piede",
-                "label": "Riflesso Prensile (piede)",
+                "label": "Riflesso Prensile Plantare (\"Book test\")",
                 "prove": [
-                    {"id": "prens_piede_sx", "label": "Piede sinistro", "scoring": "0-4"},
-                    {"id": "prens_piede_dx", "label": "Piede destro", "scoring": "0-4"},
+                    {
+                        "id": "prens_piede_sx",
+                        "label": "Piede sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Book test. Collocare un grosso libro davanti ai piedi.\n\n"
+                            "Chiedere al soggetto di appoggiare gli avampiedi sul bordo del "
+                            "libro. La pressione del peso sulla parte superficiale della parte "
+                            "superiore del piede eliciterà la risposta del riflesso prensile "
+                            "plantare nel caso sia presente.\n\n"
+                            "\"Quando sarai pronto, voglio che tu ti appoggi sulle dita dei "
+                            "piedi e ti mantenga in quella posizione per 5 secondi se ti riesce. "
+                            "(Appoggiati sulle mie spalle se senti che stai per cadere).\""
+                        ),
+                        "osservazioni": "Osservare il piede sinistro durante il test.",
+                        "scoring_specifico": {
+                            0: "Nessuna evidenza di movimento di \"prensione\" con le dita",
+                            1: "Flessione momentanea delle dita di uno o entrambi i piedi",
+                            2: "Flessione più prolungata delle dita dei piedi o instabilità",
+                            3: "Flessione ulteriormente prolungata come sopra",
+                            4: "Le dita si flettono durante l'intero test",
+                        },
+                    },
+                    {
+                        "id": "prens_piede_dx",
+                        "label": "Piede destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso book test, osservare il piede destro.",
+                        "osservazioni": "Stesse osservazioni del piede sinistro.",
+                        "scoring_specifico": {
+                            0: "Nessuna evidenza di movimento di \"prensione\" con le dita",
+                            1: "Flessione momentanea delle dita",
+                            2: "Flessione più prolungata delle dita dei piedi o instabilità",
+                            3: "Flessione ulteriormente prolungata",
+                            4: "Le dita si flettono durante l'intero test",
+                        },
+                    },
                 ],
             },
         ],
