@@ -793,32 +793,157 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
         "gruppi": [
             {
                 "id": "dita",
-                "label": "Dita",
+                "label": "Dita (Test delle opposizioni pollice-resto delle dita)",
                 "prove": [
-                    {"id": "dita_sx", "label": "Mano sinistra", "scoring": "0-4"},
-                    {"id": "dita_dx", "label": "Mano destra", "scoring": "0-4"},
+                    {
+                        "id": "dita_sx",
+                        "label": "Mano sinistra",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test delle opposizioni pollice-resto delle dita (Dai 5-6 anni — "
+                            "Holt 1991, 1993; dai 5-7 — Kohen-Raz).\n\n"
+                            "\"In piede con i piedi insieme, piegare il braccio a livello del "
+                            "gomito girando il palmo verso il viso e fare un cerchio con pollice "
+                            "e indice a livello degli occhi. Ripetere 5 volte aprendo e "
+                            "chiudendo il cerchio con pollice e indice e poi continuare nello "
+                            "stesso modo con ogni altro dito della mano facendo un cerchio con "
+                            "il pollice. Poi ripetere con l'altra mano.\" (Dimostrare).\n\n"
+                            "Il cervelletto è coinvolto anche nel controllo e la precisione dei "
+                            "movimenti fini."
+                        ),
+                        "osservazioni": (
+                            "• Ci sono problemi con l'accuratezza dei movimenti di uno o più dita?\n"
+                            "  In caso affermativo, quali? Si possono numerare per annotare quale "
+                            "dito ha problemi in ogni mano.\n"
+                            "• Ci sono movimenti \"a specchio\" nell'altra mano?\n"
+                            "• Ci sono movimenti con la bocca?\n\n"
+                            "Il movimento delle dita potrebbe essere disturbato da un riflesso "
+                            "prensile ancora presente ma anche dalla risposta di Babkin o dei "
+                            "riflessi orali. Spesso c'è una associazione con il linguaggio — in "
+                            "particolare con i problemi di pronuncia — e con i movimenti fini "
+                            "necessari per la scrittura."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nulla da segnalare",
+                            1: "Lieve grado di difficoltà per effettuare i movimenti delle dita in modo fluido e senza coinvolgimento di altri movimenti",
+                            2: "Difficoltà moderata",
+                            3: "Difficoltà marcata",
+                            4: "Incapace di svolgere movimenti indipendenti delle dita",
+                        },
+                    },
+                    {
+                        "id": "dita_dx",
+                        "label": "Mano destra",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test sull'altra mano.",
+                        "osservazioni": "Stesse osservazioni della mano sinistra.",
+                        "scoring_specifico": {
+                            0: "Nulla da segnalare",
+                            1: "Lieve grado di difficoltà",
+                            2: "Difficoltà moderata",
+                            3: "Difficoltà marcata",
+                            4: "Incapace di svolgere movimenti indipendenti delle dita",
+                        },
+                    },
                 ],
             },
             {
                 "id": "mani",
-                "label": "Mani",
+                "label": "Mani (dai 7-8 anni — Accardo PJ)",
                 "prove": [
-                    {"id": "mani_sx", "label": "Sinistra", "scoring": "0-4"},
-                    {"id": "mani_dx", "label": "Destra", "scoring": "0-4"},
+                    {
+                        "id": "mani_sx",
+                        "label": "Sinistra",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "\"In piede con i piedi o talloni insieme. Colloca le mani davanti "
+                            "a te, con il palmo di una di loro guardando verso il soffitto, "
+                            "l'altra guardando verso il pavimento. Gira entrambe le mani in "
+                            "modo che guardino verso il lato opposto. Ripeti il movimento più "
+                            "volte.\""
+                        ),
+                        "osservazioni": (
+                            "• Riesce a fare movimenti indipendenti (e opposti) con ognuna "
+                            "delle mani?\n"
+                            "• Appaiono movimenti speculari nell'altra mano o indicatori di "
+                            "stress (viso, bocca, equilibrio…)?"
+                        ),
+                        "scoring_specifico": {
+                            0: "Nulla da segnalare",
+                            1: "Lieve grado di difficoltà nel movimento alternato",
+                            2: "Difficoltà moderata o lievi movimenti speculari",
+                            3: "Difficoltà marcata o movimenti speculari evidenti",
+                            4: "Incapace di svolgere movimenti indipendenti delle mani",
+                        },
+                    },
+                    {
+                        "id": "mani_dx",
+                        "label": "Destra",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test, specificare se la difficoltà è maggiore con la mano destra o sinistra.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "Nulla da segnalare",
+                            1: "Lieve grado di difficoltà",
+                            2: "Difficoltà moderata o lievi movimenti speculari",
+                            3: "Difficoltà marcata o movimenti speculari evidenti",
+                            4: "Incapace di svolgere movimenti indipendenti delle mani",
+                        },
+                    },
                 ],
             },
             {
                 "id": "piedi",
                 "label": "Piedi",
                 "prove": [
-                    {"id": "piedi_sx", "label": "Sinistro", "scoring": "0-4"},
-                    {"id": "piedi_dx", "label": "Destro", "scoring": "0-4"},
+                    {
+                        "id": "piedi_sx",
+                        "label": "Sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "\"Seduto in una sedia. Appoggiare un piede sul pavimento. "
+                            "Sollevare leggermente l'altro piede. Fare un movimento alternato "
+                            "alzando ed abbassando il piede a livello della caviglia.\" "
+                            "(Dimostrare). Ripetere con l'altro piede.\n\n"
+                            "Sollevare entrambi i piedi del pavimento e ripetere il movimento "
+                            "in modo alternato con entrambi i piedi. (Dimostrare)."
+                        ),
+                        "osservazioni": (
+                            "• È in grado di fare il movimento di ogni piede separatamente?\n"
+                            "• Appaiono movimenti speculari?\n"
+                            "• È il movimento uguale in entrambi i piedi?\n"
+                            "• È possibile per il soggetto fare movimenti opposti?"
+                        ),
+                        "scoring_specifico": {
+                            0: "Nulla da segnalare",
+                            1: "Lieve difficoltà nel movimento alternato",
+                            2: "Difficoltà moderata o lievi movimenti speculari",
+                            3: "Difficoltà marcata o movimenti speculari evidenti",
+                            4: "Incapace di svolgere movimenti indipendenti dei piedi",
+                        },
+                    },
+                    {
+                        "id": "piedi_dx",
+                        "label": "Destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test, specificare se la difficoltà è maggiore con il piede destro o sinistro.",
+                        "osservazioni": "Stesse osservazioni del piede sinistro.",
+                        "scoring_specifico": {
+                            0: "Nulla da segnalare",
+                            1: "Lieve difficoltà nel movimento alternato",
+                            2: "Difficoltà moderata o lievi movimenti speculari",
+                            3: "Difficoltà marcata o movimenti speculari evidenti",
+                            4: "Incapace di svolgere movimenti indipendenti dei piedi",
+                        },
+                    },
                 ],
             },
             {
                 "id": "orale",
                 "label": "Disdiadococinesia orale (registrare ripetizioni e secondi)",
                 "prove": [
+                    # Il manuale 2019-2020 non descrive questa sezione nelle pagine
+                    # teoriche; struttura presa dal Formulario INPPA01IT rev. 01/22.
                     {"id": "orale_pa_rep", "label": "/pʌ/ — n. ripetizioni", "scoring": "numerico"},
                     {"id": "orale_pa_sec", "label": "/pʌ/ — secondi", "scoring": "numerico"},
                     {"id": "orale_ta_rep", "label": "/tʌ/ — n. ripetizioni", "scoring": "numerico"},
@@ -843,18 +968,78 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
         "gruppi": [
             {
                 "id": "orientamento",
-                "label": "Orientamento spaziale (sì/no)",
+                "label": "Tests cognitivo-spaziali (sì/no)",
                 "prove": [
-                    {"id": "orient_dx_sx", "label": "Problemi di discriminazione destra/sinistra",
-                     "scoring": "si_no"},
-                    {"id": "orient_orientamento", "label": "Problemi di orientamento", "scoring": "si_no"},
-                    {"id": "orient_spaziali", "label": "Problemi spaziali", "scoring": "si_no"},
+                    {
+                        "id": "orient_dx_sx",
+                        "label": "Problemi di discriminazione destra/sinistra",
+                        "scoring": "si_no",
+                        "istruzioni": (
+                            "Problemi di discriminazione Destra/Sinistra (dai 7 anni).\n\n"
+                            "\"In piedi nel centro della stanza, piedi insieme. Girati di un "
+                            "quarto di giro verso destra o sinistra quando io dirò la parola "
+                            "'destra' o 'sinistra'.\"\n\n"
+                            "L'istruttore indicherà \"sinistra\" \"destra\" in sequenza random "
+                            "diverse volte (10).\n\n"
+                            "Se questo test viene superato, chiedere di indicare il proprio "
+                            "orecchio destro/sinistro, piede, occhio, ecc (consapevolezza "
+                            "soggettiva). Se supera anche questo passaggio, chiedere di "
+                            "indicare l'orecchio destro/sinistro dell'esaminatore, poi mano, "
+                            "piede, ecc."
+                        ),
+                        "osservazioni": (
+                            "Questo test va punteggiato come \"giusto\" o \"sbagliato\". "
+                            "Segnalare a che livello di complessità sono iniziate le difficoltà "
+                            "(consapevolezza oggettiva o soggettiva di destra o sinistra, ad "
+                            "esempio)."
+                        ),
+                    },
+                    {
+                        "id": "orient_orientamento",
+                        "label": "Problemi di orientamento",
+                        "scoring": "si_no",
+                        "istruzioni": (
+                            "Problemi di Orientamento (test della bussola, dai 7 anni).\n\n"
+                            "In piedi nel centro della stanza, piedi insieme.\n\n"
+                            "L'esaminatore indicherà la posizione immaginaria dei 4 punti "
+                            "cardinali nella stanza (nord, sud, est, ovest). Verrà chiesto di "
+                            "girarsi verso ognuno di quei 4 punti ogni volta che li senta dalla "
+                            "voce dell'esaminatore. Essi dovranno essere nominati in ordine "
+                            "sparso in modo che non possa essere anticipata la direzione."
+                        ),
+                        "osservazioni": "Questo test va punteggiato come \"giusto\" o \"sbagliato\".",
+                    },
+                    {
+                        "id": "orient_spaziali",
+                        "label": "Problemi spaziali",
+                        "scoring": "si_no",
+                        "istruzioni": (
+                            "Problemi Spaziali (Test dell'orologio).\n\n"
+                            "Non adatto per bambini sotto gli 8 anni. Controllare sempre che "
+                            "sia in grado di leggere l'orologio analogico prima di provare il test.\n\n"
+                            "L'esaminatore farà vedere in che modo vorrà che il bambino faccia "
+                            "finta di essere un orologio utilizzando le mani per indicare "
+                            "l'ora.\n\n"
+                            "\"Stai in piedi con i piedi insieme e guardando verso di me.\"\n\n"
+                            "L'esaminatore allora proporrà diverse \"ore\" che il bambino dovrà "
+                            "indicare usando le sue mani al posto delle lancette, iniziando da "
+                            "quelle più semplici (dodici in punto) e rendendo il compito sempre "
+                            "più complesso. (6 volte)."
+                        ),
+                        "osservazioni": (
+                            "Il test va registrato come \"giusto\" o \"sbagliato\". L'esaminatore "
+                            "dovrebbe indicare a che livello di complessità sono iniziati gli "
+                            "errori nel caso a inizio le risposte erano adeguate."
+                        ),
+                    },
                 ],
             },
             {
                 "id": "gold",
                 "label": "Test di Gold (toccare e indicare)",
                 "prove": [
+                    # Il manuale 2019-2020 non descrive il Test di Gold nelle pagine
+                    # teoriche; struttura presa dal Formulario INPPA01IT rev. 01/22.
                     {"id": "gold_dx_su_sx", "label": "Destra su sinistra", "scoring": "0-4"},
                     {"id": "gold_sx_su_dx", "label": "Sinistra su destra", "scoring": "0-4"},
                 ],
@@ -863,6 +1048,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "specchio",
                 "label": "Test dei movimenti a specchio",
                 "prove": [
+                    # Idem: non descritto nelle pagine teoriche del manuale.
                     {"id": "specchio_sx", "label": "Sinistra", "scoring": "0-4"},
                     {"id": "specchio_dx", "label": "Destra", "scoring": "0-4"},
                 ],
