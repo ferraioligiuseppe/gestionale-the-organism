@@ -116,7 +116,6 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                             3: "Marcato dondolio quando raggiunge la posizione in piede",
                             4: "Dondola e perde l'equilibrio — sposta lateralmente uno dei piedi",
                         },
-                        # "video_url": "https://www.dropbox.com/.../recupero_supino.mp4?raw=1",
                     },
                     {
                         "id": "rec_prono",
@@ -137,7 +136,6 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                             3: "Scostamento marcato / instabilità marcata",
                             4: "Incapacità di completare la sequenza o perdita di equilibrio",
                         },
-                        # "video_url": "https://www.dropbox.com/.../recupero_prono.mp4?raw=1",
                     },
                 ],
             },
@@ -145,77 +143,486 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "romberg",
                 "label": "Test di Romberg",
                 "prove": [
-                    {"id": "romberg_aperti", "label": "Occhi aperti", "scoring": "0-4"},
-                    {"id": "romberg_chiusi", "label": "Occhi chiusi", "scoring": "0-4"},
+                    {
+                        "id": "romberg_aperti",
+                        "label": "Occhi aperti",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "In piedi, con i piedi insieme e le mani e le braccia sui fianchi, "
+                            "guarda dritto in avanti. I bambini sopra i 4 anni dovrebbero essere "
+                            "in grado di mantenere la posizione fino a 10 secondi senza perdere "
+                            "l'equilibrio."
+                        ),
+                        "osservazioni": (
+                            "Test standardizzato che valuta il controllo dell'equilibrio statico "
+                            "e la propriocezione.\n"
+                            "• C'è dondolio? Verso che lato?\n"
+                            "• C'è aggiustamento posturale verso un lato?\n"
+                            "• C'è presa con le dita dei piedi?\n"
+                            "• Negli adulti, può essere utile chiedere la sensazione soggettiva di "
+                            "dondolio (scala 1-10), non da includere nel punteggio ma utile "
+                            "indicatore di fatica/compensazione."
+                        ),
+                        "scoring_specifico": {
+                            0: "Capace di mantenersi stabile senza dondolio o perdita dell'equilibrio",
+                            1: "Lieve dondolio (annotare la direzione) o minimo coinvolgimento di altre parti del corpo",
+                            2: "Dondolio evidente e/o coinvolgimento delle mani o delle braccia",
+                            3: "Difficoltà significativa nel mantenere l'equilibrio",
+                            4: "Perde l'equilibrio",
+                        },
+                    },
+                    {
+                        "id": "romberg_chiusi",
+                        "label": "Occhi chiusi",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Ripetere lo stesso test con gli occhi chiusi. Il punteggio deve essere "
+                            "dato separatamente, con le stesse osservazioni."
+                        ),
+                        "osservazioni": (
+                            "Stesse osservazioni del Romberg a occhi aperti.\n"
+                            "• Se si osserva un peggioramento significativo a occhi chiusi, può "
+                            "essere un indicatore di difficoltà propriocettive o di equilibrio."
+                        ),
+                        "scoring_specifico": {
+                            0: "Capace di mantenersi stabile senza dondolio o perdita dell'equilibrio",
+                            1: "Lieve dondolio o minimo coinvolgimento di altre parti del corpo",
+                            2: "Dondolio evidente e/o coinvolgimento delle mani o delle braccia",
+                            3: "Difficoltà significativa nel mantenere l'equilibrio",
+                            4: "Perde l'equilibrio",
+                        },
+                    },
                 ],
             },
             {
                 "id": "mann",
                 "label": "Test di Mann (Romberg avanzato)",
                 "prove": [
-                    {"id": "mann_aperti", "label": "Occhi aperti", "scoring": "0-4"},
-                    {"id": "mann_chiusi", "label": "Occhi chiusi", "scoring": "0-4"},
+                    {
+                        "id": "mann_aperti",
+                        "label": "Occhi aperti",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Rimani fermo in piedi con un piede davanti all'altro, con il tallone "
+                            "toccando la punta dell'altro piede e con le mani sui fianchi."
+                        ),
+                        "osservazioni": (
+                            "• Riesce il sistema vestibolare ad adattarsi al cambiamento di "
+                            "posizione e di distribuzione dei pesi?\n"
+                            "• Problemi nella linea media?\n"
+                            "• Se si \"sentono\" instabili ma non c'è evidenza di ciò, potrebbe "
+                            "indicare \"mismatch\" vestibolare-propriocettivo.\n"
+                            "• Vertigine soggettiva: \"tutto in torno a me è fermo, io mi muovo\"\n"
+                            "• Vertigine oggettiva: \"io sono fermo, ma è la stanza a muoversi\"\n"
+                            "• Coinvolgimento delle braccia per mantenere l'equilibrio."
+                        ),
+                        "scoring_specifico": {
+                            0: "Capace di mantenersi stabile senza dondolio o perdita dell'equilibrio",
+                            1: "Lieve dondolio (annotare la direzione) o minimo coinvolgimento di altre parti del corpo",
+                            2: "Dondolio evidente e/o coinvolgimento delle mani o delle braccia",
+                            3: "Difficoltà significativa nel mantenere l'equilibrio",
+                            4: "Perde l'equilibrio",
+                        },
+                    },
+                    {
+                        "id": "mann_chiusi",
+                        "label": "Occhi chiusi",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Ripetere lo stesso test con gli occhi chiusi. Il punteggio deve essere "
+                            "dato separatamente, con le stesse osservazioni."
+                        ),
+                        "osservazioni": (
+                            "Stesse osservazioni del Mann a occhi aperti. Un peggioramento "
+                            "significativo ad occhi chiusi può indicare difficoltà propriocettive "
+                            "o di equilibrio."
+                        ),
+                        "scoring_specifico": {
+                            0: "Capace di mantenersi stabile senza dondolio o perdita dell'equilibrio",
+                            1: "Lieve dondolio o minimo coinvolgimento di altre parti del corpo",
+                            2: "Dondolio evidente e/o coinvolgimento delle mani o delle braccia",
+                            3: "Difficoltà significativa nel mantenere l'equilibrio",
+                            4: "Perde l'equilibrio",
+                        },
+                    },
+                ],
+            },
+            {
+                "id": "upst",
+                "label": "Test su un solo piede (UPST — Unipedal Stance Test)",
+                "prove": [
+                    {
+                        "id": "upst",
+                        "label": "Test su un solo piede (UPST), dai 6 anni",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Chiedere al bambino di collocarsi in piedi su un solo piede e dire: "
+                            "\"Cerca di mantenere questa posizione tutto il tempo che ti riesca\". "
+                            "Contabilizzare in secondi il tempo che il bambino riesce a mantenere "
+                            "la posizione prima di perdere l'equilibrio o di appoggiare l'altro "
+                            "piede. Ripetere la procedura con l'altro piede.\n\n"
+                            "Utilizzare un cronometro. Il tempo inizia quando il soggetto solleva "
+                            "il piede dal pavimento e finisce quando perde l'equilibrio, appoggia "
+                            "l'altro piede sul pavimento o sposta il piede di appoggio.\n\n"
+                            "Dati normativi:\n"
+                            "• 6 anni: 20 secondi con il piede destro o sinistro\n"
+                            "• 8+ anni: 30 secondi con piede destro o sinistro"
+                        ),
+                        "osservazioni": (
+                            "• L'incapacità di mantenersi in equilibrio su un solo piede per il "
+                            "tempo appropriato all'età può essere un indicatore di difficoltà "
+                            "vestibolari o di immaturità posturale.\n"
+                            "• Osservare ogni movimento compensatorio significativo delle braccia, "
+                            "dell'altra gamba, della bocca o delle mani durante l'esecuzione."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A. — Tempo nella norma per l'età",
+                            1: "Due secondi meno della norma per l'età",
+                            2: "Quattro secondi meno della norma per l'età",
+                            3: "Sei secondi meno della norma per l'età",
+                            4: "Otto secondi meno della norma per l'età",
+                        },
+                    },
                 ],
             },
             {
                 "id": "cammino_mezzo_giro",
                 "label": "Cammino e mezzo giro",
                 "prove": [
-                    {"id": "cammino_mezzo_giro", "label": "Cammino e mezzo giro", "scoring": "0-4"},
+                    {
+                        "id": "cammino_mezzo_giro",
+                        "label": "Cammino e mezzo giro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Cammina da un lato all'altro della stanza. Continua camminando "
+                            "finché ti dirò \"fermo!\". Allora fermati, girati per guardare verso "
+                            "il lato opposto, e rimani fermo \"sull'attenti\", con i piedi insieme. "
+                            "(Dimostrare i primi passi)."
+                        ),
+                        "osservazioni": (
+                            "Durante il cammino osservare:\n"
+                            "1. Mancanza di coordinazione grosso-motoria\n"
+                            "2. Schema del cammino (crociato, omolaterale...)\n"
+                            "3. Difficoltà nella sincronia dei movimenti\n\n"
+                            "• Diventa omolaterale dopo il giro?\n"
+                            "• Cammino tipo \"RTSC\" (flessione)?\n"
+                            "• Coinvolgimento degli arti superiori?\n"
+                            "• Si destabilizza dopo il giro? (giramento di testa)\n"
+                            "• Ricorda tutte le istruzioni? (elaborazione uditiva)\n\n"
+                            "Schema normale: cammino in schema incrociato con coinvolgimento di "
+                            "braccia e gambe, senza perdita di equilibrio o stabilità per effetto "
+                            "del giro.\n\n"
+                            "Riflessi possibilmente coinvolti: RTAC, RTSC, mancanza di riflessi "
+                            "di rotazione segmentaria (es. nessuna differenziazione a livello del "
+                            "bacino)."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Movimenti asincroni o movimenti inadeguati delle braccia",
+                            2: "Cambio a cammino omolaterale durante il giro",
+                            3: "Omolaterale o senza movimento delle braccia",
+                            4: "Non ci riesce",
+                        },
+                    },
                 ],
             },
             {
                 "id": "punte",
                 "label": "Camminare sulle punte",
                 "prove": [
-                    {"id": "punte_avanti", "label": "Avanti", "scoring": "0-4"},
-                    {"id": "punte_indietro", "label": "Indietro", "scoring": "0-4"},
+                    {
+                        "id": "punte_avanti",
+                        "label": "Avanti",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Mettiti sulle punte, e LENTAMENTE cammina lungo la stanza guardando "
+                            "dritto in avanti. (Dimostrare i primi passi)."
+                        ),
+                        "osservazioni": (
+                            "• Riflesso prensile nei piedi?\n"
+                            "• Coinvolgimento del viso\n"
+                            "• Fissazione dello sguardo sul target\n"
+                            "• Rigidità muscolare\n"
+                            "• Grado di sforzo/difficoltà\n"
+                            "• C'è deviazione in diagonale quando va all'indietro? (problemi vestibolari)\n"
+                            "• Passi di \"giapponesina\" (deambulazione cerebellare)?\n"
+                            "• Cammino con le gambe a \"forbice\"? Oppure minore inclinazione "
+                            "di uno dei due piedi."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Non completamente sulle punte, piccole difficoltà",
+                            2: "Lieve deviazione dalla normalità o lieve perdita dell'equilibrio",
+                            3: "Deviazione moderata/perdita di equilibrio",
+                            4: "Incapacità o perdita totale dell'equilibrio",
+                        },
+                    },
+                    {
+                        "id": "punte_indietro",
+                        "label": "Indietro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Ripetere il test camminando sulle punte all'indietro. Annotare ogni "
+                            "differenza di abilità nel compito in avanti e all'indietro."
+                        ),
+                        "osservazioni": (
+                            "Stesse osservazioni del cammino sulle punte in avanti. La deviazione "
+                            "in diagonale all'indietro è particolarmente indicativa di problemi "
+                            "vestibolari."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Non completamente sulle punte, piccole difficoltà",
+                            2: "Lieve deviazione dalla normalità o lieve perdita dell'equilibrio",
+                            3: "Deviazione moderata/perdita di equilibrio",
+                            4: "Incapacità o perdita totale dell'equilibrio",
+                        },
+                    },
                 ],
             },
             {
                 "id": "tandem",
-                "label": "Tallone-Punta (tandem walk)",
+                "label": "Tallone-Punta (tandem walk), dai 7 anni",
                 "prove": [
-                    {"id": "tandem_avanti", "label": "Avanti", "scoring": "0-4"},
-                    {"id": "tandem_indietro", "label": "Indietro", "scoring": "0-4"},
+                    {
+                        "id": "tandem_avanti",
+                        "label": "Avanti",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Lentamente cammina lungo la stanza collocando un piede davanti "
+                            "all'altro, tallone toccando la punta e guardando sempre fisso in "
+                            "avanti. (Dimostrare i primi passi)."
+                        ),
+                        "osservazioni": (
+                            "• Precisione nella collocazione dei piedi (propriocezione)\n"
+                            "• Dondolamento\n"
+                            "• Posizione della testa, fissazione dello sguardo\n"
+                            "• Equilibrio\n"
+                            "• Coinvolgimento delle braccia, mani o viso\n"
+                            "• Difficoltà nella linea media"
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Lievi difficoltà d'equilibrio o di collocazione dei piedi, tendenza a perdere la fissazione degli occhi, lieve coinvolgimento del viso, tendenza a guardare verso i piedi, lieve coinvolgimento delle mani o braccia",
+                            2: "Maggior grado delle osservazioni precedenti, utilizzo delle braccia per mantenere l'equilibrio, difficoltà a mantenersi nella linea media",
+                            3: "Quasi perdita di equilibrio, braccia aperte, ondeggiamento delle braccia o del corpo, imprecisione nell'appoggio dei piedi",
+                            4: "Perdita di equilibrio con o senza presenza significativa delle osservazioni precedenti",
+                        },
+                    },
+                    {
+                        "id": "tandem_indietro",
+                        "label": "Indietro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Ripetere il test all'indietro. Segnalare ogni differenza significativa "
+                            "nello svolgimento del compito all'indietro."
+                        ),
+                        "osservazioni": "Stesse osservazioni del tandem walk in avanti.",
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Lievi difficoltà d'equilibrio o di collocazione dei piedi",
+                            2: "Maggior grado delle osservazioni precedenti, difficoltà nella linea media",
+                            3: "Quasi perdita di equilibrio, ondeggiamento, imprecisione nell'appoggio",
+                            4: "Perdita di equilibrio",
+                        },
+                    },
                 ],
             },
             {
                 "id": "fog",
                 "label": "Camminare sull'esterno dei piedi (Fog walk)",
                 "prove": [
-                    {"id": "fog_avanti", "label": "Avanti", "scoring": "0-4"},
-                    {"id": "fog_indietro", "label": "Indietro", "scoring": "0-4"},
+                    {
+                        "id": "fog_avanti",
+                        "label": "Avanti",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Lentamente cammina lungo la stanza appoggiandoti solo sulla parte "
+                            "esterna dei tuoi piedi. Guarda dritto in avanti.\n\n"
+                            "Questo test può essere utilizzato in termini qualitativi dai 7-7 anni "
+                            "e mezzo, ma è normale osservare movimenti compensatori fino ai 10-13 "
+                            "anni di età."
+                        ),
+                        "osservazioni": (
+                            "Questo test rivela ogni difficoltà a livello di equilibrio o "
+                            "coordinazione. Osservare se ha bisogno di fare una pausa dopo ogni "
+                            "passo, e qualsiasi cambiamento nella postura, nella posizione di "
+                            "mani/braccia e coinvolgimento del viso.\n\n"
+                            "• Riesce a rimanere sull'esterno dei piedi tutto il tempo?\n"
+                            "• Iperestensione degli alluci?\n"
+                            "• Gambe rigide, gambe molto separate? (cervelletto)\n"
+                            "• Cammino tipo \"scimmia\"\n"
+                            "• Rotazione delle mani come formando una \"tazzina\" o emiplegia "
+                            "nelle mani?"
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Lieve coinvolgimento involontario di una delle mani",
+                            2: "Coinvolgimento delle mani in entrambi i lati del corpo e/o lieve alterazione posturale, o non completamente sull'esterno dei piedi e/o movimenti del viso/bocca",
+                            3: "Postura tipo \"scimmia\" o deambulazione rigida con movimenti omolaterali o emiplegia molto evidente",
+                            4: "Postura tipo \"scimmia\" molto evidente, incapace di muoversi o completare il compito",
+                        },
+                    },
+                    {
+                        "id": "fog_indietro",
+                        "label": "Indietro",
+                        "scoring": "0-4",
+                        "istruzioni": "Ripetere il test all'indietro e dare punteggi separati.",
+                        "osservazioni": "Stesse osservazioni del Fog walk in avanti.",
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Lieve coinvolgimento involontario di una delle mani",
+                            2: "Coinvolgimento bilaterale delle mani e/o lieve alterazione posturale",
+                            3: "Postura \"scimmia\" o deambulazione rigida con movimenti omolaterali",
+                            4: "Postura \"scimmia\" molto evidente, incapace di completare",
+                        },
+                    },
                 ],
             },
             {
                 "id": "slalom",
-                "label": "Camminare in slalom",
+                "label": "Camminare in slalom (dai 7-8 anni)",
                 "prove": [
-                    {"id": "slalom_avanti", "label": "Avanti", "scoring": "0-4"},
-                    {"id": "slalom_indietro", "label": "Indietro", "scoring": "0-4"},
+                    {
+                        "id": "slalom_avanti",
+                        "label": "Avanti",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Cammina lungo la stanza alzando una gamba a livello del ginocchio e "
+                            "incrociando davanti all'altra gamba, guardando sempre in avanti."
+                        ),
+                        "osservazioni": (
+                            "• Difficoltà per incrociare la linea media\n"
+                            "• Difficoltà nel sollevare la gamba a livello del ginocchio (RTL)\n"
+                            "• Equilibrio e stabilità, controllo dei movimenti\n"
+                            "• Livello di coinvolgimento di altre parti del corpo"
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Lievi difficoltà nelle osservazioni indicate",
+                            2: "Difficoltà moderate",
+                            3: "Difficoltà marcate",
+                            4: "Incapacità di completare il compito",
+                        },
+                    },
+                    {
+                        "id": "slalom_indietro",
+                        "label": "Indietro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Ripetere il test all'indietro. È in grado di capire come invertire il "
+                            "movimento da solo? Altrimenti può indicare difficoltà nella "
+                            "programmazione dei movimenti. Dare punteggi separati per entrambi i compiti."
+                        ),
+                        "osservazioni": "Stesse osservazioni dello slalom in avanti.",
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Lievi difficoltà",
+                            2: "Difficoltà moderate",
+                            3: "Difficoltà marcate",
+                            4: "Incapacità di completare",
+                        },
+                    },
                 ],
             },
             {
                 "id": "talloni",
-                "label": "Camminare sui talloni (ginocchio in alto)",
+                "label": "Camminare sui talloni (dai 7-8 anni)",
                 "prove": [
-                    {"id": "talloni", "label": "Camminare sui talloni", "scoring": "0-4"},
+                    {
+                        "id": "talloni",
+                        "label": "Camminare sui talloni",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "In piedi sui talloni, cammina lungo la stanza appoggiandoti sempre "
+                            "solo sui talloni, alzando la gamba il più possibile, guardando sempre "
+                            "in avanti. (Dimostrare i primi passi)."
+                        ),
+                        "osservazioni": (
+                            "• Riesce a fare la dorsi-flessione dei piedi?\n"
+                            "• Piega le ginocchia o c'è un aumento della rigidità?\n"
+                            "• Coinvolgimento esagerato delle mani o braccia?\n"
+                            "• Livello di \"overflow\" (compensazioni) di movimenti di altre "
+                            "parti del corpo?"
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Osservazioni lievi come sopra",
+                            2: "Osservazioni moderate come sopra",
+                            3: "Coinvolgimento molto importante delle braccia e movimenti \"strani\" al compito per mantenere l'equilibrio",
+                            4: "Non riesce a completare il compito",
+                        },
+                    },
                 ],
             },
             {
                 "id": "saltellare",
-                "label": "Saltellare su una gamba",
+                "label": "Saltare su una gamba (dai 4 anni)",
                 "prove": [
-                    {"id": "saltellare_dx", "label": "Gamba destra", "scoring": "0-4"},
-                    {"id": "saltellare_sx", "label": "Gamba sinistra", "scoring": "0-4"},
+                    {
+                        "id": "saltellare_dx",
+                        "label": "Gamba destra",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Salta su una sola gamba spostandoti in avanti lungo tutta la stanza "
+                            "finché ti chiederò di fermarti."
+                        ),
+                        "osservazioni": (
+                            "• Equilibrio\n"
+                            "• Riesce a controllare la velocità del movimento? È fluido?\n"
+                            "• Riesce a fermarsi?\n"
+                            "• Cambia piede quando torna indietro?\n"
+                            "• C'è dorsiflessione del piede o c'è qualche livello di \"piede piatto\"?\n"
+                            "• Segnalare che piede utilizza."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Movimento non abbastanza controllato",
+                            2: "Piede piatto",
+                            3: "Equilibrio instabile, postura spostata in avanti",
+                            4: "Cade",
+                        },
+                    },
+                    {
+                        "id": "saltellare_sx",
+                        "label": "Gamba sinistra",
+                        "scoring": "0-4",
+                        "istruzioni": "Ripetere lo stesso compito sull'altra gamba.",
+                        "osservazioni": (
+                            "Stesse osservazioni del salto su gamba destra. Annotare differenze "
+                            "significative tra i due lati."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Movimento non abbastanza controllato",
+                            2: "Piede piatto",
+                            3: "Equilibrio instabile, postura spostata in avanti",
+                            4: "Cade",
+                        },
+                    },
                 ],
             },
             {
                 "id": "schema_incrociato",
-                "label": "Trotterellare in schema incrociato",
+                "label": "Saltellare in schema incrociato (dai 5 anni)",
                 "prove": [
-                    {"id": "schema_incrociato", "label": "Trotterellare in schema incrociato", "scoring": "0-4"},
+                    {
+                        "id": "schema_incrociato",
+                        "label": "Saltellare in schema incrociato (\"skipping without a rope\")",
+                        "scoring": "0-4",
+                        "istruzioni": "Saltella in avanti lungo la stanza finché ti chiederò di fermarti.",
+                        "osservazioni": (
+                            "• Riesce a farlo?\n"
+                            "• Lo fa in schema incrociato?"
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A. — Saltella correttamente in schema incrociato",
+                            1: "Schema incrociato presente ma con lievi difficoltà",
+                            2: "Schema incrociato impreciso o con compensazioni",
+                            3: "Tendenza allo schema omolaterale",
+                            4: "Non riesce o schema completamente omolaterale",
+                        },
+                    },
                 ],
             },
         ],
