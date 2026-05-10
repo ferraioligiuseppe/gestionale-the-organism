@@ -52,25 +52,31 @@ from typing import Any
 # Legende scoring 0-4
 # -----------------------------------------------------------------------------
 
-# Legenda generica — usata quando una prova non ha scoring_specifico
-# (Formulario rev. 01/22, pag. 2)
+# Legenda generica universale (manuale corso INPP 2019-2020, pag. 3)
+# Usata come fallback quando una prova non ha scoring_specifico.
+# È neutra rispetto al tipo di prova: vale per coordinazione, cerebellare,
+# disdiadococinesia, oculomotori, ecc.
 SCORING_LABELS: dict[int, str] = {
-    0: "Nessuna anomalia",
-    1: "Minima presenza residua / Minima difficoltà",
-    2: "Riflesso primitivo residuo / Difficoltà a completare",
-    3: "Riflesso primitivo presente in gran parte / Marcata difficoltà",
-    4: "Riflesso primitivo completamente ritenuto / Incapacità",
+    0: "N.A. — Nessuna anomalia",
+    1: "Disfunzione del 25% — Minima",
+    2: "Disfunzione del 50% — Moderata",
+    3: "Disfunzione del 75% — Marcata",
+    4: "Disfunzione del 100% — Completa",
 }
 
-# Legenda alternativa percentuale (manuale corso INPP 2019-2020)
-# Mostrata come sottotitolo informativo
-SCORING_LABELS_PERCENTUALE: dict[int, str] = {
-    0: "0% — Nessuna anomalia",
-    1: "25% — Disfunzione lieve",
-    2: "50% — Disfunzione moderata",
-    3: "75% — Disfunzione marcata",
-    4: "100% — Disfunzione completa",
+# Legenda specifica per i RIFLESSI (Formulario rev. 01/22, pag. 2)
+# Usata in fallback solo quando nella sezione "riflessi" una prova non ha
+# scoring_specifico — terminologia clinicamente più precisa per il riflessi.
+SCORING_LABELS_RIFLESSI: dict[int, str] = {
+    0: "Nessuna anomalia",
+    1: "Minima presenza residua di un riflesso primitivo / Minima mancanza di sviluppo di un riflesso posturale",
+    2: "Riflesso primitivo residuo / Assenza parziale di un riflesso posturale",
+    3: "Riflesso primitivo presente in gran parte / Quasi totale assenza di un riflesso posturale",
+    4: "Riflesso primitivo completamente ritenuto / Assenza completa di un riflesso posturale",
 }
+
+# Alias mantenuto per compatibilità; ora coincide con la legenda generica
+SCORING_LABELS_PERCENTUALE: dict[int, str] = SCORING_LABELS
 
 # -----------------------------------------------------------------------------
 # Le 10 sezioni del Formulario INPP
@@ -243,44 +249,6 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                             2: "Dondolio evidente e/o coinvolgimento delle mani o delle braccia",
                             3: "Difficoltà significativa nel mantenere l'equilibrio",
                             4: "Perde l'equilibrio",
-                        },
-                    },
-                ],
-            },
-            {
-                "id": "upst",
-                "label": "Test su un solo piede (UPST — Unipedal Stance Test)",
-                "prove": [
-                    {
-                        "id": "upst",
-                        "label": "Test su un solo piede (UPST), dai 6 anni",
-                        "scoring": "0-4",
-                        "istruzioni": (
-                            "Chiedere al bambino di collocarsi in piedi su un solo piede e dire: "
-                            "\"Cerca di mantenere questa posizione tutto il tempo che ti riesca\". "
-                            "Contabilizzare in secondi il tempo che il bambino riesce a mantenere "
-                            "la posizione prima di perdere l'equilibrio o di appoggiare l'altro "
-                            "piede. Ripetere la procedura con l'altro piede.\n\n"
-                            "Utilizzare un cronometro. Il tempo inizia quando il soggetto solleva "
-                            "il piede dal pavimento e finisce quando perde l'equilibrio, appoggia "
-                            "l'altro piede sul pavimento o sposta il piede di appoggio.\n\n"
-                            "Dati normativi:\n"
-                            "• 6 anni: 20 secondi con il piede destro o sinistro\n"
-                            "• 8+ anni: 30 secondi con piede destro o sinistro"
-                        ),
-                        "osservazioni": (
-                            "• L'incapacità di mantenersi in equilibrio su un solo piede per il "
-                            "tempo appropriato all'età può essere un indicatore di difficoltà "
-                            "vestibolari o di immaturità posturale.\n"
-                            "• Osservare ogni movimento compensatorio significativo delle braccia, "
-                            "dell'altra gamba, della bocca o delle mani durante l'esecuzione."
-                        ),
-                        "scoring_specifico": {
-                            0: "N.A. — Tempo nella norma per l'età",
-                            1: "Due secondi meno della norma per l'età",
-                            2: "Quattro secondi meno della norma per l'età",
-                            3: "Sei secondi meno della norma per l'età",
-                            4: "Otto secondi meno della norma per l'età",
                         },
                     },
                 ],
@@ -557,15 +525,15 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
             },
             {
                 "id": "saltellare",
-                "label": "Saltare su una gamba (dai 4 anni)",
+                "label": "Saltellare su una gamba (dai 4 anni)",
                 "prove": [
                     {
-                        "id": "saltellare_dx",
-                        "label": "Gamba destra",
+                        "id": "saltellare",
+                        "label": "Saltellare su una gamba (destra / sinistra)",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Salta su una sola gamba spostandoti in avanti lungo tutta la stanza "
-                            "finché ti chiederò di fermarti."
+                            "finché ti chiederò di fermarti. Eseguire su entrambi i lati."
                         ),
                         "osservazioni": (
                             "• Equilibrio\n"
@@ -574,23 +542,6 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                             "• Cambia piede quando torna indietro?\n"
                             "• C'è dorsiflessione del piede o c'è qualche livello di \"piede piatto\"?\n"
                             "• Segnalare che piede utilizza."
-                        ),
-                        "scoring_specifico": {
-                            0: "N.A.",
-                            1: "Movimento non abbastanza controllato",
-                            2: "Piede piatto",
-                            3: "Equilibrio instabile, postura spostata in avanti",
-                            4: "Cade",
-                        },
-                    },
-                    {
-                        "id": "saltellare_sx",
-                        "label": "Gamba sinistra",
-                        "scoring": "0-4",
-                        "istruzioni": "Ripetere lo stesso compito sull'altra gamba.",
-                        "osservazioni": (
-                            "Stesse osservazioni del salto su gamba destra. Annotare differenze "
-                            "significative tra i due lati."
                         ),
                         "scoring_specifico": {
                             0: "N.A.",
@@ -629,7 +580,8 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
     },
     # =========================================================================
     # SEZIONE 3 — SCHEMI DI SVILUPPO MOTORIO
-    # (radio button: presente / atipico / assente, come da scelta utente)
+    # Nella scheda interna del manuale: celle libere per descrizione testuale,
+    # niente scoring 0-4 né checkbox.
     # =========================================================================
     {
         "id": "schemi_sviluppo",
@@ -641,31 +593,18 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "striscio",
                 "label": "Striscio",
                 "prove": [
-                    {"id": "striscio_omologo", "label": "Omologo", "scoring": "scelta",
-                     "opzioni": ["presente", "atipico", "assente"]},
-                    {"id": "striscio_omolaterale", "label": "Omolaterale", "scoring": "scelta",
-                     "opzioni": ["presente", "atipico", "assente"]},
-                    {"id": "striscio_incrociato", "label": "Incrociato", "scoring": "scelta",
-                     "opzioni": ["presente", "atipico", "assente"]},
+                    {"id": "striscio_omologo", "label": "Omologo", "scoring": "testo"},
+                    {"id": "striscio_omolaterale", "label": "Omolaterale", "scoring": "testo"},
+                    {"id": "striscio_incrociato", "label": "Incrociato", "scoring": "testo"},
                 ],
             },
             {
                 "id": "carponi",
                 "label": "Carponi",
                 "prove": [
-                    {"id": "carponi_omologo", "label": "Omologo", "scoring": "scelta",
-                     "opzioni": ["presente", "atipico", "assente"]},
-                    {"id": "carponi_omolaterale", "label": "Omolaterale", "scoring": "scelta",
-                     "opzioni": ["presente", "atipico", "assente"]},
-                    {"id": "carponi_incrociato", "label": "Incrociato", "scoring": "scelta",
-                     "opzioni": ["presente", "atipico", "assente"]},
-                ],
-            },
-            {
-                "id": "schemi_note",
-                "label": "Note osservative",
-                "prove": [
-                    {"id": "schemi_note", "label": "Note", "scoring": "testo"},
+                    {"id": "carponi_omologo", "label": "Omologo", "scoring": "testo"},
+                    {"id": "carponi_omolaterale", "label": "Omolaterale", "scoring": "testo"},
+                    {"id": "carponi_incrociato", "label": "Incrociato", "scoring": "testo"},
                 ],
             },
         ],
@@ -682,24 +621,164 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "tallone_tibia",
                 "label": "Tallone su tibia",
                 "prove": [
-                    {"id": "tallone_sx_su_dx", "label": "Sx su Dx", "scoring": "0-4"},
-                    {"id": "tallone_dx_su_sx", "label": "Dx su Sx", "scoring": "0-4"},
+                    {
+                        "id": "tallone_sx_su_dx",
+                        "label": "Sx su Dx",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "\"Disteso pancia in su, mani accanto ai fianchi. Piegare un ginocchio "
+                            "e collocare il tallone di quel piede sull'altra gamba, appena sotto "
+                            "il ginocchio. Lentamente fare scorrere il tallone lungo la tibia "
+                            "dell'altra gamba dal ginocchio fino alla caviglia.\" (Dimostrare).\n\n"
+                            "Ripetere il movimento due volte lentamente e un'altra un po' più "
+                            "velocemente. Ripetere il test con l'altra gamba."
+                        ),
+                        "osservazioni": (
+                            "Il cervelletto si occupa del controllo fine dei movimenti ed è il "
+                            "mediatore dell'apprendimento motorio. Possono evincersi segni o "
+                            "sintomi di danno cerebellare come atassia, dissinergia, ecc.\n\n"
+                            "C'è ATASSIA quando c'è un errore nella coordinazione muscolare anche "
+                            "se la forza necessaria per fare il movimento è presente (es. quando "
+                            "non c'è inibizione dei movimenti necessari per raffinare il movimento "
+                            "quando si vuole mantenere la posizione di una parte del corpo).\n\n"
+                            "È molto infrequente trovare segni di danno cerebellare in questi test "
+                            "in una popolazione di bambini con difficoltà di apprendimento; più "
+                            "spesso si osserva una DISFUNZIONE che potrebbe essere collegata a un "
+                            "funzionamento immaturo del cervelletto causato da riflessi posturali "
+                            "non sviluppati o dalla interferenza di attività persistente dei "
+                            "riflessi primitivi.\n\n"
+                            "* Notare se riesce a trovare la posizione iniziale. Se il problema è "
+                            "solo per LOCALIZZARE il punto appena sotto il ginocchio, può indicare "
+                            "scarsa propriocezione. Se invece si trova difficoltà nel POSIZIONARE "
+                            "il tallone sull'altra gamba, può indicare un problema a livello del "
+                            "cervelletto. A volte, entrambi i problemi possono essere presenti.\n"
+                            "* Ci sono difficoltà per controllare il movimento lungo la tibia?\n"
+                            "* Si alza il tallone sistematicamente dell'altra gamba? Questo può "
+                            "indicare problemi cerebellari.\n"
+                            "* Succede su uno solo o su entrambi i lati? Il cervelletto controlla "
+                            "lo stesso lato del corpo (ipsilaterale), mentre il cortex motorio "
+                            "controlla il lato opposto del corpo (controlaterale)."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nulla da segnalare. Il movimento è fluido e controllato. Il soggetto riesce a localizzare il ginocchio e posizionare il tallone dell'altro piede",
+                            1: "Minima difficoltà sia nel controllo del movimento che nel posizionare il tallone sulla tibia",
+                            2: "Evidenza lieve di dissinergia o atassia nel controllo del movimento o nell'essere capace di collocare il tallone sulla tibia",
+                            3: "Difficoltà significative nel controllo del movimento o nell'atto di posizionare il tallone sulla tibia",
+                            4: "Il tallone sfugge sistematicamente dalla tibia. Non è capace di collocare il tallone nell'obiettivo prefissato",
+                        },
+                    },
+                    {
+                        "id": "tallone_dx_su_sx",
+                        "label": "Dx su Sx",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Stesso test sull'altra gamba. Lentamente fare scorrere il tallone "
+                            "destro lungo la tibia sinistra dal ginocchio fino alla caviglia. "
+                            "Ripetere due volte lentamente e una un po' più velocemente."
+                        ),
+                        "osservazioni": (
+                            "Stesse osservazioni del lato sinistro. Annotare differenze "
+                            "significative tra i due lati: il cervelletto controlla "
+                            "ipsilateralmente, quindi una differenza marcata fra dx e sx può "
+                            "essere indicativa di disfunzione cerebellare unilaterale."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nulla da segnalare. Il movimento è fluido e controllato. Il soggetto riesce a localizzare il ginocchio e posizionare il tallone dell'altro piede",
+                            1: "Minima difficoltà sia nel controllo del movimento che nel posizionare il tallone sulla tibia",
+                            2: "Evidenza lieve di dissinergia o atassia nel controllo del movimento o nell'essere capace di collocare il tallone sulla tibia",
+                            3: "Difficoltà significative nel controllo del movimento o nell'atto di posizionare il tallone sulla tibia",
+                            4: "Il tallone sfugge sistematicamente dalla tibia. Non è capace di collocare il tallone nell'obiettivo prefissato",
+                        },
+                    },
                 ],
             },
             {
                 "id": "approssimazione",
                 "label": "Approssimazione digitale (linea mediana)",
                 "prove": [
-                    {"id": "appr_aperti", "label": "Occhi aperti", "scoring": "0-4"},
-                    {"id": "appr_chiusi", "label": "Occhi chiusi", "scoring": "0-4"},
+                    {
+                        "id": "appr_aperti",
+                        "label": "Occhi aperti",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "\"In piedi con i piedi insieme. Stendere entrambe le braccia "
+                            "lateralmente a livello delle spalle. Avvicinare lentamente le punte "
+                            "degli indici sulla linea mediana, davanti al naso, finché si toccano. "
+                            "Alternare la posizione lentamente 4 volte.\"\n\n"
+                            "Ripetere prima a occhi aperti, poi a occhi chiusi."
+                        ),
+                        "osservazioni": (
+                            "Si conteggia il numero di volte che il soggetto riesce a raggiungere "
+                            "l'obiettivo con movimenti precisi e morbidi.\n\n"
+                            "• Le punte degli indici si incontrano sulla linea mediana?\n"
+                            "• Movimento fluido e simmetrico, o c'è dissinergia/tremore?\n"
+                            "• C'è differenza fra entrambi i lati?\n"
+                            "• Differenza nella localizzazione (propriocezione) o nella collocazione "
+                            "(cerebellare)?"
+                        ),
+                        # Nessun scoring_specifico: il manuale non dà 5 livelli per questo test.
+                        # Cade sulla legenda generica percentuale (SCORING_LABELS).
+                    },
+                    {
+                        "id": "appr_chiusi",
+                        "label": "Occhi chiusi",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Ripetere lo stesso test con gli occhi chiusi. Si conteggia il numero "
+                            "di volte che il soggetto riesce a raggiungere l'obiettivo con "
+                            "movimenti precisi e morbidi."
+                        ),
+                        "osservazioni": (
+                            "Stesse osservazioni a occhi aperti. Un peggioramento significativo a "
+                            "occhi chiusi può indicare difficoltà propriocettive (sistema "
+                            "vestibolare-propriocettivo che lavora senza il supporto della vista)."
+                        ),
+                    },
                 ],
             },
             {
                 "id": "dito_naso",
-                "label": "Dito-naso",
+                "label": "Dito-naso (dai 7 anni — Accardo)",
                 "prove": [
-                    {"id": "dn_aperti", "label": "Occhi aperti", "scoring": "0-4"},
-                    {"id": "dn_chiusi", "label": "Occhi chiusi", "scoring": "0-4"},
+                    {
+                        "id": "dn_aperti",
+                        "label": "Occhi aperti",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "\"In piedi con i piedi insieme. Collocare la punta di uno degli "
+                            "indici sulla punta del naso. Stendere l'altro braccio e dito indice "
+                            "lateralmente a livello della spalla. Alternare la posizione "
+                            "lentamente 4 volte.\""
+                        ),
+                        "osservazioni": (
+                            "Si conteggia il numero di volte che il soggetto riesce a raggiungere "
+                            "l'obiettivo con movimenti precisi e morbidi.\n\n"
+                            "• Tocca il naso con la punta del dito senza difficoltà?\n"
+                            "• Riesce a fare in modo che entrambi i lati svolgano movimenti "
+                            "indipendenti?\n"
+                            "• Il movimento diventa sincronizzato fra entrambi i lati del corpo?\n"
+                            "• Segue la testa il movimento del braccio? (RTAC)\n"
+                            "• Si stancano e si abbassano le braccia? (RTL)\n"
+                            "• C'è differenza nella localizzazione (propriocezione) o nella "
+                            "collocazione (cerebellare) del dito sul naso?\n"
+                            "• Ci sono differenze fra entrambi i lati?"
+                        ),
+                    },
+                    {
+                        "id": "dn_chiusi",
+                        "label": "Occhi chiusi",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Ripetere il test con gli occhi chiusi. Si conteggia il numero di volte "
+                            "che il soggetto riesce a raggiungere l'obiettivo con movimenti precisi "
+                            "e morbidi."
+                        ),
+                        "osservazioni": (
+                            "Stesse osservazioni a occhi aperti. Differenza significativa fra "
+                            "occhi aperti e occhi chiusi suggerisce dipendenza dalla vista per il "
+                            "controllo del movimento (propriocezione debole)."
+                        ),
+                    },
                 ],
             },
         ],
@@ -802,7 +881,9 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "rtac",
                 "label": "Riflesso Tonico Asimmetrico del Collo (RTAC)",
                 "prove": [
-                    # ─── Test Standard (supino) ───
+                    # ─── Test Standard (supino) — scala unica del manuale ───
+                    # Le 4 caselle (Br Sx, Gb Sx, Br Dx, Gb Dx) condividono la
+                    # stessa scala ufficiale del manuale 2019-2020 pag. 29.
                     {
                         "id": "rtac_std_br_sx",
                         "label": "Standard — Braccio sinistro",
@@ -831,42 +912,63 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "rtac_std_gb_sx",
                         "label": "Standard — Gamba sinistra",
                         "scoring": "0-4",
-                        "istruzioni": "Test Standard supino. Osservare la gamba sinistra durante la rotazione della testa.",
-                        "osservazioni": "Aumento del tono flessore nell'arto del lato occipitale. Allungamento dell'arto del lato frontale.",
+                        "istruzioni": (
+                            "Test Standard (supino). Stessa procedura. Osservare la gamba sinistra "
+                            "durante la rotazione della testa."
+                        ),
+                        "osservazioni": (
+                            "Spesso può accadere che risulti evidente il movimento/aumento del "
+                            "tono flessore negli arti del lato occipitale. Osservare entrambi i "
+                            "lati del corpo (braccia e gambe)."
+                        ),
                         "scoring_specifico": {
-                            0: "Nessun movimento",
-                            1: "Lieve movimento delle dita o flessione/estensione minima",
-                            2: "Movimento di 3-5 cm o lieve torsione",
-                            3: "Movimento di più di 5 cm",
-                            4: "Allungamento completo (frontale) o flessione marcata (occipitale)",
+                            0: "Nessun movimento di dita, braccia o gambe",
+                            1: "Movimento delle dita o lieve movimento del braccio o gamba frontali",
+                            2: "Movimento del braccio di 3-5 cm o movimento di torsione del corpo",
+                            3: "Movimento del braccio di più di 5 cm e/o movimento della gamba, o movimento del corpo seguendo la rotazione della testa",
+                            4: "Allungamento del braccio e/o gamba frontale, o flessione del braccio occipitale",
                         },
                     },
                     {
                         "id": "rtac_std_br_dx",
                         "label": "Standard — Braccio destro",
                         "scoring": "0-4",
-                        "istruzioni": "Test Standard supino. Osservare il braccio destro durante la rotazione della testa.",
-                        "osservazioni": "Stesse osservazioni del braccio sinistro, applicate al lato destro.",
+                        "istruzioni": (
+                            "Test Standard (supino). Stessa procedura. Osservare il braccio destro "
+                            "durante la rotazione della testa."
+                        ),
+                        "osservazioni": (
+                            "Spesso può accadere che risulti evidente il movimento/aumento del "
+                            "tono flessore negli arti del lato occipitale. Osservare entrambi i "
+                            "lati del corpo (braccia e gambe)."
+                        ),
                         "scoring_specifico": {
                             0: "Nessun movimento di dita, braccia o gambe",
-                            1: "Movimento delle dita o lieve movimento del braccio frontale",
-                            2: "Movimento del braccio di 3-5 cm o torsione",
-                            3: "Movimento del braccio di più di 5 cm e/o movimento corpo",
-                            4: "Allungamento del braccio frontale o flessione del braccio occipitale",
+                            1: "Movimento delle dita o lieve movimento del braccio o gamba frontali",
+                            2: "Movimento del braccio di 3-5 cm o movimento di torsione del corpo",
+                            3: "Movimento del braccio di più di 5 cm e/o movimento della gamba, o movimento del corpo seguendo la rotazione della testa",
+                            4: "Allungamento del braccio e/o gamba frontale, o flessione del braccio occipitale",
                         },
                     },
                     {
                         "id": "rtac_std_gb_dx",
                         "label": "Standard — Gamba destra",
                         "scoring": "0-4",
-                        "istruzioni": "Test Standard supino. Osservare la gamba destra durante la rotazione della testa.",
-                        "osservazioni": "Stesse osservazioni della gamba sinistra, applicate al lato destro.",
+                        "istruzioni": (
+                            "Test Standard (supino). Stessa procedura. Osservare la gamba destra "
+                            "durante la rotazione della testa."
+                        ),
+                        "osservazioni": (
+                            "Spesso può accadere che risulti evidente il movimento/aumento del "
+                            "tono flessore negli arti del lato occipitale. Osservare entrambi i "
+                            "lati del corpo (braccia e gambe)."
+                        ),
                         "scoring_specifico": {
-                            0: "Nessun movimento",
-                            1: "Lieve movimento delle dita o flessione/estensione minima",
-                            2: "Movimento di 3-5 cm o lieve torsione",
-                            3: "Movimento di più di 5 cm",
-                            4: "Allungamento completo o flessione marcata",
+                            0: "Nessun movimento di dita, braccia o gambe",
+                            1: "Movimento delle dita o lieve movimento del braccio o gamba frontali",
+                            2: "Movimento del braccio di 3-5 cm o movimento di torsione del corpo",
+                            3: "Movimento del braccio di più di 5 cm e/o movimento della gamba, o movimento del corpo seguendo la rotazione della testa",
+                            4: "Allungamento del braccio e/o gamba frontale, o flessione del braccio occipitale",
                         },
                     },
                     # ─── Test di Ayres 1 (quadrupede) ───
@@ -948,8 +1050,17 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "rtac_ayres2_br_dx",
                         "label": "Test di Ayres (n.2) — Braccio destro",
                         "scoring": "0-4",
-                        "istruzioni": "Test di Ayres 2. Osservare il braccio destro durante la rotazione della testa.",
-                        "osservazioni": "Stesse osservazioni del braccio sinistro, lato opposto.",
+                        "istruzioni": (
+                            "Test di Ayres 2. Stessa procedura ma osservando il braccio destro "
+                            "durante la rotazione della testa."
+                        ),
+                        "osservazioni": (
+                            "Il punteggio si riferisce sempre al lato verso il quale viene "
+                            "girata la testa. Prestare attenzione perché se ci fosse un forte "
+                            "RTSC residuale, questo aumenterebbe l'effetto della flessione del "
+                            "braccio in questo test. Notare ogni movimento di compensazione del "
+                            "bacino in entrambi i test di Ayres."
+                        ),
                         "scoring_specifico": {
                             0: "Nessun movimento delle braccia, spalle o bacino",
                             1: "Lieve flessione o movimento del braccio contro-laterale",
@@ -1051,16 +1162,16 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "label": "Sinistra a destra",
                         "scoring": "0-4",
                         "istruzioni": (
-                            "Stesso test ma partendo dal lato opposto. Posizione prona di partenza "
-                            "con testa girata, valutazione del comfort dopo rotazione della testa "
-                            "verso il lato opposto."
+                            "Stesso test ma partendo dal lato opposto. Posizione prona di "
+                            "partenza con testa girata verso sinistra, valutazione del comfort "
+                            "dopo rotazione della testa verso destra."
                         ),
-                        "osservazioni": "Stesse osservazioni del lato dx-sx.",
+                        "osservazioni": "Stesse osservazioni del lato dx-sx. Il punteggio si riferisce a quanti arti raggiungono la posizione corretta speculare.",
                         "scoring_specifico": {
-                            0: "Posizione completamente a specchio",
-                            1: "1 arto non raggiunge la posizione speculare",
-                            2: "2 arti non raggiungono la posizione speculare",
-                            3: "3 arti non raggiungono la posizione speculare",
+                            0: "Posizione completamente a specchio (raggiunge tutti gli arti)",
+                            1: "Numero di arti diversi rispetto alla posizione a specchio (1)",
+                            2: "Numero di arti diversi rispetto alla posizione a specchio (2)",
+                            3: "Numero di arti diversi rispetto alla posizione a specchio (3)",
                             4: "Resta nella posizione perché \"ugualmente comoda\"",
                         },
                     },
@@ -1177,12 +1288,17 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                             "dalla colonna) utilizzando un pennello. Ripetere usando la parte "
                             "dura del pennello."
                         ),
-                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "osservazioni": (
+                            "Spesso il lato opposto del bacino si sposta in un movimento di "
+                            "\"scansamento\". Questo deve essere valutato più come il risultato "
+                            "di una condizione di ipersensibilità e non implica presenza del "
+                            "riflesso."
+                        ),
                         "scoring_specifico": {
-                            0: "Nessun movimento laterale del bacino",
+                            0: "Nessun movimento laterale del bacino (non confondere con una risposta di solletico)",
                             1: "Sensazione scomoda / Reazione emotiva",
-                            2: "Lieve movimento muscolare o irrigidimento ipsilaterale",
-                            3: "Evidente spostamento del bacino ipsilaterale",
+                            2: "Lieve movimento muscolare o irrigidimento del bacino ipsilateralmente",
+                            3: "Evidente spostamento del bacino ipsilateralmente",
                             4: "Il bacino si sposta di 45° o di più verso l'esterno",
                         },
                     },
