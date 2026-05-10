@@ -17,6 +17,7 @@
 # ── Costanti aree ─────────────────────────────────────────────────────
 AREA_PAZIENTI    = "👥 Pazienti"
 AREA_VALUTAZIONE = "🔬 Valutazione"
+AREA_TEST_NEUROEVOL = "🧬 Test neuroevolutivi"
 AREA_TEST_LIVE   = "🖥️ Test live"
 AREA_QUESTIONARI = "📋 Questionari"
 AREA_REPORT_AI   = "🤖 Report & AI"
@@ -26,6 +27,7 @@ AREA_STUDIO      = "⚙️ Studio"
 AREE_ORDINE = [
     AREA_PAZIENTI,
     AREA_VALUTAZIONE,
+    AREA_TEST_NEUROEVOL,
     AREA_TEST_LIVE,
     AREA_QUESTIONARI,
     AREA_REPORT_AI,
@@ -45,10 +47,13 @@ SOTTOSEZIONI = {
     ],
     AREA_VALUTAZIONE: [
         "📋 Anamnesi The Organism",
-        "👁️ Valutazione visuo-percettiva",
         "🧠 NPS — Neuropsicologica",
         "📚 DSA — Apprendimento",
         "👓 Optometria comportamentale",
+    ],
+    AREA_TEST_NEUROEVOL: [
+        "👁️ Valutazione visuo-percettiva",
+        "🧬 INPP — Valutazione diagnostica",
     ],
     AREA_TEST_LIVE: [
         "🔢 DEM interattivo",
