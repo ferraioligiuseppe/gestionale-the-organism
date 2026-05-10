@@ -802,41 +802,390 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "rtac",
                 "label": "Riflesso Tonico Asimmetrico del Collo (RTAC)",
                 "prove": [
-                    {"id": "rtac_std_br_sx", "label": "Standard — Braccio sinistro", "scoring": "0-4"},
-                    {"id": "rtac_std_gb_sx", "label": "Standard — Gamba sinistra", "scoring": "0-4"},
-                    {"id": "rtac_std_br_dx", "label": "Standard — Braccio destro", "scoring": "0-4"},
-                    {"id": "rtac_std_gb_dx", "label": "Standard — Gamba destra", "scoring": "0-4"},
-                    {"id": "rtac_ayres1_br_sx", "label": "Test di Ayres (n.1) — Braccio sinistro", "scoring": "0-4"},
-                    {"id": "rtac_ayres1_br_dx", "label": "Test di Ayres (n.1) — Braccio destro", "scoring": "0-4"},
-                    {"id": "rtac_ayres2_br_sx", "label": "Test di Ayres (n.2) — Braccio sinistro", "scoring": "0-4"},
-                    {"id": "rtac_ayres2_br_dx", "label": "Test di Ayres (n.2) — Braccio destro", "scoring": "0-4"},
-                    {"id": "rtac_schidler_br_sx", "label": "Test di Schidler — Braccio sinistro", "scoring": "0-4"},
-                    {"id": "rtac_schidler_br_dx", "label": "Test di Schidler — Braccio destro", "scoring": "0-4"},
+                    # ─── Test Standard (supino) ───
+                    {
+                        "id": "rtac_std_br_sx",
+                        "label": "Standard — Braccio sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test Standard (supino). Collocare il soggetto in posizione supina. "
+                            "Chiedere al paziente di rimanere il più fermo e rilassato possibile, "
+                            "mentre noi facciamo girare lentamente la testa verso un lato prima e "
+                            "poi l'altro. Fare sempre una pausa di almeno 3 secondi in seguito ad "
+                            "ogni rotazione verso uno dei lati e verso la linea media."
+                        ),
+                        "osservazioni": (
+                            "Spesso può accadere che risulti evidente il movimento/aumento del "
+                            "tono flessore negli arti del lato occipitale. Osservare entrambi i "
+                            "lati del corpo (braccia e gambe)."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento di dita, braccia o gambe",
+                            1: "Movimento delle dita o lieve movimento del braccio o gamba frontali",
+                            2: "Movimento del braccio di 3-5 cm o movimento di torsione del corpo",
+                            3: "Movimento del braccio di più di 5 cm e/o movimento della gamba, o movimento del corpo seguendo la rotazione della testa",
+                            4: "Allungamento del braccio e/o gamba frontale, o flessione del braccio occipitale",
+                        },
+                    },
+                    {
+                        "id": "rtac_std_gb_sx",
+                        "label": "Standard — Gamba sinistra",
+                        "scoring": "0-4",
+                        "istruzioni": "Test Standard supino. Osservare la gamba sinistra durante la rotazione della testa.",
+                        "osservazioni": "Aumento del tono flessore nell'arto del lato occipitale. Allungamento dell'arto del lato frontale.",
+                        "scoring_specifico": {
+                            0: "Nessun movimento",
+                            1: "Lieve movimento delle dita o flessione/estensione minima",
+                            2: "Movimento di 3-5 cm o lieve torsione",
+                            3: "Movimento di più di 5 cm",
+                            4: "Allungamento completo (frontale) o flessione marcata (occipitale)",
+                        },
+                    },
+                    {
+                        "id": "rtac_std_br_dx",
+                        "label": "Standard — Braccio destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Test Standard supino. Osservare il braccio destro durante la rotazione della testa.",
+                        "osservazioni": "Stesse osservazioni del braccio sinistro, applicate al lato destro.",
+                        "scoring_specifico": {
+                            0: "Nessun movimento di dita, braccia o gambe",
+                            1: "Movimento delle dita o lieve movimento del braccio frontale",
+                            2: "Movimento del braccio di 3-5 cm o torsione",
+                            3: "Movimento del braccio di più di 5 cm e/o movimento corpo",
+                            4: "Allungamento del braccio frontale o flessione del braccio occipitale",
+                        },
+                    },
+                    {
+                        "id": "rtac_std_gb_dx",
+                        "label": "Standard — Gamba destra",
+                        "scoring": "0-4",
+                        "istruzioni": "Test Standard supino. Osservare la gamba destra durante la rotazione della testa.",
+                        "osservazioni": "Stesse osservazioni della gamba sinistra, applicate al lato destro.",
+                        "scoring_specifico": {
+                            0: "Nessun movimento",
+                            1: "Lieve movimento delle dita o flessione/estensione minima",
+                            2: "Movimento di 3-5 cm o lieve torsione",
+                            3: "Movimento di più di 5 cm",
+                            4: "Allungamento completo o flessione marcata",
+                        },
+                    },
+                    # ─── Test di Ayres 1 (quadrupede) ───
+                    {
+                        "id": "rtac_ayres1_br_sx",
+                        "label": "Test di Ayres (n.1) — Braccio sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test di Ayres 1 — dai 4-5 anni (Ayres AJ, 1972, 1980). "
+                            "\"Mettiti sul pavimento in posizione quadrupede (come formando un tavolino).\" "
+                            "Fare vedere la posizione se necessario. Spiegare al paziente di rimanere "
+                            "il più fermo e rilassato possibile mentre noi gli giriamo la testa "
+                            "verso un lato prima e poi verso l'altro. Fare una pausa dopo ogni "
+                            "rotazione e nel raggiungere la linea media.\n\n"
+                            "Nota: il RTAC può essere evidente anche in popolazione neurotipica "
+                            "sotto i 7 anni; valutare l'intensità relativa. Sotto i 7 anni preferire "
+                            "il test Standard supino. Un RTSC marcato può intralciare la posizione "
+                            "quadrupede e condizionare il risultato."
+                        ),
+                        "osservazioni": (
+                            "Il punteggio si riferisce al lato verso il quale viene girata la testa.\n"
+                            "Osservare eventuali tracce dell'ATNR nella metà inferiore del corpo, "
+                            "come la rotazione del bacino o il sollevamento del piede del lato occipitale."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento delle braccia, spalle o bacino",
+                            1: "Lieve flessione o movimento del braccio contro-laterale",
+                            2: "Flessione evidente",
+                            3: "Flessione di 45 gradi",
+                            4: "Blocco totale del braccio contro-laterale",
+                        },
+                    },
+                    {
+                        "id": "rtac_ayres1_br_dx",
+                        "label": "Test di Ayres (n.1) — Braccio destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Test di Ayres 1 in posizione quadrupede. Osservare il braccio destro durante la rotazione della testa.",
+                        "osservazioni": "Stesse osservazioni del braccio sinistro, lato opposto.",
+                        "scoring_specifico": {
+                            0: "Nessun movimento delle braccia, spalle o bacino",
+                            1: "Lieve flessione o movimento del braccio contro-laterale",
+                            2: "Flessione evidente",
+                            3: "Flessione di 45 gradi",
+                            4: "Blocco totale del braccio contro-laterale",
+                        },
+                    },
+                    # ─── Test di Ayres 2 (quadrupede con braccia flesse) ───
+                    {
+                        "id": "rtac_ayres2_br_sx",
+                        "label": "Test di Ayres (n.2) — Braccio sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test di Ayres 2 — solitamente per bambini dai 4-5 anni (Ayres AJ, "
+                            "1972, 1980). Sotto i 7 anni il RTAC può essere evidente nella "
+                            "popolazione normale, da considerare come indicatore.\n\n"
+                            "\"Rimani in posizione quadrupede (come formando un tavolino), ma "
+                            "fletti leggermente le braccia.\""
+                        ),
+                        "osservazioni": (
+                            "Il punteggio si riferisce sempre al lato verso il quale viene "
+                            "girata la testa.\n"
+                            "Prestare attenzione perché se ci fosse un forte RTSC residuale, "
+                            "questo aumenterebbe l'effetto della flessione del braccio in questo "
+                            "test. Notare ogni movimento di compensazione del bacino in entrambi "
+                            "i test di Ayres.\n"
+                            "Un RT Simmetrico residuale può compromettere la capacità di "
+                            "supportare la parte superiore del corpo in posizione quadrupede; "
+                            "la presenza combinata di RTAC e RTSC può alterare i risultati."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento delle braccia, spalle o bacino",
+                            1: "Lieve flessione o movimento del braccio contro-laterale",
+                            2: "Flessione evidente",
+                            3: "Flessione di 45 gradi",
+                            4: "Blocco totale del braccio contro-laterale",
+                        },
+                    },
+                    {
+                        "id": "rtac_ayres2_br_dx",
+                        "label": "Test di Ayres (n.2) — Braccio destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Test di Ayres 2. Osservare il braccio destro durante la rotazione della testa.",
+                        "osservazioni": "Stesse osservazioni del braccio sinistro, lato opposto.",
+                        "scoring_specifico": {
+                            0: "Nessun movimento delle braccia, spalle o bacino",
+                            1: "Lieve flessione o movimento del braccio contro-laterale",
+                            2: "Flessione evidente",
+                            3: "Flessione di 45 gradi",
+                            4: "Blocco totale del braccio contro-laterale",
+                        },
+                    },
+                    # ─── Test di Hoff Schilder ───
+                    {
+                        "id": "rtac_schidler_br_sx",
+                        "label": "Test di Schilder — Braccio sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Test di Hoff Schilder — dai 7 anni (Critchley, 1970).\n\n"
+                            "\"In piedi con i piedi insieme, braccia allungate davanti al corpo a "
+                            "livello delle spalle e con i polsi rilassati. Chiudi gli occhi. "
+                            "Girerò la tua testa verso ogni lato, ma devi lasciare le braccia "
+                            "ferme dove sono.\"\n\n"
+                            "Procedura: girare la testa lentamente verso un lato. Levare le mani "
+                            "dalla testa e chiedere di mantenere la posizione con la testa girata "
+                            "lateralmente. Pausa di 5-10 secondi. Lentamente ritornare alla linea "
+                            "media. Pausa di 5-10 secondi. Ripetere verso l'altro lato. "
+                            "Ripetere la sequenza 2-3 volte. Ripetere ancora ma girando la testa "
+                            "velocemente (con attenzione)."
+                        ),
+                        "osservazioni": (
+                            "• Osservare eventuali movimenti delle braccia nella direzione della "
+                            "rotazione della testa.\n"
+                            "• Notare se c'è qualche grado di insicurezza gravitazionale come "
+                            "risultato della chiusura degli occhi o della rotazione della testa.\n"
+                            "• C'è qualche modifica nell'equilibrio? Potrebbe essere il risultato "
+                            "della stimolazione vestibolare o del RTAC nelle gambe che sposta il "
+                            "centro d'equilibrio.\n"
+                            "• L'incapacità per mantenere le braccia in parallelo con uno delle "
+                            "braccia che si sposta verso l'esterno sarebbe risultato di una "
+                            "disfunzione cerebellare sullo stesso lato; se entrambe le braccia "
+                            "tendono a scendere in giù potrebbe esserci RTL."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento risultante della rotazione della testa",
+                            1: "Leggera deviazione — 12-15°",
+                            2: "Deviazione di 30°",
+                            3: "Deviazione di 45°",
+                            4: "Rotazione completa",
+                        },
+                    },
+                    {
+                        "id": "rtac_schidler_br_dx",
+                        "label": "Test di Schilder — Braccio destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Test di Schilder. Osservare il braccio destro durante la rotazione della testa.",
+                        "osservazioni": "Stesse osservazioni del braccio sinistro, lato opposto.",
+                        "scoring_specifico": {
+                            0: "Nessun movimento risultante della rotazione della testa",
+                            1: "Leggera deviazione — 12-15°",
+                            2: "Deviazione di 30°",
+                            3: "Deviazione di 45°",
+                            4: "Rotazione completa",
+                        },
+                    },
                 ],
             },
             {
                 "id": "rtc_trasformato",
-                "label": "Riflesso Tonico Trasformato del Collo",
+                "label": "Riflesso Tonico Trasformato del Collo (TTNR)",
                 "prove": [
-                    {"id": "rtc_dx_sx", "label": "Destra a sinistra", "scoring": "0-4"},
-                    {"id": "rtc_sx_dx", "label": "Sinistra a destra", "scoring": "0-4"},
+                    {
+                        "id": "rtc_dx_sx",
+                        "label": "Destra a sinistra",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "RIFLESSO TONICO TRASFORMATO DEL COLLO (RTTC / TTNR).\n\n"
+                            "NB: importante ricordare che questo NON è un vero e proprio riflesso, "
+                            "ma una \"posizione\" nella quale il bambino dovrebbe sentirsi comodo "
+                            "una volta inibito il RTAC. Il termine RTTC è stato sviluppato da INPP.\n\n"
+                            "Si colloca la persona in posizione prona, in recovery position. "
+                            "Chi fa la valutazione girerà la testa verso il lato opposto e chiederà:\n"
+                            "\"La posizione attuale della testa è più, meno o ugualmente comoda "
+                            "rispetto a prima?\"\n\n"
+                            "Se la risposta è MENO comoda, chiedere di:\n"
+                            "\"Senza spostare la testa dalla posizione attuale, muovi gli arti in "
+                            "modo che tu stia più comodo.\""
+                        ),
+                        "osservazioni": (
+                            "In funzione di quanti arti raggiungono la posizione corretta "
+                            "(speculare rispetto alla posizione iniziale), si assegna il punteggio."
+                        ),
+                        "scoring_specifico": {
+                            0: "Posizione completamente a specchio (raggiunge tutti gli arti)",
+                            1: "Numero di arti diversi rispetto alla posizione a specchio (1)",
+                            2: "Numero di arti diversi rispetto alla posizione a specchio (2)",
+                            3: "Numero di arti diversi rispetto alla posizione a specchio (3)",
+                            4: "Resta nella posizione perché \"ugualmente comoda\"",
+                        },
+                    },
+                    {
+                        "id": "rtc_sx_dx",
+                        "label": "Sinistra a destra",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Stesso test ma partendo dal lato opposto. Posizione prona di partenza "
+                            "con testa girata, valutazione del comfort dopo rotazione della testa "
+                            "verso il lato opposto."
+                        ),
+                        "osservazioni": "Stesse osservazioni del lato dx-sx.",
+                        "scoring_specifico": {
+                            0: "Posizione completamente a specchio",
+                            1: "1 arto non raggiunge la posizione speculare",
+                            2: "2 arti non raggiungono la posizione speculare",
+                            3: "3 arti non raggiungono la posizione speculare",
+                            4: "Resta nella posizione perché \"ugualmente comoda\"",
+                        },
+                    },
                 ],
             },
             {
                 "id": "rtsc",
                 "label": "Riflesso Tonico Simmetrico del Collo (RTSC)",
                 "prove": [
-                    {"id": "rtsc_piedi_sedere", "label": "Coinvolgimento dei piedi o del sedere", "scoring": "0-4"},
-                    {"id": "rtsc_braccia", "label": "Coinvolgimento delle braccia", "scoring": "0-4"},
-                    {"id": "rtsc_carponi", "label": "Evidenza durante il carponi", "scoring": "0-4"},
+                    {
+                        "id": "rtsc_piedi_sedere",
+                        "label": "Coinvolgimento dei piedi o del sedere",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "RIFLESSO TONICO SIMMETRICO DEL COLLO (RTSC / STNR).\n\n"
+                            "Test in posizione quadrupede — dai 5 anni (Holle, B. 1976).\n\n"
+                            "\"Mantieni le braccia dritte e con il resto del corpo fermo, "
+                            "lentamente muovi la testa in su come per guardare il soffitto, fai "
+                            "una pausa (5 secondi), e poi, sempre lentamente abbassa la testa "
+                            "come per guardarti fra le ginocchia.\""
+                        ),
+                        "osservazioni": (
+                            "Osservare il sedere/piedi:\n"
+                            "• Si alzano i piedi quando la testa va in giù?\n"
+                            "• Movimento del bacino come compensazione del movimento della testa?\n"
+                            "Capute ha indicato che la presenza durante l'infanzia in modo "
+                            "significativo o per un tempo prolungato può essere un indicatore di "
+                            "coinvolgimento estrapiramidale."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento di braccia, schiena o piedi in risposta al movimento della testa",
+                            1: "Movimenti lievi delle braccia o del sedere",
+                            2: "Evidente flessione delle braccia o movimento del bacino",
+                            3: "Flessione delle braccia fino alla metà del percorso, o movimento del sedere",
+                            4: "Cade per la flessione delle braccia o si siede sopra i piedi",
+                        },
+                    },
+                    {
+                        "id": "rtsc_braccia",
+                        "label": "Coinvolgimento delle braccia",
+                        "scoring": "0-4",
+                        "istruzioni": "RTSC in posizione quadrupede. Osservare il movimento delle braccia mentre la testa si muove su/giù.",
+                        "osservazioni": (
+                            "Flessione delle braccia o abbassamento del bacino. Notare se si "
+                            "inarca la schiena (compensazione del movimento della testa)."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento delle braccia in risposta al movimento della testa",
+                            1: "Movimenti lievi delle braccia",
+                            2: "Evidente flessione delle braccia",
+                            3: "Flessione delle braccia fino alla metà del percorso",
+                            4: "Cade per la flessione delle braccia",
+                        },
+                    },
+                    {
+                        "id": "rtsc_carponi",
+                        "label": "Evidenza durante il carponi",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Rivalutare con il carpone. Alcuni soggetti sono in grado di "
+                            "compensare il riflesso in posizione statica, ma non ci riescono "
+                            "quando iniziano a muoversi (carponi)."
+                        ),
+                        "osservazioni": (
+                            "Guardare gli occhi: c'è convergenza o divergenza quando la testa va "
+                            "su o giù? Osservare la fluidità del cammino carponi sotto carico "
+                            "RTSC dinamico."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessuna evidenza di RTSC durante il movimento carponi",
+                            1: "Lieve evidenza, compensazione spontanea",
+                            2: "Evidenza moderata durante il carpone",
+                            3: "Forte alterazione del movimento carponi",
+                            4: "Incapacità di mantenere la posizione carponi a causa del riflesso",
+                        },
+                    },
                 ],
             },
             {
                 "id": "galant",
                 "label": "Riflesso Spinale di Galant",
                 "prove": [
-                    {"id": "galant_sx", "label": "Lato sinistro", "scoring": "0-4"},
-                    {"id": "galant_dx", "label": "Lato destro", "scoring": "0-4"},
+                    {
+                        "id": "galant_sx",
+                        "label": "Lato sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "RIFLESSO SPINALE DI GALANT.\n\n"
+                            "Stimolare verso il basso lungo uno dei lati della spina (a 2 cm "
+                            "dalla colonna) utilizzando un pennello.\n"
+                            "Ripetere stimolando sull'altro lato.\n"
+                            "Ripetere su entrambi i lati utilizzando la parte dura del pennello."
+                        ),
+                        "osservazioni": (
+                            "Spesso il lato opposto del bacino si sposta in un movimento di "
+                            "\"scansamento\". Questo deve essere valutato più come il risultato "
+                            "di una condizione di ipersensibilità e non implica presenza del "
+                            "riflesso."
+                        ),
+                        "scoring_specifico": {
+                            0: "Nessun movimento laterale del bacino (non confondere con una risposta di solletico)",
+                            1: "Sensazione scomoda / Reazione emotiva",
+                            2: "Lieve movimento muscolare o irrigidimento del bacino ipsilateralmente",
+                            3: "Evidente spostamento del bacino ipsilateralmente",
+                            4: "Il bacino si sposta di 45° o di più verso l'esterno",
+                        },
+                    },
+                    {
+                        "id": "galant_dx",
+                        "label": "Lato destro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Stimolare verso il basso lungo il lato destro della spina (a 2 cm "
+                            "dalla colonna) utilizzando un pennello. Ripetere usando la parte "
+                            "dura del pennello."
+                        ),
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "Nessun movimento laterale del bacino",
+                            1: "Sensazione scomoda / Reazione emotiva",
+                            2: "Lieve movimento muscolare o irrigidimento ipsilaterale",
+                            3: "Evidente spostamento del bacino ipsilaterale",
+                            4: "Il bacino si sposta di 45° o di più verso l'esterno",
+                        },
+                    },
                 ],
             },
             {
