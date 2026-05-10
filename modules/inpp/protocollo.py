@@ -2483,6 +2483,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
     },
     # =========================================================================
     # SEZIONE 9 — TEST OCULO-MOTORI
+    # Manuale 2019-2020 pp. 53-60.
     # =========================================================================
     {
         "id": "oculomotori",
@@ -2493,42 +2494,403 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "oculo_base",
                 "label": "Funzionalità oculo-motoria di base",
                 "prove": [
-                    {"id": "oc_fissazione", "label": "Difficoltà di fissazione", "scoring": "0-4"},
-                    {"id": "oc_inseguimento", "label": "Difficoltà di inseguimento (tracking orizzontale)", "scoring": "0-4"},
-                    {"id": "oc_occhio_mano", "label": "Inseguimento occhio-mano", "scoring": "0-4"},
-                    {"id": "oc_conv_latente", "label": "Convergenza latente", "scoring": "0-4"},
-                    {"id": "oc_div_latente", "label": "Divergenza latente", "scoring": "0-4"},
+                    {
+                        "id": "oc_fissazione",
+                        "label": "Difficoltà di fissazione",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "\"In piede con piedi o talloni insieme, mani ai fianchi. "
+                            "Guarda fisso l'oggetto.\""
+                        ),
+                        "osservazioni": (
+                            "• Sono gli occhi allineati simmetricamente nel guardare l'oggetto "
+                            "fermo posizionato a 20-30 cm del viso in posizione centrale?\n"
+                            "• Ci sono movimenti di uno o entrambi gli occhi per mantenere la "
+                            "fissazione, chiusura delle palpebre, o alterazione della posizione "
+                            "della testa?\n"
+                            "• Riescono a mantenere la fissazione per alcuni secondi?\n"
+                            "• Riescono a mantenere l'attenzione sull'oggetto o sono distratti "
+                            "dallo sfondo?\n"
+                            "• Hanno bisogno di fare continuamente movimenti di aggiustamento "
+                            "per mantenere la fissazione?\n"
+                            "• C'è convergenza o divergenza di uno dei due occhi?\n"
+                            "• Tentano di mascherare gli occhi dalla luce abbassando le palpebre "
+                            "o la testa?\n"
+                            "• Qualche altra osservazione particolare?\n\n"
+                            "Il manuale specifica solo 0 e 4. I livelli intermedi 1, 2, 3 "
+                            "rappresentano gradi crescenti di difficoltà."
+                        ),
+                        "scoring_specifico": {
+                            0: "Capace di mantenere la fissazione su un oggetto statico senza deviazioni e senza perdere l'attenzione per 5 secondi",
+                            1: "(grado intermedio)",
+                            2: "(grado intermedio)",
+                            3: "(grado intermedio)",
+                            4: "Incapace di fissare (indicare sempre i particolari)",
+                        },
+                    },
+                    {
+                        "id": "oc_inseguimento",
+                        "label": "Difficoltà di inseguimento (tracking orizzontale)",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Tracking (Visual Pursuit) — Inseguimento orizzontale.\n\n"
+                            "L'esaminatore tiene un oggetto al livello della punta del naso "
+                            "del soggetto ad una distanza equivalente a quella dal gomito alla "
+                            "mano (distanza di lettura).\n\n"
+                            "\"Stai in piede con i piedi insieme, mani sui fianchi. Senza "
+                            "muovere la testa se ti riesce, segui la penna con gli occhi mentre "
+                            "io la muoverò da un lato all'altro.\" (10 movimenti lenti).\n\n"
+                            "Il bambino dovrebbe essere in grado di eseguire 10 movimenti lenti "
+                            "da un lato all'altro senza spostare la testa o il corpo."
+                        ),
+                        "osservazioni": (
+                            "• Gli occhi riescono a seguire il movimento o vanno \"a scatti\"?\n"
+                            "• A che punto saltano e quante volte? In che direzione?\n"
+                            "• C'è movimento della testa? In che grado?\n"
+                            "• Perde l'oggetto nella linea media?\n"
+                            "• Ci sono problemi di equilibrio a partire dei movimenti degli occhi?\n"
+                            "• C'è inseguimento con il corpo?"
+                        ),
+                        "scoring_specifico": {
+                            0: "È capace di eseguire 10 movimenti lenti verso destra e sinistra senza scatti e senza perdita d'equilibrio o spostamenti della testa",
+                            1: "Diversi gradi di quanto sopra (lieve)",
+                            2: "Diversi gradi di quanto sopra (moderato)",
+                            3: "Diversi gradi di quanto sopra (marcato)",
+                            4: "Incapace di seguire lo stimolo",
+                        },
+                    },
+                    {
+                        "id": "oc_occhio_mano",
+                        "label": "Inseguimento occhio-mano",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Tracking (inseguimento) Occhio-Mano.\n\n"
+                            "Identica procedura come sopra (tracking), ma in questo caso sarà "
+                            "il SOGGETTO a tenere in mano e muovere la penna con la mano che "
+                            "utilizza per scrivere. L'osservatore guiderà il movimento."
+                        ),
+                        "osservazioni": (
+                            "• C'è un aumento del movimento della testa quando è lo stesso "
+                            "soggetto a muovere lo stimolo? Se c'è movimento della testa in "
+                            "questo test ma non nel test semplice di inseguimento visivo, "
+                            "questo bambino riuscirebbe a leggere, ma potrebbe avere delle "
+                            "difficoltà con i suoi movimenti oculari per scrivere.\n"
+                            "• L'esaminatore riesce a percepire resistenza nel movimento del "
+                            "braccio?"
+                        ),
+                        "scoring_specifico": {
+                            0: "È capace di fare il movimento con gli occhi senza movimenti della testa o del corpo per 10 movimenti verso destra e sinistra",
+                            1: "Lieve movimento della testa nella direzione del braccio",
+                            2: "Evidente movimento della testa nella direzione del braccio",
+                            3: "Significativo movimento della testa nella direzione del braccio",
+                            4: "Inseguimento totale della testa o del corpo",
+                        },
+                    },
+                    {
+                        "id": "oc_conv_latente",
+                        "label": "Convergenza latente",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Convergenza o Divergenza Latente — Cover test.\n\n"
+                            "Latente significa ritardata. Convergenza implica un movimento "
+                            "degli occhi verso il naso; mentre divergenza descrive un movimento "
+                            "degli stessi dal centro verso l'esterno.\n\n"
+                            "Si può osservare la convergenza o divergenza latente durante il "
+                            "\"Cover test\", nel quale c'è l'occlusione della visione di uno "
+                            "dei due occhi. L'occhio coperto potrebbe \"vagare\" quando non "
+                            "riesce a focalizzare lo stesso oggetto.\n\n"
+                            "Chiedere al bambino di fissare un oggetto a 20-30 cm del viso. "
+                            "Coprire e scoprire alternativamente un occhio con un oggetto opaco."
+                        ),
+                        "osservazioni": (
+                            "C'è qualche movimento dell'occhio coperto quando viene "
+                            "\"scoperto\"?\n\n"
+                            "Se quando si elimina l'occlusione l'occhio si sposta verso "
+                            "l'esterno (divergenza), indica la presenza di una CONVERGENZA "
+                            "LATENTE (mentre era coperto, l'occhio si era spostato verso "
+                            "l'interno e poi ha recuperato la posizione al momento di essere "
+                            "scoperto)."
+                        ),
+                        "scoring_specifico": {
+                            0: "Movimento impercettibile dell'occhio coperto verso l'interno quando viene scoperto",
+                            1: "Graduale aumento di movimento di aggiustamento (lieve)",
+                            2: "Graduale aumento di movimento di aggiustamento (moderato)",
+                            3: "Graduale aumento di movimento di aggiustamento (marcato)",
+                            4: "Movimento di aggiustamento molto marcato",
+                        },
+                    },
+                    {
+                        "id": "oc_div_latente",
+                        "label": "Divergenza latente",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Stesso cover test. La DIVERGENZA LATENTE si rileva quando "
+                            "l'occhio coperto si era spostato in divergenza: al momento di "
+                            "rimuovere l'occlusione farà un movimento di correzione evidente "
+                            "verso il centro (anche se il movimento osservato sembrerebbe "
+                            "essere in convergenza, in realtà implica che c'è stata una "
+                            "\"divergenza latente\")."
+                        ),
+                        "osservazioni": (
+                            "Si sposta l'occhio verso il naso (divergenza) o verso l'esterno "
+                            "(convergenza)?"
+                        ),
+                        "scoring_specifico": {
+                            0: "Movimento impercettibile dell'occhio coperto",
+                            1: "Graduale aumento di movimento di aggiustamento (lieve)",
+                            2: "Graduale aumento di movimento di aggiustamento (moderato)",
+                            3: "Graduale aumento di movimento di aggiustamento (marcato)",
+                            4: "Movimento di aggiustamento molto marcato",
+                        },
+                    },
                 ],
             },
             {
                 "id": "oculo_lateralizzati",
                 "label": "Test bilaterali",
                 "prove": [
-                    {"id": "oc_conv_sx", "label": "Convergenza — Occhio sinistro", "scoring": "0-4"},
-                    {"id": "oc_conv_dx", "label": "Convergenza — Occhio destro", "scoring": "0-4"},
-                    {"id": "oc_chius_sx", "label": "Chiusura indipendente — Occhio sinistro", "scoring": "0-4"},
-                    {"id": "oc_chius_dx", "label": "Chiusura indipendente — Occhio destro", "scoring": "0-4"},
-                    {"id": "oc_yoking_sx", "label": "Yoking — Occhio sinistro", "scoring": "0-4"},
-                    {"id": "oc_yoking_dx", "label": "Yoking — Occhio destro", "scoring": "0-4"},
-                    {"id": "oc_perif_sx", "label": "Visione periferica amplificata — Sinistra", "scoring": "0-4"},
-                    {"id": "oc_perif_dx", "label": "Visione periferica amplificata — Destra", "scoring": "0-4"},
+                    {
+                        "id": "oc_conv_sx",
+                        "label": "Convergenza — Occhio sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Difficoltà di Convergenza (da vicino).\n\n"
+                            "Chiedere al bambino di fissare un oggetto o immagine piccola (un "
+                            "punto colorato o una stella ad es.) ad una distanza di mezzo "
+                            "metro dal viso. Chiedere di mantenere lo sguardo fisso mentre si "
+                            "avvicina lentamente l'oggetto verso il viso. Gli occhi dovrebbero "
+                            "convergere a circa 3-5 cm del viso."
+                        ),
+                        "osservazioni": (
+                            "• Convergono gli occhi?\n"
+                            "• Riescono a mantenere la convergenza durante 1-3 secondi?\n"
+                            "• C'è uno o entrambi gli occhi che divergono?\n\n"
+                            "La convergenza e divergenza sono abilità necessarie per essere "
+                            "capace di aggiustare la messa a fuoco a diverse distanze "
+                            "velocemente."
+                        ),
+                        "scoring_specifico": {
+                            0: "Gli occhi convergono a 3-5 cm del naso",
+                            1: "Lieve perdita di convergenza nell'occhio sinistro",
+                            2: "Moderata perdita di convergenza nell'occhio sinistro",
+                            3: "Marcata perdita di convergenza nell'occhio sinistro",
+                            4: "Incapace di convergere da vicino",
+                        },
+                    },
+                    {
+                        "id": "oc_conv_dx",
+                        "label": "Convergenza — Occhio destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test. Osservare il comportamento dell'occhio destro.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro. Indicare quale occhio perde la convergenza.",
+                        "scoring_specifico": {
+                            0: "Gli occhi convergono a 3-5 cm del naso",
+                            1: "Lieve perdita di convergenza nell'occhio destro",
+                            2: "Moderata perdita di convergenza nell'occhio destro",
+                            3: "Marcata perdita di convergenza nell'occhio destro",
+                            4: "Incapace di convergere da vicino",
+                        },
+                    },
+                    {
+                        "id": "oc_chius_sx",
+                        "label": "Chiusura indipendente — Occhio sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Riesce il bambino a chiudere un occhio alla volta (l'occhio "
+                            "sinistro)?"
+                        ),
+                        "osservazioni": "Il punteggio sarà 0 o 4 per ognuno dei due occhi (manuale).",
+                        "scoring_specifico": {
+                            0: "Riesce a chiudere l'occhio sinistro indipendentemente",
+                            4: "Non riesce a chiudere l'occhio sinistro indipendentemente",
+                        },
+                    },
+                    {
+                        "id": "oc_chius_dx",
+                        "label": "Chiusura indipendente — Occhio destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Riesce il bambino a chiudere l'occhio destro indipendentemente?",
+                        "osservazioni": "Il punteggio sarà 0 o 4.",
+                        "scoring_specifico": {
+                            0: "Riesce a chiudere l'occhio destro indipendentemente",
+                            4: "Non riesce a chiudere l'occhio destro indipendentemente",
+                        },
+                    },
+                    {
+                        "id": "oc_yoking_sx",
+                        "label": "Yoking — Occhio sinistro",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Perdita della capacità di \"Yoking\".\n\n"
+                            "Questo test valuta la capacità dei due occhi di lavorare insieme, "
+                            "anche se uno è schermato rispetto all'altro.\n\n"
+                            "Chiedere al bambino di tenere un cartoncino fra gli occhi, sopra "
+                            "il naso, come dividendo il viso a metà. Utilizzando una penna, "
+                            "chiedere di seguire la penna con gli occhi, anche se questa sarà "
+                            "in una posizione nella quale solo uno dei due occhi riesce a "
+                            "vedere i movimenti della penna. Eseguire questi movimenti con "
+                            "l'oggetto: rettangolo, X, 8."
+                        ),
+                        "osservazioni": (
+                            "Riesce l'occhio che non \"vede\" lo stimolo, a seguire "
+                            "esattamente i movimenti fatti dall'occhio che insegue l'oggetto? "
+                            "Ripetere il test con l'altro occhio."
+                        ),
+                        "scoring_specifico": {
+                            0: "Gli occhi lavorano insieme eseguendo gli stessi movimenti",
+                            4: "L'occhio che non vede lo stimolo non riesce a seguire l'altro occhio (alcuni soggetti potrebbero rimanere con lo sguardo fisso)",
+                        },
+                    },
+                    {
+                        "id": "oc_yoking_dx",
+                        "label": "Yoking — Occhio destro",
+                        "scoring": "0-4",
+                        "istruzioni": "Stesso test, schermando l'altro lato per valutare l'occhio destro.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "Gli occhi lavorano insieme eseguendo gli stessi movimenti",
+                            4: "L'occhio che non vede lo stimolo non riesce a seguire l'altro occhio",
+                        },
+                    },
+                    {
+                        "id": "oc_perif_sx",
+                        "label": "Visione periferica amplificata — Sinistra",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Visione periferica amplificata.\n\n"
+                            "Il bambino rimane seduto e gli viene chiesto di mantenere lo "
+                            "sguardo in avanti. L'esaminatore si colloca in ginocchio dietro "
+                            "la sedia e colloca le sue dita ad entrambi i lati al livello "
+                            "degli occhi e alla distanza delle spalle. Il bambino dovrà "
+                            "continuare a guardare fisso in avanti, mentre l'esaminatore "
+                            "lentamente ritira le dita di entrambi i lati all'indietro. Il "
+                            "bambino dovrà dire \"stop\" quando le dita spariscono dalla sua "
+                            "vista.\n\n"
+                            "La distanza normale di visione periferica dovrebbe permettere di "
+                            "mantenere la visione delle dita fino alle spalle in entrambi i "
+                            "lati."
+                        ),
+                        "osservazioni": (
+                            "• Notare se il bambino riesce a vedere le dita oltre il punto "
+                            "indicato. In quel caso si parla di visione periferica amplificata "
+                            "nel lato specifico o su entrambi.\n"
+                            "• Invece, se il bambino perde di vista uno o entrambe le dita "
+                            "prima di raggiungere il livello delle spalle, si può parlare di "
+                            "RIDUZIONE della visione periferica.\n\n"
+                            "Specificare il lato nel quale la visione è amplificata.\n\n"
+                            "Fare attenzione che, se si porta correzione, in particolare per "
+                            "miopia, la consapevolezza della visione periferica potrebbe "
+                            "sparire quando le dita si spostano dietro la montatura degli "
+                            "occhiali."
+                        ),
+                        "scoring_specifico": {
+                            0: "Entrambe le dita spariscono dell'angolo di visione alla altezza delle spalle",
+                            1: "Lieve aumento in uno dei lati",
+                            2: "Moderato aumento della distanza",
+                            3: "Moderato aumento della distanza (più marcato)",
+                            4: "Significativo aumento di distanza in uno dei lati",
+                        },
+                    },
+                    {
+                        "id": "oc_perif_dx",
+                        "label": "Visione periferica amplificata — Destra",
+                        "scoring": "0-4",
+                        "istruzioni": "Stessa procedura, valutare il lato destro.",
+                        "osservazioni": "Stesse osservazioni del lato sinistro.",
+                        "scoring_specifico": {
+                            0: "Entrambe le dita spariscono dell'angolo di visione alla altezza delle spalle",
+                            1: "Lieve aumento in uno dei lati",
+                            2: "Moderato aumento della distanza",
+                            3: "Moderato aumento della distanza (più marcato)",
+                            4: "Significativo aumento di distanza in uno dei lati",
+                        },
+                    },
                 ],
             },
             {
                 "id": "oculo_accomodazione",
                 "label": "Accomodazione",
                 "prove": [
-                    {"id": "oc_accomod", "label": "Ristabilimento della visione binoculare", "scoring": "0-4"},
+                    {
+                        "id": "oc_accomod",
+                        "label": "Ristabilimento della visione binoculare",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Accomodazione (\"Riserve fusionali\").\n\n"
+                            "Ripetere il test di convergenza, ma questa volta, chiedere al "
+                            "bambino di dire \"ora\" quando l'oggetto diventa sdoppiato da "
+                            "vicino.\n\n"
+                            "Spiegare al bambino che dovrà continuare a guardare l'oggetto "
+                            "mentre l'osservatore lo allontana e che deve farci un nuovo "
+                            "segnale quando la immagine torna ad essere chiara."
+                        ),
+                        "osservazioni": (
+                            "La distanza ideale fra il punto dove diventa sdoppiata e quella "
+                            "dove si ristabilisce la visione corretta sono 5-7 cm. Una "
+                            "distanza maggiore implica un lento ristabilimento della visione "
+                            "binoculare (accomodazione) o un possibile grado di ipermetropia. "
+                            "In questo ultimo caso, è fondamentale consigliare una visita "
+                            "oculistica completa, con particolare attenzione alla distanza di "
+                            "lettura.\n\n"
+                            "Nota: negli adulti, la distanza di messa a fuoco tende ad essere "
+                            "maggiore."
+                        ),
+                        "scoring_specifico": {
+                            0: "Recupero prima dei 7 cm",
+                            1: "Diversi gradi di maggiore distanza necessaria per il recupero della visione (lieve)",
+                            2: "Diversi gradi di maggiore distanza necessaria per il recupero della visione (moderato)",
+                            3: "Diversi gradi di maggiore distanza necessaria per il recupero della visione (marcato)",
+                            4: "Più di 21 cm",
+                        },
+                    },
                 ],
             },
             {
                 "id": "pupillare",
                 "label": "Riflesso pupillare (annotazione testuale)",
                 "prove": [
-                    {"id": "pup_prima_sx", "label": "Prima stimolazione — Sx", "scoring": "testo"},
-                    {"id": "pup_prima_dx", "label": "Prima stimolazione — Dx", "scoring": "testo"},
-                    {"id": "pup_seconda_sx", "label": "Seconda stimolazione — Sx", "scoring": "testo"},
-                    {"id": "pup_seconda_dx", "label": "Seconda stimolazione — Dx", "scoring": "testo"},
+                    {
+                        "id": "pup_prima_sx",
+                        "label": "Prima stimolazione — Sx",
+                        "scoring": "testo",
+                        "istruzioni": (
+                            "Riflesso pupillare. Questo test non viene realizzato in modo "
+                            "routinario come parte della valutazione diagnostica.\n\n"
+                            "In una stanza al buio, chiedere al bambino di guardare un "
+                            "oggetto nella distanza. Utilizzando una penna luce a circa 20 cm "
+                            "dell'occhio, illuminare l'occhio avvicinando lentamente la luce. "
+                            "NON FARE GUARDARE DIRETTAMENTE LA LUCE.\n\n"
+                            "Quando la luce arriva al occhio, la pupilla dovrebbe costringersi "
+                            "(farsi più piccola); e quando si toglie la luce, la pupilla "
+                            "dovrebbe dilatarsi (più grande)."
+                        ),
+                        "osservazioni": (
+                            "La mancanza di costrizione si associa con foto sensitività / "
+                            "scarsa reazione alla luce. Annotare in formato libero la "
+                            "risposta osservata sull'occhio sinistro alla prima stimolazione."
+                        ),
+                    },
+                    {
+                        "id": "pup_prima_dx",
+                        "label": "Prima stimolazione — Dx",
+                        "scoring": "testo",
+                        "istruzioni": "Stessa procedura sull'occhio destro alla prima stimolazione.",
+                        "osservazioni": "Annotare in formato libero la risposta osservata.",
+                    },
+                    {
+                        "id": "pup_seconda_sx",
+                        "label": "Seconda stimolazione — Sx",
+                        "scoring": "testo",
+                        "istruzioni": "Ripetere la stimolazione sull'occhio sinistro per valutare l'eventuale fatica della risposta pupillare.",
+                        "osservazioni": "Annotare in formato libero la risposta osservata.",
+                    },
+                    {
+                        "id": "pup_seconda_dx",
+                        "label": "Seconda stimolazione — Dx",
+                        "scoring": "testo",
+                        "istruzioni": "Ripetere la stimolazione sull'occhio destro.",
+                        "osservazioni": "Annotare in formato libero la risposta osservata.",
+                    },
                 ],
             },
         ],
