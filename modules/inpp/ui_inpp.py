@@ -321,21 +321,66 @@ def _render_prova(prova: dict, valori: dict):
     label = prova["label"]
     current = valori.get(pid)
 
+    # ── Pannello guida clinica (istruzioni / osservazioni / video) ────
+    # Si mostra solo se almeno un contenuto è presente.
+    has_istruzioni = bool(prova.get("istruzioni"))
+    has_osservazioni = bool(prova.get("osservazioni"))
+    has_scoring_spec = bool(prova.get("scoring_specifico"))
+    has_video = bool(prova.get("video_url"))
+
+    if has_istruzioni or has_osservazioni or has_video or has_scoring_spec:
+        with st.expander(f"📖 Guida — {label}", expanded=False):
+            if has_istruzioni:
+                st.markdown("**Istruzioni al paziente**")
+                st.write(prova["istruzioni"])
+            if has_osservazioni:
+                st.markdown("**Osservazioni cliniche**")
+                st.write(prova["osservazioni"])
+            if has_scoring_spec:
+                st.markdown("**Scoring specifico per questo test**")
+                for k in sorted(prova["scoring_specifico"].keys()):
+                    st.markdown(f"- **{k}** — {prova['scoring_specifico'][k]}")
+            if has_video:
+                st.markdown("**Video esplicativo**")
+                try:
+                    st.video(prova["video_url"])
+                except Exception as e:
+                    st.caption(f"⚠️ video non riproducibile: {e}")
+                    st.caption(f"Link: {prova['video_url']}")
+            if prova.get("posturale"):
+                st.info(
+                    "ℹ️ Riflesso **posturale**: clinicamente lo scoring si interpreta "
+                    "al contrario (0 = riflesso assente, 4 = riflesso completo)."
+                )
+
+    # ── Widget di input vero e proprio ────────────────────────────────
     if scoring == "0-4":
-        # radio orizzontale 0-4
-        opt_labels = [str(i) for i in range(5)]
+        # Se la prova ha scoring_specifico, lo uso per le etichette delle opzioni
+        spec = prova.get("scoring_specifico") or {}
         try:
             idx = int(current) if current is not None else 0
             if idx < 0 or idx > 4:
                 idx = 0
         except (TypeError, ValueError):
             idx = 0
+
+        def _fmt(i):
+            if i in spec:
+                # mostro il numero + breve estratto della descrizione specifica
+                desc = spec[i]
+                if len(desc) > 50:
+                    desc = desc[:47] + "..."
+                return f"{i} — {desc}"
+            if i in SCORING_LABELS:
+                return f"{i} — {SCORING_LABELS[i].split('/')[0].strip()}"
+            return str(i)
+
         nuovo = st.radio(
             label,
             options=range(5),
             index=idx,
-            format_func=lambda i: f"{i} — {SCORING_LABELS[i].split('/')[0].strip()}" if i in SCORING_LABELS else str(i),
-            horizontal=True,
+            format_func=_fmt,
+            horizontal=False if spec else True,  # spec → verticale (più leggibile)
             key=f"prova_{pid}",
         )
         valori[pid] = int(nuovo)

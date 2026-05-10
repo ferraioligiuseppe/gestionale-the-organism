@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 Definizione completa del protocollo INPP — Formulario di Valutazione
-Diagnostica dello Sviluppo Neurologico (rev. 01/22).
+Diagnostica dello Sviluppo Neurologico.
+
+Fonti:
+- Formulario INPP rev. 01/22 (Annesso 1 — scheda di compilazione)
+- INPP One Year Training Course 2019-2020, Secondo Modulo
+  "La Valutazione Diagnostica" — manuale operativo
 
 Questo file è la SORGENTE DI VERITÀ per tutto il modulo INPP:
 - ui_inpp.py legge da qui per costruire i form
@@ -9,6 +14,28 @@ Questo file è la SORGENTE DI VERITÀ per tutto il modulo INPP:
 - pdf_inpp.py legge da qui per costruire il referto
 
 Per modificare/aggiungere una prova, basta cambiare questo file.
+
+═══════════════════════════════════════════════════════════════════════════
+STRUTTURA DI UNA PROVA
+═══════════════════════════════════════════════════════════════════════════
+
+Campi OBBLIGATORI:
+- id           : identificatore unico (chiave per il salvataggio in DB)
+- label        : etichetta visibile nella UI
+- scoring      : tipo di scoring (vedi sotto)
+
+Campi OPZIONALI di guida clinica (si popolano gradualmente dal manuale):
+- istruzioni   : testo delle istruzioni da dare al paziente
+                 (es. "Disteso pancia in su, fra poco ti chiederò...")
+- osservazioni : criteri di osservazione clinica per il valutatore
+                 (es. "Come si alza, c'è posizione gambe a W, è stabile...")
+- scoring_specifico : dict {0: "...", 1: "...", 2: "...", 3: "...", 4: "..."}
+                      con la descrizione SPECIFICA per QUESTA prova.
+                      Se assente, viene usata la legenda generica SCORING_LABELS.
+- video_url    : URL diretto a un video esplicativo (Dropbox raw=1, YouTube,
+                 ecc.). Se presente, l'UI mostra un player.
+- posturale    : bool — True se è un riflesso posturale (lo scoring si inverte
+                 clinicamente: 0=assenza riflesso, 4=riflesso completo)
 
 Tipi di scoring:
 - "0-4"          : scoring INPP standard (legenda in SCORING_LABELS)
@@ -22,14 +49,27 @@ Tipi di scoring:
 from typing import Any
 
 # -----------------------------------------------------------------------------
-# Legenda scoring 0-4 ufficiale INPP (pag. 2 del Formulario rev. 01/22)
+# Legende scoring 0-4
 # -----------------------------------------------------------------------------
+
+# Legenda generica — usata quando una prova non ha scoring_specifico
+# (Formulario rev. 01/22, pag. 2)
 SCORING_LABELS: dict[int, str] = {
     0: "Nessuna anomalia",
     1: "Minima presenza residua / Minima difficoltà",
     2: "Riflesso primitivo residuo / Difficoltà a completare",
     3: "Riflesso primitivo presente in gran parte / Marcata difficoltà",
     4: "Riflesso primitivo completamente ritenuto / Incapacità",
+}
+
+# Legenda alternativa percentuale (manuale corso INPP 2019-2020)
+# Mostrata come sottotitolo informativo
+SCORING_LABELS_PERCENTUALE: dict[int, str] = {
+    0: "0% — Nessuna anomalia",
+    1: "25% — Disfunzione lieve",
+    2: "50% — Disfunzione moderata",
+    3: "75% — Disfunzione marcata",
+    4: "100% — Disfunzione completa",
 }
 
 # -----------------------------------------------------------------------------
@@ -52,8 +92,53 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "recupero",
                 "label": "Recupero della posizione verticale",
                 "prove": [
-                    {"id": "rec_supino", "label": "Da supino", "scoring": "0-4"},
-                    {"id": "rec_prono", "label": "Da prono", "scoring": "0-4"},
+                    {
+                        "id": "rec_supino",
+                        "label": "Da supino",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Disteso pancia in su. Fra poco ti chiederò di alzarti il più "
+                            "velocemente possibile, e quando sarai in piedi, dovrai rimanere "
+                            "con i piedi insieme e le braccia e mani sui fianchi, come un soldato."
+                        ),
+                        "osservazioni": (
+                            "• Come si alza? La sequenza normale è: alzare la testa, sollevare il "
+                            "tronco, utilizzare le mani come appoggio e poi spostare i piedi.\n"
+                            "• C'è posizione delle gambe a W (RTSC)?\n"
+                            "• È stabile quando raggiunge la posizione? La stabilità può essere "
+                            "disturbata da fattori vestibolari, di cervelletto, di riflessi o per "
+                            "una situazione di bassa pressione sanguigna."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A. — Nessuna anomalia",
+                            1: "Lento",
+                            2: "Lento e scoordinato",
+                            3: "Marcato dondolio quando raggiunge la posizione in piede",
+                            4: "Dondola e perde l'equilibrio — sposta lateralmente uno dei piedi",
+                        },
+                        # "video_url": "https://www.dropbox.com/.../recupero_supino.mp4?raw=1",
+                    },
+                    {
+                        "id": "rec_prono",
+                        "label": "Da prono",
+                        "scoring": "0-4",
+                        "istruzioni": "Come il test precedente, ma disteso prono (pancia in giù).",
+                        "osservazioni": (
+                            "• Sequenza normale: appoggiarsi sulle braccia come sostegno, piegare "
+                            "le ginocchia e spingere fino ad alzarsi.\n"
+                            "• Punteggio in base a:\n"
+                            "  a) il livello di scostamento dalla sequenza normale\n"
+                            "  b) stabilità dell'equilibrio statico in piede"
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A. — Nessuna anomalia",
+                            1: "Lieve scostamento dalla sequenza",
+                            2: "Scostamento moderato / lieve instabilità statica",
+                            3: "Scostamento marcato / instabilità marcata",
+                            4: "Incapacità di completare la sequenza o perdita di equilibrio",
+                        },
+                        # "video_url": "https://www.dropbox.com/.../recupero_prono.mp4?raw=1",
+                    },
                 ],
             },
             {
