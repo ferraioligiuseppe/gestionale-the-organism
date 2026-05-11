@@ -942,9 +942,46 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "orale",
                 "label": "Disdiadococinesia orale (registrare ripetizioni e secondi)",
                 "prove": [
-                    # Il manuale 2019-2020 non descrive questa sezione nelle pagine
-                    # teoriche; struttura presa dal Formulario INPPA01IT rev. 01/22.
-                    {"id": "orale_pa_rep", "label": "/pʌ/ — n. ripetizioni", "scoring": "numerico"},
+                    # Manuale 2019-2020 pp. 63-64 — Protocollo di valutazione della
+                    # Disdiadococinesia Orale + tabella Diadochokinetic Rates di
+                    # Fletcher (1972) per età 6-13 anni.
+                    {
+                        "id": "orale_pa_rep",
+                        "label": "/pʌ/ — n. ripetizioni",
+                        "scoring": "numerico",
+                        "istruzioni": (
+                            "Protocollo di valutazione della Disdiadococinesia Orale "
+                            "(da utilizzare con soggetti con problemi di linguaggio orale "
+                            "o una storia di essi).\n\n"
+                            "Prima di valutare la velocità delle ripetizioni è importante "
+                            "che il bambino sappia bene cosa deve fare e abbia avuto "
+                            "l'opportunità di allenarsi. L'obbiettivo è che il risultato "
+                            "rappresenti il miglior tentativo possibile per il compito.\n\n"
+                            "Chiedere al bambino di respirare profondo e ripetere /pʌpʌpʌ.../ "
+                            "il più veloce possibile, durante tutto il tempo che possa. "
+                            "Registrare il numero di ripetizioni e il numero di secondi.\n\n"
+                            "Ripetere con /tʌtʌtʌ.../, /kʌkʌkʌ.../, /pʌtəpʌtəpʌtə.../ e "
+                            "/pʌtəkəpʌtəkəpʌtəkə.../.\n\n"
+                            "Calcolare le ripetizioni per secondo e confrontarle con la "
+                            "tabella normativa Fletcher (1972) — vedi colonna 'Note' del "
+                            "test."
+                        ),
+                        "osservazioni": (
+                            "Diadochokinetic Rates (ripetizioni per secondo) — Fletcher 1972:\n\n"
+                            "Età  | /pʌ/ | /tʌ/ | /kʌ/ | /pʌtə/ | /pʌtəkə/\n"
+                            "6    | 4.1  | 4.0  | 3.6  | 2.0    | 0.97\n"
+                            "7    | 4.1  | 4.0  | 3.7  | 2.9    | 1.0\n"
+                            "8    | 4.7  | 4.5  | 4.1  | 2.4    | 1.2\n"
+                            "9    | 5.0  | 4.8  | 4.3  | 2.5    | 1.3\n"
+                            "10   | 5.4  | 5.2  | 4.6  | 2.7    | 1.4\n"
+                            "11   | 5.5  | 5.5  | 5.0  | 3.1    | 1.5\n"
+                            "12   | 5.9  | 5.7  | 5.1  | 3.1    | 1.5\n"
+                            "13   | 6.0  | 6.0  | 5.4  | 3.5    | 1.7\n\n"
+                            "Nei bambini più piccoli, l'accuratezza e la consistenza delle "
+                            "produzioni possono raccontarci di più che semplicemente il "
+                            "calcolo della velocità."
+                        ),
+                    },
                     {"id": "orale_pa_sec", "label": "/pʌ/ — secondi", "scoring": "numerico"},
                     {"id": "orale_ta_rep", "label": "/tʌ/ — n. ripetizioni", "scoring": "numerico"},
                     {"id": "orale_ta_sec", "label": "/tʌ/ — secondi", "scoring": "numerico"},
@@ -2897,6 +2934,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
     },
     # =========================================================================
     # SEZIONE 10 — TEST VISUO-PERCETTIVI
+    # Manuale 2019-2020 pag. 61.
     # =========================================================================
     {
         "id": "visuo_percettivi",
@@ -2907,16 +2945,85 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "vp_principali",
                 "label": "Test visuo-percettivi",
                 "prove": [
-                    {"id": "vp_stimulous_bound", "label": "Indicazioni di Stimulous bound", "scoring": "0-4"},
-                    {"id": "vp_discriminazione", "label": "Problemi di discriminazione visiva", "scoring": "0-4"},
-                    {"id": "vp_integrazione", "label": "Difficoltà di integrazione viso-motoria", "scoring": "0-4"},
-                    {"id": "vp_spaziali", "label": "Problemi spaziali", "scoring": "0-4"},
+                    {
+                        "id": "vp_stimulous_bound",
+                        "label": "Indicazioni di Stimulous bound",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Effetto Stimulus Bound (Distraibilità).\n\n"
+                            "Si riferisce alla difficoltà di ignorare stimoli irrilevanti "
+                            "rispetto a quello indicato (il contrario sarebbe la capacità di "
+                            "concentrarsi sul target ignorando lo sfondo). Si valuta con il "
+                            "test delle diagonali nei rettangoli."
+                        ),
+                        "osservazioni": (
+                            "• Si sposta la linea evidentemente verso gli angoli?\n"
+                            "• È più evidente nel rettangolo grande (VMI) o nel piccolo (SB)?\n\n"
+                            "Se non è evidente quale dei due problemi risulta evidente, fare "
+                            "disegnare la diagonale senza il rettangolo — c'è qualche ulteriore "
+                            "differenza?"
+                        ),
+                    },
+                    {
+                        "id": "vp_discriminazione",
+                        "label": "Problemi di discriminazione visiva",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Discriminazione visiva — l'abilità di discriminare forme, "
+                            "dimensioni o altro simili o con qualche differenza fra di loro."
+                        ),
+                        "osservazioni": (
+                            "• Vede il bambino adeguatamente ciò che ha davanti?\n"
+                            "• Distorce in qualche modo le figure, c'è perseveranza "
+                            "(ripetizioni) o separa delle figure che invece sono insieme nel "
+                            "modello?\n\n"
+                            "(Se ci sono dubbi se un problema è dovuto a difficoltà di "
+                            "discriminazione visiva o a integrazione viso-motoria, chiedere al "
+                            "bambino se il suo disegno è uguale o meno al modello)."
+                        ),
+                    },
+                    {
+                        "id": "vp_integrazione",
+                        "label": "Difficoltà di integrazione viso-motoria",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Integrazione viso-motoria — coordinazione occhio-mano."
+                        ),
+                        "osservazioni": (
+                            "• Riesce il bambino a fare lavorare insieme l'occhio e la mano "
+                            "per copiare le figure?\n"
+                            "• Com'è la qualità della linea?\n"
+                            "• Gli angoli sono chiusi in modo pulito, o ci sono spazi o "
+                            "sovrapposizioni?\n"
+                            "• Ci sono evidenze di tremore? La pressione della matita sulla "
+                            "carta è esagerata o troppo leggera?\n"
+                            "• Usa una serie di linee discontinue per completare il disegno?\n"
+                            "• Ha bisogno di girare la pagina verso ogni angolo per copiare "
+                            "le figure?"
+                        ),
+                    },
+                    {
+                        "id": "vp_spaziali",
+                        "label": "Problemi spaziali",
+                        "scoring": "0-4",
+                        "istruzioni": (
+                            "Abilità spaziali — Fa riferimento all'orientamento e la "
+                            "disposizione degli elementi (lay-out) nella pagina."
+                        ),
+                        "osservazioni": (
+                            "• Com'è la dimensione, proporzione e la sequenza e la "
+                            "collocazione delle \"forme geometriche\"?\n"
+                            "• L'insieme della pagina rispetta le dimensioni e orientamento "
+                            "del modello?"
+                        ),
+                    },
                 ],
             },
         ],
     },
     # =========================================================================
-    # SEZIONE 11 — GOODENOUGH (Indice di Aston, disegno della figura umana)
+    # SEZIONE 11 — GOODENOUGH (Disegno della figura umana / Indice di Aston)
+    # Manuale 2019-2020 pp. 71-72 (Test Goodenough — Istituti Fay Onlus).
     # =========================================================================
     {
         "id": "goodenough",
@@ -2928,12 +3035,103 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "good_score",
                 "label": "Punteggio Goodenough",
                 "prove": [
-                    {"id": "good_punteggio", "label": "Punteggio totale (somma dei criteri)",
-                     "scoring": "numerico"},
-                    {"id": "good_eta_mentale", "label": "Età mentale corrispondente (anni;mesi)",
-                     "scoring": "testo"},
-                    {"id": "good_note", "label": "Note osservative sul disegno",
-                     "scoring": "testo"},
+                    {
+                        "id": "good_punteggio",
+                        "label": "Punteggio totale (somma dei criteri)",
+                        "scoring": "numerico",
+                        "istruzioni": (
+                            "Il Test Goodenough \"Disegno della figura umana\".\n\n"
+                            "Istruzioni al paziente: \"Voglio che tu faccia il disegno di una "
+                            "persona. Cerca di fare del tuo meglio. Prenditi il tempo che ti "
+                            "serve e fai attenzione. Impegnati tanto per fare il miglior "
+                            "disegno che ti riesca.\"\n\n"
+                            "Tempo: non c'è un limite. Normalmente la maggior parte dei "
+                            "bambini impiegheranno circa 10 minuti.\n\n"
+                            "Bisogna tenere in considerazione che questo test rappresenta uno "
+                            "strumento di screening di base. I disegni di bambini sopra i 10 "
+                            "anni e/o di quelli che hanno ricevuto lezioni di disegno, possono "
+                            "non rappresentare una valutazione accurata del \"potenziale\" "
+                            "cognitivo.\n\n"
+                            "PUNTEGGIO\n"
+                            "TIPO A — Livello preliminare (disegno non riconoscibile come "
+                            "figura umana):\n"
+                            "  • Scarabocchi scontrollati e apparentemente senza uno scopo → 0\n"
+                            "  • Linee con un qualche livello di controllo, una sorta di forma "
+                            "geometrica → 1\n\n"
+                            "TIPO B — Tutti gli altri disegni che possono essere riconosciuti "
+                            "come tentativi di rappresentare la figura umana. Ogni aspetto "
+                            "presente implica un punto in più. NON SI POSSONO SEGNARE MEZZI "
+                            "PUNTI."
+                        ),
+                        "osservazioni": (
+                            "Categorie di criteri da valutare (sommare 1 punto per ogni "
+                            "elemento presente):\n\n"
+                            "STRUTTURA GROSSOLANA: testa, gambe, braccia, tronco, lunghezza "
+                            "tronco maggiore della larghezza, rappresentazione spalle "
+                            "(allargamento del tronco al di sotto del collo).\n\n"
+                            "ARTI: braccia e gambe collegati al tronco; collegati nel punto "
+                            "giusto; collo presente; linea del collo tracciata come "
+                            "continuazione del tronco, della testa o entrambi.\n\n"
+                            "PARTICOLARI SULLA TESTA: occhi (uno o due), naso, bocca, naso e "
+                            "bocca bidimensionali (evidenti due labbra), narici, capelli, "
+                            "capelli non solo sulla circonferenza della testa e non in "
+                            "trasparenza.\n\n"
+                            "VESTITI: vestiti presenti, due capi non in trasparenza, completo "
+                            "senza trasparenze, 4 articoli di vestiario, costume completo.\n\n"
+                            "PARTICOLARI NELLE MANI: dita presenti, numero adeguato, dita in "
+                            "due dimensioni, opposizione pollice e indice, mano "
+                            "differenziata.\n\n"
+                            "ARTICOLAZIONI: braccia (gomito, spalla), gambe (ginocchio, "
+                            "bacino).\n\n"
+                            "PROPORZIONI: testa, braccia, gambe, piedi, braccia/gambe in due "
+                            "dimensioni.\n\n"
+                            "COORDINAZIONE MOTORIA: linee decise, collegamenti corretti, "
+                            "contorno testa, contorno tronco, braccia/gambe senza irregolarità, "
+                            "simmetria.\n\n"
+                            "PARTICOLARI FINI SULLA TESTA: orecchie evidenti, posizione, "
+                            "sopracciglia/ciglia, pupille, proporzioni occhi, sguardo, mento e "
+                            "fronte evidenziati.\n\n"
+                            "PROFILO: proiezione mento, talloni, profilo corpo, figura in vero "
+                            "profilo."
+                        ),
+                    },
+                    {
+                        "id": "good_eta_mentale",
+                        "label": "Età mentale corrispondente (anni;mesi)",
+                        "scoring": "testo",
+                        "istruzioni": (
+                            "Convertire il punteggio totale in età mentale usando la tabella "
+                            "del manuale (anni;mesi):"
+                        ),
+                        "osservazioni": (
+                            "Tabella di conversione punteggio → età mentale:\n\n"
+                            "1 → 3;3   |  14 → 6;6   |  27 → 9;9    |  40 → 13\n"
+                            "2 → 3;6   |  15 → 6;9   |  28 → 10     |  41 → 13;3\n"
+                            "3 → 3;9   |  16 → 7     |  29 → 10;3   |  42 → 13;6\n"
+                            "4 → 4     |  17 → 7;3   |  30 → 10;6   |  43 → 13;9\n"
+                            "5 → 4;3   |  18 → 7;6   |  31 → 10;9   |  44 → 14\n"
+                            "6 → 4;6   |  19 → 7;9   |  32 → 11     |  45 → 14;3\n"
+                            "7 → 4;9   |  20 → 8     |  33 → 11;3   |  46 → 14;6\n"
+                            "8 → 5     |  21 → 8;3   |  34 → 11;6   |  47 → 14;9\n"
+                            "9 → 5;3   |  22 → 8;6   |  35 → 11;9   |  48 → 15\n"
+                            "10 → 5;6  |  23 → 8;9   |  36 → 12     |  49 → 15;3\n"
+                            "11 → 5;9  |  24 → 9     |  37 → 12;3   |  50 → 15;6\n"
+                            "12 → 6    |  25 → 9;3   |  38 → 12;6   |  51 → 15;9\n"
+                            "13 → 6;3  |  26 → 9;6   |  39 → 12;9   |\n\n"
+                            "Annotare nel formato \"anni;mesi\" (es. 9;3 = 9 anni e 3 mesi)."
+                        ),
+                    },
+                    {
+                        "id": "good_note",
+                        "label": "Note osservative sul disegno",
+                        "scoring": "testo",
+                        "istruzioni": "Annotare osservazioni cliniche libere sul disegno.",
+                        "osservazioni": (
+                            "Spazio per note descrittive: caratteristiche del tratto, "
+                            "espressione emotiva, simbolismi, atteggiamento durante "
+                            "l'esecuzione, tempo impiegato, eventuali commenti del paziente."
+                        ),
+                    },
                 ],
             },
         ],
