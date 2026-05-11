@@ -7,6 +7,7 @@ Architettura:
 - Bottone "Nuova valutazione" → apre l'editor
 - Editor → tabs per le 10 sezioni del protocollo, calcoli automatici, salvataggio
 - Possibilità di rieditare valutazioni esistenti
+- Possibilità di agganciare un URL YouTube della seduta al record
 
 Il modulo è data-driven: la struttura delle sezioni e delle prove è in protocollo.py,
 quindi questo file resta agnostico rispetto al contenuto clinico.
@@ -94,7 +95,9 @@ def _render_lista(conn, paziente_id: int, paziente_nome: str, edit_key: str):
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([2, 2, 3, 2])
             with c1:
-                st.markdown(f"**{v['data_valutazione'].strftime('%d/%m/%Y')}**")
+                # Icona 🎥 se è presente un video della seduta
+                video_badge = " 🎥" if v.get("video_seduta_url") else ""
+                st.markdown(f"**{v['data_valutazione'].strftime('%d/%m/%Y')}**{video_badge}")
                 if v.get("terapista"):
                     st.caption(f"Terapista: {v['terapista']}")
             with c2:
@@ -190,6 +193,27 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
         key=f"inpp_motivo_{val_id}",
     )
 
+    # ----- Video della seduta (URL YouTube) -----
+    video_seduta_url = st.text_input(
+        "🎥 Video della seduta (URL YouTube)",
+        value=val_caricata.get("video_seduta_url") or "",
+        placeholder="https://youtu.be/abc123xyz  oppure  https://www.youtube.com/watch?v=...",
+        help=(
+            "Incolla qui l'URL YouTube del video della seduta. "
+            "Suggerimento: caricare il video come 'Non in elenco' per mantenerlo "
+            "riservato ma riproducibile dal gestionale."
+        ),
+        key=f"inpp_video_seduta_{val_id}",
+    )
+    # Anteprima del video se l'URL sembra valido
+    if video_seduta_url and video_seduta_url.strip().lower().startswith(("http://", "https://")):
+        with st.expander("▶️ Anteprima video", expanded=False):
+            try:
+                st.video(video_seduta_url.strip())
+            except Exception as e:
+                st.caption(f"⚠️ video non riproducibile: {e}")
+                st.caption(f"Link: {video_seduta_url.strip()}")
+
     st.divider()
 
     # ----- Sezioni del protocollo -----
@@ -254,6 +278,7 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
                     riepilogo=riepilogo,
                     note_finali=note_finali.strip() or None,
                     val_id=val_id,
+                    video_seduta_url=video_seduta_url,
                 )
                 st.success(f"Valutazione salvata (id={new_id}).")
                 # se era nuova, passiamo all'edit dell'esistente

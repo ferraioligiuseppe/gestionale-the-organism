@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS inpp_valutazioni (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Colonne aggiunte successivamente (idempotenti, sicure su DB già popolato)
+ALTER TABLE inpp_valutazioni
+    ADD COLUMN IF NOT EXISTS video_seduta_url TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_inpp_valutazioni_paziente
     ON inpp_valutazioni(paziente_id);
 
@@ -70,7 +74,7 @@ def lista_valutazioni(conn, paziente_id: int) -> list[dict]:
         cur.execute(
             """
             SELECT id, data_valutazione, terapista, motivo,
-                   riepilogo, created_at, updated_at
+                   riepilogo, video_seduta_url, created_at, updated_at
             FROM inpp_valutazioni
             WHERE paziente_id = %s
             ORDER BY data_valutazione DESC, id DESC
@@ -89,8 +93,9 @@ def lista_valutazioni(conn, paziente_id: int) -> list[dict]:
             "terapista": r[2],
             "motivo": r[3],
             "riepilogo": r[4] or {},
-            "created_at": r[5],
-            "updated_at": r[6],
+            "video_seduta_url": r[5],
+            "created_at": r[6],
+            "updated_at": r[7],
         })
     return out
 
@@ -105,7 +110,8 @@ def carica_valutazione(conn, val_id: int) -> Optional[dict]:
         cur.execute(
             """
             SELECT id, paziente_id, data_valutazione, terapista, motivo,
-                   risultati, riepilogo, note_finali, created_at, updated_at
+                   risultati, riepilogo, note_finali, video_seduta_url,
+                   created_at, updated_at
             FROM inpp_valutazioni
             WHERE id = %s
             """,
@@ -127,8 +133,9 @@ def carica_valutazione(conn, val_id: int) -> Optional[dict]:
         "risultati": r[5] or {},
         "riepilogo": r[6] or {},
         "note_finali": r[7],
-        "created_at": r[8],
-        "updated_at": r[9],
+        "video_seduta_url": r[8],
+        "created_at": r[9],
+        "updated_at": r[10],
     }
 
 
@@ -142,6 +149,7 @@ def salva_valutazione(
     riepilogo: dict[str, Any],
     note_finali: str,
     val_id: Optional[int] = None,
+    video_seduta_url: Optional[str] = None,
 ) -> int:
     """
     Salva (insert o update) una valutazione INPP.
@@ -155,6 +163,9 @@ def salva_valutazione(
     riepilogo_json = json.dumps(riepilogo, ensure_ascii=False, default=str)
     now = datetime.now(ROMA)
 
+    # Normalizza l'URL: stringa vuota → NULL nel DB
+    video_seduta_url = (video_seduta_url or "").strip() or None
+
     cur = conn.cursor()
     try:
         if val_id is None:
@@ -162,13 +173,15 @@ def salva_valutazione(
                 """
                 INSERT INTO inpp_valutazioni
                     (paziente_id, data_valutazione, terapista, motivo,
-                     risultati, riepilogo, note_finali, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s)
+                     risultati, riepilogo, note_finali, video_seduta_url,
+                     created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
                     paziente_id, data_valutazione, terapista, motivo,
                     risultati_json, riepilogo_json, note_finali,
+                    video_seduta_url,
                     now, now,
                 ),
             )
@@ -183,6 +196,7 @@ def salva_valutazione(
                     risultati        = %s::jsonb,
                     riepilogo        = %s::jsonb,
                     note_finali      = %s,
+                    video_seduta_url = %s,
                     updated_at       = %s
                 WHERE id = %s
                 RETURNING id
@@ -190,6 +204,7 @@ def salva_valutazione(
                 (
                     data_valutazione, terapista, motivo,
                     risultati_json, riepilogo_json, note_finali,
+                    video_seduta_url,
                     now, val_id,
                 ),
             )
