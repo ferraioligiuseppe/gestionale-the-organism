@@ -8,12 +8,17 @@ Architettura:
 - Editor → tabs per le 10 sezioni del protocollo, calcoli automatici, salvataggio
 - Possibilità di rieditare valutazioni esistenti
 - Possibilità di agganciare un URL YouTube della seduta al record
+- Tracking automatico in background (created_by/updated_by + snapshot storico):
+  gestito interamente da db_inpp.salva_valutazione; qui ci limitiamo a
+  passargli lo username dell'utente loggato.
 
 Il modulo è data-driven: la struttura delle sezioni e delle prove è in protocollo.py,
 quindi questo file resta agnostico rispetto al contenuto clinico.
 """
 
 from datetime import date
+from typing import Optional
+
 import streamlit as st
 
 from . import db_inpp
@@ -30,6 +35,22 @@ try:
     _PDF_DISPONIBILE = True
 except Exception:
     _PDF_DISPONIBILE = False
+
+
+# =============================================================================
+# HELPERS
+# =============================================================================
+
+def _get_username() -> Optional[str]:
+    """
+    Estrae lo username dell'utente loggato.
+    Restituisce None se non c'è autenticazione attiva (es. sviluppo locale).
+    """
+    u = st.session_state.get("user")
+    if isinstance(u, dict):
+        v = u.get("username")
+        return str(v).strip() if v else None
+    return None
 
 
 # =============================================================================
@@ -279,6 +300,7 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
                     note_finali=note_finali.strip() or None,
                     val_id=val_id,
                     video_seduta_url=video_seduta_url,
+                    username=_get_username(),
                 )
                 st.success(f"Valutazione salvata (id={new_id}).")
                 # se era nuova, passiamo all'edit dell'esistente
