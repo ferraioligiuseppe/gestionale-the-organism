@@ -465,33 +465,34 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     with c8:
         cap = st.text_input("CAP", value=r.get("cap", "") or "",
                              key=f"{key}_cap", max_chars=5)
-    with c9:
-        # Pattern session_state pulito: NON usare value= insieme a key= se la
-        # chiave viene modificata programmaticamente (es. dal CAP lookup).
-        # Mixing value= e session_state[key] solleva StreamlitAPIException.
-        citta_key = f"{key}_citta"
-        if citta_key not in st.session_state:
-            st.session_state[citta_key] = r.get("citta", "") or ""
-        citta = st.text_input("Città", key=citta_key)
-    with c10:
-        prov_key = f"{key}_prov"
-        if prov_key not in st.session_state:
-            st.session_state[prov_key] = r.get("provincia", "") or ""
-        prov = st.text_input("Prov.", key=prov_key, max_chars=2)
 
+    # Chiavi di session_state per Città / Prov
+    # Regola Streamlit: session_state[key_widget] può essere modificato SOLO
+    # prima che il widget con quella chiave sia istanziato. Quindi facciamo
+    # il CAP lookup PRIMA di renderizzare Città e Prov.
+    citta_key = f"{key}_citta"
+    prov_key = f"{key}_prov"
     last_cap_key = f"{key}_last_cap"
+
+    if citta_key not in st.session_state:
+        st.session_state[citta_key] = r.get("citta", "") or ""
+    if prov_key not in st.session_state:
+        st.session_state[prov_key] = r.get("provincia", "") or ""
     if not is_nuovo and last_cap_key not in st.session_state:
         st.session_state[last_cap_key] = r.get("cap", "") or ""
+
     prev_cap = st.session_state.get(last_cap_key, "")
     if cap and cap != prev_cap:
         info = _cap_lookup(cap)
         if info:
-            # Setta direttamente le chiavi widget (no chiavi "_v" intermedie)
             st.session_state[citta_key] = info["citta"]
             st.session_state[prov_key] = info["provincia"]
-            st.session_state[last_cap_key] = cap
-            st.rerun()
         st.session_state[last_cap_key] = cap
+
+    with c9:
+        citta = st.text_input("Città", key=citta_key)
+    with c10:
+        prov = st.text_input("Prov.", key=prov_key, max_chars=2)
 
     if not is_nuovo:
         stati = ["ATTIVO", "SOSPESO", "ARCHIVIATO"]
