@@ -897,6 +897,14 @@ def render_anagrafica(conn) -> None:
         suppressCellFocus=True, domLayout="normal",
     )
 
+    # Nonce per resettare la selezione AgGrid dopo apertura del dialog.
+    # Senza questo, AgGrid mantiene la riga selezionata anche dopo la chiusura
+    # del dialog: ri-cliccare la stessa riga non triggera selection_changed e
+    # il dialog non si riapre più.
+    sel_nonce_key = f"ana_sel_nonce_{st.session_state['ana_filtro']}"
+    if sel_nonce_key not in st.session_state:
+        st.session_state[sel_nonce_key] = 0
+
     grid_response = AgGrid(
         df,
         gridOptions=gob.build(),
@@ -906,7 +914,7 @@ def render_anagrafica(conn) -> None:
         allow_unsafe_jscode=False,
         theme="balham",
         fit_columns_on_grid_load=False,
-        key=f"aggrid_pazienti_{st.session_state['ana_filtro']}",
+        key=f"aggrid_pazienti_{st.session_state['ana_filtro']}_{st.session_state[sel_nonce_key]}",
     )
 
     # Selezione → apri dialog modifica
@@ -919,14 +927,13 @@ def render_anagrafica(conn) -> None:
     if selected:
         try:
             paz_id = int(selected[0].get("_id"))
-            last_opened = st.session_state.get("ana_last_opened")
-            if last_opened != paz_id:
-                st.session_state["ana_last_opened"] = paz_id
-                _dialog_modifica(conn, paz_id)
+            # Incrementa il nonce: al prossimo rerun la grid si ricostruisce
+            # senza selezione, così cliccare di nuovo lo stesso paziente
+            # riaprirà correttamente il dialog.
+            st.session_state[sel_nonce_key] += 1
+            _dialog_modifica(conn, paz_id)
         except Exception:
             pass
-    else:
-        st.session_state.pop("ana_last_opened", None)
 
     # Dialog conferma eliminazione
     if st.session_state.get("ana_da_eliminare"):
