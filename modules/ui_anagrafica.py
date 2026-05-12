@@ -11,8 +11,10 @@ Generatore + validatore Codice Fiscale, lookup CAP automatico,
 sezione Privacy/GDPR completa restano dentro il dialog di modifica.
 """
 from __future__ import annotations
+import csv
 import datetime
 import io
+import os
 import streamlit as st
 
 
@@ -65,12 +67,41 @@ def _cap_lookup(cap: str) -> dict:
             places = r.json().get("places", [])
             if places:
                 return {
-                    "citta": places[0].get("place name", "").title(),
+                    "citta": places[0].get("place name", "").upper(),
                     "provincia": places[0].get("state abbreviation", "").upper(),
                 }
     except Exception:
         pass
     return {}
+
+
+@st.cache_data(show_spinner=False)
+def _comuni_italiani() -> list[tuple[str, str]]:
+    """
+    Carica la lista (CITTA, PROV) dei comuni italiani dal CSV
+    'codici_catastali_comuni.csv'. Ritorna lista ordinata alfabeticamente.
+    Cache permanente (il file non cambia a runtime).
+    """
+    candidates = [
+        "codici_catastali_comuni.csv",
+        os.path.join(os.path.dirname(__file__), "codici_catastali_comuni.csv"),
+    ]
+    out: list[tuple[str, str]] = []
+    for path in candidates:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                for row in reader:
+                    citta = (row.get("paese") or "").strip().upper()
+                    prov = (row.get("prov") or "").strip().upper()
+                    if citta and prov:
+                        out.append((citta, prov))
+            break
+        except Exception:
+            continue
+    return sorted(out, key=lambda x: x[0])
 
 
 def _cf_helpers():
@@ -466,18 +497,34 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
         cap = st.text_input("CAP", value=r.get("cap", "") or "",
                              key=f"{key}_cap", max_chars=5)
 
-    # Chiavi di session_state per Città / Prov
-    # Regola Streamlit: session_state[key_widget] può essere modificato SOLO
-    # prima che il widget con quella chiave sia istanziato. Quindi facciamo
-    # il CAP lookup PRIMA di renderizzare Città e Prov.
-    citta_key = f"{key}_citta"
-    prov_key = f"{key}_prov"
-    last_cap_key = f"{key}_last_cap"
+    # Autocomplete Città con ricerca-as-you-type. La selectbox di Streamlit
+    # ha già il filtro nativo per testo digitato.
+    comuni = _comuni_italiani()
+    opzioni = ["— seleziona —"] + [f"{c} ({p})" for c, p in comuni]
 
-    if citta_key not in st.session_state:
-        st.session_state[citta_key] = r.get("citta", "") or ""
-    if prov_key not in st.session_state:
-        st.session_state[prov_key] = r.get("provincia", "") or ""
+    citta_sel_key = f"{key}_citta_sel"
+    last_cap_key = f"{key}_last_cap"
+    prov_view_key = f"{key}_prov_view"
+
+    # Stato iniziale del selectbox in base ai dati del paziente esistente
+    def _label_iniziale() -> str:
+        c0 = (r.get("citta") or "").strip().upper()
+        p0 = (r.get("provincia") or "").strip().upper()
+        if c0 and p0:
+            candidato = f"{c0} ({p0})"
+            if candidato in opzioni:
+                return candidato
+        if c0:
+            # Match solo per nome se la provincia non corrisponde / manca
+            for opt in opzioni:
+                if opt.startswith(c0 + " ("):
+                    return opt
+        return opzioni[0]
+
+    # Regola Streamlit: posso modificare session_state[widget_key] SOLO prima
+    # che il widget sia istanziato. CAP lookup va PRIMA del selectbox.
+    if citta_sel_key not in st.session_state:
+        st.session_state[citta_sel_key] = _label_iniziale()
     if not is_nuovo and last_cap_key not in st.session_state:
         st.session_state[last_cap_key] = r.get("cap", "") or ""
 
@@ -485,14 +532,31 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     if cap and cap != prev_cap:
         info = _cap_lookup(cap)
         if info:
-            st.session_state[citta_key] = info["citta"]
-            st.session_state[prov_key] = info["provincia"]
+            target = f"{info['citta']} ({info['provincia']})"
+            if target in opzioni:
+                st.session_state[citta_sel_key] = target
         st.session_state[last_cap_key] = cap
 
     with c9:
-        citta = st.text_input("Città", key=citta_key)
+        sel = st.selectbox(
+            "Città",
+            opzioni,
+            key=citta_sel_key,
+            help="Inizia a digitare per filtrare i comuni italiani",
+        )
+
+    # Parse del selezionato per derivare città e provincia
+    if sel != "— seleziona —" and " (" in sel and sel.endswith(")"):
+        citta = sel.rsplit(" (", 1)[0]
+        prov = sel.rsplit(" (", 1)[1].rstrip(")")
+    else:
+        citta = ""
+        prov = ""
+
+    # Setta session_state della prov-view PRIMA del widget (Streamlit lo consente)
+    st.session_state[prov_view_key] = prov
     with c10:
-        prov = st.text_input("Prov.", key=prov_key, max_chars=2)
+        st.text_input("Prov.", key=prov_view_key, disabled=True, max_chars=2)
 
     if not is_nuovo:
         stati = ["ATTIVO", "SOSPESO", "ARCHIVIATO"]
