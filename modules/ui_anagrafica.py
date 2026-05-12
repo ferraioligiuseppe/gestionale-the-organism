@@ -466,16 +466,18 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
         cap = st.text_input("CAP", value=r.get("cap", "") or "",
                              key=f"{key}_cap", max_chars=5)
     with c9:
-        citta_default = st.session_state.pop(f"{key}_citta_v", None)
-        if citta_default is None:
-            citta_default = r.get("citta", "") or ""
-        citta = st.text_input("Città", value=citta_default, key=f"{key}_citta")
+        # Pattern session_state pulito: NON usare value= insieme a key= se la
+        # chiave viene modificata programmaticamente (es. dal CAP lookup).
+        # Mixing value= e session_state[key] solleva StreamlitAPIException.
+        citta_key = f"{key}_citta"
+        if citta_key not in st.session_state:
+            st.session_state[citta_key] = r.get("citta", "") or ""
+        citta = st.text_input("Città", key=citta_key)
     with c10:
-        prov_default = st.session_state.pop(f"{key}_prov_v", None)
-        if prov_default is None:
-            prov_default = r.get("provincia", "") or ""
-        prov = st.text_input("Prov.", value=prov_default,
-                              key=f"{key}_prov", max_chars=2)
+        prov_key = f"{key}_prov"
+        if prov_key not in st.session_state:
+            st.session_state[prov_key] = r.get("provincia", "") or ""
+        prov = st.text_input("Prov.", key=prov_key, max_chars=2)
 
     last_cap_key = f"{key}_last_cap"
     if not is_nuovo and last_cap_key not in st.session_state:
@@ -484,8 +486,9 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     if cap and cap != prev_cap:
         info = _cap_lookup(cap)
         if info:
-            st.session_state[f"{key}_citta_v"] = info["citta"]
-            st.session_state[f"{key}_prov_v"] = info["provincia"]
+            # Setta direttamente le chiavi widget (no chiavi "_v" intermedie)
+            st.session_state[citta_key] = info["citta"]
+            st.session_state[prov_key] = info["provincia"]
             st.session_state[last_cap_key] = cap
             st.rerun()
         st.session_state[last_cap_key] = cap
