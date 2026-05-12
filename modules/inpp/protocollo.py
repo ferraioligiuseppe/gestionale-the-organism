@@ -152,6 +152,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "romberg_aperti",
                         "label": "Occhi aperti",
+                        "video_url": "https://youtu.be/SrKwBsJ6X18",
                         "scoring": "0-4",
                         "istruzioni": (
                             "In piedi, con i piedi insieme e le mani e le braccia sui fianchi, "
@@ -355,6 +356,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "tandem_avanti",
                         "label": "Avanti",
+                        "video_url": "https://youtu.be/Yp1pwlaiBhk",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Lentamente cammina lungo la stanza collocando un piede davanti "
@@ -380,6 +382,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "tandem_indietro",
                         "label": "Indietro",
+                        "video_url": "https://youtu.be/Yp1pwlaiBhk",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Ripetere il test all'indietro. Segnalare ogni differenza significativa "
@@ -403,6 +406,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "fog_avanti",
                         "label": "Avanti",
+                        "video_url": "https://youtu.be/Xt2f-fs1TNk",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Lentamente cammina lungo la stanza appoggiandoti solo sulla parte "
@@ -434,6 +438,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "fog_indietro",
                         "label": "Indietro",
+                        "video_url": "https://youtu.be/Xt2f-fs1TNk",
                         "scoring": "0-4",
                         "istruzioni": "Ripetere il test all'indietro e dare punteggi separati.",
                         "osservazioni": "Stesse osservazioni del Fog walk in avanti.",
@@ -593,18 +598,18 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "id": "striscio",
                 "label": "Striscio",
                 "prove": [
-                    {"id": "striscio_omologo", "label": "Omologo", "scoring": "testo"},
-                    {"id": "striscio_omolaterale", "label": "Omolaterale", "scoring": "testo"},
-                    {"id": "striscio_incrociato", "label": "Incrociato", "scoring": "testo"},
+                    {"id": "striscio_omologo", "label": "Omologo", "scoring": "testo", "video_url": "https://youtu.be/45A3sASpy2A"},
+                    {"id": "striscio_omolaterale", "label": "Omolaterale", "scoring": "testo", "video_url": "https://youtu.be/45A3sASpy2A"},
+                    {"id": "striscio_incrociato", "label": "Incrociato", "scoring": "testo", "video_url": "https://youtu.be/45A3sASpy2A"},
                 ],
             },
             {
                 "id": "carponi",
                 "label": "Carponi",
                 "prove": [
-                    {"id": "carponi_omologo", "label": "Omologo", "scoring": "testo"},
-                    {"id": "carponi_omolaterale", "label": "Omolaterale", "scoring": "testo"},
-                    {"id": "carponi_incrociato", "label": "Incrociato", "scoring": "testo"},
+                    {"id": "carponi_omologo", "label": "Omologo", "scoring": "testo", "video_url": "https://youtu.be/IpbzpjVGz8Y"},
+                    {"id": "carponi_omolaterale", "label": "Omolaterale", "scoring": "testo", "video_url": "https://youtu.be/IpbzpjVGz8Y"},
+                    {"id": "carponi_incrociato", "label": "Incrociato", "scoring": "testo", "video_url": "https://youtu.be/IpbzpjVGz8Y"},
                 ],
             },
         ],
@@ -798,6 +803,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "dita_sx",
                         "label": "Mano sinistra",
+                        "video_url": "https://youtu.be/ULjtocpscw8",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Test delle opposizioni pollice-resto delle dita (Dai 5-6 anni — "
@@ -834,6 +840,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "dita_dx",
                         "label": "Mano destra",
+                        "video_url": "https://youtu.be/ULjtocpscw8",
                         "scoring": "0-4",
                         "istruzioni": "Stesso test sull'altra mano.",
                         "osservazioni": "Stesse osservazioni della mano sinistra.",
@@ -1110,6 +1117,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "rtac_std_br_sx",
                         "label": "Standard — Braccio sinistro",
+                        "video_url": "https://youtu.be/A0-D-sMrGmQ",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Test Standard (supino). Collocare il soggetto in posizione supina. "
@@ -1134,6 +1142,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "rtac_std_gb_sx",
                         "label": "Standard — Gamba sinistra",
+                        "video_url": "https://youtu.be/A0-D-sMrGmQ",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Test Standard (supino). Stessa procedura. Osservare la gamba sinistra "
@@ -1155,6 +1164,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "rtac_std_br_dx",
                         "label": "Standard — Braccio destro",
+                        "video_url": "https://youtu.be/A0-D-sMrGmQ",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Test Standard (supino). Stessa procedura. Osservare il braccio destro "
@@ -1176,6 +1186,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "rtac_std_gb_dx",
                         "label": "Standard — Gamba destra",
+                        "video_url": "https://youtu.be/A0-D-sMrGmQ",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Test Standard (supino). Stessa procedura. Osservare la gamba destra "
@@ -1407,6 +1418,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "rtsc_piedi_sedere",
                         "label": "Coinvolgimento dei piedi o del sedere",
+                        "video_url": "https://youtu.be/Wk0P8-uvpRQ",
                         "scoring": "0-4",
                         "istruzioni": (
                             "RIFLESSO TONICO SIMMETRICO DEL COLLO (RTSC / STNR).\n\n"
@@ -1435,6 +1447,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "rtsc_braccia",
                         "label": "Coinvolgimento delle braccia",
+                        "video_url": "https://youtu.be/Wk0P8-uvpRQ",
                         "scoring": "0-4",
                         "istruzioni": "RTSC in posizione quadrupede. Osservare il movimento delle braccia mentre la testa si muove su/giù.",
                         "osservazioni": (
@@ -1452,6 +1465,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "rtsc_carponi",
                         "label": "Evidenza durante il carponi",
+                        "video_url": "https://youtu.be/Wk0P8-uvpRQ",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Rivalutare con il carpone. Alcuni soggetti sono in grado di "
@@ -1534,6 +1548,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "rtl_std",
                         "label": "Test Standard",
+                        "video_url": "https://youtu.be/sx2lJ0HbTz0",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Test Standard in posizione supina. Collocare il soggetto nella "
@@ -2534,6 +2549,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "oc_fissazione",
                         "label": "Difficoltà di fissazione",
+                        "video_url": "https://youtu.be/9Wn4aBooyY8",
                         "scoring": "0-4",
                         "istruzioni": (
                             "\"In piede con piedi o talloni insieme, mani ai fianchi. "
@@ -2568,6 +2584,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "oc_inseguimento",
                         "label": "Difficoltà di inseguimento (tracking orizzontale)",
+                        "video_url": "https://youtu.be/9Wn4aBooyY8",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Tracking (Visual Pursuit) — Inseguimento orizzontale.\n\n"
@@ -2626,6 +2643,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "oc_conv_latente",
                         "label": "Convergenza latente",
+                        "video_url": "https://youtu.be/9Wn4aBooyY8",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Convergenza o Divergenza Latente — Cover test.\n\n"
@@ -2851,6 +2869,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "oc_accomod",
                         "label": "Ristabilimento della visione binoculare",
+                        "video_url": "https://youtu.be/9Wn4aBooyY8",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Accomodazione (\"Riserve fusionali\").\n\n"
@@ -2985,6 +3004,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                     {
                         "id": "vp_integrazione",
                         "label": "Difficoltà di integrazione viso-motoria",
+                        "video_url": "https://youtu.be/mJMmBjsB0M0",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Integrazione viso-motoria — coordinazione occhio-mano."
