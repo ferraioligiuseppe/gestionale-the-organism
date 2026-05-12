@@ -274,34 +274,6 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
     """
     st.subheader("📋 Risposte Questionari — Anamnesi")
 
-    # ── DEBUG TEMPORANEO ───────────────────────────────────────
-    with st.expander("🐛 Debug (rimuovere dopo test)"):
-        st.write(f"paziente_id ricevuto: `{paziente_id}` (tipo: {type(paziente_id).__name__})")
-        try:
-            cur_d = conn.cursor()
-            # Conto totale
-            cur_d.execute("SELECT COUNT(*) FROM anamnesi")
-            tot = cur_d.fetchone()
-            st.write(f"Totale righe in anamnesi: {tot[0] if not isinstance(tot, dict) else list(tot.values())[0]}")
-            # Pazienti distinti
-            cur_d.execute("SELECT DISTINCT paziente_id FROM anamnesi ORDER BY paziente_id")
-            ids = cur_d.fetchall()
-            ids_list = [r[0] if not isinstance(r, dict) else list(r.values())[0] for r in ids]
-            st.write(f"Paziente_id distinti in anamnesi: {ids_list}")
-            # Match con il paziente corrente
-            cur_d.execute("SELECT id, paziente_id, motivo FROM anamnesi WHERE paziente_id = %s",
-                            (paziente_id,))
-            match = cur_d.fetchall()
-            st.write(f"Match con paziente_id={paziente_id}: {len(match)} righe")
-            for m in match:
-                if isinstance(m, dict):
-                    st.write(f"  → id={m.get('id')}, paziente_id={m.get('paziente_id')}, motivo={m.get('motivo')}")
-                else:
-                    st.write(f"  → id={m[0]}, paziente_id={m[1]}, motivo={m[2]}")
-        except Exception as e:
-            st.error(f"Debug fallito: {e}")
-    # ── FINE DEBUG ──────────────────────────────────────────────
-
     try:
         cur = conn.cursor()
         cur.execute(
