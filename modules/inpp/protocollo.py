@@ -814,6 +814,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "dn_aperti",
                         "label": "Occhi aperti",
                         "scoring": "0-4",
+                        "video_url": "https://youtu.be/SMH94FDjBNI",
                         "istruzioni": (
                             "\"In piedi con i piedi insieme. Collocare la punta di uno degli "
                             "indici sulla punta del naso. Stendere l'altro braccio e dito indice "
@@ -838,6 +839,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "dn_chiusi",
                         "label": "Occhi chiusi",
                         "scoring": "0-4",
+                        "video_url": "https://youtu.be/SMH94FDjBNI",
                         "istruzioni": (
                             "Ripetere il test con gli occhi chiusi. Si conteggia il numero di volte "
                             "che il soggetto riesce a raggiungere l'obiettivo con movimenti precisi "
@@ -1158,8 +1160,8 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 "label": "Test dei movimenti a specchio",
                 "prove": [
                     # Idem: non descritto nelle pagine teoriche del manuale.
-                    {"id": "specchio_sx", "label": "Sinistra", "scoring": "0-4"},
-                    {"id": "specchio_dx", "label": "Destra", "scoring": "0-4"},
+                    {"id": "specchio_sx", "label": "Sinistra", "scoring": "0-4", "video_url": "https://youtu.be/0qdIK02rhNo"},
+                    {"id": "specchio_dx", "label": "Destra", "scoring": "0-4", "video_url": "https://youtu.be/0qdIK02rhNo"},
                 ],
             },
         ],
