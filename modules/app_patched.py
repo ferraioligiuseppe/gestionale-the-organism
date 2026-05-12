@@ -2049,7 +2049,15 @@ def _connect_cached():
             raise RuntimeError("psycopg2 non disponibile. Aggiungi psycopg2-binary a requirements.txt")
 
         try:
-            conn = psycopg2.connect(_DB_URL)
+            conn = psycopg2.connect(
+                _DB_URL,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+                connect_timeout=10,
+                options="-c statement_timeout=30000",
+            )
         except Exception:
             # Non-leak diagnostics (does not print the URL)
             u = _DB_URL or ""

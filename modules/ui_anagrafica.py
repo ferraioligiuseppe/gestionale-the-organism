@@ -11,8 +11,10 @@ Generatore + validatore Codice Fiscale, lookup CAP automatico,
 sezione Privacy/GDPR completa restano dentro il dialog di modifica.
 """
 from __future__ import annotations
+import csv
 import datetime
 import io
+import os
 import streamlit as st
 
 
@@ -65,12 +67,41 @@ def _cap_lookup(cap: str) -> dict:
             places = r.json().get("places", [])
             if places:
                 return {
-                    "citta": places[0].get("place name", "").title(),
+                    "citta": places[0].get("place name", "").upper(),
                     "provincia": places[0].get("state abbreviation", "").upper(),
                 }
     except Exception:
         pass
     return {}
+
+
+@st.cache_data(show_spinner=False)
+def _comuni_italiani() -> list[tuple[str, str]]:
+    """
+    Carica la lista (CITTA, PROV) dei comuni italiani dal CSV
+    'codici_catastali_comuni.csv'. Ritorna lista ordinata alfabeticamente.
+    Cache permanente (il file non cambia a runtime).
+    """
+    candidates = [
+        "codici_catastali_comuni.csv",
+        os.path.join(os.path.dirname(__file__), "codici_catastali_comuni.csv"),
+    ]
+    out: list[tuple[str, str]] = []
+    for path in candidates:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                for row in reader:
+                    citta = (row.get("paese") or "").strip().upper()
+                    prov = (row.get("prov") or "").strip().upper()
+                    if citta and prov:
+                        out.append((citta, prov))
+            break
+        except Exception:
+            continue
+    return sorted(out, key=lambda x: x[0])
 
 
 def _cf_helpers():
@@ -465,30 +496,67 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     with c8:
         cap = st.text_input("CAP", value=r.get("cap", "") or "",
                              key=f"{key}_cap", max_chars=5)
-    with c9:
-        citta_default = st.session_state.pop(f"{key}_citta_v", None)
-        if citta_default is None:
-            citta_default = r.get("citta", "") or ""
-        citta = st.text_input("Città", value=citta_default, key=f"{key}_citta")
-    with c10:
-        prov_default = st.session_state.pop(f"{key}_prov_v", None)
-        if prov_default is None:
-            prov_default = r.get("provincia", "") or ""
-        prov = st.text_input("Prov.", value=prov_default,
-                              key=f"{key}_prov", max_chars=2)
 
+    # Autocomplete Città con ricerca-as-you-type. La selectbox di Streamlit
+    # ha già il filtro nativo per testo digitato.
+    comuni = _comuni_italiani()
+    opzioni = ["— seleziona —"] + [f"{c} ({p})" for c, p in comuni]
+
+    citta_sel_key = f"{key}_citta_sel"
     last_cap_key = f"{key}_last_cap"
+    prov_view_key = f"{key}_prov_view"
+
+    # Stato iniziale del selectbox in base ai dati del paziente esistente
+    def _label_iniziale() -> str:
+        c0 = (r.get("citta") or "").strip().upper()
+        p0 = (r.get("provincia") or "").strip().upper()
+        if c0 and p0:
+            candidato = f"{c0} ({p0})"
+            if candidato in opzioni:
+                return candidato
+        if c0:
+            # Match solo per nome se la provincia non corrisponde / manca
+            for opt in opzioni:
+                if opt.startswith(c0 + " ("):
+                    return opt
+        return opzioni[0]
+
+    # Regola Streamlit: posso modificare session_state[widget_key] SOLO prima
+    # che il widget sia istanziato. CAP lookup va PRIMA del selectbox.
+    if citta_sel_key not in st.session_state:
+        st.session_state[citta_sel_key] = _label_iniziale()
     if not is_nuovo and last_cap_key not in st.session_state:
         st.session_state[last_cap_key] = r.get("cap", "") or ""
+
     prev_cap = st.session_state.get(last_cap_key, "")
     if cap and cap != prev_cap:
         info = _cap_lookup(cap)
         if info:
-            st.session_state[f"{key}_citta_v"] = info["citta"]
-            st.session_state[f"{key}_prov_v"] = info["provincia"]
-            st.session_state[last_cap_key] = cap
-            st.rerun()
+            target = f"{info['citta']} ({info['provincia']})"
+            if target in opzioni:
+                st.session_state[citta_sel_key] = target
         st.session_state[last_cap_key] = cap
+
+    with c9:
+        sel = st.selectbox(
+            "Città",
+            opzioni,
+            key=citta_sel_key,
+            help="Inizia a digitare per filtrare i comuni italiani",
+        )
+
+    # Parse del selezionato per derivare città e provincia
+    if sel != "— seleziona —" and " (" in sel and sel.endswith(")"):
+        citta = sel.rsplit(" (", 1)[0]
+        prov = sel.rsplit(" (", 1)[1].rstrip(")")
+    else:
+        citta = ""
+        prov = ""
+
+    # Setta session_state della prov-view PRIMA del widget (Streamlit lo consente)
+    st.session_state[prov_view_key] = prov
+    with c10:
+        st.text_input("Prov.", key=prov_view_key, disabled=True, max_chars=2)
 
     if not is_nuovo:
         stati = ["ATTIVO", "SOSPESO", "ARCHIVIATO"]
@@ -893,6 +961,14 @@ def render_anagrafica(conn) -> None:
         suppressCellFocus=True, domLayout="normal",
     )
 
+    # Nonce per resettare la selezione AgGrid dopo apertura del dialog.
+    # Senza questo, AgGrid mantiene la riga selezionata anche dopo la chiusura
+    # del dialog: ri-cliccare la stessa riga non triggera selection_changed e
+    # il dialog non si riapre più.
+    sel_nonce_key = f"ana_sel_nonce_{st.session_state['ana_filtro']}"
+    if sel_nonce_key not in st.session_state:
+        st.session_state[sel_nonce_key] = 0
+
     grid_response = AgGrid(
         df,
         gridOptions=gob.build(),
@@ -902,7 +978,7 @@ def render_anagrafica(conn) -> None:
         allow_unsafe_jscode=False,
         theme="balham",
         fit_columns_on_grid_load=False,
-        key=f"aggrid_pazienti_{st.session_state['ana_filtro']}",
+        key=f"aggrid_pazienti_{st.session_state['ana_filtro']}_{st.session_state[sel_nonce_key]}",
     )
 
     # Selezione → apri dialog modifica
@@ -915,14 +991,13 @@ def render_anagrafica(conn) -> None:
     if selected:
         try:
             paz_id = int(selected[0].get("_id"))
-            last_opened = st.session_state.get("ana_last_opened")
-            if last_opened != paz_id:
-                st.session_state["ana_last_opened"] = paz_id
-                _dialog_modifica(conn, paz_id)
+            # Incrementa il nonce: al prossimo rerun la grid si ricostruisce
+            # senza selezione, così cliccare di nuovo lo stesso paziente
+            # riaprirà correttamente il dialog.
+            st.session_state[sel_nonce_key] += 1
+            _dialog_modifica(conn, paz_id)
         except Exception:
             pass
-    else:
-        st.session_state.pop("ana_last_opened", None)
 
     # Dialog conferma eliminazione
     if st.session_state.get("ana_da_eliminare"):

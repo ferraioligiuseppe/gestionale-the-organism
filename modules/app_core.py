@@ -2028,6 +2028,7 @@ class _PgConn:
                     keepalives_interval=10,
                     keepalives_count=5,
                     connect_timeout=10,
+                    options="-c statement_timeout=30000",
                 )
             except Exception as e:
                 raise RuntimeError(f"Impossibile riconnettersi al DB: {e}") from e
@@ -2262,6 +2263,7 @@ def _connect_cached():
                 keepalives_interval=10,
                 keepalives_count=5,
                 connect_timeout=10,
+                options="-c statement_timeout=30000",
             )
         except Exception:
             # Non-leak diagnostics (does not print the URL)
@@ -2551,6 +2553,14 @@ def init_db() -> None:
     # -------------------------
     # PostgreSQL (OVH) init
     # -------------------------
+    # Reset difensivo della transazione: se la connessione cached (st.cache_resource)
+    # aveva una transazione abortita da una run precedente, qui la puliamo prima
+    # di iniziare le DDL. Altrimenti tutte le CREATE TABLE successive fallirebbero
+    # con `InFailedSqlTransaction: current transaction is aborted`.
+    try:
+        conn.rollback()
+    except Exception:
+        pass
     # Nota: usiamo tipi compatibili e vincoli FK corretti.
         # Anamnesi (Valutazione PNEV) – tabella centrale (PostgreSQL)
     cur.execute(

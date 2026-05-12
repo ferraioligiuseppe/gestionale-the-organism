@@ -9,7 +9,7 @@ import streamlit as st
 
 from .app_menu import (
     AREE_ORDINE, SOTTOSEZIONI,
-    AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_TEST_LIVE,
+    AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_TEST_NEUROEVOL, AREA_TEST_LIVE,
     AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA, AREA_STUDIO,
 )
 
@@ -325,19 +325,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except Exception as e:
                 st.error(f"Modulo anamnesi non disponibile: {e}")
             return
-        if sotto == "👁️ Valutazione visuo-percettiva":
-            try:
-                from .ui_valutazione_visuo_percettiva import render_valutazione_visuo_percettiva
-                cur2 = conn.cursor()
-                cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
-                paz_rec = cur2.fetchone()
-                if paz_rec and not isinstance(paz_rec, dict):
-                    cols = [d[0] for d in cur2.description]
-                    paz_rec = dict(zip(cols, paz_rec))
-                render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
-            except Exception as e:
-                st.error(f"Errore valutazione visuo-percettiva: {e}")
-            return
         if sotto == "🧠 NPS — Neuropsicologica":
             try:
                 from .ui_nps_completo import render_nps_completo
@@ -368,6 +355,41 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             return
         if sotto == "👓 Optometria comportamentale":
             st.info("Sezione in costruzione — usa la Valutazione visiva (VVF) per ora.")
+            return
+
+    # ── AREA TEST NEUROEVOLUTIVI ──────────────────────────────────────
+    elif area == AREA_TEST_NEUROEVOL:
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
+        if not paz_id:
+            return
+        if sotto == "👁️ Valutazione visuo-percettiva":
+            try:
+                from .ui_valutazione_visuo_percettiva import render_valutazione_visuo_percettiva
+                cur2 = conn.cursor()
+                cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
+                paz_rec = cur2.fetchone()
+                if paz_rec and not isinstance(paz_rec, dict):
+                    cols = [d[0] for d in cur2.description]
+                    paz_rec = dict(zip(cols, paz_rec))
+                render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
+            except Exception as e:
+                st.error(f"Errore valutazione visuo-percettiva: {e}")
+            return
+        if sotto == "🧬 INPP — Valutazione diagnostica":
+            try:
+                from .inpp import render_inpp
+                cur2 = conn.cursor()
+                cur2.execute("SELECT cognome, nome FROM Pazienti WHERE id=%s", (paz_id,))
+                row = cur2.fetchone()
+                cur2.close()
+                if row:
+                    nome = f"{row[0]} {row[1]}".strip()
+                else:
+                    nome = "Paziente"
+                render_inpp(conn, paz_id, nome)
+            except Exception as e:
+                st.error(f"Errore modulo INPP: {e}")
             return
 
     # ── AREA TEST LIVE ────────────────────────────────────────────────
