@@ -2553,6 +2553,14 @@ def init_db() -> None:
     # -------------------------
     # PostgreSQL (OVH) init
     # -------------------------
+    # Reset difensivo della transazione: se la connessione cached (st.cache_resource)
+    # aveva una transazione abortita da una run precedente, qui la puliamo prima
+    # di iniziare le DDL. Altrimenti tutte le CREATE TABLE successive fallirebbero
+    # con `InFailedSqlTransaction: current transaction is aborted`.
+    try:
+        conn.rollback()
+    except Exception:
+        pass
     # Nota: usiamo tipi compatibili e vincoli FK corretti.
         # Anamnesi (Valutazione PNEV) – tabella centrale (PostgreSQL)
     cur.execute(
