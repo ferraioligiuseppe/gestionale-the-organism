@@ -255,6 +255,71 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                 ],
             },
             {
+                "id": "upst",
+                "label": "Test su un solo piede (UPST - Unipedal Stance Test) (dai 6 anni)",
+                "prove": [
+                    {
+                        "id": "upst_sx",
+                        "label": "Gamba sinistra",
+                        "scoring": "0-4",
+                        "video_url": "https://youtu.be/Pd0PgisDyC0",
+                        "istruzioni": (
+                            "Chiedere al bambino di collocarsi in piedi su un solo piede e "
+                            "chiedere: \"Cerca di mantenere questa posizione tutto il tempo che "
+                            "ti riesca\". Contabilizzare in secondi il tempo che il bambino "
+                            "riesce a mantenere la posizione prima di perdere l'equilibrio o di "
+                            "appoggiare l'altro piede.\n\n"
+                            "Utilizzando un cronometro, contabilizzare il tempo in secondi che "
+                            "il bambino riesce a mantenere l'equilibrio senza appoggiare l'altro "
+                            "piede. Guardare il soggetto e non il cronometro. Il tempo inizia "
+                            "quando il soggetto solleva il piede dal pavimento e finisce quando "
+                            "perde l'equilibrio, appoggia l'altro piede sul pavimento oppure "
+                            "sposta il piede che tiene il peso per aiutarsi a mantenere la "
+                            "posizione."
+                        ),
+                        "osservazioni": (
+                            "Dati normativi:\n"
+                            "• 6 anni: 20 secondi (piede destro o sinistro)\n"
+                            "• 8+ anni: 30 secondi (piede destro o sinistro)\n\n"
+                            "L'incapacità di mantenersi in equilibrio su un solo piede per il "
+                            "tempo appropriato all'età può essere un indicatore di difficoltà "
+                            "vestibolari o di immaturità posturale.\n\n"
+                            "Osservare ogni movimento compensatorio significativo delle braccia, "
+                            "dell'altra gamba, della bocca o delle mani durante l'esecuzione del "
+                            "test."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Due secondi meno della norma per l'età",
+                            2: "Quattro secondi meno della norma per l'età",
+                            3: "Sei secondi meno della norma per l'età",
+                            4: "Otto secondi meno della norma per l'età",
+                        },
+                    },
+                    {
+                        "id": "upst_dx",
+                        "label": "Gamba destra",
+                        "scoring": "0-4",
+                        "video_url": "https://youtu.be/Pd0PgisDyC0",
+                        "istruzioni": (
+                            "Ripetere la procedura con l'altra gamba (gamba destra)."
+                        ),
+                        "osservazioni": (
+                            "Stesse osservazioni e dati normativi della gamba sinistra. "
+                            "Confrontare i tempi tra le due gambe: differenze significative "
+                            "possono indicare asimmetrie vestibolari o posturali."
+                        ),
+                        "scoring_specifico": {
+                            0: "N.A.",
+                            1: "Due secondi meno della norma per l'età",
+                            2: "Quattro secondi meno della norma per l'età",
+                            3: "Sei secondi meno della norma per l'età",
+                            4: "Otto secondi meno della norma per l'età",
+                        },
+                    },
+                ],
+            },
+            {
                 "id": "cammino_mezzo_giro",
                 "label": "Cammino e mezzo giro",
                 "prove": [
