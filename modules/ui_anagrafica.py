@@ -75,6 +75,57 @@ def _cap_lookup(cap: str) -> dict:
     return {}
 
 
+@st.cache_resource(show_spinner=False)
+def _pgeo_nominatim_it():
+    """Carica il dataset geonames IT (~5MB) una sola volta per sessione.
+    Ritorna None se pgeocode non è installato o il download fallisce."""
+    try:
+        import pgeocode
+        return pgeocode.Nominatim('it')
+    except Exception:
+        return None
+
+
+def _citta_to_cap(citta_name: str, provincia: str = "") -> str:
+    """
+    Lookup CAP per nome città (dataset geonames offline via pgeocode).
+    Ritorna il CAP solo se la città ha un UNICO CAP, altrimenti stringa vuota
+    (per città grandi con più CAP, l'utente lo inserisce a mano).
+    `provincia` è la sigla (es. 'SA'), opzionale ma migliora il disambiguamento
+    quando due comuni hanno lo stesso nome in regioni diverse.
+    """
+    if not citta_name:
+        return ""
+    nomi = _pgeo_nominatim_it()
+    if nomi is None:
+        return ""
+    try:
+        res = nomi.query_location(citta_name, top_k=20)
+        if res is None or len(res) == 0:
+            return ""
+        # Match esatto sul nome (case-insensitive)
+        target = citta_name.strip().upper()
+        exact = res[res["place_name"].astype(str).str.upper() == target]
+        if exact.empty:
+            return ""
+        # Disambiguazione per provincia se fornita (county_code = sigla)
+        if provincia:
+            with_prov = exact[
+                exact["county_code"].astype(str).str.upper()
+                == provincia.strip().upper()
+            ]
+            if not with_prov.empty:
+                exact = with_prov
+        unique_caps = (
+            exact["postal_code"].dropna().astype(str).str.strip().unique()
+        )
+        if len(unique_caps) == 1:
+            return unique_caps[0]
+        return ""
+    except Exception:
+        return ""
+
+
 @st.cache_data(show_spinner=False)
 def _comuni_italiani() -> list[tuple[str, str]]:
     """
@@ -497,19 +548,17 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
                                 value=r.get("indirizzo", "") or "",
                                 key=f"{key}_ind")
 
-    c8, c9, c10 = st.columns([1, 2, 1])
-    with c8:
-        cap = st.text_input("CAP", value=r.get("cap", "") or "",
-                             key=f"{key}_cap", max_chars=5)
-
-    # Autocomplete Città con ricerca-as-you-type. La selectbox di Streamlit
-    # ha già il filtro nativo per testo digitato.
-    comuni = _comuni_italiani()
-    opzioni = ["— seleziona —"] + [f"{c} ({p})" for c, p in comuni]
-
+    # ── Setup chiavi state per autocompletamento bidirezionale CAP ↔ Città ──
+    # last_cap_key e last_citta_key tengono traccia del "valore precedente"
+    # per rilevare quale dei due campi è stato modificato dall'utente
+    # ed evitare loop infiniti (CAP→Città→CAP→…).
     citta_sel_key = f"{key}_citta_sel"
     last_cap_key = f"{key}_last_cap"
+    last_citta_key = f"{key}_last_citta"
     prov_view_key = f"{key}_prov_view"
+
+    comuni = _comuni_italiani()
+    opzioni = ["— seleziona —"] + [f"{c} ({p})" for c, p in comuni]
 
     # Stato iniziale del selectbox in base ai dati del paziente esistente
     def _label_iniziale() -> str:
@@ -526,13 +575,40 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
                     return opt
         return opzioni[0]
 
-    # Regola Streamlit: posso modificare session_state[widget_key] SOLO prima
-    # che il widget sia istanziato. CAP lookup va PRIMA del selectbox.
+    # Inizializzazione state (PRIMA di qualunque widget)
     if citta_sel_key not in st.session_state:
         st.session_state[citta_sel_key] = _label_iniziale()
-    if not is_nuovo and last_cap_key not in st.session_state:
+    if last_cap_key not in st.session_state:
         st.session_state[last_cap_key] = r.get("cap", "") or ""
+    if last_citta_key not in st.session_state:
+        st.session_state[last_citta_key] = st.session_state[citta_sel_key]
 
+    # ── Direzione Città → CAP (rilevata PRIMA di render del CAP widget) ──
+    # Se l'utente ha cambiato la città nel rerun precedente, prova ad
+    # autocompilare il CAP (solo per città con un unico CAP).
+    curr_citta_sel = st.session_state[citta_sel_key]
+    prev_citta_sel = st.session_state[last_citta_key]
+    if (curr_citta_sel != prev_citta_sel
+            and curr_citta_sel
+            and curr_citta_sel != "— seleziona —"
+            and " (" in curr_citta_sel):
+        nome_citta = curr_citta_sel.rsplit(" (", 1)[0]
+        sigla_prov = curr_citta_sel.rsplit(" (", 1)[1].rstrip(")")
+        cap_auto = _citta_to_cap(nome_citta, sigla_prov)
+        if cap_auto:
+            st.session_state[f"{key}_cap"] = cap_auto
+            # Aggiorno anche last_cap per evitare il loop CAP→Città al rerun
+            st.session_state[last_cap_key] = cap_auto
+    st.session_state[last_citta_key] = curr_citta_sel
+
+    c8, c9, c10 = st.columns([1, 2, 1])
+    with c8:
+        cap = st.text_input("CAP", value=r.get("cap", "") or "",
+                             key=f"{key}_cap", max_chars=5)
+
+    # ── Direzione CAP → Città (esistente, invariata) ──
+    # Regola Streamlit: posso modificare session_state[widget_key] SOLO prima
+    # che il widget sia istanziato. CAP lookup va PRIMA del selectbox.
     prev_cap = st.session_state.get(last_cap_key, "")
     if cap and cap != prev_cap:
         info = _cap_lookup(cap)
@@ -540,6 +616,8 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
             target = f"{info['citta']} ({info['provincia']})"
             if target in opzioni:
                 st.session_state[citta_sel_key] = target
+                # Aggiorno anche last_citta per evitare il loop Città→CAP
+                st.session_state[last_citta_key] = target
         st.session_state[last_cap_key] = cap
 
     with c9:
