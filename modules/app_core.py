@@ -4994,6 +4994,13 @@ def ui_pazienti():
 
     mostra_archiviati = st.checkbox("Mostra anche pazienti archiviati", value=False, key="elenco_show_archiviati")
 
+    ordine = st.radio(
+        "Ordina per",
+        ["Alfabetico", "Più recenti", "Più vecchi"],
+        horizontal=True,
+        key="elenco_ordine",
+    )
+
     query = "SELECT * FROM Pazienti"
     params = []
     conditions = []
@@ -5006,7 +5013,13 @@ def ui_pazienti():
         params.extend([like, like, like])
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY Cognome, Nome"
+
+    if ordine == "Più recenti":
+        query += " ORDER BY id DESC"
+    elif ordine == "Più vecchi":
+        query += " ORDER BY id ASC"
+    else:
+        query += " ORDER BY Cognome, Nome"
 
     cur.execute(query, params)
     rows = cur.fetchall()
