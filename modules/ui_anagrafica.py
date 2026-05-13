@@ -86,44 +86,53 @@ def _pgeo_nominatim_it():
         return None
 
 
-def _citta_to_cap(citta_name: str, provincia: str = "") -> str:
+def _citta_to_cap_status(citta_name: str, provincia: str = "") -> tuple[str, str]:
     """
-    Lookup CAP per nome città (dataset geonames offline via pgeocode).
-    Ritorna il CAP solo se la città ha un UNICO CAP, altrimenti stringa vuota
-    (per città grandi con più CAP, l'utente lo inserisce a mano).
-    `provincia` è la sigla (es. 'SA'), opzionale ma migliora il disambiguamento
-    quando due comuni hanno lo stesso nome in regioni diverse.
+    Lookup CAP per nome città leggendo direttamente il DataFrame di pgeocode
+    (più affidabile del fuzzy match di query_location).
+
+    Ritorna una tupla (cap, status):
+      - cap: il CAP suggerito (stringa vuota se non disponibile)
+      - status: codice diagnostico ('ok', 'multi', 'not_found', 'no_lib')
     """
     if not citta_name:
-        return ""
+        return ("", "not_found")
     nomi = _pgeo_nominatim_it()
     if nomi is None:
-        return ""
+        return ("", "no_lib")
     try:
-        res = nomi.query_location(citta_name, top_k=20)
-        if res is None or len(res) == 0:
-            return ""
-        # Match esatto sul nome (case-insensitive)
+        df = getattr(nomi, "_data", None)
+        if df is None or len(df) == 0:
+            return ("", "no_lib")
         target = citta_name.strip().upper()
-        exact = res[res["place_name"].astype(str).str.upper() == target]
+        # Match esatto case-insensitive su place_name
+        mask = df["place_name"].astype(str).str.upper() == target
+        exact = df[mask]
         if exact.empty:
-            return ""
-        # Disambiguazione per provincia se fornita (county_code = sigla)
+            return ("", "not_found")
+        # Disambiguazione per provincia (county_code = sigla, es 'NA')
         if provincia:
+            prov_up = provincia.strip().upper()
             with_prov = exact[
-                exact["county_code"].astype(str).str.upper()
-                == provincia.strip().upper()
+                exact["county_code"].astype(str).str.upper() == prov_up
             ]
             if not with_prov.empty:
                 exact = with_prov
-        unique_caps = (
+        caps = (
             exact["postal_code"].dropna().astype(str).str.strip().unique()
         )
-        if len(unique_caps) == 1:
-            return unique_caps[0]
-        return ""
+        if len(caps) == 1:
+            return (caps[0], "ok")
+        if len(caps) > 1:
+            return ("", "multi")
+        return ("", "not_found")
     except Exception:
-        return ""
+        return ("", "no_lib")
+
+
+def _citta_to_cap(citta_name: str, provincia: str = "") -> str:
+    """Versione compatibile che ritorna solo il CAP (o stringa vuota)."""
+    return _citta_to_cap_status(citta_name, provincia)[0]
 
 
 @st.cache_data(show_spinner=False)
@@ -586,6 +595,7 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     # ── Direzione Città → CAP (rilevata PRIMA di render del CAP widget) ──
     # Se l'utente ha cambiato la città nel rerun precedente, prova ad
     # autocompilare il CAP (solo per città con un unico CAP).
+    cap_status_key = f"{key}_cap_status"
     curr_citta_sel = st.session_state[citta_sel_key]
     prev_citta_sel = st.session_state[last_citta_key]
     if (curr_citta_sel != prev_citta_sel
@@ -594,17 +604,38 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
             and " (" in curr_citta_sel):
         nome_citta = curr_citta_sel.rsplit(" (", 1)[0]
         sigla_prov = curr_citta_sel.rsplit(" (", 1)[1].rstrip(")")
-        cap_auto = _citta_to_cap(nome_citta, sigla_prov)
+        cap_auto, status = _citta_to_cap_status(nome_citta, sigla_prov)
         if cap_auto:
             st.session_state[f"{key}_cap"] = cap_auto
             # Aggiorno anche last_cap per evitare il loop CAP→Città al rerun
             st.session_state[last_cap_key] = cap_auto
+            st.session_state[cap_status_key] = f"✓ CAP {cap_auto} suggerito"
+        else:
+            if status == "multi":
+                st.session_state[cap_status_key] = (
+                    f"ℹ️ {nome_citta.title()} ha più CAP — inseriscilo a mano"
+                )
+            elif status == "not_found":
+                st.session_state[cap_status_key] = (
+                    f"⚠️ {nome_citta.title()} non trovato nel database CAP "
+                    "— inseriscilo a mano"
+                )
+            elif status == "no_lib":
+                st.session_state[cap_status_key] = (
+                    "⚠️ Lookup CAP non disponibile (libreria pgeocode "
+                    "non caricata o dati non scaricati)"
+                )
     st.session_state[last_citta_key] = curr_citta_sel
 
     c8, c9, c10 = st.columns([1, 2, 1])
     with c8:
         cap = st.text_input("CAP", value=r.get("cap", "") or "",
                              key=f"{key}_cap", max_chars=5)
+        # Diagnostica del lookup Città→CAP (svanisce alla modifica successiva
+        # solo se la città cambia di nuovo).
+        _msg = st.session_state.get(cap_status_key, "")
+        if _msg:
+            st.caption(_msg)
 
     # ── Direzione CAP → Città (esistente, invariata) ──
     # Regola Streamlit: posso modificare session_state[widget_key] SOLO prima
