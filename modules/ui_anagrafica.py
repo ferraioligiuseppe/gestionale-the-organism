@@ -945,6 +945,7 @@ def render_anagrafica(conn) -> None:
     for p in pazienti:
         rows_df.append({
             "_id": p.get("id"),
+            "ID": p.get("id"),
             "Stato": _badge_stato(p.get("stato_paziente")),
             "Cognome": p.get("cognome", "") or "",
             "Nome": p.get("nome", "") or "",
@@ -971,9 +972,21 @@ def render_anagrafica(conn) -> None:
         filter=True, sortable=True, resizable=True, floatingFilter=True,
     )
     gob.configure_column("_id", hide=True)
+
+    # Ordinamento iniziale aggrid coerente con la scelta utente
+    _ord = st.session_state.get("ana_ordine", "Alfabetico")
+    sort_cognome = "asc" if _ord == "Alfabetico" else None
+    sort_id = (
+        "desc" if _ord == "Più recenti"
+        else "asc" if _ord == "Più vecchi"
+        else None
+    )
+
+    gob.configure_column("ID", width=80, type=["numericColumn"],
+                          sort=sort_id, floatingFilter=False)
     gob.configure_column("Stato", width=80, pinned="left",
                           filter="agTextColumnFilter", floatingFilter=False)
-    gob.configure_column("Cognome", width=180, pinned="left", sort="asc")
+    gob.configure_column("Cognome", width=180, pinned="left", sort=sort_cognome)
     gob.configure_column("Nome", width=160)
     gob.configure_column("Data nascita", width=130)
     gob.configure_column("Età", width=80, type=["numericColumn"],
