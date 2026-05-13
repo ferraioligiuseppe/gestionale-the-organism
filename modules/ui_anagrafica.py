@@ -75,63 +75,82 @@ def _cap_lookup(cap: str) -> dict:
     return {}
 
 
-@st.cache_resource(show_spinner=False)
-def _pgeo_nominatim_it():
-    """Carica il dataset geonames IT (~5MB) una sola volta per sessione.
-    Ritorna None se pgeocode non è installato o il download fallisce."""
-    try:
-        import pgeocode
-        return pgeocode.Nominatim('it')
-    except Exception:
-        return None
+@st.cache_data(show_spinner=False)
+def _carica_cap_comuni() -> dict:
+    """
+    Carica la mappa (COMUNE_UPPER, PROV_UPPER) -> CAP dal CSV
+    'cap_comuni_italiani.csv'. Il CSV deve avere intestazione e colonne
+    'Comune', 'Provincia', 'CAP' separate da ';'.
+    Formato compatibile: github.com/dakk/Italia.json/comuni.csv
+    Ritorna {} se il file non esiste.
+    """
+    candidates = [
+        "cap_comuni_italiani.csv",
+        os.path.join(os.path.dirname(__file__), "cap_comuni_italiani.csv"),
+    ]
+    out: dict = {}
+    for path in candidates:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f, delimiter=";")
+                for row in reader:
+                    comune = (row.get("Comune") or "").strip().upper()
+                    prov = (row.get("Provincia") or "").strip().upper()
+                    cap = (row.get("CAP") or "").strip()
+                    if comune and cap:
+                        out[(comune, prov)] = cap
+                        # Fallback per match senza provincia
+                        out.setdefault(comune, cap)
+            break
+        except Exception:
+            continue
+    return out
+
+
+# Città italiane "grandi" con molti CAP: per queste il CAP "primario" del CSV
+# è spesso fuorviante (es. il CAP centrale non corrisponde al quartiere reale).
+_CITTA_MULTICAP = {
+    "ROMA", "MILANO", "NAPOLI", "TORINO", "PALERMO", "GENOVA",
+    "BOLOGNA", "FIRENZE", "BARI", "CATANIA", "VENEZIA", "VERONA",
+    "MESSINA", "PADOVA", "TRIESTE", "BRESCIA", "TARANTO", "PRATO",
+    "PARMA", "MODENA", "REGGIO CALABRIA", "REGGIO NELL'EMILIA",
+    "PERUGIA", "LIVORNO", "RAVENNA", "CAGLIARI", "FOGGIA", "RIMINI",
+    "SALERNO", "FERRARA", "SASSARI", "MONZA", "BERGAMO", "PESCARA",
+    "TRENTO", "VICENZA", "TERNI", "BOLZANO", "NOVARA", "PIACENZA",
+    "ANCONA", "LECCE", "LATINA", "BRINDISI",
+}
 
 
 def _citta_to_cap_status(citta_name: str, provincia: str = "") -> tuple[str, str]:
     """
-    Lookup CAP per nome città leggendo direttamente il DataFrame di pgeocode
-    (più affidabile del fuzzy match di query_location).
-
+    Lookup CAP per nome città usando un CSV locale (no rete, no librerie esterne).
     Ritorna una tupla (cap, status):
       - cap: il CAP suggerito (stringa vuota se non disponibile)
-      - status: codice diagnostico ('ok', 'multi', 'not_found', 'no_lib')
+      - status: 'ok' | 'multi' | 'not_found' | 'no_lib'
+        'no_lib' qui significa "CSV cap_comuni_italiani.csv mancante nel repo".
     """
     if not citta_name:
         return ("", "not_found")
-    nomi = _pgeo_nominatim_it()
-    if nomi is None:
+    nome_up = citta_name.strip().upper()
+    prov_up = provincia.strip().upper() if provincia else ""
+    # Città grandi: non auto-compiliamo (servirebbe il CAP specifico della via)
+    if nome_up in _CITTA_MULTICAP:
+        return ("", "multi")
+    mappa = _carica_cap_comuni()
+    if not mappa:
         return ("", "no_lib")
-    try:
-        df = getattr(nomi, "_data", None)
-        if df is None or len(df) == 0:
-            return ("", "no_lib")
-        target = citta_name.strip().upper()
-        # Match esatto case-insensitive su place_name
-        mask = df["place_name"].astype(str).str.upper() == target
-        exact = df[mask]
-        if exact.empty:
-            return ("", "not_found")
-        # Disambiguazione per provincia (county_code = sigla, es 'NA')
-        if provincia:
-            prov_up = provincia.strip().upper()
-            with_prov = exact[
-                exact["county_code"].astype(str).str.upper() == prov_up
-            ]
-            if not with_prov.empty:
-                exact = with_prov
-        caps = (
-            exact["postal_code"].dropna().astype(str).str.strip().unique()
-        )
-        if len(caps) == 1:
-            return (caps[0], "ok")
-        if len(caps) > 1:
-            return ("", "multi")
-        return ("", "not_found")
-    except Exception:
-        return ("", "no_lib")
+    # Match esatto (comune, provincia), poi fallback solo per comune
+    if prov_up and (nome_up, prov_up) in mappa:
+        return (mappa[(nome_up, prov_up)], "ok")
+    if nome_up in mappa:
+        return (mappa[nome_up], "ok")
+    return ("", "not_found")
 
 
 def _citta_to_cap(citta_name: str, provincia: str = "") -> str:
-    """Versione compatibile che ritorna solo il CAP (o stringa vuota)."""
+    """Compat: ritorna solo il CAP (stringa vuota se non disponibile)."""
     return _citta_to_cap_status(citta_name, provincia)[0]
 
 
@@ -622,8 +641,8 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
                 )
             elif status == "no_lib":
                 st.session_state[cap_status_key] = (
-                    "⚠️ Lookup CAP non disponibile (libreria pgeocode "
-                    "non caricata o dati non scaricati)"
+                    "⚠️ File CAP non disponibile "
+                    "(cap_comuni_italiani.csv mancante nel repo)"
                 )
     st.session_state[last_citta_key] = curr_citta_sel
 
