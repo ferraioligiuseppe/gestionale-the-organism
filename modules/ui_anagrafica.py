@@ -141,7 +141,7 @@ def _row_to_plain_dict(row, cols):
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi"):
+def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi", ordine: str = "Alfabetico"):
     conn = _conn
     try:
         cur = conn.cursor()
@@ -159,7 +159,12 @@ def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi"):
         )
         if where:
             sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY cognome, nome"
+        if ordine == "Più recenti":
+            sql += " ORDER BY id DESC"
+        elif ordine == "Più vecchi":
+            sql += " ORDER BY id ASC"
+        else:
+            sql += " ORDER BY cognome, nome"
         cur.execute(sql)
         rows = cur.fetchall() or []
         cols = [d[0] for d in cur.description] if cur.description else []
@@ -874,6 +879,7 @@ def render_anagrafica(conn) -> None:
     """Render principale anagrafica v3.0 - aggrid + dialog."""
 
     st.session_state.setdefault("ana_filtro", "Attivi")
+    st.session_state.setdefault("ana_ordine", "Alfabetico")
 
     # Messaggio post-rerun
     if msg := st.session_state.pop("ana_msg_success", None):
@@ -904,8 +910,26 @@ def render_anagrafica(conn) -> None:
         st.session_state["ana_filtro"] = filtro
         st.rerun()
 
+    # Ordinamento
+    ordine = st.radio(
+        "Ordina per",
+        ["Alfabetico", "Più recenti", "Più vecchi"],
+        index=["Alfabetico", "Più recenti", "Più vecchi"].index(
+            st.session_state["ana_ordine"]
+        ),
+        horizontal=True,
+        key="ana_ordine_radio",
+    )
+    if ordine and ordine != st.session_state["ana_ordine"]:
+        st.session_state["ana_ordine"] = ordine
+        st.rerun()
+
     # Carico dati
-    pazienti = _carica_pazienti_full(conn, st.session_state["ana_filtro"])
+    pazienti = _carica_pazienti_full(
+        conn,
+        st.session_state["ana_filtro"],
+        st.session_state["ana_ordine"],
+    )
     st.caption(f"{len(pazienti)} paziente/i")
 
     if not pazienti:
