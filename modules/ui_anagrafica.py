@@ -650,11 +650,23 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     with c8:
         cap = st.text_input("CAP", value=r.get("cap", "") or "",
                              key=f"{key}_cap", max_chars=5)
-        # Diagnostica del lookup Città→CAP (svanisce alla modifica successiva
-        # solo se la città cambia di nuovo).
+        # Diagnostica del lookup Città→CAP.
+        # Se c'è un messaggio recente del lookup lo mostro, altrimenti mostro
+        # lo stato del sistema (utile per capire al volo se il CSV è caricato).
         _msg = st.session_state.get(cap_status_key, "")
         if _msg:
             st.caption(_msg)
+        else:
+            _mappa_test = _carica_cap_comuni()
+            if _mappa_test:
+                st.caption(
+                    f"💡 Lookup CAP attivo ({len(_mappa_test)} voci caricate)"
+                )
+            else:
+                st.caption(
+                    "⚠️ File CAP non disponibile "
+                    "(modules/cap_comuni_italiani.csv mancante)"
+                )
 
     # ── Direzione CAP → Città (esistente, invariata) ──
     # Regola Streamlit: posso modificare session_state[widget_key] SOLO prima
