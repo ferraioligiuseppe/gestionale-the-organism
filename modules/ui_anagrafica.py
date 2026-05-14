@@ -254,6 +254,73 @@ def _citta_to_cap(citta_name: str, provincia: str = "") -> str:
     return _citta_to_cap_status(citta_name, provincia)[0]
 
 
+def _get_all_caps(citta_name: str, provincia: str = "") -> list:
+    """Restituisce TUTTI i CAP per una città (utile per le città multi-CAP).
+    Lista vuota se la città non è nel dataset."""
+    if not citta_name:
+        return []
+    nome_up = citta_name.strip().upper()
+    prov_up = provincia.strip().upper() if provincia else ""
+    mappa = _carica_cap_comuni()
+    if not mappa:
+        return []
+    val = None
+    if prov_up and (nome_up, prov_up) in mappa:
+        val = mappa[(nome_up, prov_up)]
+    elif nome_up in mappa:
+        val = mappa[nome_up]
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return list(val)
+    if isinstance(val, str):
+        return [val]
+    return []
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _street_to_cap_nominatim(indirizzo: str, citta: str, provincia: str = "") -> str:
+    """
+    Lookup CAP usando Nominatim (OpenStreetMap, gratuito, no API key) per
+    indirizzo + città. Risposta cached per 24h per non sovraccaricare il server.
+    Ritorna stringa CAP a 5 cifre se trovato, altrimenti "".
+
+    Usato come fallback per le città multi-CAP: dato l'indirizzo completo
+    (via + numero civico), Nominatim restituisce le coordinate e il CAP
+    della zona postale corrispondente.
+    """
+    if not indirizzo or not citta:
+        return ""
+    try:
+        import requests
+        import urllib.parse
+        query_parts = [indirizzo.strip(), citta.strip()]
+        if provincia:
+            query_parts.append(provincia.strip())
+        query_parts.append("Italia")
+        query = ", ".join(query_parts)
+        url = (
+            "https://nominatim.openstreetmap.org/search"
+            f"?q={urllib.parse.quote(query)}"
+            "&format=json&addressdetails=1&limit=1&countrycodes=it"
+        )
+        # User-Agent richiesto dalla policy d'uso di Nominatim
+        resp = requests.get(
+            url,
+            headers={"User-Agent": "GestionaleStudioTheOrganism/1.0"},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                postcode = (data[0].get("address", {}) or {}).get("postcode", "")
+                if postcode and len(postcode) == 5 and postcode.isdigit():
+                    return postcode
+    except Exception:
+        pass
+    return ""
+
+
 @st.cache_data(show_spinner=False)
 def _comuni_italiani() -> list[tuple[str, str]]:
     """
@@ -683,6 +750,7 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     citta_sel_key = f"{key}_citta_sel"
     last_cap_key = f"{key}_last_cap"
     last_citta_key = f"{key}_last_citta"
+    last_indirizzo_key = f"{key}_last_indirizzo"
     prov_view_key = f"{key}_prov_view"
 
     comuni = _comuni_italiani()
@@ -710,41 +778,85 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
         st.session_state[last_cap_key] = r.get("cap", "") or ""
     if last_citta_key not in st.session_state:
         st.session_state[last_citta_key] = st.session_state[citta_sel_key]
+    if last_indirizzo_key not in st.session_state:
+        st.session_state[last_indirizzo_key] = r.get("indirizzo", "") or ""
 
     # ── Direzione Città → CAP (rilevata PRIMA di render del CAP widget) ──
-    # Se l'utente ha cambiato la città nel rerun precedente, prova ad
-    # autocompilare il CAP (solo per città con un unico CAP).
+    # Si attiva quando cambia la città O l'indirizzo (utile per multi-CAP).
     cap_status_key = f"{key}_cap_status"
     curr_citta_sel = st.session_state[citta_sel_key]
     prev_citta_sel = st.session_state[last_citta_key]
-    if (curr_citta_sel != prev_citta_sel
-            and curr_citta_sel
-            and curr_citta_sel != "— seleziona —"
-            and " (" in curr_citta_sel):
+    # L'indirizzo widget renderizza prima di questo blocco, quindi il suo state
+    # è già aggiornato al valore corrente.
+    curr_indirizzo = st.session_state.get(f"{key}_ind", "") or ""
+    prev_indirizzo = st.session_state[last_indirizzo_key]
+
+    city_changed = (curr_citta_sel != prev_citta_sel
+                    and curr_citta_sel
+                    and curr_citta_sel != "— seleziona —"
+                    and " (" in curr_citta_sel)
+    indirizzo_changed = (curr_indirizzo != prev_indirizzo
+                         and curr_indirizzo.strip())
+
+    if (city_changed or indirizzo_changed) and curr_citta_sel \
+            and curr_citta_sel != "— seleziona —" \
+            and " (" in curr_citta_sel:
         nome_citta = curr_citta_sel.rsplit(" (", 1)[0]
         sigla_prov = curr_citta_sel.rsplit(" (", 1)[1].rstrip(")")
         cap_auto, status = _citta_to_cap_status(nome_citta, sigla_prov)
         if cap_auto:
+            # Città con CAP unico → autocompila
             st.session_state[f"{key}_cap"] = cap_auto
-            # Aggiorno anche last_cap per evitare il loop CAP→Città al rerun
             st.session_state[last_cap_key] = cap_auto
             st.session_state[cap_status_key] = f"✓ CAP {cap_auto} suggerito"
-        else:
-            if status == "multi":
+        elif status == "multi":
+            # Città multi-CAP: prova lookup via indirizzo con Nominatim/OSM
+            if curr_indirizzo.strip():
+                with st.spinner("🔍 Cerco il CAP dall'indirizzo..."):
+                    cap_strada = _street_to_cap_nominatim(
+                        curr_indirizzo, nome_citta, sigla_prov
+                    )
+                if cap_strada:
+                    st.session_state[f"{key}_cap"] = cap_strada
+                    st.session_state[last_cap_key] = cap_strada
+                    st.session_state[cap_status_key] = (
+                        f"✓ CAP {cap_strada} dedotto dall'indirizzo "
+                        f"'{curr_indirizzo}' (OpenStreetMap)"
+                    )
+                else:
+                    # Nominatim non ha trovato → mostra lista CAP disponibili
+                    caps_list = _get_all_caps(nome_citta, sigla_prov)
+                    sample = ", ".join(caps_list[:6])
+                    if len(caps_list) > 6:
+                        sample += f" … (+{len(caps_list) - 6} altri)"
+                    st.session_state[cap_status_key] = (
+                        f"ℹ️ {nome_citta.title()} ha {len(caps_list)} CAP. "
+                        f"Non sono riuscito a dedurlo da "
+                        f"'{curr_indirizzo}'. CAP disponibili: {sample}"
+                    )
+            else:
+                # Nessun indirizzo → mostra solo la lista
+                caps_list = _get_all_caps(nome_citta, sigla_prov)
+                sample = ", ".join(caps_list[:6])
+                if len(caps_list) > 6:
+                    sample += f" … (+{len(caps_list) - 6} altri)"
                 st.session_state[cap_status_key] = (
-                    f"ℹ️ {nome_citta.title()} ha più CAP — inseriscilo a mano"
+                    f"ℹ️ {nome_citta.title()} ha {len(caps_list)} CAP. "
+                    f"Inserisci prima l'indirizzo per autocompilarlo, "
+                    f"oppure scegli tra: {sample}"
                 )
-            elif status == "not_found":
-                st.session_state[cap_status_key] = (
-                    f"⚠️ {nome_citta.title()} non trovato nel database CAP "
-                    "— inseriscilo a mano"
-                )
-            elif status == "no_lib":
-                st.session_state[cap_status_key] = (
-                    "⚠️ File CAP non disponibile "
-                    "(comuni.json o cap_comuni_italiani.csv mancante)"
-                )
+        elif status == "not_found":
+            st.session_state[cap_status_key] = (
+                f"⚠️ {nome_citta.title()} non trovato nel database CAP "
+                "— inseriscilo a mano"
+            )
+        elif status == "no_lib":
+            st.session_state[cap_status_key] = (
+                "⚠️ File CAP non disponibile "
+                "(comuni.json o cap_comuni_italiani.csv mancante)"
+            )
     st.session_state[last_citta_key] = curr_citta_sel
+    st.session_state[last_indirizzo_key] = curr_indirizzo
 
     c8, c9, c10 = st.columns([1, 2, 1])
     with c8:
