@@ -78,39 +78,131 @@ def _cap_lookup(cap: str) -> dict:
 @st.cache_data(show_spinner=False)
 def _carica_cap_comuni() -> dict:
     """
-    Carica la mappa (COMUNE_UPPER, PROV_UPPER) -> CAP dal CSV
-    'cap_comuni_italiani.csv'. Il CSV deve avere intestazione e colonne
-    'Comune', 'Provincia', 'CAP' separate da ';'.
-    Formato compatibile: github.com/dakk/Italia.json/comuni.csv
-    Ritorna {} se il file non esiste.
+    Carica la mappa (COMUNE_UPPER, PROV_UPPER) -> CAP per i comuni italiani.
+
+    Tenta due formati in quest'ordine:
+
+    1. JSON formato matteocontrini/comuni-json (consigliato, completo: 7904 comuni
+       con supporto multi-CAP). Schema: lista di oggetti con campi `nome`, `sigla`,
+       `cap` (array di stringhe). Per i comuni multi-CAP (Roma, Milano, Napoli...)
+       memorizziamo solo il primo CAP MA marchiamo l'entrata come "multi" usando
+       una tupla speciale come valore, così la funzione di lookup può distinguere.
+
+    2. CSV con colonne Comune;Provincia;CAP (formato compatibile con
+       github.com/dakk/Italia.json o file analoghi).
+
+    Cerca i file in: cwd, modules/, parent di modules/, modules/data/.
+    Ritorna {} se nessun file utilizzabile è stato trovato.
+
+    I valori del dict sono:
+      - stringa "CAP" per comuni con un solo CAP
+      - lista di stringhe ["CAP1", "CAP2", ...] per comuni multi-CAP
     """
-    candidates = [
+    import json
+    nomi_json = ["comuni.json", "comuni_italiani.json", "cap_comuni.json"]
+    nomi_csv = [
         "cap_comuni_italiani.csv",
-        os.path.join(os.path.dirname(__file__), "cap_comuni_italiani.csv"),
+        "comuni.csv",
+        "comuni_italiani.csv",
+        "comuni-italiani.csv",
+        "cap_comuni.csv",
+        "cap.csv",
     ]
-    out: dict = {}
-    for path in candidates:
-        if not os.path.exists(path):
-            continue
+    dir_modulo = os.path.dirname(os.path.abspath(__file__))
+    cartelle = [
+        ".",
+        dir_modulo,
+        os.path.join(dir_modulo, ".."),
+        os.path.join(dir_modulo, "data"),
+        os.path.join(dir_modulo, "..", "data"),
+    ]
+
+    def _try_load_json(path: str) -> dict | None:
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f, delimiter=";")
-                for row in reader:
-                    comune = (row.get("Comune") or "").strip().upper()
-                    prov = (row.get("Provincia") or "").strip().upper()
-                    cap = (row.get("CAP") or "").strip()
-                    if comune and cap:
-                        out[(comune, prov)] = cap
-                        # Fallback per match senza provincia
-                        out.setdefault(comune, cap)
-            break
+            with open(path, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                return None
+            result: dict = {}
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                nome = (item.get("nome") or "").strip().upper()
+                sigla = (item.get("sigla") or "").strip().upper()
+                cap_field = item.get("cap")
+                # cap può essere lista di stringhe o singola stringa
+                if isinstance(cap_field, list):
+                    caps = [str(c).strip() for c in cap_field if str(c).strip()]
+                elif isinstance(cap_field, str) and cap_field.strip():
+                    caps = [cap_field.strip()]
+                else:
+                    caps = []
+                if not nome or not caps:
+                    continue
+                value = caps[0] if len(caps) == 1 else caps  # str o list
+                result[(nome, sigla)] = value
+                result.setdefault(nome, value)
+            return result if result else None
         except Exception:
-            continue
-    return out
+            return None
+
+    def _try_load_csv(path: str) -> dict | None:
+        for sep in (";", ","):
+            try:
+                with open(path, "r", encoding="utf-8-sig") as f:
+                    reader = csv.DictReader(f, delimiter=sep)
+                    fns = reader.fieldnames or []
+                    fn_lc = {fn.strip().lower(): fn for fn in fns if fn}
+                    fn_comune = (
+                        fn_lc.get("comune") or fn_lc.get("nome")
+                        or fn_lc.get("paese") or fn_lc.get("denominazione")
+                    )
+                    fn_prov = (
+                        fn_lc.get("provincia") or fn_lc.get("prov")
+                        or fn_lc.get("sigla provincia")
+                        or fn_lc.get("sigla_provincia")
+                        or fn_lc.get("provinciasigla")
+                    )
+                    fn_cap = fn_lc.get("cap")
+                    if not fn_comune or not fn_cap:
+                        continue
+                    result: dict = {}
+                    for row in reader:
+                        comune = (row.get(fn_comune) or "").strip().upper()
+                        prov = ((row.get(fn_prov) or "").strip().upper()
+                                if fn_prov else "")
+                        cap = (row.get(fn_cap) or "").strip()
+                        if comune and cap:
+                            result[(comune, prov)] = cap
+                            result.setdefault(comune, cap)
+                    if result:
+                        return result
+            except Exception:
+                continue
+        return None
+
+    # Provo prima il JSON (più completo), poi il CSV
+    for nome in nomi_json:
+        for cartella in cartelle:
+            path = os.path.normpath(os.path.join(cartella, nome))
+            if os.path.exists(path):
+                loaded = _try_load_json(path)
+                if loaded:
+                    return loaded
+    for nome in nomi_csv:
+        for cartella in cartelle:
+            path = os.path.normpath(os.path.join(cartella, nome))
+            if os.path.exists(path):
+                loaded = _try_load_csv(path)
+                if loaded:
+                    return loaded
+    return {}
 
 
-# Città italiane "grandi" con molti CAP: per queste il CAP "primario" del CSV
-# è spesso fuorviante (es. il CAP centrale non corrisponde al quartiere reale).
+# Set di città grandi con molti CAP, usato come fallback nel caso il dataset
+# usato (CSV) non distingua i multi-CAP. Quando si carica il JSON di
+# matteocontrini, il multi-CAP è determinato dai dati e questo set serve solo
+# come backup.
 _CITTA_MULTICAP = {
     "ROMA", "MILANO", "NAPOLI", "TORINO", "PALERMO", "GENOVA",
     "BOLOGNA", "FIRENZE", "BARI", "CATANIA", "VENEZIA", "VERONA",
@@ -125,27 +217,35 @@ _CITTA_MULTICAP = {
 
 def _citta_to_cap_status(citta_name: str, provincia: str = "") -> tuple[str, str]:
     """
-    Lookup CAP per nome città usando un CSV locale (no rete, no librerie esterne).
+    Lookup CAP per nome città usando i dati locali (JSON o CSV, no rete).
     Ritorna una tupla (cap, status):
       - cap: il CAP suggerito (stringa vuota se non disponibile)
       - status: 'ok' | 'multi' | 'not_found' | 'no_lib'
-        'no_lib' qui significa "CSV cap_comuni_italiani.csv mancante nel repo".
     """
     if not citta_name:
         return ("", "not_found")
     nome_up = citta_name.strip().upper()
     prov_up = provincia.strip().upper() if provincia else ""
-    # Città grandi: non auto-compiliamo (servirebbe il CAP specifico della via)
-    if nome_up in _CITTA_MULTICAP:
-        return ("", "multi")
     mappa = _carica_cap_comuni()
     if not mappa:
         return ("", "no_lib")
-    # Match esatto (comune, provincia), poi fallback solo per comune
+    # Cerco prima per (comune, provincia), poi solo per comune
+    val = None
     if prov_up and (nome_up, prov_up) in mappa:
-        return (mappa[(nome_up, prov_up)], "ok")
-    if nome_up in mappa:
-        return (mappa[nome_up], "ok")
+        val = mappa[(nome_up, prov_up)]
+    elif nome_up in mappa:
+        val = mappa[nome_up]
+    if val is None:
+        return ("", "not_found")
+    # val è una stringa (CAP unico) o lista (multi-CAP)
+    if isinstance(val, list):
+        return ("", "multi")
+    if isinstance(val, str):
+        # Fallback: rispetta la lista hardcoded di città grandi anche se il
+        # dataset CSV non distingue i multi-CAP (capita coi CSV semplici).
+        if nome_up in _CITTA_MULTICAP:
+            return ("", "multi")
+        return (val, "ok")
     return ("", "not_found")
 
 
@@ -642,7 +742,7 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
             elif status == "no_lib":
                 st.session_state[cap_status_key] = (
                     "⚠️ File CAP non disponibile "
-                    "(cap_comuni_italiani.csv mancante nel repo)"
+                    "(comuni.json o cap_comuni_italiani.csv mancante)"
                 )
     st.session_state[last_citta_key] = curr_citta_sel
 
@@ -665,7 +765,7 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
             else:
                 st.caption(
                     "⚠️ File CAP non disponibile "
-                    "(modules/cap_comuni_italiani.csv mancante)"
+                    "(modules/comuni.json o modules/cap_comuni_italiani.csv mancante)"
                 )
 
     # ── Direzione CAP → Città (esistente, invariata) ──
