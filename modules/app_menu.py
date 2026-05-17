@@ -22,6 +22,7 @@ AREA_TEST_LIVE   = "🖥️ Test live"
 AREA_QUESTIONARI = "📋 Questionari"
 AREA_REPORT_AI   = "🤖 Report & AI"
 AREA_AUDIOLOGIA  = "🔉 Audiologia"
+AREA_MARKETING   = "📣 Marketing"
 AREA_STUDIO      = "⚙️ Studio"
 
 AREE_ORDINE = [
@@ -32,6 +33,7 @@ AREE_ORDINE = [
     AREA_QUESTIONARI,
     AREA_REPORT_AI,
     AREA_AUDIOLOGIA,
+    AREA_MARKETING,
     AREA_STUDIO,
 ]
 
@@ -80,6 +82,9 @@ SOTTOSEZIONI = {
         "🎧 Bilancio uditivo",
         "📊 Audiometria funzionale",
         "📖 Lettura avanzata",
+    ],
+    AREA_MARKETING: [
+        "📅 Eventi e iscrizioni",
     ],
     AREA_STUDIO: [
         "📊 Dashboard incassi",
