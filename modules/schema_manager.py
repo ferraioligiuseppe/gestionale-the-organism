@@ -18,6 +18,9 @@ from typing import Literal, Optional
 from modules.consensi_costellazioni.db_schema import (
     apply_schema as _apply_consensi_costellazioni_schema,
 )
+from modules.eventi.db_schema import (
+    apply_schema as _apply_eventi_schema,
+)
 
 Backend = Literal["postgres", "sqlite"]
 
@@ -33,6 +36,7 @@ def ensure_all_schemas(conn, backend: Backend = "postgres") -> None:
     ensure_vision_schema(conn, backend=backend)
     ensure_osteo_schema(conn, backend=backend)
     ensure_consensi_costellazioni_schema(conn, backend=backend)  # ← QUESTA
+    ensure_eventi_schema(conn, backend=backend)
 
 
 def ensure_auth_schema(conn, backend: Backend = "postgres") -> None:
@@ -132,6 +136,10 @@ def ensure_auth_schema(conn, backend: Backend = "postgres") -> None:
 def ensure_consensi_costellazioni_schema(conn, backend: Backend = "postgres") -> None:
     """Schema del modulo consensi costellazioni familiari."""
     _apply_consensi_costellazioni_schema(conn, db_backend=backend)
+
+def ensure_eventi_schema(conn, backend: Backend = "postgres") -> None:
+    """Schema del modulo eventi."""
+    _apply_eventi_schema(conn, db_backend=backend)
 
 def ensure_core_schema(conn, backend: Backend = "postgres") -> None:
     """
