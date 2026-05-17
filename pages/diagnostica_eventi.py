@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 # pages/diagnostica_eventi.py
 #
-# Pagina admin TEMPORANEA di diagnostica per il modulo eventi.
-# Verifica che le tabelle ev_eventi e ev_iscrizioni siano state create
-# correttamente sul Postgres OVH e che siano scrivibili.
+# Pagina admin TEMPORANEA di diagnostica + setup per il modulo eventi.
+# Verifica e crea (se mancano) le tabelle ev_eventi e ev_iscrizioni
+# sul Postgres OVH.
 #
 # COME USARE:
 #   1. Login al gestionale come admin
 #   2. URL: https://testgestionale.streamlit.app/diagnostica_eventi
-#   3. Controlla i risultati
-#   4. Cancella il file dal repo quando hai finito le verifiche
+#   3. Se le tabelle mancano premi "Crea tabelle ora"
+#   4. Verifica tutti i check
+#   5. Cancella il file dal repo quando hai finito
 
 import streamlit as st
 import sys, os
@@ -25,8 +26,8 @@ st.set_page_config(
     layout="centered",
 )
 
-st.title("🔍 Diagnostica modulo Eventi")
-st.caption("Pagina admin temporanea — verifica setup DB modulo eventi.")
+st.title("🔍 Diagnostica e setup modulo Eventi")
+st.caption("Pagina admin temporanea — verifica e crea tabelle modulo eventi.")
 
 # Protezione minima: utente loggato
 user = st.session_state.get("user")
@@ -50,53 +51,94 @@ except Exception as e:
 
 st.divider()
 
-# =============================================================================
-# CHECK 1: ESISTENZA TABELLE
-# =============================================================================
 
-st.markdown("## Check 1 — Esistenza tabelle del modulo")
+# =============================================================================
+# HELPER: check esistenza tabelle
+# =============================================================================
 
 TABELLE_ATTESE = ["ev_eventi", "ev_iscrizioni"]
 
-try:
+
+def _check_tabelle(conn):
     cur = conn.cursor()
-    cur.execute("""
-        SELECT table_name
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_name = ANY(%s)
-        ORDER BY table_name;
-    """, (TABELLE_ATTESE,))
-    rows = cur.fetchall()
-    cur.close()
+    try:
+        cur.execute("""
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = ANY(%s)
+            ORDER BY table_name;
+        """, (TABELLE_ATTESE,))
+        rows = cur.fetchall()
+        return [r[0] for r in rows]
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
 
-    tabelle_trovate = [r[0] for r in rows]
 
-    col1, col2 = st.columns(2)
-    for t in TABELLE_ATTESE:
-        if t in tabelle_trovate:
-            col1.success(f"✅ `{t}` esiste")
-        else:
-            col2.error(f"❌ `{t}` NON trovata")
+# =============================================================================
+# STEP 1: VERIFICA / CREAZIONE TABELLE
+# =============================================================================
 
-    if set(tabelle_trovate) != set(TABELLE_ATTESE):
-        st.warning(
-            "Alcune tabelle mancano. Verifica che lo schema sia stato applicato "
-            "(controlla i log Streamlit del primo avvio dopo il deploy)."
-        )
-        st.stop()
+st.markdown("## Step 1 — Tabelle del modulo")
+
+try:
+    presenti = _check_tabelle(conn)
+    mancanti = [t for t in TABELLE_ATTESE if t not in presenti]
 except Exception as e:
-    st.error(f"Errore controllo tabelle: {e}")
-    st.code(traceback.format_exc())
+    st.warning(f"Verifica fallita: {e}")
+    presenti = []
+    mancanti = list(TABELLE_ATTESE)
+
+col1, col2 = st.columns(2)
+for t in TABELLE_ATTESE:
+    if t in presenti:
+        col1.success(f"✅ `{t}` esiste")
+    else:
+        col2.error(f"❌ `{t}` mancante")
+
+if mancanti:
+    st.warning(f"Tabelle da creare: **{', '.join(mancanti)}**")
+
+    if st.button("🛠️ Crea tabelle ora", type="primary", use_container_width=True):
+        try:
+            from modules.eventi.db_schema import apply_schema
+
+            with st.spinner("Creazione tabelle in corso..."):
+                apply_schema(conn, db_backend="postgres")
+
+            st.success("✅ Schema applicato!")
+
+            # Verifica post-creazione
+            presenti2 = _check_tabelle(conn)
+            st.write("Tabelle ora presenti:")
+            for t in TABELLE_ATTESE:
+                if t in presenti2:
+                    st.markdown(f"- ✅ `{t}`")
+                else:
+                    st.markdown(f"- ❌ `{t}` (ancora mancante!)")
+
+            if all(t in presenti2 for t in TABELLE_ATTESE):
+                st.balloons()
+                st.info("🎉 Tabelle create. Ricarica la pagina per vedere i check successivi.")
+
+        except Exception as e:
+            st.error(f"Creazione tabelle fallita: {e}")
+            st.code(traceback.format_exc())
+
+    st.divider()
+    st.caption("Una volta create le tabelle, ricarica la pagina per gli altri check.")
     st.stop()
 
 st.divider()
 
 # =============================================================================
-# CHECK 2: STRUTTURA COLONNE
+# STEP 2: STRUTTURA COLONNE
 # =============================================================================
 
-st.markdown("## Check 2 — Struttura delle tabelle")
+st.markdown("## Step 2 — Struttura delle tabelle")
 
 for tabella in TABELLE_ATTESE:
     with st.expander(f"📋 Colonne di `{tabella}`"):
@@ -132,10 +174,10 @@ for tabella in TABELLE_ATTESE:
 st.divider()
 
 # =============================================================================
-# CHECK 3: CONTEGGIO RIGHE
+# STEP 3: CONTEGGIO RIGHE
 # =============================================================================
 
-st.markdown("## Check 3 — Contenuto attuale")
+st.markdown("## Step 3 — Contenuto attuale")
 
 try:
     cur = conn.cursor()
@@ -154,13 +196,13 @@ except Exception as e:
 st.divider()
 
 # =============================================================================
-# CHECK 4: TEST DI SCRITTURA/LETTURA
+# STEP 4: TEST DI SCRITTURA/LETTURA
 # =============================================================================
 
-st.markdown("## Check 4 — Test scrittura/lettura")
+st.markdown("## Step 4 — Test scrittura/lettura")
 st.caption(
-    "Inserisce un evento di prova, poi lo cancella. Serve a confermare "
-    "che il modulo può scrivere effettivamente sul DB."
+    "Inserisce un evento di prova, poi lo cancella. "
+    "Conferma che il modulo può effettivamente scrivere sul DB."
 )
 
 if st.button("🧪 Esegui test di scrittura", type="primary"):
@@ -183,7 +225,7 @@ if st.button("🧪 Esegui test di scrittura", type="primary"):
         # SELECT
         cur.execute("SELECT slug, titolo, tipo, data_ora FROM ev_eventi WHERE id = %s;", (new_id,))
         row = cur.fetchone()
-        st.success(f"✅ SELECT riuscito — record letto:")
+        st.success("✅ SELECT riuscito — record letto:")
         st.json({
             "id": new_id,
             "slug": row[0],
@@ -194,7 +236,7 @@ if st.button("🧪 Esegui test di scrittura", type="primary"):
 
         # DELETE
         cur.execute("DELETE FROM ev_eventi WHERE id = %s;", (new_id,))
-        st.success(f"✅ DELETE riuscito — record di test rimosso")
+        st.success("✅ DELETE riuscito — record di test rimosso")
 
         conn.commit()
         cur.close()
@@ -212,10 +254,10 @@ if st.button("🧪 Esegui test di scrittura", type="primary"):
 st.divider()
 
 # =============================================================================
-# CHECK 5: TABELLA PAZIENTI ESISTE (per la futura FK)
+# STEP 5: TABELLA PAZIENTI ESISTE (per la futura FK)
 # =============================================================================
 
-st.markdown("## Check 5 — Aggancio Pazienti")
+st.markdown("## Step 5 — Aggancio Pazienti")
 st.caption("Verifica che la tabella Pazienti esista e sia raggiungibile.")
 
 try:
