@@ -10,7 +10,8 @@ import streamlit as st
 from .app_menu import (
     AREE_ORDINE, SOTTOSEZIONI,
     AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_TEST_NEUROEVOL, AREA_TEST_LIVE,
-    AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA, AREA_STUDIO,
+    AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA,
+    AREA_MARKETING, AREA_STUDIO,
 )
 
 
@@ -515,6 +516,16 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 ui_reading_dom()
             except ImportError as e:
                 st.error(f"Modulo Lettura non disponibile: {e}")
+            return
+
+    # ── AREA MARKETING ────────────────────────────────────────────────
+    elif area == AREA_MARKETING:
+        if sotto == "📅 Eventi e iscrizioni":
+            try:
+                from .eventi.ui_eventi import render_eventi_section
+                render_eventi_section()
+            except ImportError as e:
+                st.error(f"Modulo Eventi non disponibile: {e}")
             return
 
     # ── AREA STUDIO ───────────────────────────────────────────────────
