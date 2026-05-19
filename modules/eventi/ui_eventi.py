@@ -19,8 +19,13 @@ import csv
 import logging
 from datetime import datetime, time, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import streamlit as st
+
+# Fuso orario locale studio (Europe/Rome) per evitare salvataggi naive
+# che PostgreSQL interpreta come UTC e mostra con offset sbagliato.
+ROME_TZ = ZoneInfo("Europe/Rome")
 
 from .db_eventi import (
     TIPI_VALIDI,
@@ -386,7 +391,7 @@ def _render_tab_azioni(conn, ev: dict):
                     conn, ev["id"],
                     titolo=titolo,
                     tipo=tipo,
-                    data_ora=datetime.combine(data_ev, ora_ev),
+                    data_ora=datetime.combine(data_ev, ora_ev, tzinfo=ROME_TZ),
                     durata_minuti=durata if durata > 0 else None,
                     sede=sede or None,
                     descrizione=descrizione or None,
@@ -504,7 +509,7 @@ def _render_form_crea_evento(conn):
                     conn,
                     titolo=titolo,
                     tipo=tipo,
-                    data_ora=datetime.combine(data_ev, ora_ev),
+                    data_ora=datetime.combine(data_ev, ora_ev, tzinfo=ROME_TZ),
                     durata_minuti=durata if durata > 0 else None,
                     sede=sede or None,
                     descrizione=descrizione or None,
