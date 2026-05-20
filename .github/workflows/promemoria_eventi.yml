@@ -1,1 +1,22 @@
+name: Promemoria Eventi Notturni
 
+# Esegue ogni notte alle 08:00 ora italiana (06:00 UTC in ora legale, 07:00 UTC in ora solare).
+# Per coprire entrambi i periodi senza complicazioni, giriamo alle 06:00 UTC.
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  # Permette anche l'esecuzione manuale dal tab Actions di GitHub
+  workflow_dispatch:
+
+jobs:
+  trigger-promemoria:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chiama endpoint promemoria
+        run: |
+          echo "Triggering promemoria eventi..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            "https://testgestionale.streamlit.app/cron_promemoria?token=${{ secrets.CRON_TOKEN }}")
+          echo "Risposta:"
+          echo "$RESPONSE"
+          # Nota: Streamlit Cloud risponde con HTML, il controllo è best-effort
