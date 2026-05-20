@@ -57,15 +57,19 @@ st.header("Step 1 — Eventi da controllare")
 st.caption("Vengono mostrati gli eventi futuri (data_ora >= oggi).")
 
 try:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id, titolo, data_ora, sede, slug FROM ev_eventi "
-            f"WHERE data_ora >= {placeholder} ORDER BY data_ora ASC",
-            (datetime.now(ROME_TZ),)
-        )
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-        eventi = [dict(zip(cols, r)) for r in rows]
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, titolo, data_ora, sede, slug FROM ev_eventi "
+        f"WHERE data_ora >= {placeholder} ORDER BY data_ora ASC",
+        (datetime.now(ROME_TZ),)
+    )
+    rows = cur.fetchall()
+    cols = [d[0] for d in cur.description]
+    eventi = [dict(zip(cols, r)) for r in rows]
+    try:
+        cur.close()
+    except Exception:
+        pass
 except Exception as e:
     st.error(f"Errore query: {e}")
     st.stop()
@@ -143,14 +147,18 @@ if conferma and st.button("🔧 Applica correzione", type="primary"):
     errori = []
     for ev in selezionati:
         try:
-            with conn.cursor() as cur:
-                # Aggiorno data_ora sottraendo offset
-                # Il datetime corretto è già aware in ROME_TZ
-                cur.execute(
-                    f"UPDATE ev_eventi SET data_ora = {placeholder}, "
-                    f"updated_at = {placeholder} WHERE id = {placeholder}",
-                    (ev["dt_corretto"], datetime.now(ROME_TZ), ev["id"])
-                )
+            cur = conn.cursor()
+            # Aggiorno data_ora sottraendo offset
+            # Il datetime corretto è già aware in ROME_TZ
+            cur.execute(
+                f"UPDATE ev_eventi SET data_ora = {placeholder}, "
+                f"updated_at = {placeholder} WHERE id = {placeholder}",
+                (ev["dt_corretto"], datetime.now(ROME_TZ), ev["id"])
+            )
+            try:
+                cur.close()
+            except Exception:
+                pass
             conn.commit()
             successi += 1
         except Exception as e:

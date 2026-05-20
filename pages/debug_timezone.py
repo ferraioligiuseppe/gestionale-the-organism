@@ -33,15 +33,19 @@ st.info(f"Backend: {'PostgreSQL' if is_postgres else 'SQLite'}")
 
 # Query raw degli eventi futuri
 try:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id, titolo, data_ora, created_at, updated_at FROM ev_eventi "
-            f"WHERE data_ora >= {placeholder} ORDER BY data_ora ASC",
-            (datetime.now(ROME_TZ),)
-        )
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-        eventi = [dict(zip(cols, r)) for r in rows]
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, titolo, data_ora, created_at, updated_at FROM ev_eventi "
+        f"WHERE data_ora >= {placeholder} ORDER BY data_ora ASC",
+        (datetime.now(ROME_TZ),)
+    )
+    rows = cur.fetchall()
+    cols = [d[0] for d in cur.description]
+    eventi = [dict(zip(cols, r)) for r in rows]
+    try:
+        cur.close()
+    except Exception:
+        pass
 except Exception as e:
     st.error(f"Errore query: {e}")
     st.stop()
