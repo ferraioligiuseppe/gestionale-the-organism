@@ -165,6 +165,49 @@ def _testo_notifica_studio(evento: dict, iscrizione: dict) -> str:
     )
 
 
+def _testo_promemoria_iscritto(evento: dict, iscrizione: dict, tipo: str = "24h") -> str:
+    """
+    Testo plain-text del promemoria pre-evento.
+    tipo: '48h' (mancano 2 giorni) o '24h' (manca 1 giorno / domani)
+    """
+    nome = iscrizione.get("nome", "").strip()
+    data_str = _format_data_evento(evento["data_ora"])
+
+    if tipo == "48h":
+        apertura = (
+            f"Ciao {nome},\n\n"
+            f"ti ricordiamo che tra due giorni ci sarà l'incontro a cui sei iscritto/a:\n\n"
+        )
+    else:  # 24h
+        apertura = (
+            f"Ciao {nome},\n\n"
+            f"ci vediamo domani! Ti ricordiamo l'appuntamento a cui sei iscritto/a:\n\n"
+        )
+
+    corpo = (
+        f"  {evento.get('titolo', '')}\n"
+        f"  📅 {data_str}\n"
+    )
+    if evento.get("sede"):
+        corpo += f"  📍 {evento['sede']}\n"
+    if evento.get("conduttore"):
+        corpo += f"  👤 Conduttore: {evento['conduttore']}\n"
+    if evento.get("prezzo") is not None and float(evento["prezzo"]) > 0:
+        corpo += f"  💶 Contributo: € {float(evento['prezzo']):.2f}\n"
+
+    chiusura = (
+        "\n"
+        "Ti aspettiamo. Se per qualsiasi motivo non potrai più esserci, "
+        "ti chiediamo gentilmente di avvisarci rispondendo a questa email, "
+        "così possiamo liberare il posto per chi è in lista d'attesa.\n\n"
+        "A presto,\n"
+        "Studio The Organism\n"
+        "Via De Rosa 46, Pagani (SA)\n"
+        "www.theorganism.com\n"
+    )
+    return apertura + corpo + chiusura
+
+
 # =============================================================================
 # API PUBBLICA
 # =============================================================================
@@ -237,3 +280,41 @@ def invia_notifica_studio(evento: dict, iscrizione: dict) -> None:
         logger.info(f"Notifica studio inviata a {to_email}")
     except Exception as e:
         logger.error(f"Notifica studio FALLITA: {e}", exc_info=True)
+
+
+def invia_promemoria_iscritto(
+    evento: dict,
+    iscrizione: dict,
+    tipo: str = "24h",
+) -> None:
+    """
+    Invia email di promemoria pre-evento all'iscritto.
+
+    Args:
+        evento: dict con i dati dell'evento
+        iscrizione: dict con i dati dell'iscritto
+        tipo: '48h' o '24h'
+
+    Solleva eccezione se l'invio fallisce.
+    """
+    to_email = iscrizione.get("email")
+    if not to_email:
+        raise ValueError("Email dell'iscritto mancante")
+
+    msg = EmailMessage()
+    titolo_ev = evento.get("titolo", "Evento")
+
+    if tipo == "48h":
+        msg["Subject"] = f"Tra 2 giorni: {titolo_ev}"
+    else:
+        msg["Subject"] = f"Ci vediamo domani: {titolo_ev}"
+
+    msg["From"] = _from_address()
+    msg["To"] = to_email
+    msg.set_content(_testo_promemoria_iscritto(evento, iscrizione, tipo))
+
+    _send(msg)
+    logger.info(
+        f"Promemoria {tipo} inviato a {to_email} per evento "
+        f"{evento.get('id')} (iscrizione {iscrizione.get('id')})"
+    )
