@@ -228,6 +228,68 @@ def apply_schema(conn: Any, db_backend: str = "postgres") -> None:
         except Exception:
             pass
 
+    # Migrazione colonne promemoria (48h/24h) - idempotente
+    _ensure_promemoria_columns(conn, db_backend)
+
+
+def _ensure_promemoria_columns(conn: Any, db_backend: str = "postgres") -> None:
+    """
+    Migrazione idempotente: aggiunge le colonne per il tracking dei due
+    promemoria distinti (48h e 24h) alla tabella ev_iscrizioni.
+
+    Le colonne pre-esistenti (email_promemoria_inviata, email_promemoria_ts)
+    restano per retrocompatibilità ma non vengono più usate dalla nuova logica.
+    """
+    nuove_colonne_pg = [
+        ("promemoria_48h_inviato", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("promemoria_48h_ts", "TIMESTAMPTZ"),
+        ("promemoria_24h_inviato", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("promemoria_24h_ts", "TIMESTAMPTZ"),
+    ]
+    nuove_colonne_sqlite = [
+        ("promemoria_48h_inviato", "INTEGER NOT NULL DEFAULT 0"),
+        ("promemoria_48h_ts", "TEXT"),
+        ("promemoria_24h_inviato", "INTEGER NOT NULL DEFAULT 0"),
+        ("promemoria_24h_ts", "TEXT"),
+    ]
+
+    cur = conn.cursor()
+    try:
+        if db_backend == "postgres":
+            cur.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'ev_iscrizioni'
+            """)
+            esistenti = {r[0] for r in cur.fetchall()}
+            for nome, tipo in nuove_colonne_pg:
+                if nome not in esistenti:
+                    cur.execute(
+                        f"ALTER TABLE ev_iscrizioni ADD COLUMN {nome} {tipo}"
+                    )
+                    logger.info(f"Aggiunta colonna ev_iscrizioni.{nome}")
+        else:
+            cur.execute("PRAGMA table_info(ev_iscrizioni)")
+            esistenti = {r[1] for r in cur.fetchall()}
+            for nome, tipo in nuove_colonne_sqlite:
+                if nome not in esistenti:
+                    cur.execute(
+                        f"ALTER TABLE ev_iscrizioni ADD COLUMN {nome} {tipo}"
+                    )
+                    logger.info(f"Aggiunta colonna ev_iscrizioni.{nome}")
+
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+
 
 def drop_schema(conn: Any) -> None:
     """
