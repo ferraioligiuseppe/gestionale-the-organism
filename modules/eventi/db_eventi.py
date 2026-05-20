@@ -747,3 +747,140 @@ def mark_email_promemoria_inviata(conn: Any, iscrizione_id: int) -> bool:
             cur.close()
         except Exception:
             pass
+
+
+# =============================================================================
+# PROMEMORIA AUTOMATICI (48h / 24h prima evento)
+# =============================================================================
+
+def eventi_con_promemoria_da_inviare(conn: Any) -> list[dict]:
+    """
+    Ritorna gli eventi futuri per cui c'è almeno un promemoria da inviare ORA.
+
+    Per ogni evento calcola le finestre temporali:
+      - 48h: evento tra ~46h e ~50h da adesso → manda promemoria '48h'
+      - 24h: evento tra ~22h e ~26h da adesso → manda promemoria '24h'
+
+    Le finestre larghe (±2h) garantiscono che un cron giornaliero non perda
+    eventi anche se gira a orari leggermente diversi.
+
+    Ritorna lista di dict: {evento: {...}, tipi: ['48h', '24h']}
+    """
+    from datetime import timedelta
+
+    now = datetime.now(ROME_TZ)
+    ph = _placeholder(conn)
+
+    cur = conn.cursor()
+    try:
+        # Prendo tutti gli eventi futuri (entro 3 giorni) con iscrizioni aperte/confermabili
+        limite = now + timedelta(days=3)
+        cur.execute(
+            f"""SELECT * FROM ev_eventi
+                WHERE data_ora >= {ph} AND data_ora <= {ph}
+                ORDER BY data_ora ASC;""",
+            (now, limite),
+        )
+        eventi = _rows_to_dicts(cur, cur.fetchall())
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+
+    risultati = []
+    for ev in eventi:
+        dt = ev["data_ora"]
+        # SQLite restituisce stringhe ISO; Postgres restituisce datetime.
+        if isinstance(dt, str):
+            try:
+                dt = datetime.fromisoformat(dt)
+            except ValueError:
+                # Formato non standard: salto questo evento
+                continue
+        # Normalizzo a aware Rome
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc).astimezone(ROME_TZ)
+        else:
+            dt = dt.astimezone(ROME_TZ)
+
+        ore_mancanti = (dt - now).total_seconds() / 3600.0
+
+        tipi = []
+        # Finestra 48h: tra 46 e 50 ore
+        if 46 <= ore_mancanti <= 50:
+            tipi.append("48h")
+        # Finestra 24h: tra 22 e 26 ore
+        if 22 <= ore_mancanti <= 26:
+            tipi.append("24h")
+
+        if tipi:
+            risultati.append({"evento": ev, "tipi": tipi, "ore_mancanti": round(ore_mancanti, 1)})
+
+    return risultati
+
+
+def iscritti_senza_promemoria(conn: Any, evento_id: int, tipo: str) -> list[dict]:
+    """
+    Ritorna gli iscritti confermati di un evento che NON hanno ancora ricevuto
+    il promemoria del tipo specificato ('48h' o '24h').
+    """
+    if tipo not in ("48h", "24h"):
+        raise ValueError(f"Tipo promemoria non valido: {tipo}")
+
+    col = "promemoria_48h_inviato" if tipo == "48h" else "promemoria_24h_inviato"
+    ph = _placeholder(conn)
+    false_val = False if _is_postgres(conn) else 0
+
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"""SELECT * FROM ev_iscrizioni
+                WHERE evento_id = {ph}
+                  AND stato = 'confermata'
+                  AND {col} = {ph}
+                ORDER BY created_at ASC;""",
+            (evento_id, false_val),
+        )
+        return _rows_to_dicts(cur, cur.fetchall())
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+
+
+def marca_promemoria_inviato(conn: Any, iscrizione_id: int, tipo: str) -> bool:
+    """
+    Segna che il promemoria (48h o 24h) è stato inviato a una iscrizione.
+    """
+    if tipo not in ("48h", "24h"):
+        raise ValueError(f"Tipo promemoria non valido: {tipo}")
+
+    col_flag = "promemoria_48h_inviato" if tipo == "48h" else "promemoria_24h_inviato"
+    col_ts = "promemoria_48h_ts" if tipo == "48h" else "promemoria_24h_ts"
+    ph = _placeholder(conn)
+    sql_now = "NOW()" if _is_postgres(conn) else "CURRENT_TIMESTAMP"
+    true_val = True if _is_postgres(conn) else 1
+
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"""UPDATE ev_iscrizioni
+                SET {col_flag} = {ph}, {col_ts} = {sql_now}
+                WHERE id = {ph};""",
+            (true_val, iscrizione_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
