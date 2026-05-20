@@ -509,6 +509,118 @@ def _render_tab_azioni(conn, ev: dict):
                             st.code(err)
 
     st.divider()
+    st.markdown("**🔔 Promemoria pre-evento (48h / 24h)**")
+    st.caption(
+        "I promemoria email partono in automatico ogni notte (48h e 24h prima). "
+        "Qui puoi inviarli manualmente subito, oppure generare la lista WhatsApp "
+        "da inviare a mano."
+    )
+
+    tab_email, tab_wa = st.tabs(["📧 Email", "💬 WhatsApp (manuale)"])
+
+    with tab_email:
+        tipo_prom = st.radio(
+            "Tipo promemoria",
+            options=["48h", "24h"],
+            horizontal=True,
+            key=f"tipo_prom_{ev['id']}",
+            help="48h = 'tra due giorni', 24h = 'ci vediamo domani'",
+        )
+
+        try:
+            from .db_eventi import iscritti_senza_promemoria, lista_iscrizioni
+            non_inviati = iscritti_senza_promemoria(conn, ev["id"], tipo_prom)
+            tutti_confermati = lista_iscrizioni(conn, ev["id"], stato="confermata")
+        except Exception as e:
+            st.error(f"Errore lettura iscritti: {e}")
+            non_inviati = []
+            tutti_confermati = []
+
+        st.write(
+            f"Iscritti confermati: **{len(tutti_confermati)}** · "
+            f"Non hanno ancora ricevuto il promemoria {tipo_prom}: **{len(non_inviati)}**"
+        )
+
+        if non_inviati:
+            conferma_prom = st.checkbox(
+                f"✋ Confermo invio promemoria {tipo_prom} a {len(non_inviati)} iscritti",
+                key=f"chk_prom_{ev['id']}_{tipo_prom}",
+            )
+            if conferma_prom and st.button(
+                f"📧 Invia promemoria {tipo_prom} ora",
+                type="primary",
+                key=f"btn_prom_{ev['id']}_{tipo_prom}",
+            ):
+                try:
+                    from .email_eventi import invia_promemoria_iscritto
+                    from .db_eventi import marca_promemoria_inviato
+                except Exception as e:
+                    st.error(f"Errore import: {e}")
+                    st.stop()
+
+                successi, errori = 0, []
+                progress = st.progress(0, text="Invio...")
+                for i, iscr in enumerate(non_inviati):
+                    try:
+                        invia_promemoria_iscritto(ev, iscr, tipo_prom)
+                        marca_promemoria_inviato(conn, iscr["id"], tipo_prom)
+                        successi += 1
+                    except Exception as e:
+                        errori.append(f"{iscr.get('email','?')}: {e}")
+                    progress.progress((i + 1) / len(non_inviati),
+                                      text=f"Inviata {i+1}/{len(non_inviati)}")
+                progress.empty()
+                if successi:
+                    st.success(f"✅ {successi} promemoria {tipo_prom} inviati")
+                if errori:
+                    st.error(f"❌ {len(errori)} errori:")
+                    for err in errori:
+                        st.code(err)
+        else:
+            st.info(f"Tutti gli iscritti confermati hanno già ricevuto il promemoria {tipo_prom}.")
+
+    with tab_wa:
+        tipo_wa = st.radio(
+            "Tipo messaggio",
+            options=["48h", "24h"],
+            horizontal=True,
+            key=f"tipo_wa_{ev['id']}",
+        )
+        st.caption(
+            "Clicca il link 💬 di ogni iscritto per aprire WhatsApp con il messaggio "
+            "già pronto. Devi solo premere invio. (Funziona se il telefono è valido.)"
+        )
+
+        try:
+            from .db_eventi import lista_iscrizioni
+            from .promemoria_eventi import genera_lista_whatsapp
+            confermati = lista_iscrizioni(conn, ev["id"], stato="confermata")
+            lista_wa = genera_lista_whatsapp(ev, confermati, tipo_wa)
+        except Exception as e:
+            st.error(f"Errore: {e}")
+            lista_wa = []
+
+        if not lista_wa:
+            st.info("Nessun iscritto confermato.")
+        else:
+            for voce in lista_wa:
+                c1, c2 = st.columns([0.55, 0.45])
+                with c1:
+                    st.markdown(f"**{voce['nome']}**")
+                    st.caption(f"📞 {voce['telefono']}")
+                with c2:
+                    if voce["link_wa"]:
+                        st.link_button(
+                            "💬 Apri WhatsApp",
+                            voce["link_wa"],
+                            use_container_width=True,
+                        )
+                    else:
+                        st.caption("❌ telefono non valido")
+                with st.expander("Vedi/copia messaggio"):
+                    st.code(voce["messaggio"], language=None)
+
+    st.divider()
     st.markdown("**⚠️ Zona pericolosa**")
     with st.popover("🗑️ Elimina evento definitivamente"):
         st.error(
