@@ -435,6 +435,80 @@ def _render_tab_azioni(conn, ev: dict):
                 st.rerun()
 
     st.divider()
+    st.markdown("**📤 Re-invia email di conferma**")
+    st.caption(
+        "Re-invia l'email di conferma (con PDF aggiornato dal DB) a tutti gli iscritti "
+        "che hanno stato **confermata**. Utile se hai corretto un dato dell'evento "
+        "(orario, sede, conduttore) e vuoi notificare gli iscritti già registrati."
+    )
+
+    # Conta iscritti confermati
+    try:
+        from .db_eventi import lista_iscrizioni
+        iscritti_confermati = lista_iscrizioni(conn, ev["id"], stato="confermata")
+    except Exception as e:
+        st.error(f"Errore lettura iscritti: {e}")
+        iscritti_confermati = []
+
+    if not iscritti_confermati:
+        st.info("Nessun iscritto confermato per questo evento.")
+    else:
+        st.write(
+            f"Iscritti confermati: **{len(iscritti_confermati)}** "
+            f"({', '.join(i.get('email', '?') for i in iscritti_confermati[:3])}"
+            f"{', ...' if len(iscritti_confermati) > 3 else ''})"
+        )
+
+        # Doppia conferma
+        col_btn1, col_btn2 = st.columns([2, 1])
+        with col_btn1:
+            conferma_reinvio = st.checkbox(
+                f"✋ Confermo: voglio re-inviare l'email a tutti i {len(iscritti_confermati)} iscritti",
+                key=f"chk_reinvia_{ev['id']}",
+            )
+        with col_btn2:
+            if conferma_reinvio:
+                if st.button(
+                    "📤 Invia ora",
+                    type="primary",
+                    key=f"btn_reinvia_{ev['id']}",
+                    use_container_width=True,
+                ):
+                    # Import lazy per evitare errori se moduli non disponibili
+                    try:
+                        from .email_eventi import invia_conferma_iscritto
+                        from .pdf_evento import genera_pdf_conferma
+                    except Exception as e:
+                        st.error(f"Errore import: {e}")
+                        st.stop()
+
+                    successi = 0
+                    errori = []
+                    progress = st.progress(0, text="Invio in corso...")
+
+                    for i, iscr in enumerate(iscritti_confermati):
+                        try:
+                            # Rigenera il PDF con i dati attuali (rilegge il DB)
+                            pdf_bytes = genera_pdf_conferma(ev, iscr)
+                            invia_conferma_iscritto(ev, iscr, pdf_bytes=pdf_bytes)
+                            successi += 1
+                        except Exception as e:
+                            errori.append(f"{iscr.get('email', '?')}: {e}")
+                        progress.progress(
+                            (i + 1) / len(iscritti_confermati),
+                            text=f"Inviata {i+1}/{len(iscritti_confermati)}",
+                        )
+
+                    progress.empty()
+
+                    if successi:
+                        st.success(f"✅ {successi} email inviate con successo")
+                    if errori:
+                        st.error(f"❌ {len(errori)} errori:")
+                        for err in errori:
+                            st.code(err)
+
+    st.divider()
     st.markdown("**⚠️ Zona pericolosa**")
     with st.popover("🗑️ Elimina evento definitivamente"):
         st.error(
