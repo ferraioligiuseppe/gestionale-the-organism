@@ -757,12 +757,12 @@ def eventi_con_promemoria_da_inviare(conn: Any) -> list[dict]:
     """
     Ritorna gli eventi futuri per cui c'è almeno un promemoria da inviare ORA.
 
-    Per ogni evento calcola le finestre temporali:
-      - 48h: evento tra ~46h e ~50h da adesso → manda promemoria '48h'
-      - 24h: evento tra ~22h e ~26h da adesso → manda promemoria '24h'
+    Per ogni evento calcola i giorni di calendario mancanti:
+      - 48h: evento dopodomani (2 giorni) → manda promemoria '48h'
+      - 24h: evento domani (1 giorno) → manda promemoria '24h'
 
-    Le finestre larghe (±2h) garantiscono che un cron giornaliero non perda
-    eventi anche se gira a orari leggermente diversi.
+    La logica a giorni di calendario è robusta rispetto all'ora in cui gira
+    il cron: non importa se parte alle 8:00 o alle 23:00, conta solo il giorno.
 
     Ritorna lista di dict: {evento: {...}, tipi: ['48h', '24h']}
     """
@@ -806,16 +806,20 @@ def eventi_con_promemoria_da_inviare(conn: Any) -> list[dict]:
 
         ore_mancanti = (dt - now).total_seconds() / 3600.0
 
+        # Logica basata su GIORNI DI CALENDARIO (robusta rispetto all'ora del cron).
+        # Calcolo quanti giorni di calendario mancano tra oggi e il giorno dell'evento.
+        giorni_mancanti = (dt.date() - now.date()).days
+
         tipi = []
-        # Finestra 48h: tra 46 e 50 ore
-        if 46 <= ore_mancanti <= 50:
+        # Promemoria 48h: l'evento è dopodomani (2 giorni di calendario)
+        if giorni_mancanti == 2:
             tipi.append("48h")
-        # Finestra 24h: tra 22 e 26 ore
-        if 22 <= ore_mancanti <= 26:
+        # Promemoria 24h: l'evento è domani (1 giorno di calendario)
+        if giorni_mancanti == 1:
             tipi.append("24h")
 
         if tipi:
-            risultati.append({"evento": ev, "tipi": tipi, "ore_mancanti": round(ore_mancanti, 1)})
+            risultati.append({"evento": ev, "tipi": tipi, "ore_mancanti": round(ore_mancanti, 1), "giorni_mancanti": giorni_mancanti})
 
     return risultati
 
