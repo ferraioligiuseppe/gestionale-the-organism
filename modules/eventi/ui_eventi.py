@@ -617,7 +617,7 @@ def _render_tab_azioni(conn, ev: dict):
                         )
                     else:
                         st.caption("❌ telefono non valido")
-                with st.expander("Vedi/copia messaggio"):
+                with st.popover("Vedi/copia messaggio"):
                     st.code(voce["messaggio"], language=None)
 
     st.divider()
