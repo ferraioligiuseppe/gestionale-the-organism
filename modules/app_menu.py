@@ -79,6 +79,7 @@ SOTTOSEZIONI = {
     AREA_AUDIOLOGIA: [
         "🔉 Diagnostica uditiva",
         "🎵 Stimolazione passiva",
+        "🎧 MAPS",
         "🎧 Bilancio uditivo",
         "📊 Audiometria funzionale",
         "📖 Lettura avanzata",
