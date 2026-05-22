@@ -86,6 +86,7 @@
       <button class="play" id="play" disabled>▶ Ascolta</button>
       <button class="btn co" id="recBtn" disabled>● Registra</button>
       <a id="recDl" download="MAPS-sessione.webm" style="display:none;font-family:var(--mono);font-size:12.5px;color:var(--green)">⬇ scarica registrazione</a>
+      <button class="btn" id="logBtn" disabled>⬇ Log tempi (CSV)</button>
       <span class="fname" id="fname">nessun file caricato</span>
       <input type="text" id="url" placeholder="…oppure incolla un URL audio (R2)" style="flex:1;min-width:180px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:10px 12px;border-radius:10px;font-family:var(--mono);font-size:12px">
       <button class="btn" id="urlBtn">↧ Carica da URL</button>
@@ -109,8 +110,11 @@
     <h2>La cornice — le due bascule (Hipérion)</h2>
     <div class="controls">
       <div class="sec">Bascula ampiezza — volume L/R, lenta</div>
+      <div class="ctl" style="margin-bottom:-4px"><label style="margin-bottom:0"><span class="toggle" id="ampTog"><span class="tt"></span><span id="ampTogL">spenta — si parte senza</span></span></label></div>
       <div class="ctl"><label>Attenuazione <span class="val" id="vAa">−6 dB</span></label>
         <input type="range" id="aa" min="0" max="50" value="6"><div class="ends"><span>0 dB</span><span>−50 dB</span></div></div>
+      <div class="ctl"><label>Partenza progressiva (sale in) <span class="val" id="vAr">20 s</span></label>
+        <input type="range" id="ar" min="0" max="120" value="20"><div class="ends"><span>0 · subito a pieno</span><span>120 s · molto graduale</span></div></div>
       <div class="ctl"><label>Tempo medio <span class="val" id="vAt">~0.8 s</span></label>
         <input type="range" id="at" min="20" max="300" value="80"><div class="ends"><span>0.2 s</span><span>3 s</span></div></div>
       <div class="ctl"><label>Lateralità</label>
@@ -192,6 +196,7 @@
 let ctx, buffer, src, running=false, evtCount=0, jumpCount=0;
 let gL, gR, merger, splitter, birthHP, freqShelf, outG, airDelay, recDest, recorder=null, recChunks=[], recording=false;
 let mediaEl=null, mediaSource=null, useStream=false;
+let ampOn=false, sessT0=0, eventLog=[];
 let oscL, oscR, binMerger, binGain;
 let trShelf, trGain;
 let micStream, micSource, voiceHP, voiceShelf, voiceGain, micOn=false;
@@ -257,7 +262,9 @@ function activeBands(){ return [...document.querySelectorAll('#bands .chip.on')]
 function ampStep(){
   if(!running) return;
   const t=ctx.currentTime, liss=lissTau(); ampSide=!ampSide;
-  const atten=-(+$('aa').value);
+  // fattore di partenza progressiva: l'attenuazione sale da 0 al pieno in 'ar' secondi
+  const elapsed=(performance.now()-sessT0)/1000; const ramp=(+$('ar').value); const grow=ramp<=0?1:Math.min(1,elapsed/ramp);
+  const attenFull=ampOn?(+$('aa').value):0; const atten=-(attenFull*grow);
   let dbL=0,dbR=0;
   if(lateralita==='alt'){ if(ampSide) dbL=atten; else dbR=atten; }
   else if(lateralita==='dx'){ dbL=ampSide?atten:0; }
@@ -265,7 +272,8 @@ function ampStep(){
   gL.gain.setTargetAtTime(dbToGain(dbL),t,liss); gR.gain.setTargetAtTime(dbToGain(dbR),t,liss);
   const delta=dbR-dbL;
   $('iAmp').innerHTML=(delta>=0?'+':'')+delta.toFixed(0)+'<small>dB</small>';
-  $('iAmpx').textContent=Math.abs(delta)<1?'centro':(delta>0?'← sinistra':'destra →');
+  $('iAmpx').textContent=!ampOn?'spenta':(grow<1?'in salita…':(Math.abs(delta)<1?'centro':(delta>0?'← sinistra':'destra →')));
+  logEvent('ampiezza', {L:dbL.toFixed(1), R:dbR.toFixed(1), on:ampOn?1:0});
   const base=(+$('at').value)/100*1000; const dw=base*(1+spread()*rndR(-1,1));
   ampTimer=setTimeout(ampStep,Math.max(120,dw));
 }
@@ -285,10 +293,12 @@ function freqStep(){
     $('iFreq').innerHTML='brillante'; $('iFreqx').textContent='taglia sotto '+(tornanteCur>=1000?(tornanteCur/1000).toFixed(1)+'k':tornanteCur)+' Hz';
     document.querySelectorAll('#bands .chip').forEach(c=>c.classList.toggle('flash',+c.dataset.f===tornanteCur));
     $('iJ').textContent=jumpCount; $('iJx').textContent='su '+evtCount+' commutazioni';
+    logEvent('frequenza', {fase:'brillante', tornante:tornanteCur, salto:jumped?1:0, atten:-(+$('fa').value)});
   } else {
     freqShelf.gain.setTargetAtTime(0,t,liss);
     $('iFreq').innerHTML='pieno'; $('iFreqx').textContent='spettro intero';
     document.querySelectorAll('#bands .chip').forEach(c=>c.classList.remove('flash'));
+    logEvent('frequenza', {fase:'pieno', tornante:tornanteCur, salto:0, atten:0});
   }
   const base=+$('ft').value; const dw=base*(1+spread()*rndR(-1,1));
   freqTimer=setTimeout(freqStep,Math.max(60,dw));
@@ -300,6 +310,7 @@ function start(){
   if(useStream){ if(!mediaSource) mediaSource=ctx.createMediaElementSource(mediaEl); mediaSource.connect(splitter); try{mediaEl.currentTime=0;}catch(e){} mediaEl.play(); }
   else { src=ctx.createBufferSource(); src.buffer=buffer; src.loop=true; src.connect(splitter); src.start(); }
   running=true; ampSide=false; freqBright=false; evtCount=0; jumpCount=0; $('evtN').textContent=0;
+  sessT0=performance.now(); eventLog=[]; $('logBtn').disabled=false;
   $('play').classList.add('on'); $('play').innerHTML='■ Ferma'; $('recBtn').disabled=false;
   ampStep(); freqStep();
 }
@@ -312,6 +323,25 @@ function stop(){
   document.querySelectorAll('#bands .chip').forEach(c=>c.classList.remove('flash'));
 }
 $('play').addEventListener('click',()=>{ running?stop():start(); });
+
+// --- LOG TEMPORALE DEGLI EVENTI (per allineamento EEG) ---
+function logEvent(tipo, data){
+  const ms=Math.round(performance.now()-sessT0);
+  eventLog.push(Object.assign({t_ms:ms, tipo:tipo}, data));
+}
+$('logBtn').addEventListener('click',()=>{
+  if(!eventLog.length){ return; }
+  const cols=['t_ms','tipo','fase','tornante','salto','atten','L','R','on'];
+  let csv=cols.join(',')+'\n';
+  for(const e of eventLog){ csv+=cols.map(c=>e[c]!==undefined?e[c]:'').join(',')+'\n'; }
+  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='MAPS-log-tempi.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+});
+
+// --- interruttore bascula ampiezza (spenta all'avvio per cautela) ---
+$('ampTog').addEventListener('click',()=>{ ampOn=$('ampTog').classList.toggle('on'); $('ampTogL').textContent=ampOn?'attiva':'spenta — si parte senza'; });
+$('ar').addEventListener('input',e=>$('vAr').textContent=e.target.value+' s');
 function startRec(){
   if(!running||!recDest){ $('fname').textContent='avvia prima l\'ascolto, poi registra'; return; }
   recChunks=[];
