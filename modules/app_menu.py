@@ -9,7 +9,7 @@
 ║  3. 🖥️ Test live        — DEM, K-D, somministrazione                ║
 ║  4. 📋 Questionari     — link remoti, risposte, lenti, osteopatia   ║
 ║  5. 🤖 Report & AI     — relazioni, piano VT, PDF, export           ║
-║  6. 🔉 Audiologia      — diagnostica, stimolazione, bilancio        ║
+║  6. 🎧 Stimolazione uditiva MAPS — diagnostica, stimolazione, bilancio        ║
 ║  7. ⚙️ Studio          — incassi, utenti, admin SaaS                ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
@@ -21,7 +21,7 @@ AREA_TEST_NEUROEVOL = "🧬 Test neuroevolutivi"
 AREA_TEST_LIVE   = "🖥️ Test live"
 AREA_QUESTIONARI = "📋 Questionari"
 AREA_REPORT_AI   = "🤖 Report & AI"
-AREA_AUDIOLOGIA  = "🔉 Audiologia"
+AREA_AUDIOLOGIA  = "🎧 Stimolazione uditiva MAPS"
 AREA_MARKETING   = "📣 Marketing"
 AREA_STUDIO      = "⚙️ Studio"
 
@@ -78,7 +78,6 @@ SOTTOSEZIONI = {
     ],
     AREA_AUDIOLOGIA: [
         "🔉 Diagnostica uditiva",
-        "🎵 Stimolazione passiva",
         "🎧 MAPS",
         "🎧 Bilancio uditivo",
         "📊 Audiometria funzionale",
