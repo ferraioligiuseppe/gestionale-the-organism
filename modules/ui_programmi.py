@@ -17,7 +17,41 @@ except Exception:
 
 LIVELLI = ["Potential", "Boost", "High Performance"]
 CONDIZIONI = ["Generico", "Dislessia", "Disprassia", "ADHD", "Deficit attentivo", "Autismo"]
-MODALITA = ["Potential", "Focus", "Motor", "Ricarica"]
+MODALITA = ["Potential", "Focus", "Motor", "Ricarica", "Growth"]
+
+# --- Sequenze standard dallo schema MAPS (4 programmi Potential) ---
+_LET = {"b": "Potential", "f": "Focus", "m": "Motor", "r": "Ricarica"}
+
+
+def _seq_da_lettere(lettere, brani=None):
+    out = []
+    for i, L in enumerate(lettere):
+        b = (brani[i] if brani and i < len(brani) else "")
+        out.append((_LET.get(L, "Potential"), b))
+    return out
+
+
+def _growth_ogni_4(seq):
+    """Inserisce un passo Growth dopo ogni 4 brani di lavoro (pausa di crescita)."""
+    out, c = [], 0
+    for m, b in seq:
+        out.append((m, b))
+        c += 1
+        if c % 4 == 0:
+            out.append(("Growth", ""))
+    return out
+
+
+_P1_BRANI = ["bach", "bach19", "mozart1", "vivaldi13", "vivaldi13", "SON", "mozart2",
+             "bach13", "vivaldi9", "mozart3", "bach2", "bach20", "mozart5", "vivaldi01",
+             "mozart8", "bach23", "vivaldi10", "vivaldi13", "mozart5", "bach17", "bach10"]
+
+SEED_POTENTIAL = [
+    ("Potential 1", _seq_da_lettere(list("bbbbbbrbrbrbmbmbfbfbr"), _P1_BRANI)),
+    ("Potential 2", _seq_da_lettere(list("mbbbrfrbrbfbfbrbfbfrb"))),
+    ("Potential 3", _seq_da_lettere(list("bfrbbfrbmfbbmrbffrbfb"))),
+    ("Potential 4", _seq_da_lettere(list("bfrfrbrfmbrbrfbrrfbrb"))),
+]
 
 
 def _get_conn():
@@ -125,6 +159,34 @@ def _elimina(conn, pid):
         pass
 
 
+def _nome_esiste(conn, nome):
+    pg = _is_postgres(conn)
+    ph = "%s" if pg else "?"
+    cur = conn.cursor()
+    try:
+        cur.execute(f"SELECT 1 FROM programmi_ascolto WHERE nome = {ph} LIMIT 1", (nome,))
+        return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def _semina_potential(conn):
+    creati = 0
+    for nome, seq in SEED_POTENTIAL:
+        if _nome_esiste(conn, nome):
+            continue
+        seqg = _growth_ogni_4(seq)
+        sequenza = [{"ordine": i + 1, "modalita": m, "brano": b} for i, (m, b) in enumerate(seqg)]
+        _salva(conn, {
+            "nome": nome, "livello": "Potential", "condizione": "Generico",
+            "durata_giorni": len(sequenza), "durata_brano_min": 30,
+            "sequenza_json": json.dumps(sequenza, ensure_ascii=False),
+            "note": "Seminato dallo schema MAPS (Growth ogni 4 brani)",
+        })
+        creati += 1
+    return creati
+
+
 def ui_programmi(conn=None):
     st.header("🗂 Programmi MAPS — costruttore")
     st.caption("Crea e salva i percorsi di ascolto. Ogni programma è una sequenza di passi (modalità + brano).")
@@ -137,6 +199,19 @@ def ui_programmi(conn=None):
         st.error("Manca la libreria pandas: non posso mostrare l'editor della sequenza.")
         return
 
+    st.subheader("📥 Programmi pronti")
+    st.write("Crea con un clic i 4 programmi **Potential** (1–4) dello schema MAPS, "
+             "con un passo **Growth** ogni 4 brani. Nascono già pronti; poi puoi "
+             "modificarli o aggiungerne altri qui sotto.")
+    if st.button("📥 Semina i 4 Potential standard", type="primary"):
+        n = _semina_potential(conn)
+        if n:
+            st.success(f"Creati {n} programmi Potential standard (Growth ogni 4 brani). Li trovi nell'elenco in fondo.")
+        else:
+            st.info("I programmi Potential standard esistono già (vedi l'elenco in fondo alla pagina).")
+        st.rerun()
+
+    st.divider()
     st.subheader("Nuovo programma")
     c1, c2, c3 = st.columns(3)
     nome = c1.text_input("Nome del programma", value="Potential generico")
