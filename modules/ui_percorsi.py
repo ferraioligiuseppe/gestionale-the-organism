@@ -8,6 +8,7 @@ Il calendario riflette esattamente la sequenza del programma costruito.
 """
 import json
 import datetime
+import random
 import streamlit as st
 
 try:
@@ -16,6 +17,47 @@ except Exception:
     pd = None
 
 CHECKPOINT_OGNI = 21  # giorni tra un questionario e l'altro
+
+# Famiglie di brani e quante tracce ha ciascuna (nomi file: famiglia_01, famiglia_02 ...)
+# I nomi esatti dei file verranno riconciliati quando i brani saranno su R2.
+POOL_LAVORO = {"bach": 12, "mozart": 28, "vivaldi": 35, "celtica": 21, "jazz": 6, "country": 9, "ambient": 30}
+POOL_RIPOSO = {"nature": 3, "gregoriano": 1, "ambient": 30}
+
+
+def _brani(pool):
+    out = []
+    for fam, n in pool.items():
+        for i in range(1, int(n) + 1):
+            out.append(f"{fam}_{i:02d}")
+    return out
+
+
+def _genera_sequenza(programma_seq):
+    """Genera la sequenza personale CONGELATA: per ogni passo pesca un brano vero.
+    Lavoro: niente ripetizione della coppia brano+modalità nel ciclo. Growth: libero."""
+    lavoro = _brani(POOL_LAVORO)
+    riposo = _brani(POOL_RIPOSO)
+    usate = set()
+    out = []
+    for i, passo in enumerate(programma_seq):
+        mod = passo.get("modalita", "Potential")
+        if mod == "Growth":
+            brano = random.choice(riposo) if riposo else ""
+        else:
+            cand = [b for b in lavoro if (b, mod) not in usate]
+            if not cand:
+                cand = lavoro[:]  # coppie esaurite: si ricomincia
+            brano = random.choice(cand) if cand else ""
+            if brano:
+                usate.add((brano, mod))
+        out.append({
+            "ordine": i + 1,
+            "modalita": mod,
+            "brano": brano,
+            "binaurale": passo.get("binaurale", "no"),
+            "pattern": passo.get("pattern", ""),
+        })
+    return out
 
 
 def _get_conn():
@@ -60,6 +102,7 @@ def _ensure_table(conn):
             programma_id BIGINT,
             data_inizio TEXT,
             stato TEXT,
+            sequenza_json TEXT,
             created_at TEXT
         )""")
     else:
@@ -70,12 +113,37 @@ def _ensure_table(conn):
             programma_id INTEGER,
             data_inizio TEXT,
             stato TEXT,
+            sequenza_json TEXT,
             created_at TEXT
         )""")
     try:
         conn.commit()
     except Exception:
         pass
+    _ensure_columns(conn)
+
+
+def _ensure_columns(conn):
+    """Aggiunge sequenza_json alle tabelle già esistenti senza quella colonna."""
+    cur = conn.cursor()
+    if _is_postgres(conn):
+        try:
+            cur.execute("ALTER TABLE percorsi_ascolto ADD COLUMN IF NOT EXISTS sequenza_json TEXT")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    else:
+        try:
+            cur.execute("ALTER TABLE percorsi_ascolto ADD COLUMN sequenza_json TEXT")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass  # colonna già presente
 
 
 def _programmi(conn):
@@ -99,14 +167,14 @@ def _programma_by_id(conn, pid):
         return None
 
 
-def _assegna(conn, paz_id, prog_id, data_inizio):
+def _assegna(conn, paz_id, prog_id, data_inizio, sequenza_json):
     pg = _is_postgres(conn)
     ph = "%s" if pg else "?"
     cur = conn.cursor()
     cur.execute(
-        f"""INSERT INTO percorsi_ascolto (paziente_id, programma_id, data_inizio, stato, created_at)
-            VALUES ({ph},{ph},{ph},{ph},{ph})""",
-        (paz_id, prog_id, data_inizio, "attivo",
+        f"""INSERT INTO percorsi_ascolto (paziente_id, programma_id, data_inizio, stato, sequenza_json, created_at)
+            VALUES ({ph},{ph},{ph},{ph},{ph},{ph})""",
+        (paz_id, prog_id, data_inizio, "attivo", sequenza_json,
          datetime.datetime.now().isoformat(timespec="seconds")))
     try:
         conn.commit()
@@ -119,7 +187,7 @@ def _percorsi_paziente(conn, paz_id):
     ph = "%s" if pg else "?"
     cur = conn.cursor()
     try:
-        cur.execute(f"""SELECT id, programma_id, data_inizio, stato, created_at
+        cur.execute(f"""SELECT id, programma_id, data_inizio, stato, sequenza_json, created_at
                         FROM percorsi_ascolto WHERE paziente_id = {ph}
                         ORDER BY id DESC""", (paz_id,))
         return cur.fetchall()
@@ -185,8 +253,16 @@ def ui_percorsi(conn=None):
     scelta = c1.selectbox("Programma", list(nomi.keys()))
     data_inizio = c2.date_input("Data di inizio", value=datetime.date.today())
     if st.button("➕ Assegna al paziente", type="primary"):
-        _assegna(conn, paz_id, nomi[scelta], data_inizio.isoformat())
-        st.success(f"Programma «{scelta.split(' — ')[0]}» assegnato a {nome or paz_id}.")
+        prog_scelto = _programma_by_id(conn, nomi[scelta])
+        try:
+            prog_seq = json.loads(_g(prog_scelto, 3, "sequenza_json") or "[]")
+        except Exception:
+            prog_seq = []
+        seq_concreta = _genera_sequenza(prog_seq)
+        _assegna(conn, paz_id, nomi[scelta], data_inizio.isoformat(),
+                 json.dumps(seq_concreta, ensure_ascii=False))
+        st.success(f"Programma «{scelta.split(' — ')[0]}» assegnato a {nome or paz_id}. "
+                   f"Sequenza personale generata ({len(seq_concreta)} giorni).")
         st.rerun()
 
     # --- PERCORSI DEL PAZIENTE ---
@@ -207,14 +283,30 @@ def ui_percorsi(conn=None):
 
     prog_nome = _g(prog, 1, "nome")
     durata_brano = _g(prog, 2, "durata_brano_min") or 30
-    try:
-        sequenza = json.loads(_g(prog, 3, "sequenza_json") or "[]")
-    except Exception:
-        sequenza = []
+    # sequenza CONGELATA del percorso (brani veri); fallback al programma (solo modalità) se assente
+    seq_congelata = _g(attivo, 4, "sequenza_json")
+    sequenza, congelata = [], False
+    if seq_congelata:
+        try:
+            sequenza = json.loads(seq_congelata)
+            congelata = True
+        except Exception:
+            sequenza = []
+    if not sequenza:
+        try:
+            sequenza = json.loads(_g(prog, 3, "sequenza_json") or "[]")
+        except Exception:
+            sequenza = []
     try:
         d0 = datetime.date.fromisoformat(str(data_str)[:10])
     except Exception:
         d0 = datetime.date.today()
+
+    def _brano_txt(passo):
+        b = passo.get("brano", "")
+        if congelata and b:
+            return b
+        return "casuale (riposo)" if passo.get("modalita") == "Growth" else "casuale (lavoro)"
 
     n = len(sequenza)
     oggi = datetime.date.today()
@@ -229,7 +321,7 @@ def ui_percorsi(conn=None):
         if bina and bina != "no":
             bina_txt = f" · binaurale {bina}" + (f" ({passo.get('pattern')})" if passo.get("pattern") else "")
         st.info(f"**Oggi (giorno {giorno_corrente}):** modalità **{passo.get('modalita','')}**"
-                + f" · brano: {passo.get('brano') or ('casuale (riposo)' if passo.get('modalita')=='Growth' else 'casuale (lavoro)')}"
+                + f" · brano: {_brano_txt(passo)}"
                 + bina_txt)
     elif giorno_corrente < 1:
         st.info(f"Il percorso inizia il {d0.strftime('%d/%m/%Y')} (tra {1 - giorno_corrente} giorni).")
@@ -251,7 +343,7 @@ def ui_percorsi(conn=None):
                 "Giorno": g,
                 "Data": data_g.strftime("%d/%m/%Y"),
                 "Modalità": passo.get("modalita", ""),
-                "Brano": (passo.get("brano") or ("casuale (riposo)" if passo.get("modalita") == "Growth" else "casuale (lavoro)")),
+                "Brano": _brano_txt(passo),
                 "Binaurale": bina_txt,
                 "Checkpoint": check,
                 "Oggi": "👉" if g == giorno_corrente else "",
