@@ -92,9 +92,11 @@ def ui_maps(conn=None):
 
     cornice = None
     try:
-        from modules.paziente_attivo import header_paziente_attivo, paziente_attivo_record
-        paz_id = header_paziente_attivo(conn)
-        if paz_id:
+        from modules.paziente_attivo import paziente_attivo_id, paziente_attivo_record
+        paz_id = paziente_attivo_id()
+        if not paz_id:
+            st.info("Nessun paziente attivo: seleziona un paziente per caricare la sua cornice. MAPS parte con valori generici.")
+        else:
             rec = paziente_attivo_record() or {}
             nome = (str(rec.get("cognome", "")) + " " + str(rec.get("nome", ""))).strip()
             row = _ultima_audiometria(conn, paz_id)
