@@ -490,8 +490,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         # L'header serve solo per i moduli che richiedono un paziente
         _audio_map = {
             "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
-            "🎵 Stimolazione passiva":   ("ui_stimolazione_passiva",  "ui_stimolazione_passiva"),
             "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
+            "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
             "🎧 Bilancio uditivo":       ("ui_bilancio_uditivo",      "ui_bilancio_uditivo"),
             "📊 Audiometria funzionale": ("ui_audiometria_funzionale","ui_audiometria_funzionale"),
         }
@@ -646,7 +646,6 @@ def dispatch_main_section(*, sezione: str,
         " Eye Tracking":                 (AREA_AUDIOLOGIA,  "👁️ Eye tracking"),
         " Lettura Avanzata DOM":         (AREA_AUDIOLOGIA,  "📖 Lettura avanzata"),
         "🔉 Diagnostica Uditiva":        (AREA_AUDIOLOGIA,  "🔉 Diagnostica uditiva"),
-        "🎵 Stimolazione Passiva":       (AREA_AUDIOLOGIA,  "🎵 Stimolazione passiva"),
         "🧠 Terapia":                    (AREA_VALUTAZIONE, "⚡ Funzioni esecutive"),
         "🧠 NPS — Valutazione Neuropsicologica": (AREA_VALUTAZIONE, "🧠 NPS — Neuropsicologica"),
         "📚 DSA — Apprendimento":        (AREA_VALUTAZIONE, "📚 DSA — Apprendimento"),
