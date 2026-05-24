@@ -37,10 +37,19 @@ def _get_conn():
 
 
 def _is_postgres(conn):
+    t = type(conn).__name__
+    if "Pg" in t or "pg" in t:
+        return True
     try:
-        return "psycopg" in type(conn).__module__.lower()
+        import sys, os
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from app_patched import _DB_BACKEND
+        return _DB_BACKEND == "postgres"
     except Exception:
-        return False
+        pass
+    return False
 
 
 def _ensure_table(conn):
