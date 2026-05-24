@@ -229,7 +229,7 @@ def ui_percorsi(conn=None):
         if bina and bina != "no":
             bina_txt = f" · binaurale {bina}" + (f" ({passo.get('pattern')})" if passo.get("pattern") else "")
         st.info(f"**Oggi (giorno {giorno_corrente}):** modalità **{passo.get('modalita','')}**"
-                + (f" · brano: {passo.get('brano')}" if passo.get('brano') else "")
+                + f" · brano: {passo.get('brano') or ('casuale (riposo)' if passo.get('modalita')=='Growth' else 'casuale (lavoro)')}"
                 + bina_txt)
     elif giorno_corrente < 1:
         st.info(f"Il percorso inizia il {d0.strftime('%d/%m/%Y')} (tra {1 - giorno_corrente} giorni).")
@@ -251,7 +251,7 @@ def ui_percorsi(conn=None):
                 "Giorno": g,
                 "Data": data_g.strftime("%d/%m/%Y"),
                 "Modalità": passo.get("modalita", ""),
-                "Brano": passo.get("brano", "") or "(scelto dal sistema)",
+                "Brano": (passo.get("brano") or ("casuale (riposo)" if passo.get("modalita") == "Growth" else "casuale (lavoro)")),
                 "Binaurale": bina_txt,
                 "Checkpoint": check,
                 "Oggi": "👉" if g == giorno_corrente else "",

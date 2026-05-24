@@ -44,12 +44,10 @@ def _growth_ogni_4(seq):
     return out
 
 
-_P1_BRANI = ["bach", "bach19", "mozart1", "vivaldi13", "vivaldi13", "SON", "mozart2",
-             "bach13", "vivaldi9", "mozart3", "bach2", "bach20", "mozart5", "vivaldi01",
-             "mozart8", "bach23", "vivaldi10", "vivaldi13", "mozart5", "bach17", "bach10"]
+_P1_BRANI = None  # i brani non si assegnano: vengono pescati a caso (lavoro o riposo)
 
 SEED_POTENTIAL = [
-    ("Potential 1", _seq_da_lettere(list("bbbbbbrbrbrbmbmbfbfbr"), _P1_BRANI)),
+    ("Potential 1", _seq_da_lettere(list("bbbbbbrbrbrbmbmbfbfbr"))),
     ("Potential 2", _seq_da_lettere(list("mbbbrfrbrbfbfbrbfbfrb"))),
     ("Potential 3", _seq_da_lettere(list("bfrbbfrbmfbbmrbffrbfb"))),
     ("Potential 4", _seq_da_lettere(list("bfrfrbrfmbrbrfbrrfbrb"))),
@@ -224,9 +222,10 @@ def ui_programmi(conn=None):
     durata_giorni = c4.number_input("Durata (giorni)", min_value=1, max_value=365, value=84)
     durata_brano = c5.number_input("Durata di ogni brano (minuti)", min_value=1, max_value=180, value=30)
 
-    st.markdown("**Sequenza dei passi** — modalità e brano per ciascun passo (puoi aggiungere o togliere righe):")
-    st.caption("Binaurale: scegli la banda (o «no») e il pattern dentro il brano in minuti acceso/spento, "
-               "es. «10/10/10» = 10 min acceso, 10 spento, 10 acceso. Spento di default.")
+    st.markdown("**Sequenza dei passi** — modalità per ciascun passo (puoi aggiungere o togliere righe):")
+    st.caption("Brano: lascialo **vuoto** per la pesca casuale (di lavoro, o di riposo per il Growth). "
+               "Scrivilo solo se vuoi forzare un brano preciso a quel passo. "
+               "Binaurale: scegli la banda (o «no») e il pattern in minuti acceso/spento, es. «10/10/10». Spento di default.")
     n_default = 21
     df = pd.DataFrame({
         "ordine": list(range(1, n_default + 1)),
