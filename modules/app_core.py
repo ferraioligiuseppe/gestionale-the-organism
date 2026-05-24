@@ -18,13 +18,7 @@ try:
     from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
 except Exception:
     _ui_diag_uditiva = None
-try:
-    from modules.ui_stimolazione_passiva import ui_stimolazione_passiva as _ui_stim_passiva
-except Exception:
-    _ui_stim_passiva = None
-from modules.app_udito_router import dispatch_udito_section
 from modules.app_main_router import dispatch_main_section
-from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
 from modules.ui_lenti_contatto import ui_lenti_contatto
 from modules.ui_esami_strumentali import ui_esami_strumentali
 from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
@@ -33,8 +27,6 @@ try:
     from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
 except Exception:
     _ui_calib_cuffie_ext = None
-from modules.stimolazione_uditiva.ui_generatore_stimolazione import ui_generatore_stimolazione
-
 from modules.app_sections import (
     SECTION_DASHBOARD,
     SECTION_PAZIENTI,
