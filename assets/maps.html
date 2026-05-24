@@ -447,7 +447,7 @@ function applyCornice(){
   const b=$('cornice'); if(b){ b.style.display='block';
     const th=c.tornante_hz>=1000?(c.tornante_hz/1000).toFixed(1)+'k':c.tornante_hz;
     const lat=c.lateralita==='dx'?'destro':(c.lateralita==='sx'?'sinistro':'alternato');
-    b.innerHTML='🩺 Cornice dal paziente <b>'+(c.paziente||'')+'</b>'+(c.data_esame?' · audiometria '+c.data_esame:'')+' · privilegia orecchio <b>'+lat+'</b> · dominanza dicotica '+(c.dominanza||'n/d')+' · tornante clinico <b>'+th+' Hz</b> · attenuazione '+c.atten_freq_db+' dB'; }
+    b.innerHTML='🩺 Impostazioni dai test di <b>'+(c.paziente||'')+'</b>'+(c.data_esame?' · audiometria '+c.data_esame:'')+' · privilegia orecchio <b>'+lat+'</b> · dominanza dicotica '+(c.dominanza||'n/d')+' · tornante clinico <b>'+th+' Hz</b> · attenuazione '+c.atten_freq_db+' dB'; }
 }
 applyCornice();
 
