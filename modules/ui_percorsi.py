@@ -224,8 +224,13 @@ def ui_percorsi(conn=None):
     if 1 <= giorno_corrente <= n:
         st.progress(giorno_corrente / n, text=f"Giorno {giorno_corrente} di {n}")
         passo = sequenza[giorno_corrente - 1]
+        bina = passo.get("binaurale", "no")
+        bina_txt = ""
+        if bina and bina != "no":
+            bina_txt = f" · binaurale {bina}" + (f" ({passo.get('pattern')})" if passo.get("pattern") else "")
         st.info(f"**Oggi (giorno {giorno_corrente}):** modalità **{passo.get('modalita','')}**"
-                + (f" · brano: {passo.get('brano')}" if passo.get('brano') else ""))
+                + (f" · brano: {passo.get('brano')}" if passo.get('brano') else "")
+                + bina_txt)
     elif giorno_corrente < 1:
         st.info(f"Il percorso inizia il {d0.strftime('%d/%m/%Y')} (tra {1 - giorno_corrente} giorni).")
     else:
@@ -238,11 +243,16 @@ def ui_percorsi(conn=None):
             g = i + 1
             data_g = d0 + datetime.timedelta(days=i)
             check = "📋 questionario" if g % CHECKPOINT_OGNI == 0 else ""
+            bina = passo.get("binaurale", "no")
+            bina_txt = "—"
+            if bina and bina != "no":
+                bina_txt = bina + (f" {passo.get('pattern')}" if passo.get("pattern") else "")
             righe.append({
                 "Giorno": g,
                 "Data": data_g.strftime("%d/%m/%Y"),
                 "Modalità": passo.get("modalita", ""),
                 "Brano": passo.get("brano", "") or "(scelto dal sistema)",
+                "Binaurale": bina_txt,
                 "Checkpoint": check,
                 "Oggi": "👉" if g == giorno_corrente else "",
             })

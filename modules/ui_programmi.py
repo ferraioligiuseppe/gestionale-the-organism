@@ -18,6 +18,8 @@ except Exception:
 LIVELLI = ["Potential", "Boost", "High Performance"]
 CONDIZIONI = ["Generico", "Dislessia", "Disprassia", "ADHD", "Deficit attentivo", "Autismo"]
 MODALITA = ["Potential", "Focus", "Motor", "Ricarica", "Growth"]
+# Bande binaurali (frequenza del battito): delta ~2 Hz, theta ~6 Hz, alfa ~10 Hz, beta ~16 Hz, gamma ~40 Hz
+BANDE = ["no", "delta", "theta", "alfa", "beta", "gamma"]
 
 # --- Sequenze standard dallo schema MAPS (4 programmi Potential) ---
 _LET = {"b": "Potential", "f": "Focus", "m": "Motor", "r": "Ricarica"}
@@ -176,7 +178,8 @@ def _semina_potential(conn):
         if _nome_esiste(conn, nome):
             continue
         seqg = _growth_ogni_4(seq)
-        sequenza = [{"ordine": i + 1, "modalita": m, "brano": b} for i, (m, b) in enumerate(seqg)]
+        sequenza = [{"ordine": i + 1, "modalita": m, "brano": b, "binaurale": "no", "pattern": ""}
+                    for i, (m, b) in enumerate(seqg)]
         _salva(conn, {
             "nome": nome, "livello": "Potential", "condizione": "Generico",
             "durata_giorni": len(sequenza), "durata_brano_min": 30,
@@ -222,11 +225,15 @@ def ui_programmi(conn=None):
     durata_brano = c5.number_input("Durata di ogni brano (minuti)", min_value=1, max_value=180, value=30)
 
     st.markdown("**Sequenza dei passi** — modalità e brano per ciascun passo (puoi aggiungere o togliere righe):")
+    st.caption("Binaurale: scegli la banda (o «no») e il pattern dentro il brano in minuti acceso/spento, "
+               "es. «10/10/10» = 10 min acceso, 10 spento, 10 acceso. Spento di default.")
     n_default = 21
     df = pd.DataFrame({
         "ordine": list(range(1, n_default + 1)),
         "modalità": ["Potential"] * n_default,
         "brano": [""] * n_default,
+        "binaurale": ["no"] * n_default,
+        "pattern": [""] * n_default,
     })
     try:
         edited = st.data_editor(
@@ -235,6 +242,8 @@ def ui_programmi(conn=None):
                 "ordine": st.column_config.NumberColumn("Passo", disabled=True),
                 "modalità": st.column_config.SelectboxColumn("Modalità", options=MODALITA, required=True),
                 "brano": st.column_config.TextColumn("Brano"),
+                "binaurale": st.column_config.SelectboxColumn("Binaurale", options=BANDE, required=True),
+                "pattern": st.column_config.TextColumn("Pattern (min)"),
             },
             key="seq_editor",
         )
@@ -257,6 +266,8 @@ def ui_programmi(conn=None):
                     "ordine": i,
                     "modalita": str(r.get("modalità", "Potential")),
                     "brano": str(r.get("brano", "") or ""),
+                    "binaurale": str(r.get("binaurale", "no") or "no"),
+                    "pattern": str(r.get("pattern", "") or ""),
                 })
             _salva(conn, {
                 "nome": nome.strip(), "livello": livello, "condizione": condizione,
