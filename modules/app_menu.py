@@ -80,6 +80,7 @@ SOTTOSEZIONI = {
         "🔉 Diagnostica uditiva",
         "🎧 MAPS",
         "🗂 Programmi MAPS",
+        "🧭 Percorsi MAPS",
         "🎧 Bilancio uditivo",
         "📊 Audiometria funzionale",
         "📖 Lettura avanzata",

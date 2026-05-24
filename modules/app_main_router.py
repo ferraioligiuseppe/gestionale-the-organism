@@ -492,6 +492,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
             "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
             "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
+            "🧭 Percorsi MAPS":          ("ui_percorsi",              "ui_percorsi"),
             "🎧 Bilancio uditivo":       ("ui_bilancio_uditivo",      "ui_bilancio_uditivo"),
             "📊 Audiometria funzionale": ("ui_audiometria_funzionale","ui_audiometria_funzionale"),
         }
