@@ -85,7 +85,7 @@ def _costruisci_cornice(row, nome=""):
 
 def ui_maps(conn=None):
     st.header("\U0001F3A7 MAPS \u2014 Stimolazione uditiva adattiva")
-    st.caption("Music \u00b7 Adapted \u00b7 Psychacustic \u00b7 System \u2014 cornice clinica dal paziente attivo")
+    st.caption("Music \u00b7 Adapted \u00b7 Psychacustic \u00b7 System \u2014 impostazioni dai test del paziente attivo")
 
     if conn is None:
         conn = _get_conn()
@@ -95,7 +95,7 @@ def ui_maps(conn=None):
         from modules.paziente_attivo import paziente_attivo_id, paziente_attivo_record
         paz_id = paziente_attivo_id()
         if not paz_id:
-            st.info("Nessun paziente attivo: seleziona un paziente per caricare la sua cornice. MAPS parte con valori generici.")
+            st.info("Impostazioni generiche — nessun paziente attivo. Seleziona un paziente per usare le sue impostazioni dai test.")
         else:
             rec = paziente_attivo_record() or {}
             nome = (str(rec.get("cognome", "")) + " " + str(rec.get("nome", ""))).strip()
@@ -109,10 +109,9 @@ def ui_maps(conn=None):
                         f"attenuazione {cornice['atten_freq_db']} dB \u00b7 dominanza {cornice['dominanza']}."
                     )
             else:
-                st.info("Nessuna audiometria per questo paziente: MAPS parte con valori generici. "
-                        "Esegui prima l'Audiometria funzionale per costruire la cornice.")
+                st.info("Impostazioni generiche — nessun test audiometrico per questo paziente.")
     except Exception as e:
-        st.caption(f"(cornice non disponibile: {e})")
+        st.caption(f"(impostazioni del paziente non disponibili: {e})")
 
     html_path = Path(__file__).resolve().parent.parent / "assets" / "maps.html"
     if not html_path.exists():
