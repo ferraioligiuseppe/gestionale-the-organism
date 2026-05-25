@@ -19,9 +19,9 @@ except Exception:
 CHECKPOINT_OGNI = 21  # giorni tra un questionario e l'altro
 
 # Famiglie di brani e quante tracce ha ciascuna (nomi file: famiglia_01, famiglia_02 ...)
-# I nomi esatti dei file verranno riconciliati quando i brani saranno su R2.
-POOL_LAVORO = {"bach": 12, "mozart": 28, "vivaldi": 35, "celtica": 21, "jazz": 6, "country": 9, "ambient": 30}
-POOL_RIPOSO = {"nature": 3, "gregoriano": 1, "ambient": 30}
+# Numeri reali verificati su R2 (bucket pnev-audio), maggio 2026.
+POOL_LAVORO = {"bach": 12, "mozart": 28, "vivaldi": 7, "celtica": 21, "jazz": 6, "country": 9, "ambient": 71}
+POOL_RIPOSO = {"nature": 3, "gregoriano": 1, "ambient": 71}
 
 
 def _brani(pool):
