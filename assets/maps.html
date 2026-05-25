@@ -97,6 +97,21 @@
   </div>
 
   <div class="card">
+    <h2>🎵 Libreria R2 — scegli o pesca un brano</h2>
+    <div class="transport" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <label style="margin:0">Genere
+        <select id="famSel" style="background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:9px 11px;border-radius:9px;font-family:var(--mono);font-size:12.5px;margin-left:6px"></select>
+      </label>
+      <button class="btn" id="randFam">🎲 Random (questo genere)</button>
+      <button class="btn co" id="randAll">🎲 Random (stimulus)</button>
+      <button class="btn co" id="randRest">🎲 Random (growth)</button>
+      <span class="fname" id="pickStat">—</span>
+    </div>
+    <div id="brani" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px"></div>
+    <div class="note">Clicca un brano per caricarlo da R2 e farlo partire, oppure usa i dadi per pescarne uno random. Poi scegli la modalità qui sotto.</div>
+  </div>
+
+  <div class="card">
     <h2>Stato dal vivo</h2>
     <div class="inst">
       <div class="gauge jump"><div class="gl">Tornante attuale</div><div class="gv" id="iTorn">1000<small>Hz</small></div><div class="gx" id="iTornx">clinico</div></div>
@@ -476,6 +491,55 @@ function exitPreset(){ if(applyingMode) return; document.querySelectorAll('.btn.
 ['to','fa','ft','li','jp','aa','at','rnd','vol'].forEach(id=>{ const el=$(id); if(el) el.addEventListener('input',exitPreset); });
 $('bands').addEventListener('click',e=>{ if(e.target.classList.contains('chip')) exitPreset(); });
 $('lat').addEventListener('click',e=>{ if(e.target.dataset.l) exitPreset(); });
+
+/* ============ LIBRERIA R2 (jukebox studio) ============ */
+const R2_BASE = "https://pub-6779dbf6c3774d10bab0e4d5573d0630.r2.dev";
+const POOL_LAVORO = {bach:12, mozart:28, vivaldi:7, celtica:21, jazz:6, country:9, ambient:71};
+const POOL_RIPOSO = {nature:3, gregoriano:1, ambient:71};
+// mappa famiglia -> modalità suggerita (si imposta da sola quando scegli il brano)
+const FAM_MODE = {bach:'potential', mozart:'potential', vivaldi:'potential', celtica:'focus',
+                  jazz:'ricarica', country:'motor', ambient:'potential', nature:'growth', gregoriano:'growth'};
+
+function braniDi(fam){ const n=(POOL_LAVORO[fam]||POOL_RIPOSO[fam]||0); const a=[];
+  for(let i=1;i<=n;i++) a.push(`${fam}_${String(i).padStart(2,'0')}`); return a; }
+
+function urlBrano(nome){ const fam=nome.split('_')[0]; return `${R2_BASE}/${fam}/${nome}.flac`; }
+
+function caricaBrano(nome, modAuto){
+  const u=urlBrano(nome);
+  $('url').value=u; $('urlBtn').click();
+  $('pickStat').textContent='▶ '+nome;
+  if(modAuto && FAM_MODE[nome.split('_')[0]]) setMode(FAM_MODE[nome.split('_')[0]]);
+}
+
+function renderBrani(fam){
+  const box=$('brani'); box.innerHTML='';
+  braniDi(fam).forEach(nome=>{
+    const b=document.createElement('span'); b.className='chip'; b.textContent=nome;
+    b.style.cursor='pointer';
+    b.addEventListener('click',()=>caricaBrano(nome,false));
+    box.appendChild(b);
+  });
+}
+
+// popola il menù famiglie
+(function initLib(){
+  const sel=$('famSel');
+  Object.keys(POOL_LAVORO).concat(Object.keys(POOL_RIPOSO).filter(f=>!POOL_LAVORO[f]))
+    .forEach(fam=>{ const o=document.createElement('option'); o.value=fam; o.textContent=fam; sel.appendChild(o); });
+  sel.addEventListener('change',()=>renderBrani(sel.value));
+  renderBrani(sel.value);
+})();
+
+function pescaDa(pool){ const fams=Object.keys(pool);
+  const tutti=[]; fams.forEach(f=>braniDi(f).forEach(n=>tutti.push(n)));
+  return tutti[Math.floor(Math.random()*tutti.length)]; }
+
+$('randFam').addEventListener('click',()=>{ const fam=$('famSel').value;
+  const lista=braniDi(fam); const nome=lista[Math.floor(Math.random()*lista.length)];
+  caricaBrano(nome,true); });
+$('randAll').addEventListener('click',()=>caricaBrano(pescaDa(POOL_LAVORO),true));
+$('randRest').addEventListener('click',()=>caricaBrano(pescaDa(POOL_RIPOSO),true));
 </script>
 </body>
 </html>
