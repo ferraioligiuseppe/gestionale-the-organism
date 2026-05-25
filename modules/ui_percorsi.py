@@ -33,27 +33,15 @@ def _brani(pool):
 
 
 def _genera_sequenza(programma_seq):
-    """Genera la sequenza personale CONGELATA: per ogni passo pesca un brano vero.
-    Lavoro: niente ripetizione della coppia brano+modalità nel ciclo. Growth: libero."""
-    lavoro = _brani(POOL_LAVORO)
-    riposo = _brani(POOL_RIPOSO)
-    usate = set()
+    """Salva SOLO la sequenza delle modalità del percorso (niente congelamento dei brani).
+    Il brano viene scelto FRESCO ogni giorno al momento dell'ascolto (su pnev.it),
+    per non far abituare il cervello e mantenere alta la plasticità (BDNF, sinaptogenesi)."""
     out = []
     for i, passo in enumerate(programma_seq):
-        mod = passo.get("modalita", "Potential")
-        if mod == "Growth":
-            brano = random.choice(riposo) if riposo else ""
-        else:
-            cand = [b for b in lavoro if (b, mod) not in usate]
-            if not cand:
-                cand = lavoro[:]  # coppie esaurite: si ricomincia
-            brano = random.choice(cand) if cand else ""
-            if brano:
-                usate.add((brano, mod))
         out.append({
             "ordine": i + 1,
-            "modalita": mod,
-            "brano": brano,
+            "modalita": passo.get("modalita", "Potential"),
+            "brano": "",  # vuoto: pescato fresco ogni giorno da pnev.it
             "binaurale": passo.get("binaurale", "no"),
             "pattern": passo.get("pattern", ""),
         })

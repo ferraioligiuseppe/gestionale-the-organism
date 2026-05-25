@@ -176,7 +176,7 @@ def _semina_potential(conn):
         if _nome_esiste(conn, nome):
             continue
         seqg = _growth_ogni_4(seq)
-        sequenza = [{"ordine": i + 1, "modalita": m, "brano": b, "binaurale": "no", "pattern": ""}
+        sequenza = [{"ordine": i + 1, "modalita": m, "binaurale": "no", "pattern": ""}
                     for i, (m, b) in enumerate(seqg)]
         _salva(conn, {
             "nome": nome, "livello": "Potential", "condizione": "Generico",
@@ -186,6 +186,25 @@ def _semina_potential(conn):
         })
         creati += 1
     return creati
+
+
+def _semina_percorso_104(conn):
+    """Crea UN unico percorso di 104 giorni: le 4 sequenze Potential concatenate in fila."""
+    nome = "Percorso completo 104 giorni"
+    if _nome_esiste(conn, nome):
+        return 0
+    sequenza, ordine = [], 0
+    for _, seq in SEED_POTENTIAL:
+        for (m, b) in _growth_ogni_4(seq):
+            ordine += 1
+            sequenza.append({"ordine": ordine, "modalita": m, "binaurale": "no", "pattern": ""})
+    _salva(conn, {
+        "nome": nome, "livello": "Potential", "condizione": "Generico",
+        "durata_giorni": len(sequenza), "durata_brano_min": 30,
+        "sequenza_json": json.dumps(sequenza, ensure_ascii=False),
+        "note": "Percorso unico: Potential 1-2-3-4 in fila. Brano scelto fresco ogni giorno.",
+    })
+    return len(sequenza)
 
 
 def ui_programmi(conn=None):
@@ -212,6 +231,17 @@ def ui_programmi(conn=None):
             st.info("I programmi Potential standard esistono già (vedi l'elenco in fondo alla pagina).")
         st.rerun()
 
+    st.write("Oppure crea **un unico percorso di 104 giorni** (Potential 1-2-3-4 in fila): "
+             "lo assegni una volta sola e copre l'intero ciclo. Il brano di ogni giorno è scelto "
+             "**fresco** al momento dell'ascolto, per non far abituare il cervello.")
+    if st.button("📥 Semina il Percorso completo 104 giorni"):
+        n = _semina_percorso_104(conn)
+        if n:
+            st.success(f"Creato il «Percorso completo 104 giorni» ({n} giorni). Lo trovi nell'elenco in fondo.")
+        else:
+            st.info("Il «Percorso completo 104 giorni» esiste già (vedi l'elenco in fondo).")
+        st.rerun()
+
     st.divider()
     st.subheader("Nuovo programma")
     c1, c2, c3 = st.columns(3)
@@ -223,14 +253,13 @@ def ui_programmi(conn=None):
     durata_brano = c5.number_input("Durata di ogni brano (minuti)", min_value=1, max_value=180, value=30)
 
     st.markdown("**Sequenza dei passi** — modalità per ciascun passo (puoi aggiungere o togliere righe):")
-    st.caption("Brano: lascialo **vuoto** per la pesca casuale (di lavoro, o di riposo per il Growth). "
-               "Scrivilo solo se vuoi forzare un brano preciso a quel passo. "
+    st.caption("Il programma definisce solo il **tipo** di ogni passo (Potential, Focus, Motor, Ricarica, Growth). "
+               "Il brano vero è scelto a caso al momento dell'ascolto, da una raccolta dedicata (lavoro o riposo). "
                "Binaurale: scegli la banda (o «no») e il pattern in minuti acceso/spento, es. «10/10/10». Spento di default.")
     n_default = 21
     df = pd.DataFrame({
         "ordine": list(range(1, n_default + 1)),
         "modalità": ["Potential"] * n_default,
-        "brano": [""] * n_default,
         "binaurale": ["no"] * n_default,
         "pattern": [""] * n_default,
     })
@@ -240,7 +269,6 @@ def ui_programmi(conn=None):
             column_config={
                 "ordine": st.column_config.NumberColumn("Passo", disabled=True),
                 "modalità": st.column_config.SelectboxColumn("Modalità", options=MODALITA, required=True),
-                "brano": st.column_config.TextColumn("Brano"),
                 "binaurale": st.column_config.SelectboxColumn("Binaurale", options=BANDE, required=True),
                 "pattern": st.column_config.TextColumn("Pattern (min)"),
             },
@@ -264,7 +292,6 @@ def ui_programmi(conn=None):
                 sequenza.append({
                     "ordine": i,
                     "modalita": str(r.get("modalità", "Potential")),
-                    "brano": str(r.get("brano", "") or ""),
                     "binaurale": str(r.get("binaurale", "no") or "no"),
                     "pattern": str(r.get("pattern", "") or ""),
                 })
