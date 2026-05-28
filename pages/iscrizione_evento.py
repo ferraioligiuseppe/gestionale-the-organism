@@ -232,7 +232,8 @@ with st.form("form_iscrizione_pubblica"):
     with col3:
         email = st.text_input("Email ✱", max_chars=200)
     with col4:
-        telefono = st.text_input("Telefono", max_chars=50)
+        telefono = st.text_input("Cellulare ✱", max_chars=50,
+                                 placeholder="Es. 333 1234567")
 
     note = st.text_area("Note (opzionale)", max_chars=500, height=80,
                         placeholder="Eventuali necessità, allergie, richieste particolari...")
@@ -299,6 +300,15 @@ if submitted:
         errors.append("Il **cognome** è obbligatorio.")
     if not email or "@" not in email or "." not in email.split("@")[-1]:
         errors.append("L'**email** non è valida.")
+    # Cellulare obbligatorio + validazione base
+    tel_pulito = "".join(c for c in (telefono or "") if c.isdigit())
+    if not telefono or not telefono.strip():
+        errors.append("Il **cellulare** è obbligatorio.")
+    elif len(tel_pulito) < 9:
+        errors.append(
+            "Il **cellulare** non sembra valido. Inserisci un numero di "
+            "cellulare completo (es. 333 1234567)."
+        )
     if not consenso_privacy:
         errors.append("Devi accettare l'**informativa privacy** per iscriverti.")
 
