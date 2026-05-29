@@ -436,6 +436,16 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 except ImportError as e:
                     st.error(f"Modulo questionari non disponibile: {e}")
             return
+        if sotto == "🎮 Esercizi Wordwall":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if paz_id:
+                try:
+                    from .ui_wordwall import render_wordwall
+                    render_wordwall(conn, paz_id)
+                except ImportError as e:
+                    st.error(f"Modulo Wordwall non disponibile: {e}")
+            return
         if sotto == "👁️ Lenti a contatto":
             from .ui_lenti_contatto import ui_lenti_contatto
             ui_lenti_contatto(); return

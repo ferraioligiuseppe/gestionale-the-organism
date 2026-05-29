@@ -65,6 +65,7 @@ SOTTOSEZIONI = {
     ],
     AREA_QUESTIONARI: [
         "📋 Questionari remoti",
+        "🎮 Esercizi Wordwall",
         "👁️ Lenti a contatto",
         "🦴 Osteopatia",
         "📸 Photoref AI",
