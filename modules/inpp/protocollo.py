@@ -1277,6 +1277,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "rtac_ayres1_br_sx",
                         "label": "Test di Ayres (n.1) — Braccio sinistro",
                         "scoring": "0-4",
+                        "video_url": "https://youtu.be/ghyRYEouK6k",
                         "istruzioni": (
                             "Test di Ayres 1 — dai 4-5 anni (Ayres AJ, 1972, 1980). "
                             "\"Mettiti sul pavimento in posizione quadrupede (come formando un tavolino).\" "
@@ -1306,6 +1307,7 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "rtac_ayres1_br_dx",
                         "label": "Test di Ayres (n.1) — Braccio destro",
                         "scoring": "0-4",
+                        "video_url": "https://youtu.be/ghyRYEouK6k",
                         "istruzioni": "Test di Ayres 1 in posizione quadrupede. Osservare il braccio destro durante la rotazione della testa.",
                         "osservazioni": "Stesse osservazioni del braccio sinistro, lato opposto.",
                         "scoring_specifico": {
@@ -1486,6 +1488,9 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "rtsc_piedi_sedere",
                         "label": "Coinvolgimento dei piedi o del sedere",
                         "video_url": "https://youtu.be/Wk0P8-uvpRQ",
+                        "video_label": "Soggetto > 7 anni",
+                        "video_url_secondario": "https://youtu.be/i3AALsoiA4A",
+                        "video_label_secondario": "Soggetto 4-7 anni",
                         "scoring": "0-4",
                         "istruzioni": (
                             "RIFLESSO TONICO SIMMETRICO DEL COLLO (RTSC / STNR).\n\n"
@@ -1515,6 +1520,9 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "rtsc_braccia",
                         "label": "Coinvolgimento delle braccia",
                         "video_url": "https://youtu.be/Wk0P8-uvpRQ",
+                        "video_label": "Soggetto > 7 anni",
+                        "video_url_secondario": "https://youtu.be/i3AALsoiA4A",
+                        "video_label_secondario": "Soggetto 4-7 anni",
                         "scoring": "0-4",
                         "istruzioni": "RTSC in posizione quadrupede. Osservare il movimento delle braccia mentre la testa si muove su/giù.",
                         "osservazioni": (
@@ -1533,6 +1541,9 @@ PROTOCOLLO_INPP: list[dict[str, Any]] = [
                         "id": "rtsc_carponi",
                         "label": "Evidenza durante il carponi",
                         "video_url": "https://youtu.be/Wk0P8-uvpRQ",
+                        "video_label": "Soggetto > 7 anni",
+                        "video_url_secondario": "https://youtu.be/i3AALsoiA4A",
+                        "video_label_secondario": "Soggetto 4-7 anni",
                         "scoring": "0-4",
                         "istruzioni": (
                             "Rivalutare con il carpone. Alcuni soggetti sono in grado di "

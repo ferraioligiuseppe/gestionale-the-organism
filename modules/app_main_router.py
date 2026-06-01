@@ -10,7 +10,8 @@ import streamlit as st
 from .app_menu import (
     AREE_ORDINE, SOTTOSEZIONI,
     AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_TEST_NEUROEVOL, AREA_TEST_LIVE,
-    AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA, AREA_STUDIO,
+    AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA,
+    AREA_MARKETING, AREA_STUDIO,
 )
 
 
@@ -435,6 +436,16 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 except ImportError as e:
                     st.error(f"Modulo questionari non disponibile: {e}")
             return
+        if sotto == "🎮 Esercizi Wordwall":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if paz_id:
+                try:
+                    from .ui_wordwall import render_wordwall
+                    render_wordwall(conn, paz_id)
+                except ImportError as e:
+                    st.error(f"Modulo Wordwall non disponibile: {e}")
+            return
         if sotto == "👁️ Lenti a contatto":
             from .ui_lenti_contatto import ui_lenti_contatto
             ui_lenti_contatto(); return
@@ -489,7 +500,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         # L'header serve solo per i moduli che richiedono un paziente
         _audio_map = {
             "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
-            "🎵 Stimolazione passiva":   ("ui_stimolazione_passiva",  "ui_stimolazione_passiva"),
+            "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
+            "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
+            "🧭 Percorsi MAPS":          ("ui_percorsi",              "ui_percorsi"),
             "🎧 Bilancio uditivo":       ("ui_bilancio_uditivo",      "ui_bilancio_uditivo"),
             "📊 Audiometria funzionale": ("ui_audiometria_funzionale","ui_audiometria_funzionale"),
         }
@@ -515,6 +528,16 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 ui_reading_dom()
             except ImportError as e:
                 st.error(f"Modulo Lettura non disponibile: {e}")
+            return
+
+    # ── AREA MARKETING ────────────────────────────────────────────────
+    elif area == AREA_MARKETING:
+        if sotto == "📅 Eventi e iscrizioni":
+            try:
+                from .eventi.ui_eventi import render_eventi_section
+                render_eventi_section()
+            except ImportError as e:
+                st.error(f"Modulo Eventi non disponibile: {e}")
             return
 
     # ── AREA STUDIO ───────────────────────────────────────────────────
@@ -634,7 +657,6 @@ def dispatch_main_section(*, sezione: str,
         " Eye Tracking":                 (AREA_AUDIOLOGIA,  "👁️ Eye tracking"),
         " Lettura Avanzata DOM":         (AREA_AUDIOLOGIA,  "📖 Lettura avanzata"),
         "🔉 Diagnostica Uditiva":        (AREA_AUDIOLOGIA,  "🔉 Diagnostica uditiva"),
-        "🎵 Stimolazione Passiva":       (AREA_AUDIOLOGIA,  "🎵 Stimolazione passiva"),
         "🧠 Terapia":                    (AREA_VALUTAZIONE, "⚡ Funzioni esecutive"),
         "🧠 NPS — Valutazione Neuropsicologica": (AREA_VALUTAZIONE, "🧠 NPS — Neuropsicologica"),
         "📚 DSA — Apprendimento":        (AREA_VALUTAZIONE, "📚 DSA — Apprendimento"),

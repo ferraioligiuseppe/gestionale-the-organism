@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAPS — Music · Adapted · Psychacustic · System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d1411; --panel:#131d18; --panel2:#0f1713; --line:#23332b;
+    --txt:#dce8e1; --dim:#7d9488; --green:#3fbf86; --green-d:#1d6b44;
+    --amber:#e0a23c; --hot:#e0613c; --blue:#5aa6d8; --violet:#9a8de0; --cyan:#52c4c4; --coral:#e07a52;
+    --sans:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.55;padding:28px 20px 60px;
+    background-image:radial-gradient(circle at 20% 0%,#16241d 0%,transparent 55%);}
+  .wrap{max-width:780px;margin:0 auto}
+  header{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:24px}
+  .kick{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--green);margin-bottom:8px}
+  h1{font-size:25px;font-weight:600;letter-spacing:-.01em}
+  .sub{color:var(--dim);font-size:14px;margin-top:6px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
+  .card h2{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .transport{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .filebtn{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:11px 16px;border-radius:10px;font-size:14px;cursor:pointer}
+  .filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .filebtn:hover{border-color:var(--green-d)}
+  .play{display:inline-flex;align-items:center;justify-content:center;gap:9px;background:var(--green-d);border:1px solid var(--green);color:#eafff4;padding:11px 22px;border-radius:10px;font-size:15px;font-weight:500;cursor:pointer;transition:filter .15s;min-width:130px}
+  .play:hover{filter:brightness(1.12)} .play:disabled{opacity:.4;cursor:not-allowed} .play.on{background:#5a2018;border-color:var(--hot)}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:11px 18px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s}
+  .btn.co{background:#3a2016;border-color:var(--coral);color:#ffe6da} .btn.cy{background:#173030;border-color:var(--cyan);color:#dffafa} .btn.on{background:#5a2018;border-color:var(--hot);color:#ffe6da}
+  .fname{font-family:var(--mono);font-size:12.5px;color:var(--dim);flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .inst{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .gauge{background:var(--panel2);padding:13px 15px}
+  .gauge .gl{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+  .gauge .gv{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--txt)}
+  .gauge .gv small{font-size:12px;font-weight:400;color:var(--dim);margin-left:2px}
+  .gauge .gx{font-family:var(--mono);font-size:11px;color:var(--amber);margin-top:3px}
+  .gauge.vi .gv{color:var(--violet)} .gauge.cy .gv{color:var(--cyan)} .gauge.jump .gv{color:var(--hot)}
+  .evt{font-family:var(--mono);font-size:11.5px;color:var(--dim);text-align:center;margin-top:14px} .evt b{color:var(--green)}
+  .bands{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+  .chip{font-family:var(--mono);font-size:12px;padding:7px 11px;border-radius:8px;cursor:pointer;background:var(--panel2);border:1px solid var(--line);color:var(--dim);user-select:none;transition:all .12s}
+  .chip.on{background:var(--green-d);border-color:var(--green);color:#eafff4}
+  .chip.flash{background:var(--hot);border-color:var(--hot);color:#2a0f08}
+  .chip.sel{background:var(--cyan);border-color:var(--cyan);color:#0c2222}
+  .seg{display:inline-flex;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg span{padding:7px 14px;font-size:13px;cursor:pointer;background:var(--panel2);color:var(--dim);user-select:none}
+  .seg span.on{background:var(--green-d);color:#eafff4}
+  .controls{display:grid;gap:17px}
+  .ctl label{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;margin-bottom:7px}
+  .ctl .val{font-family:var(--mono);font-size:12.5px;color:var(--amber)}
+  .ctl .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:4px;font-family:var(--mono)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;background:linear-gradient(90deg,var(--green-d),#2a4338);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--green);border:2px solid #0d1411;cursor:pointer;box-shadow:0 0 0 1px var(--green)}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--green);border:2px solid #0d1411;cursor:pointer}
+  input[type=range].vi{background:linear-gradient(90deg,#4a3f8a,#2a2540)} input[type=range].vi::-webkit-slider-thumb{background:var(--violet);box-shadow:0 0 0 1px var(--violet)}
+  input[type=range].cy{background:linear-gradient(90deg,#2a6a6a,#1d3838)} input[type=range].cy::-webkit-slider-thumb{background:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
+  input[type=range].co{background:linear-gradient(90deg,#7a4030,#3a241c)} input[type=range].co::-webkit-slider-thumb{background:var(--coral);box-shadow:0 0 0 1px var(--coral)}
+  .toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--dim);user-select:none}
+  .tt{position:relative;width:34px;height:19px;background:#26332c;border-radius:10px;transition:background .15s}
+  .tt::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#6b7c72;transition:transform .15s}
+  .toggle.on .tt::after{transform:translateX(15px);background:#fff}
+  .toggle.vio.on .tt{background:var(--violet)} .toggle.cya.on .tt{background:var(--cyan)}
+  .prog{height:8px;background:#0a110d;border-radius:4px;overflow:hidden;margin-top:6px} .prog i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#2a6a6a,var(--cyan));border-radius:4px;transition:width .1s linear}
+  .birthrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px} .birthnow{font-family:var(--mono);font-size:13px;color:var(--cyan)}
+  .note{font-size:13px;color:var(--dim);background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:12px 15px;margin-top:16px} .note b{color:var(--txt);font-weight:500}
+  .note.warn{border-left-color:var(--coral)} .note.cyl{border-left-color:var(--cyan)}
+  .sec{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--green);margin:4px 0 -4px}
+  .micstat{font-family:var(--mono);font-size:12px;color:var(--dim)} .micstat.ok{color:var(--green)} .micstat.err{color:var(--coral)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="text-align:center;border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:24px">
+    <div style="display:inline-block;background:#f6f6f4;border-radius:18px;padding:12px 20px"><img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAEsAPsDASIAAhEBAxEB/8QAHQABAAICAwEBAAAAAAAAAAAAAAYHBQgBAwQCCf/EAEoQAAEEAQIDBQQGBwQIBQUAAAEAAgMEBQYRBxIhEzFBUWEUIjJxCBVSgZGxI0JicqHB0jNWldEWFyRDU2OS8CU3dIKDJ5OisrP/xAAbAQEAAgMBAQAAAAAAAAAAAAAABQYCAwQHAf/EADwRAAIBAwEFBAcFCAIDAAAAAAABAgMEEQUGEiExQRNRYXEygZGhscHRFCIzUvAHFSNCYpLh8RZyNIKi/9oADAMBAAIRAxEAPwDb5ERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBFhs/qfC4SMuvXY2OH6gO5Vb6g4zRMLmYmlz7frydy77bTLm5/Dhw7+hF3utWVlwrVFnu5suFfLpY2/FI0fMrV3PcYcvK9wlzMNcfYiO5/gole4mWJXEvymQmP7IIH8SpSGzs1+JUS95wR1y4r8bW0qTXfjC9puWbdUHY2Iv+oL7bNC74ZWH5OC0iPEF5O/a5E+vOP816avEiaNwLb2Ri9e/wDIrY9nodKy9hn+8NWjxlYyx4NM3XBB7ii1Mw3F3JwOaIs9v+zPuPzVg4DjRbAb9Y1Y54/+JEVzVdnrlLNNqXkzX/yWjSko3dOdJ/1RaLyRRXTevtPZsNbFbbDKf1JDsVKWua5oc0gg9xChq1CpRlu1ItMnbe6o3Md+lJSXgcoiLUbwiIgCIiAIiIAiIgCIiAIiIAiIgCIiAIiwOstUY/TWOdYtSAyEe5GD1cVspUp1ZqEFls1V69OhB1KjwkZLL5SliqjrV6dkUbRv1PeqU1/xdmkZLDiXtq1m9HTvOxVd8TOIdrJWXS3ZnO3/ALGs123TzPkPVVNlMlbyM3PZk3aPhYOjW/IfzVttNJoWaUq/3p93REBbw1DaB5t32Vv+b+aX/VfP48iVag1tLZne6Fz7UhPWWYnb7h3lRW9kr10n2mzI9v2Qdm/gF40XdOvOfBvh3Fv0zZvTtN40qeZfmlxl7Xy9WAiItROhERAF3VbNiq/nrzyRO/YdsulETa4owqU4VIuE1lPo+KJNidXW672+1t7QD/eR+68fd3H+CuHh7xYv0msAte3VBsHMcfeZ/MLXhdtaeatM2aCR0cje5zSt0qsasdyvHeXvKhf7HUHJ19Ol2NTw9F+a6er2M390lqvFajqtlpztEm3vRk9Qs8tItD61s1bsTmzmrcaRyuadmSenofRbQcNOIFXUMDalxzYbzRsQT0f8lXdR0Z0Y9tQe9D3oirTVa1Kv9i1CO5V6d0vFP9e0nqIigSfCIiAIiIAiIgCIiAIiIAiIgCIvixNHBA+aVwaxgJJKJZPjaSyzFatz1TT2IlvWngED3G79XFaocT9cWr919uw/tJ5N+wiJ6MHmfT81JeNOufrK/PN2hNOueSGMH43Kh7lma3ZfYndzSPO5P8h6K7afZqwpKT/El7kVyztJbSXblP8A8am/75fRdf8APD5sTS2JnTTPdJI87uce8rrRFsbyelQhGEVGKwkEREMgiIgCIiAIiIAiIgCmuiNUWK9uGGSdzLDCOwm36u/ZPr6qFLkdOoWylVdN5XIiNZ0ahq1u6NXg1xjLrF96+a6m83CvWsWpMcK1l4beiGzh9r1U5WlfDHVtqpchsMlIt1iOfr/aM8/81t/pTNV89hYL8Dgedo5h5FV3WdOjQkq1L0Je59xT9IvK8ak7C8/Fp/8A0ujRlURFBk+EREAREQBERAEREAREQBVrxz1KcZhhi6z9p7PR2x6hqsmR4jjc9x2DRuVqbxu1M+5lshca/cMPYwfPu/zKm9CtVWuO0n6MOP0K/tDcVFRja0PTqtRXr5lWauyRvZIxMdvDAS1v7TvE/wAlhURWKpN1JOTL3p1hS0+1hbUuUVjz7363xCIiwO0IiIAiIgCIiAIiIAiIgCIiA9GOtyUbsdqL4mHqPtDxH3rZfgBqxsGQZj3y71bjQ6Ik9xWsCnHDXLSVpRG15ElaQSx9f1Seo/H81tjTjcU5W8uUuXmUbbK0dFU9Vor71JpS8YN/J/Fm9CLFaSybMvp+peYQeeMc3zWVVDqQcJOL5o7aVSNWCnHk+IREWBsCIiAIiIAiIgCIiAwHEHI/Vmkr1nfZ3ZlrfmVpRxCtultQVyd++V/zJ2H81tb9IG4YNKR1wdjNJ1Wnuq5TLnrPXowhg+4K4aPDs7Fz6yfwIO0h9r2kinypQb9b4fMxSIi6j0QL6jY+R7WRsc97js1rRuSfQLux9OzfuRU6cLpp5XcrGN7z/kPVXTofSVXT1YTScs+Re39JNt0Z+yzyHr3lVzaHaW20Slmf3pvlHv8AF9y8fYcl3dwt48eL7imLmPv0mtdco2a7XfCZYnNB+8heVbI3a1e7Vkq24mzQSt5XscNwR/34qgtU4p+Ez1rGuJc2J28bj+sw9Wn8PyXBsttbHW5TpThuTjxxnKa/x8zVZXyuG4tYZi0RFciQO2rXnt2Y61aF800juVjGDcuPorCw3C+aSFsmWyIgeRuYoGB5b83Hp+AWf4aaWbhqAyF2MfWNhvUEdYWH9X5nx/BZ7UOexmBqtnyM/Jz9I42jme/5D+fcvJtf2zvbi8+xaR0eMpZcn1xz4ePXnnBB3WoVJVOzof7IfY4WUSz/AGfMWmO8O0ia4fw2US1JojNYWJ1gsZcqt6ulg3PKPNzT1Hz6hTmrxMwEswZNBertP67o2uH3gHdS/H3amQqstUrEdiB/c9h3Hy9D6FcC2k2l0acZX0HKD/Mlj1SS5+3yNX2u7t3mouHj9TXBFauudAR2u0yOBjbFP8UlUdGyerPI+ncfRVZKx8Ujo5GOY9hLXNcNi0+RC9P0XXbTWKPa274rmnzXn8nyZM29zC4jmJ8oiKZOgLJaZs+y5uu8nZr3dm75O6fnssauWuLHB7ehadx9yyhLdkpdxy31rG7tqlCXKSa9qwbnfR8yhsYCfHvdu6B+4HoVaKoD6O1/bUEkW/u2IQ7+G6v9VvXqKpXssdeJQNl68qunQUuccr2BERQ5YQiLkgjvBCA4REQBERAYzVWRkxOnrmQiaHSxM9wEbjmJABPp1VdaY1tl481AzJXDZqzSBkge0As3OwcNh02PgrE1bTfkNNZCpGN5HwksHm4e8PyVFb+IJH8lR9p766tLylOnJqOM46N5457+GDRVk01glP0j5CK+Ph8C47rUnLO58pbd5zP/ADK2c4v5Zma0/hrgcDK0dnO3xa8d/wCPf961iybeXJWgfCZ//wCxXtOlVoV9Lo1KbypZZH7OtPXbt/0xPMvXisfcyl6OlRgdNPIejR3AeJJ8APNZLS+lcrqCUGtF2VXf37MgIYPl9o+g/grj0vp7HaepdhSYXSP27Wd/xyH18h6BVjaTa+10iDp02p1e7ov+305vw5lwu7+FBYXGX65nk0VpWppypuC2e9KP00+3/wCLfJv5+K6dfari09TENfklyMzd4mHqGN+2708h4rnW2r6enoTBHy2Mi5vuQg9GftP8h6d5/iqXyFyzkLsty5M6aeV3M97vH/Ieipezmztzrtz+8tTy4Pjx/m+kV/hEfaWk7mfbVuXx/wAF1cOM3PnNOCe5IJLUMropXbAc3iDsPQ/wUT420g27jsi1v9pG6F59WncfwJXHBG5y3sjQJ/tI2TNHq07H+DgpFxdpmzo98zW7uqzsl+TT7p/MLCnTjo216hBYhKWEumJrl5Jv3HxJW9/hcm/iUwpvwp059ZZP61tx71KjvcBHSSXvH3N7/nso1pzD2s5losfVGznHd7yOkbB3uP8A31OyvvE0K2LxsFCozkghbyt37z5k+pPUq07c7RKwtvslF/xKi/tj1fm+S9b7jt1K77KHZx5v4HGXyFXFY6fIXJOSGFvM7zJ8APUnoqF1HmLWcy0uQtHYv6MYD0jYO5o/76lZ7iZqb67yXsVSTfH1XENIPSV/cX/LwH3nxUPWexOzf7tt/tVdfxZr+2Pd5vm/Z0GnWnYx35ek/cFl9L6gv6evizTdzRu6TQOPuSD18j5HwWIRXS5tqVzSlRrRUovmmSM4RnFxkso2E05nKGex4uUZN9ukkTvjjd5OH8+4rEa30bU1BGbMBZWyLR7su3uyej/8+8eqqHB5a9hcgy7QmMcjejgerXt+y4eIV06Q1TQ1FW/REQ3GDeWs4+8PVv2m+v4rxrWtn77Zm5+3afJ9muvWPhLvXjy7+OM1+4talnPtKT4frmUllcddxd19O/XfBMzva7xHmD4j1C8i2Gz2Fx2bp+zZGuJGj4Hjo+M+bT4fkqq1Lw/zGNe6Wgx2Rq94MY/SNHq3x+Y3V00Dbez1GKp3LVOp4+i/J/J+rJIWuo06qxPg/cQ5F9SsfE8xysdG8d7XjlI+4r5V3TysokjYD6PMzhqLFHf464B/BbQLVv6PTT/pDhwB3QA/wWyeSzuHxwJuZKtER+rz8zv+kblQe1FWFKtGVRpLdXPgeY7NYUK66dpL4mRXVbs16ld1i1NHDCz4nvdsAoJm+JETQ6PD03SO/wCNYGzR8mjqfvIUDy+WyOWn7bIW5JyPhaTs1vyaOgXnN/tXa0E40Pvy93t6+r2lhlVS5E11XxBc8PqYEOY09HWnjY/+wHu+Z/BYbQGYykeqKsDbM88VqTkmje8uBBB3d17iO/dY3T2nMrnJB7HXLYd/enk6Rj7/AB+QVq6U0vj8BFzRDt7bhs+w8dfk0fqj/sqG0+nqeq3ULqpJxinnPJY7kuuf9swipTeTOoiL0I6AiIgOVUvEjTb8ZkHZKpH/ALDYdu7YdInnvB9D3j8FbK+J4op4XwzRskieOV7HjcOHkQovVtLp6jQ7OXBrin3P6GM47ywa62IIbERinjD2HrsVho9IabZbdaOJhklc7mJlLnjf5E7K3td6LoUMTZymL7Zj4hz9gXczCPQnqP4rX3VmvMjjHxx1cfWHaNJEkjnO2IPdsNlW7PZnaXsnTtpNU88cVMR9mU/cR1OpTjeq3i8VZryylx5/InznRQQFziyKKNvUnZrWD8gFXes+IkcbX0tPPEknc62R7rf3Ae8+p6eW6gmc1DmM07/xG9JLGDuIh7sY/wDaOn4rFK1aF+z+jazVa/kqkvyr0fXnjL3LvyWS20uMHvVXl93Q+5ZJJZXSyvdJI8lznOO5cfMnxXwiL0dJJYRLmf4fZEYzV1Cd7uWJ7+xkP7L+n57FXlfqw3aU9KyzmimYY5G+hGy1v/grm0VrXHZHFxxZK5DVvwsDZO1cGiTb9cE9OviPNeYftB0avUnS1C2i248HjmsPMXw9fHpwIbVLeTaqwXIzGl9O47T1N0FJr3PkO8s0mxe/y328B5BRPinq0QRyYHGy/pnjltytPwD7APmfHyHTxXOt+IMEUL6On5hLO4bPtN+GMfseZ9e4eqqxxLnFziSSdySdyStWy2y9zdXP7z1XLecpS5t97XRLovkuONlZTnPtq3vOERF6qTYREQBdlaeatOyxXlfDNGeZj2O2c0+hXWixlFSWGuAayWfpPiQx4ZV1A3kd3C3G3of32ju+Y/BWHVsQW4G2Ks0c8LurXxuDmn7wtbV6sdkb+Ol7Whcnqv8AExPLd/mO4rz3Wf2e2t3J1bOXZyfTnH6r1ZXgRVxpUJvNN4+BsPaq1bQ2tVoJx/zYw78wvCdO6fJ3OEx+/wD6dv8AkqoqcQtTwNDX2oLA/wCbA0n8Rssni+IWoruQgqdlQaJHgOIhO4Hj+t5KsQ2E1+k9yjUWPCbXyRG17OvbUpVJSxGKbfHouJadWvBVaG1oI4ABsBG0N2Hl0XfDG+aTs4Y3SPP6rGkk/cFI+CeLjzsNm/mK0dmNh5Ymub7oPyHereqVatRnJUrQ12+UbA38lpr7E3sK7hd1llc8Zl8cETp9SF3QVamsRl4FQ4jQ+fvlrn1hSiP69g8p/wCkdfyU4wWgsPj+WW2HZCcdd5RtGD6N8fv3UsRTFls3Y2r3nHefe+Pu5EjGnFHDGtY0MY0Na0bAAbAD0C5RFPmwIiIAiIgCIiA6MhXbbozVnjdsjC0rTXi1g5Kc92sWHtKkpe3p3t8f4dfuW6KpP6QWm9po81DFzRyDkmGysOz9wo1ZUJPhNe8re0Malv2WoUlmVGWfNdUalovbmqLsfkZKx35AeaM+bT3f5fcvEpqUXFtM9Ftrinc0Y1qTzGSTXkwiIvhvCIiAIiIAiIgCIiAIiIAiIgCk+gaTprklrl35R2bPVx7/AOH5qNRsdJI2NjS5ziA0DxJV68EtJm9l6dQt5oq/6Sd23Qu7yt9BxpqVafKKyU3bS+lC0jY0vxKz3f8A1/mfy9bNgOF2I+p9IVIXN2kkbzv+ZUpXEbGxxtY0bNaNgFyqHXqutUlUlzbM7WhG3oxpR5RWAiItRvCIiAIiIAiIgCIiALHajxUGZw89Cw0FsjSB6FZFFlCbhJSjzRhUpxqRcJLKZpjxP0nZqW56UkZFms4mI7fG3y+/81VxBB2I2K3i4t6MZqHGG3VYBdhG42/WHktTNbadmgsS2ooXNlYT7RFt1/eA/P8AFXq3uI39FVY+kua+ZB6DfvQ7r923L/hSeacnyTf8r+Xj58IeiIsT0cIiIAiIgCIiAIiIAiIgCIsxpvDPyc4kkBbVYfeP2z9kfzWUISqS3YnHf39DT7eVxXliMf1heL6GU0JhpLFhl10ZcSeWu3bvPcXfyC3A4TaXbp7T7HysAtTgOefEeig3BLQnM6PNZCAMiYB7PGRsPQ7K7QABsO4KJ1u+io/ZKT4Lm+9nn+mQrajdS1W6WG+EF+WP6+YREVZLIEREAREQBERAEREAREQBERAFWPFfh4zLMflMUwMttG72AfGrORdNpd1LSoqlN8Tiv7Cjf0XRrLK+Bolq3Sk0NmV9aAxTtJ7SuRtufNvr6KGua5ri1wLXA7EEbELenX/D/G6kidPE1te6B0e0fF81rnr/AIfW6NhzMjUfFIOjLEY7/n5q5W11Q1BZpvdn1X0Iuy1y80Jq31BOpR6TXFpd0u9e/wAyoUWVyeByFElxj7aIf7yMb/iO8LFL7OEoPElgv1nfW17T7W3mpR8Pn3eTCIixOsIiIAiIgCL2Y/G3b7tq0DnN8Xno0feptpPREli1G1sDr1kno0N9xp+Xj963U6EprPJd7K/q+01jpn3Jy3qnSMeL9fd6/VkjWntPz33NmsNdHWPd9qT5eQ9VsNwk4autmG/ka/YUo9uyi225lJeHfCyGkY8hnAJJhsWw+DfmrWijZFGI42hrWjYADuUVqGsQoxdG1eW+cvoVFWt5rVdXWpcIL0afReL73+uC4HFeGOvCyGFgYxg2aAO5faIqo3ksqSSwgiIh9CIiAIiIAiIgCIiAIiIAiIgCIiALy5LH08jXdBdrsmjcNiHDdepF9jJxeUYyjGa3ZLKKo1Xwgp2XPnw0/YPPXs3dyqPVfC7JVXuddw5k/wCdCNj+IW2a4e1rxs9ocPIhTltr9zSW7UxNeJXq2zdDtO2tZSpT74vBole0V2biI55oT9mWPf8AiNljZdKZFp/Ry1pB+8W/mFvXf05hLwPtONrvJ8eQbrBW+GmlLBJ9h5CfsnZSMNcsp+nTa8jZF7R2/CncRmv6or4pZ95pWdMZff8As4T/APKF9x6Vyjj7xrsHrJv+QW4p4TaWJ37KX/qXfX4XaUiIJqOf+85ZvV9OXSRm7/aeXDNNeOH9TUGro2R7gJre/pFGSfxKlunOG9i3I0VMRPZd9uYbj8O5bV4/SGnaOxgxcAI8S3dZqGCGFvLFExg8mjZaKm0FGH4NLj4mipYaxecLu7aXdBbvwwUppbg3YfySZidsUY/3UatfT2m8RgoBFQqMYQOr9upWXRQt3qlzd/iS4dy5Hbp+iWdhxpQ4974sIiKPJYIiIAiIgCIiAIiIAiIgCIiAIiIAiIgC+LE0NaB89iaOGGNpc+SR4a1oHeST0AX2q4+kwSOCWoBv3iAH1HbMWylDtJxh3vBnTjvyUe8sKpZr3K0dmpYhsQSDdksTw9jh5gjoV2rWT6IOt/Zr9nQt+UCGyXWcduejZAN5Ix+8BzAeYd5rZizNDWry2bErYoYmGSSRx2DGgbkn0ABK2XNvKhUcGZ16LpT3WdVm/RrWYKtm7VhnsEiCKSZrXynya0nd33L0LSTUusZtccb8fniXNrDKVYaDD3xwNmby/Inq4+rlu4743fvH81ndWjt1HL4tGVeg6KjnqcISACSdgO8oofxUyxpYJuPhce3vHlIHeIx8X49B95UVe3cLO3lXnyiv9L1s5pPCyS2CaGxH2kE0crN9uZjw4fiF9qtOH01nT+qZtP5ABgtNaWjfoJOXdu3zBI+YVlrRpl/9to77juyTaa7mj5GW8guqzarVuX2mzBBzfD2kgbv8tyu1UPx+iFriLi6sjndnJVhZ8uaVwJCsGm2SvK/ZOWODffyIzWNRenW3bRjvPKWM45l2jKYwnYZKkT/6hn+a9bSHNDmkFp6gg7gqrZeCGndnBmVyjXdQCRGR+HKo/wAOrWV0bxRdoyxddZoyymHl3PKCWczJGg/Ce4EevoF0rTretTnK2q7zis4axw9pxPV7u2q043lDdjN7qalni+WVgvJc+i4VBfS41rmMPXxmlcPZlqDIxPntyxP5XvjDuRsYcOoBO5PyA7t1G29CVeooLqWajSdWaii6LepdOVLJrWtQYivODsY5LsTXA/Iu3WSglinhbNDIyWJ43a9jg5rh6EdCqCwf0Y9PnFRHNZ/JPyD2B0pqsjbE1xHUAOaS4DzJ6qScJOE2b4e6wsWa2rXW9PSwOb7E6NzXPkO3K5zdywFvX3h1O+2y3VKNuovcqZa8OZsnTpJPdnx8i3ERFxnOEREAREQBERAEREAREQBERAFW/wBJn/yTz/8A8H/92KyFW/0mf/JPP+ggJ/8AvsW+1/Hh5r4m2h+LHzRQUmlrlbgppbiXgN4clh7UrbT2DryCw4xynz5Xe6f2XeinXGLiq3VXDXBYPTAL8rqgNZarRHd8IDuV0PoXSe7+6CfFTb6N1OtkeAuPoXYWz1bJtxTRu7nsdK8EfhusJwh4GSaO4gWdQZS7VvVanMMS1m5fu7oJJARsHNb0G2/Uk+SlJ3FLfk6vODePHw9TO6VWG89/nFvBWPEXSVbRPELh5p+DldLFDVktStH9rO62S93y36D0AW37/jd+8fzWs/0lh/8AXfRXTvjq7ev+1lbMP+N37x/Nct7JzpUpPm0/iaLmTlCDficKro7lXUPEb2u3Zhjx9M7xmWQNDmsPujr5u6/JTDiHlTitMzujcWzWD2EZ8uYHc/cAVGtJ6EoZDA17uSfaZLOC9rY3hoDP1e8HqR1+9UbWJ1rq6p2lCKlu/fkm8LwTI6eW8I44oupyyUs1jb9aS1A8Md2UzXO7+ZrtgfA7/ipzgMjHlsPWyEew7Zm7h9l3c4fcd1Gn8OMEWOEc11ryDykyAgHw391Y7hVdmp5G9py2CHsc6Ro+y5vR4+/oVrtqlzaalvXEVFVuHB5W8vr7wm1Lj1LEVDcfpXwcRsbNGztHx1IXtZ9oiV5A+9XyqM44g/60sN0PWCvt6/pnL0jZ54vPUyu7WpvT8L80fiZaTihrFwcGaDmDzvsTHOevy5QuvhrpXUmU1w7WuqK76rg50sccjeR0jy3lbs3va1o8/IequNxPM73j3nxXytL1SMKcoUKShvLDeW3j1nRHRJ1KsKl1XlUUHlLCSz3vHMKsuPPC1vEXG1JqVuKnl6Ac2B8oJjlY7YmN+3UdQCCN9uvTqrNVUcauJ2oeHmfxjotMNyGAmgLrFouc09pzEcgeN2sIAB94dd/RcNqqnarsvSLLQ399bnMrqrN9I3Q1WOsKU+YoV2hrAY47zQ0dwBaRJtt5qb8GuNzdX51umNQ4puLzLw4QuiLuymc0EuYWu95j9gTsSQdiOhXli+kxod1XtX4nOsm2/sxHE4b/AL3Pt96g/CapleJPHx/EKLFOx+Jr2jakePg5mx8jIw7ue89C7b19FJypOpTnKvTUcLmuHE7XDfjJ1YJY6+JtOiDuRQhGBERAEREAREQBERAEREAREQGPzd3IU4o3Y/DS5RznEPZHZjh5Bt37vI3+5YW5lM5cqy1bnD+axXlaWyRS5Go9j2nvBBdsQoli9c5ip9ILP6Xy0vPp6w6pUxjzygVrpqduYj032lZ2hBJPvR7DvWT+kBrDI6U0Dbbp5zf9Ir8M8eN32/Q9nC6Wawd9+kcbHO6gjmLB4oDM0clm6NSKpS4ey1q0TeWOGHIVGMYPIAO2C7/r3Uv9xrn+KVf6l2abz9OXG6cqX8gz61yuMbbiif0fOGRxmV42G3QyN3/eWTGWxpzrsELkRybarbhq7nnELnlgf8uZpHzCAjlyzk7lytcucNfaLNR3NWmlu03vhPmxxO7fuXs+vdS/3Guf4pV/qXjqcT+H9vOswtfVeNkuSTmvGA5wikl327NspHZufv05Q4nfosjhbTn6u1HA/VEV9lc1tsWK7GOxfNET7zx1f2nx+93bbBfcsZPLaymdtRdlZ4fzzx778smRqOG/yLl2DOakAAGhbYA6ADJ1f6l5cPxO0BmM5HhcZqvG2bsshjhax7uSd472xyEckjuh6NcT0Uv7+5Y7qznqCN/Xmpf7jXP8Uq/1LpZk84yy+0zh9M2d42dKMhUD3DyJ5t1IaOQoXnzMpXqtp0DuSUQTNkMbvJ3KTsfmvSjinzBGvr3Uv9xrf+KVf6l57N7L2bMNmzw6fNPAd4ZJL9Nzoz+yS7cfcoZxG1zqLG68lv4eyG6V0d7MdURiLmNj2o7EA7bj2eItnO329ircsWK9arJasTxRV4mGSSZ7w1jWAblxcegG3XfyWSbXFHyUVJYaI/8AXupf7jXP8Uq/1J9e6l/uNc/xSr/UoLxB4uaduaScdEatqyZQZLHMb2QIdJA+7DHKY+0aBI0teQXM3AB7wp1q/Xmj9J3WUs9nqlO3K0yR1QHSzlm5HP2cYc7l3BHMRt0718Po+vdS/wBxrn+KVf6l8yZnUUsbo5NB2nscNnNdkqpDh5EF3VeturdMu01W1K3O0HYa0+OOG62XeJ7pJBGwcw8S8hvXuPftssfp/iPobP5wYTD6moW8g8OMUTXOb24b8Ric4BsoHjyF3mgMPJhqUk/tD+DWNdLvvzmShvv+KzcGX1BXhZBBoGxFEwbMYzI1GtaPIAO2Ci2E4z6WvcR83pifLUI61QU46ErY5uexNL2glYfd2HK5rAO74vFSjU3ETRWmsq7F5vUVOncY0PmiPO8wNPc6UsaRE09+7yBt1WTlKXNn1yb5s7fr3Uv9xrn+KVf6lx9e6l/uNc/xSr/UvfqDUun8Bgvr3MZilSxh5OSzJKOSTn+AM235y7wDdyfBQaLiHS1BxT0fj9Lagit4u1UyhyNeNvK7tYmV3Rdox7Q9hHO4jcDffxWJ8LOYSWNLm8riAS3ffY+S5REAREQBERAEREAREQBERAU+7Tceq9acWcMZzUsvnxMtK20e9Usx1Gvhmb6te1p9RuPFeS3S1Jm9Ea41zrbEnFZNumLmKoUHHcVo2wOdYlHX/fTDcH/hxReZVx16NKvctXIKkEVm2WGzMxgD5ixvK0uPedm9Bv3BfdutXt1JqluCOevPG6OWKRocyRjhs5pB7wQSCEBUbJ4qmveDk9mVkMU2nL1WN7zs10zq9RzWbnpzEMcQPHlK9VbK4jI/SO1DFFkIJIaOjIq9+Rko5YHe1yucC4dxDHAny3CsPNac0/msM3DZjCY7IY1gaGVLNdskTeUbN2aRsNh3Edy4wumtO4Tk+psFjMd2cHszPZarI9ouYv5Og+HmJdt5klAVVQvZjhpo7T1MZLS+sNEx2KeOouhHY3+SSVscLmBpfDZe0lriWhhIaXd6xnECDJ2Hcf6+JbNJcdjsaAyDcyPZ7Ge0a3bruY+cDbqd1bWM0HojF5r66xukMDTyQJcLUFCNkjSe8ggdCfEjYrN16NKvds3a9SCK1bLDYmZGA+bkHKzmI6nYdBv3BAYjD5bR82nsI/GX8P8AVNgQsxDWyxiNx5f0bImk/EAOgHUbFeHjJjNQZrhXqTFaUndDmrWPkjqOa/kcXHbdod+qXN5mg9Ni5e3G6I0Zjc6/PY/SeDqZV5LnXIaEbJd3fEeYDcE+JHUqQIDRb6GfDjidg+NcOWvYHL4LEU4po8m65A6Bk7SwhsQDtuc8/K7puBy77+e6msM/Q0tpXJ6jybtqmNqvsygd7g0bho8y47NA8yFll5slQo5Om6nkade5Wc5rnQzxh7CWuDmkg9Nw5oI9QEBTmhcBxVpaIt4/KaV0Xdkz0li7l/a8zZZJM+1uXse1tdwHKwti2BIAYNisBkruTP0dsjpPVIEt7R+Vx+O1EyNxkEuNjsQydrvsHOjdWLS4kDcMfuO8LYteRmOx7L1q8yjWbatxsiszCIc8zGcwY15/WA5nbA93MfNAVT9JXIaYn0JgGutY+xZn1Di5MN2cjXk7Wo+Z8e2/u9kXAkdNnAeIWcympdQ3+J+f0xp6bTuEdiKVaxZvZSu+aa02XncDGxskf6JnKQXFx94kbBZ/HcP9CY507sfozT9Q2HMfN2OPibzljxI0nYeD2tcPAEA+C9epdJaW1LLBNqLTmJy8lffsX3ajJXR79SAXDuPiO4oDXK7cx9v6N+rLOVtVclincQuaxLVhLYJ4DkYHSOjj3cQxwLiBue/vO6tPjvcxNzRmnq+FtU7GVs57GP057NI15522I3OfFy9zBD2nMR0DSd1ItfaKjy+kxhsBBj8a52apZOXaPs2PMNqKWRx5R1e5se2/idt9llcNovR+FzE+Yw2lsLjshPzCS1WpRxyuDjuRzAbjfx27/FARbS9qvV+kHr6CxZjhfYxeHnhZJIGmSJvtLXObv3gOOxPgT6qKcIWatFHU9WtqbSlG/FqDIPzFbIYqWSyHuncWPlcLDA5joez5DygcnKB3K2NRaU0xqOerPqDTuKystR3NWkuVGSuiO+/ulw3HUA7dy6dR6J0dqS7Hd1DpXC5a1G3lZNcpRyvDfs8xG5HoeiAqbDY7G6a1Bwjq3c/QzGBrRZaGhkYdmU/bZHNdXYz3nNHLF20UfvH4SAd1ndSWsHP9KPRsVOWtJmIcFkxeMZBe2I9kYWvI8d+0IB7gT5qzMhhMNkcK7CX8Rj7WLcwRmlNWY6DlHcOQjl2Hh06eC8mD0jpXBez/AFLpvE441u07A1qjIzH2gaJCCBvu4NaCfHlHkgM0iIgCIiAIiIAiIgB7lWsWp+Iec1VqfHaYxmk20cFkm48yZK1ZbLK7sIpS7aNhaB+l27/BWUe4ql9JN18df8S/9E5dLMp/6St7UZSKw6TtPYa3d2TgOXbb1339EBN9EasyuQ1Hk9J6nw9bF57H14bf+x2jPWt1pXOa2WJzmtcNnsc1zXDcHbqQVMtj5HyVT5rh/rS7gdW5iTUlSTWuZxsdCrJRjfUrU68by/sI3EukBfzybyk7guBAHKvDonHaDx+q6eHs8PMvofNZCpPXjifMTWyTOzJlj7WGV0czg3dw59n9C4eKAuZNj16Hp3qiqmpM1guEuS4fRW3v1hjsk3SeNleffkE43qWj6NquMhPnC9ZKHSeGzPEoaAzLZbumdJ6Zx7sfjJ5XdlZklfLG6xKAR2pa2FrRzbgFzjtuUBPOIGprGmTp7sakdj62z1XFv7Rxb2bJufd427yOXoD0Um67bkEKmOL2jsRiNL6Q05g3XcXQt62x5aILchdXD+cOEBcSYhsDsG9GkkgBem9pbA6F4raAk0jQbiG5m1coZKKvI/ktxtpyTMMgJPM9r4wQ8+91PXqgLf2PToevd070G5OwBPyVD6qoaQ1ZLqTK4zhtnNSyxzWa8mdlyUcDYJ4d2v8AZXTTBzGxuaQDG1rd2nbdfVG3c1zjOEGntSXrEuOzmnJcrlmiV0ZyU0MFfljkc0glhMrpHN32cWjfpuEBe2x6dD17kVNcZdIaf0dwV1ZJpek7Ex2W1DJBXnkEDXNsxe8yMu5WOIOxLQN9hvvspDx0mMUGjg2Uxl+tcSzo7bm/THcevQHp6ICxNj5HyWG1DqGnhMngcfbhsPlzd80KxjaC1kghkl3fuRsOWJw6bnfZVhrrS8juIOazWr9AX9c4O1DAMW+lK2WTFsbGBJGKznsO7nhz+0j5nHmA6coWK1lpzh9qixwjymPoty2OyGV9jZZuSSyTS1mU7TmxyOeeclr29Q73gW7HuQF1yWMyNSxVG4qE4d1R0kl42dpGTh4DYuy26gt3PNv0222WS2PkfwVVNq1tPcbsRjcLUEFGpoi+6CnE53Z7tuQEADc9d9/Xqsfwo0BpfV/DzA6y1HBNltS5qpFkrOW9rlZaimk9/lhexwMTWfA1rNgA3qD1QFyJuF03pJoqU8teHt5mROdHFvt2jgCQ37zsPvX5+cNOOXGbIccMVHZzeRvPv5WOtZwz2bQBjpOV8bYtv0fKN+vQjl3J70B+hJIA3JAA7yfBVhg9W8RtZY5mo9HYLTFfT9gudQOYuWG2bsQJAlLYmFsLXbbtB5jtsSB3K0CBuR3jf8VWVDQmstH1vYNAaypRYeEuNXDZ3GGxHXa5xd2cc8b2StYCTsHB+w6eCAnOl7uVyOEhtZrCPwt8lzZ6hsMnDCHEbtkb0c1224JAOx6gHosoqR1Fqm/k9J0eI8mPdQy2gs9Yq52nXmM0T67SIbvZnYc7AxzJmkjcdnt3qSAz6v4yWZqNstxukMeYK8zNyyTJ3Iw4u2HR4irlnTznKAsrY+R8+5YbF6ip5HVma01BDZbcw0VWWw5zAGOFhryzlO+527M77geHeqY0lhcDpE4L/WDobMYvUUVuGKXV0Fx1iG5bc8ND5LEcnaNZK8gckrAwc/KemyyejOHminceNcdppujvRjxFmr0d+hle2dz3jr3lzQfuQF27HyKAE9wJWvOmabtb18tqPU3DLK6ruWsrdghuHK1om0oobD4mQ12vmY+EsDAS4Bri8l253C9eWwufycnB/Teupb0V2S5koci1t39LYhjqyljZZIjs4vjbHz7Hru7r1QF97HbfYp81RkXDzTDOONnScVJ8WlZNOxZaXBMmeKUtwWXwiV0e+3wfq/CTs4gkAqVcFa0eHy+vNLUTIzE4bPtjx1d8jnitHLUgmdGwuJIYHvcQ3uG+w6ICyEREAREQBYnA6eoYXI5u9TM5lzV4XrXaPBAkETIvd6dByxt6deu6yyIDwahxMGbw8+Ms2LteOblPbU7T680bmkOa5kjCC0ggeh7iCNwo9hNAVKWoaeeymodQ6ivUGSNoOytmN7KvO3le5jY42AvLd28ztzsSBtuVMEQFa19JuyX0h7msrWJlq1sPh4aVSd42bdsydoXStG+x7KJ5iDtt95XjwUj1dorHahydPMMyGVw2ZpxuhhyWLsCKfsnEF0TuZrmSMJAPK5p2I3GxUnRARFmgMW7HY6pdymdyUlDMRZltq7eMs0liPcN5iRyhm3TkYGjp02675fM6dx+WzeCzFozizg7MtmpyP2aXyQuhdzDbqOV527uuyy6ICBXOFmEnsZOOHMaipYjKzyWMhhqt4Mp2JJP7QkcvO0PO5c1j2tcSdx1O/ttcOdPz6OwOmmy5Gs3T8cTMVfr2ezuVXRs7MPbIBtuW7hwILXA7EbKYIgIhX4f4yTB5nE57LZ3UsOZgFe47K3ec9mAdmxtjaxkexJO7Wg77Ek7BYxvCfFT3MVbzWpdV52bD3IbmOORyDXiu+J242DWNDt9ti527iNxzDc72EiAiOb0MchlbeQpax1dhfbCDYr0Mg3sXHYN3a2Rj+yJAH9mW+ff1XGR4c6ataNxela0dzG1MPLHPjJ6dgssVJmc20rZDvu88z+YuB5ud24O6l6ICNYTRtPG5yjnZ8rl8rlaeOmx7bd6ZjnyRSzNlcXBjGjmDmNAIAAA228Vh28LcVXlmhxeotVYjETzunlw+PyXY1OZzuZ4Zs3tImucSS2N7R1OwG6nqIAsfBgsJBmJczBhsbFk5QRJdZVjbO8Hv3kA5j+KyCID5ljZLG6KRoex7S1zT3EEbEKv4uFdanH7Jhdc66w2NHRlCrlw6KJv2Y3SsfIxvkGu6eGysJEBF3YPE6R4c38VhcBLkKdalYeMcwmWW89zXOe1znEl75HE7lx3JcsXwV0M3R3CTF6XvB7rklYyZNwldzunlb+kHODze6CGB2+4DGqeIgIJFwxovlpsymqdWZrG0rEdiDG5HINlr9pG4OjLyGCSUNcGuAe9w3AJ32Xv1DoSllNUjU1TN53B5N8DK1qXF2mxi5ExxcxsrXscDylztnABwDiN1LEQEKyPDmlJl7+Swuo9S6adkpTPegxNxjIbEpADpeSRjwx7gBu5nKTtudz1WRj0Vh47OmbAlyD5NNumdSdNbdK55lidE8yufu6QkOJ3J7/TopIiAw405jxrR+rd5/rF+NbjSOf8AR9iJTKPd2+Lmceu/d4L6wmnqGHy+cylQzmfN22XLYe8FokbCyIco26Dljb069d1lkQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREB//Z" alt="MAPS" style="height:120px;width:auto;display:block"></div>
+    <div class="sub" style="margin-top:14px">Music · Adapted · Psychacustic · System — stimolazione uditiva adattiva</div>
+  </header>
+  <div id="cornice" style="display:none;background:#13241d;border:1px solid var(--green-d);border-left:3px solid var(--green);border-radius:0 8px 8px 0;padding:11px 15px;margin-bottom:16px;font-size:13px;color:var(--txt)"></div>
+
+  <div class="card">
+    <h2>Sorgente e ascolto</h2>
+    <div class="transport">
+      <label class="filebtn">📁 Carica audio<input type="file" id="file" accept="audio/*"></label>
+      <button class="play" id="play" disabled>▶ Ascolta</button>
+      <button class="btn co" id="recBtn" disabled>● Registra</button>
+      <a id="recDl" download="MAPS-sessione.webm" style="display:none;font-family:var(--mono);font-size:12.5px;color:var(--green)">⬇ scarica registrazione</a>
+      <button class="btn" id="logBtn" disabled>⬇ Log tempi (CSV)</button>
+      <button class="btn" id="eegBtn">🔌 Collega EEG</button>
+      <span class="micstat" id="eegStat">EEG non collegato</span>
+      <span class="fname" id="fname">nessun file caricato</span>
+      <input type="text" id="url" placeholder="…oppure incolla un URL audio (R2)" style="flex:1;min-width:180px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:10px 12px;border-radius:10px;font-family:var(--mono);font-size:12px">
+      <button class="btn" id="urlBtn">↧ Carica da URL</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🎵 Libreria R2 — scegli o pesca un brano</h2>
+    <div class="transport" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <label style="margin:0">Genere
+        <select id="famSel" style="background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:9px 11px;border-radius:9px;font-family:var(--mono);font-size:12.5px;margin-left:6px"></select>
+      </label>
+      <button class="btn" id="randFam">🎲 Random (questo genere)</button>
+      <button class="btn co" id="randAll">🎲 Random (stimulus)</button>
+      <button class="btn co" id="randRest">🎲 Random (growth)</button>
+      <span class="fname" id="pickStat">—</span>
+    </div>
+    <div id="brani" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px"></div>
+    <div class="note">Clicca un brano per caricarlo da R2 e farlo partire, oppure usa i dadi per pescarne uno random. Poi scegli la modalità qui sotto.</div>
+  </div>
+
+  <div class="card">
+    <h2>Stato dal vivo</h2>
+    <div class="inst">
+      <div class="gauge jump"><div class="gl">Tornante attuale</div><div class="gv" id="iTorn">1000<small>Hz</small></div><div class="gx" id="iTornx">clinico</div></div>
+      <div class="gauge"><div class="gl">Bascula ampiezza (L/R)</div><div class="gv" id="iAmp">0.0<small>dB</small></div><div class="gx" id="iAmpx">centro</div></div>
+      <div class="gauge"><div class="gl">Bascula frequenze</div><div class="gv" id="iFreq">pieno<small></small></div><div class="gx" id="iFreqx">—</div></div>
+      <div class="gauge vi"><div class="gl">Battito binaurale</div><div class="gv" id="iBeat">spento<small></small></div><div class="gx" id="iBeatx">—</div></div>
+      <div class="gauge cy"><div class="gl">Transcranico (sim.)</div><div class="gv" id="iTr">spento<small></small></div><div class="gx" id="iTrx">—</div></div>
+      <div class="gauge"><div class="gl">Salti del tornante</div><div class="gv" id="iJ">0</div><div class="gx" id="iJx">su 0 commutazioni</div></div>
+    </div>
+    <div class="evt">commutazioni di frequenza: <b id="evtN">0</b></div>
+  </div>
+
+  <div class="card">
+    <h2>Modalità di stimolazione</h2>
+    <div class="transport" style="gap:8px">
+      <button class="btn mode" data-m="potential">Potential · senza variazione</button>
+      <button class="btn mode" data-m="focus">Focus · 1000–3000 Hz</button>
+      <button class="btn mode" data-m="motor">Motor · 250–750 Hz</button>
+      <button class="btn mode" data-m="ricarica">Ricarica · 3000–8000 Hz</button>
+      <button class="btn mode" data-m="growth">Growth · crescita</button>
+      <button class="btn mode" data-m="libero">✋ Manuale / libero</button>
+    </div>
+    <div class="note"><b>Potential</b>: bascula stabile, senza salti del tornante. <b>Focus</b>: frequenze medie. <b>Motor</b>: gravi. <b>Ricarica</b>: acuti. <b>Growth</b>: crescita — suono pieno senza variazioni di tono, per consolidare la rete neurale. Ogni modalità sposta automaticamente tornante, bande e salto.</div>
+  </div>
+
+  <div class="card">
+    <h2>La cornice — le due bascule</h2>
+    <div class="controls">
+      <div class="sec">Bascula ampiezza — volume L/R, lenta</div>
+      <div class="ctl" style="margin-bottom:-4px"><label style="margin-bottom:0"><span class="toggle" id="ampTog"><span class="tt"></span><span id="ampTogL">spenta — si parte senza</span></span></label></div>
+      <div class="ctl"><label>Attenuazione <span class="val" id="vAa">−6 dB</span></label>
+        <input type="range" id="aa" min="0" max="50" value="6"><div class="ends"><span>0 dB</span><span>−50 dB</span></div></div>
+      <div class="ctl"><label>Partenza progressiva (sale in) <span class="val" id="vAr">20 s</span></label>
+        <input type="range" id="ar" min="0" max="120" value="20"><div class="ends"><span>0 · subito a pieno</span><span>120 s · molto graduale</span></div></div>
+      <div class="ctl"><label>Tempo medio <span class="val" id="vAt">~0.8 s</span></label>
+        <input type="range" id="at" min="20" max="300" value="80"><div class="ends"><span>0.2 s</span><span>3 s</span></div></div>
+      <div class="ctl"><label>Lateralità</label>
+        <div class="seg" id="lat"><span data-l="sx">sinistra</span><span data-l="alt" class="on">alternata</span><span data-l="dx">destra</span></div></div>
+
+      <div class="sec">Bascula frequenze — altalena sul tornante, rapida</div>
+      <div class="ctl"><label>Tornante clinico <span class="val" id="vTo">1000 Hz</span></label>
+        <input type="range" id="to" min="0" max="100" value="48"><div class="ends"><span>125 Hz</span><span>10500 Hz</span></div></div>
+      <div class="ctl"><label>Attenuazione (profondità del taglio) <span class="val" id="vFa">−12 dB</span></label>
+        <input type="range" id="fa" min="0" max="50" value="12"><div class="ends"><span>0 dB</span><span>−50 dB</span></div></div>
+      <div class="ctl"><label>Tempo medio <span class="val" id="vFt">~450 ms</span></label>
+        <input type="range" id="ft" min="80" max="2000" value="450"><div class="ends"><span>80 ms · rapido</span><span>2000 ms · lento</span></div></div>
+      <div class="ctl"><label>Lissage (smussatura del cambio) <span class="val" id="vLi">~10 ms</span></label>
+        <input type="range" id="li" min="2" max="200" value="10"><div class="ends"><span>2 ms · secco</span><span>200 ms · morbido</span></div></div>
+
+      <div class="sec">Randomizzazione — il contenuto dentro la cornice</div>
+      <div class="ctl"><label>Salto del tornante (probabilità) <span class="val" id="vJp">20%</span></label>
+        <input type="range" id="jp" min="0" max="100" value="20"><div class="ends"><span>0% · fisso</span><span>100% · salta sempre</span></div></div>
+      <div class="ctl"><label>Variazione casuale dei tempi <span class="val" id="vRnd">±40%</span></label>
+        <input type="range" id="rnd" min="0" max="100" value="40"><div class="ends"><span>fissi</span><span>molto variabili</span></div></div>
+      <div class="ctl"><label>Bande tra cui può saltare il tornante</label>
+        <div class="bands" id="bands">
+          <span class="chip on" data-f="125">125</span><span class="chip on" data-f="250">250</span><span class="chip on" data-f="500">500</span>
+          <span class="chip on" data-f="725">725</span><span class="chip on" data-f="1000">1k</span><span class="chip on" data-f="1300">1.3k</span>
+          <span class="chip on" data-f="1600">1.6k</span><span class="chip on" data-f="2000">2k</span><span class="chip on" data-f="2600">2.6k</span>
+          <span class="chip on" data-f="3300">3.3k</span><span class="chip on" data-f="4100">4.1k</span><span class="chip on" data-f="5100">5.1k</span>
+          <span class="chip on" data-f="5800">5.8k</span><span class="chip on" data-f="6500">6.5k</span><span class="chip on" data-f="8200">8.2k</span>
+          <span class="chip on" data-f="10500">10.5k</span>
+        </div></div>
+      <div class="ctl"><label>Volume musica <span class="val" id="vVol">70%</span></label>
+        <input type="range" id="vol" min="0" max="100" value="70"></div>
+    </div>
+    <div class="note"><b>Cuffie stereo.</b> Bascula, binaurale e precessione esistono solo in stereo.</div>
+  </div>
+
+  <div class="card">
+    <h2><span>Conduzione transcranica — simulazione</span><span class="toggle cya on" id="trTog"><span class="tt"></span><span id="trTogL">attiva</span></span></h2>
+    <div class="controls">
+      <div class="ctl"><label>Precessione (anticipo) <span class="val" id="vPre">15 ms</span></label><input type="range" class="cy" id="pre" min="0" max="40" value="15"><div class="ends"><span>0 ms</span><span>40 ms</span></div></div>
+      <div class="ctl"><label>Enfasi acuti @ 2000 Hz <span class="val" id="vTrHi">+6 dB</span></label><input type="range" class="cy" id="trhi" min="0" max="15" value="6"><div class="ends"><span>0 dB</span><span>+15 dB</span></div></div>
+      <div class="ctl"><label>Livello osseo <span class="val" id="vTrL">25%</span></label><input type="range" class="cy" id="trlev" min="0" max="60" value="25"><div class="ends"><span>tenue</span><span>marcato</span></div></div>
+    </div>
+    <div class="note warn"><b>In cuffia è simulazione</b> via aerea. La conduzione ossea reale, col vibratore, resta da studio.</div>
+  </div>
+
+  <div class="card">
+    <h2><span>Battiti binaurali</span><span class="toggle vio on" id="binTog"><span class="tt"></span><span id="binTogL">attivi</span></span></h2>
+    <div class="controls">
+      <div class="ctl"><label>Portante <span class="val" id="vCar">200 Hz</span></label><input type="range" class="vi" id="car" min="80" max="500" value="200"><div class="ends"><span>80 Hz</span><span>500 Hz</span></div></div>
+      <div class="ctl"><label>Battito <span class="val" id="vBeat">7.0 Hz · theta</span></label><input type="range" class="vi" id="beat" min="10" max="400" value="70"><div class="ends"><span>1 Hz · delta</span><span>40 Hz · gamma</span></div></div>
+      <div class="ctl"><label>Livello <span class="val" id="vBin">15%</span></label><input type="range" class="vi" id="bin" min="0" max="60" value="15"><div class="ends"><span>tenue</span><span>marcato</span></div></div>
+    </div>
+    <div class="note">delta 1–4 · theta 4–8 · alpha 8–13 · beta 13–30 · gamma &gt;30 Hz.</div>
+  </div>
+
+  <div class="card">
+    <h2><span>Parto sonoro — manuale, senza tempo</span></h2>
+    <div class="controls">
+      <div class="ctl"><label>Bersaglio</label><div class="bands"><span class="chip sel" data-t="music">musica</span><span class="chip" data-t="voice">voce</span></div></div>
+      <div class="ctl"><label>Posizione — la guidi tu a mano <span class="val" id="vBpos">spettro pieno · 20 Hz</span></label>
+        <input type="range" class="cy" id="bpos" min="0" max="100" value="0"><div class="ends"><span>nato · spettro pieno</span><span>intrauterino · solo acuti</span></div></div>
+    </div>
+    <div class="note cyl">Nessun timer: muovi tu il cursore al ritmo che senti giusto, dal liquido amniotico (tutto a destra, solo acuti) fino alla nascita (tutto a sinistra, spettro pieno). Sul bersaglio voce serve il microfono attivo.</div>
+  </div>
+
+  <div class="card">
+    <h2><span>Fase attiva — microfono</span></h2>
+    <div class="transport" style="margin-bottom:14px"><button class="btn co" id="micBtn">🎙 Attiva microfono</button><span class="micstat" id="micStat">microfono spento</span></div>
+    <div class="controls">
+      <div class="ctl"><label>Filtro voce — taglia sotto <span class="val" id="vVHp">200 Hz</span></label><input type="range" class="co" id="vhp" min="50" max="4000" value="200"><div class="ends"><span>50 Hz · piena</span><span>4000 Hz · solo acuti</span></div></div>
+      <div class="ctl"><label>Enfasi acuti voce <span class="val" id="vVHi">+6 dB</span></label><input type="range" class="co" id="vhi" min="0" max="15" value="6"><div class="ends"><span>0 dB</span><span>+15 dB</span></div></div>
+      <div class="ctl"><label>Volume di ritorno <span class="val" id="vVlev">35%</span></label><input type="range" class="co" id="vlev" min="0" max="80" value="35"><div class="ends"><span>tenue</span><span>forte</span></div></div>
+    </div>
+    <div class="note warn"><b>Cuffie chiuse obbligatorie</b> (Larsen). In locale il microfono può essere bloccato: funzionerà su pnev.it in HTTPS.</div>
+  </div>
+</div>
+
+<script>
+let ctx, buffer, src, running=false, evtCount=0, jumpCount=0;
+window.MAPS_CORNICE = null;
+let gL, gR, merger, splitter, birthHP, freqShelf, outG, airDelay, recDest, recorder=null, recChunks=[], recording=false;
+let mediaEl=null, mediaSource=null, useStream=false;
+let ampOn=false, sessT0=0, eventLog=[];
+let eegWS=null, eegConnected=false;
+let oscL, oscR, binMerger, binGain;
+let trShelf, trGain;
+let micStream, micSource, voiceHP, voiceShelf, voiceGain, micOn=false;
+let ampTimer=null, freqTimer=null, ampSide=false, freqBright=false, tornanteCur=1000;
+let birth={active:false,raf:null};
+let lateralita='alt', birthTarget='music';
+
+const $=id=>document.getElementById(id);
+const rndR=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const dbToGain=db=>Math.pow(10,db/20);
+const waveName=hz=>hz<4?'delta':hz<8?'theta':hz<13?'alpha':hz<30?'beta':'gamma';
+const ensureCtx=()=>{ if(!ctx) ctx=new (window.AudioContext||window.webkitAudioContext)(); return ctx; };
+const tornClin=()=>Math.round(125*Math.pow(10500/125,$('to').value/100));
+const lissTau=()=>Math.max(0.0007,(+$('li').value)/1000/3);
+const spread=()=>$('rnd').value/100*0.7;
+
+$('file').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; $('fname').textContent=f.name; ensureCtx(); useStream=false; if(mediaEl){ try{mediaEl.pause();}catch(e){} }
+  const arr=await f.arrayBuffer();
+  try{ buffer=await ctx.decodeAudioData(arr); $('play').disabled=false; $('fname').textContent=f.name+' · pronto'; }
+  catch(err){ $('fname').textContent='formato non leggibile — prova mp3 o wav'; } });
+
+$('urlBtn').addEventListener('click',()=>{ const u=$('url').value.trim(); if(!u) return; ensureCtx();
+  if(mediaEl){ try{mediaEl.pause();}catch(e){} }
+  mediaEl=new Audio(); mediaEl.crossOrigin='anonymous'; mediaEl.loop=true; mediaEl.src=u;
+  mediaSource=null; useStream=true; buffer=null;
+  $('fname').textContent='caricamento da URL…';
+  mediaEl.addEventListener('canplay',()=>{ $('play').disabled=false; $('fname').textContent='streaming pronto'; },{once:true});
+  mediaEl.addEventListener('error',()=>{ $('fname').textContent='URL non caricabile (controlla indirizzo o CORS su R2)'; });
+});
+
+function buildGraph(){
+  splitter=ctx.createChannelSplitter(2); merger=ctx.createChannelMerger(2);
+  gL=ctx.createGain(); gR=ctx.createGain();
+  birthHP=ctx.createBiquadFilter(); birthHP.type='highpass'; birthHP.frequency.value=20; birthHP.Q.value=0.7;
+  freqShelf=ctx.createBiquadFilter(); freqShelf.type='lowshelf'; freqShelf.frequency.value=tornClin(); freqShelf.gain.value=0;
+  outG=ctx.createGain(); outG.gain.value=$('vol').value/100;
+  airDelay=ctx.createDelay(0.5); airDelay.delayTime.value=+$('pre').value/1000;
+  splitter.connect(gL,0); splitter.connect(gR,1);
+  gL.connect(merger,0,0); gR.connect(merger,0,1);
+  merger.connect(birthHP); birthHP.connect(freqShelf);
+  recDest=ctx.createMediaStreamDestination();
+  freqShelf.connect(outG); outG.connect(airDelay); airDelay.connect(ctx.destination); airDelay.connect(recDest);
+  trShelf=ctx.createBiquadFilter(); trShelf.type='highshelf'; trShelf.frequency.value=2000; trShelf.gain.value=+$('trhi').value;
+  trGain=ctx.createGain(); trGain.gain.value=$('trTog').classList.contains('on')?(+$('trlev').value/100*0.6):0;
+  freqShelf.connect(trShelf); trShelf.connect(trGain); trGain.connect(ctx.destination); trGain.connect(recDest);
+  const car=+$('car').value, beat=+$('beat').value/10;
+  oscL=ctx.createOscillator(); oscR=ctx.createOscillator(); oscL.type='sine'; oscR.type='sine';
+  oscL.frequency.value=car-beat/2; oscR.frequency.value=car+beat/2;
+  binMerger=ctx.createChannelMerger(2); binGain=ctx.createGain();
+  binGain.gain.value=$('binTog').classList.contains('on')?(+$('bin').value/100*0.5):0;
+  oscL.connect(binMerger,0,0); oscR.connect(binMerger,0,1); binMerger.connect(binGain); binGain.connect(ctx.destination); binGain.connect(recDest);
+  oscL.start(); oscR.start(); updBeatPanel(); updTrPanel();
+}
+
+function updBeatPanel(){ if(!$('binTog').classList.contains('on')){ $('iBeat').innerHTML='spento'; $('iBeatx').textContent='—'; return; }
+  const beat=+$('beat').value/10; $('iBeat').innerHTML=beat.toFixed(1)+'<small>Hz</small>'; $('iBeatx').textContent=waveName(beat); }
+function updTrPanel(){ if(!$('trTog').classList.contains('on')){ $('iTr').innerHTML='spento'; $('iTrx').textContent='—'; return; }
+  $('iTr').innerHTML=$('pre').value+'<small>ms</small>'; $('iTrx').textContent='+'+$('trhi').value+' dB · '+$('trlev').value+'%'; }
+function activeBands(){ return [...document.querySelectorAll('#bands .chip.on')].map(c=>+c.dataset.f); }
+
+// --- BASCULA AMPIEZZA (lenta) ---
+function ampStep(){
+  if(!running) return;
+  const t=ctx.currentTime, liss=lissTau(); ampSide=!ampSide;
+  // fattore di partenza progressiva: l'attenuazione sale da 0 al pieno in 'ar' secondi
+  const elapsed=(performance.now()-sessT0)/1000; const ramp=(+$('ar').value); const grow=ramp<=0?1:Math.min(1,elapsed/ramp);
+  const attenFull=ampOn?(+$('aa').value):0; const atten=-(attenFull*grow);
+  let dbL=0,dbR=0;
+  if(lateralita==='alt'){ if(ampSide) dbL=atten; else dbR=atten; }
+  else if(lateralita==='dx'){ dbL=ampSide?atten:0; }
+  else { dbR=ampSide?atten:0; }
+  gL.gain.setTargetAtTime(dbToGain(dbL),t,liss); gR.gain.setTargetAtTime(dbToGain(dbR),t,liss);
+  const delta=dbR-dbL;
+  $('iAmp').innerHTML=(delta>=0?'+':'')+delta.toFixed(0)+'<small>dB</small>';
+  $('iAmpx').textContent=!ampOn?'spenta':(grow<1?'in salita…':(Math.abs(delta)<1?'centro':(delta>0?'← sinistra':'destra →')));
+  logEvent('ampiezza', {L:dbL.toFixed(1), R:dbR.toFixed(1), on:ampOn?1:0});
+  const base=(+$('at').value)/100*1000; const dw=base*(1+spread()*rndR(-1,1));
+  ampTimer=setTimeout(ampStep,Math.max(120,dw));
+}
+// --- BASCULA FREQUENZE (rapida, sul tornante) ---
+function freqStep(){
+  if(!running) return;
+  const t=ctx.currentTime, liss=lissTau(); freqBright=!freqBright;
+  evtCount++; $('evtN').textContent=evtCount;
+  if(freqBright){
+    let jumped=false;
+    if(Math.random()*100 < (+$('jp').value)){ const b=activeBands(); if(b.length){ tornanteCur=b[Math.floor(Math.random()*b.length)]; jumped=true; jumpCount++; } }
+    else tornanteCur=tornClin();
+    freqShelf.frequency.setTargetAtTime(tornanteCur,t,liss);
+    freqShelf.gain.setTargetAtTime(-(+$('fa').value),t,liss);
+    $('iTorn').innerHTML=(tornanteCur>=1000?(tornanteCur/1000).toFixed(1)+'k':tornanteCur)+'<small>Hz</small>';
+    $('iTornx').textContent=jumped?'★ saltato a caso':'clinico';
+    $('iFreq').innerHTML='brillante'; $('iFreqx').textContent='taglia sotto '+(tornanteCur>=1000?(tornanteCur/1000).toFixed(1)+'k':tornanteCur)+' Hz';
+    document.querySelectorAll('#bands .chip').forEach(c=>c.classList.toggle('flash',+c.dataset.f===tornanteCur));
+    $('iJ').textContent=jumpCount; $('iJx').textContent='su '+evtCount+' commutazioni';
+    logEvent('frequenza', {fase:'brillante', tornante:tornanteCur, salto:jumped?1:0, atten:-(+$('fa').value)});
+  } else {
+    freqShelf.gain.setTargetAtTime(0,t,liss);
+    $('iFreq').innerHTML='pieno'; $('iFreqx').textContent='spettro intero';
+    document.querySelectorAll('#bands .chip').forEach(c=>c.classList.remove('flash'));
+    logEvent('frequenza', {fase:'pieno', tornante:tornanteCur, salto:0, atten:0});
+  }
+  const base=+$('ft').value; const dw=base*(1+spread()*rndR(-1,1));
+  freqTimer=setTimeout(freqStep,Math.max(60,dw));
+}
+
+function start(){
+  if(!buffer && !useStream) return; if(ctx.state==='suspended') ctx.resume();
+  buildGraph();
+  if(useStream){ if(!mediaSource) mediaSource=ctx.createMediaElementSource(mediaEl); mediaSource.connect(splitter); try{mediaEl.currentTime=0;}catch(e){} mediaEl.play(); }
+  else { src=ctx.createBufferSource(); src.buffer=buffer; src.loop=true; src.connect(splitter); src.start(); }
+  running=true; ampSide=false; freqBright=false; evtCount=0; jumpCount=0; $('evtN').textContent=0;
+  sessT0=performance.now(); eventLog=[]; $('logBtn').disabled=false;
+  logEvent('START', {fase:'avvio'});
+  $('play').classList.add('on'); $('play').innerHTML='■ Ferma'; $('recBtn').disabled=false;
+  ampStep(); freqStep();
+}
+function stop(){
+  running=false; if(ampTimer) clearTimeout(ampTimer); if(freqTimer) clearTimeout(freqTimer);
+  if(src){ try{src.stop()}catch(e){} } if(oscL){ try{oscL.stop();oscR.stop()}catch(e){} }
+  if(useStream&&mediaEl){ try{mediaEl.pause();}catch(e){} } if(mediaSource){ try{mediaSource.disconnect();}catch(e){} }
+  $('play').classList.remove('on'); $('play').innerHTML='▶ Ascolta';
+  if(recording) stopRec(); $('recBtn').disabled=true;
+  document.querySelectorAll('#bands .chip').forEach(c=>c.classList.remove('flash'));
+}
+$('play').addEventListener('click',()=>{ running?stop():start(); });
+
+// --- PONTE EEG (EmotivPRO via programma-ponte locale) ---
+function connectBridge(){
+  try{
+    eegWS=new WebSocket('ws://localhost:8765');
+    $('eegStat').textContent='EEG: connessione…'; $('eegStat').className='micstat';
+    eegWS.onopen=()=>{ eegConnected=true; $('eegStat').textContent='EEG collegato ✓'; $('eegStat').className='micstat ok'; };
+    eegWS.onclose=()=>{ eegConnected=false; $('eegStat').textContent='EEG non collegato'; $('eegStat').className='micstat'; };
+    eegWS.onerror=()=>{ eegConnected=false; $('eegStat').textContent='EEG: ponte non trovato (avvia il programma-ponte)'; $('eegStat').className='micstat err'; };
+  }catch(e){ $('eegStat').textContent='EEG: errore di connessione'; $('eegStat').className='micstat err'; }
+}
+$('eegBtn').addEventListener('click',connectBridge);
+
+// --- LOG TEMPORALE DEGLI EVENTI (per allineamento EEG) ---
+function logEvent(tipo, data){
+  const ms=Math.round(performance.now()-sessT0);
+  const ev=Object.assign({t_ms:ms, tipo:tipo}, data);
+  eventLog.push(ev);
+  if(eegConnected && eegWS && eegWS.readyState===1){ try{ eegWS.send(JSON.stringify(ev)); }catch(e){} }
+}
+$('logBtn').addEventListener('click',()=>{
+  if(!eventLog.length){ return; }
+  const cols=['t_ms','tipo','fase','tornante','salto','atten','L','R','on'];
+  let csv=cols.join(',')+'\n';
+  for(const e of eventLog){ csv+=cols.map(c=>e[c]!==undefined?e[c]:'').join(',')+'\n'; }
+  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='MAPS-log-tempi.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+});
+
+// --- interruttore bascula ampiezza (spenta all'avvio per cautela) ---
+$('ampTog').addEventListener('click',()=>{ ampOn=$('ampTog').classList.toggle('on'); $('ampTogL').textContent=ampOn?'attiva':'spenta — si parte senza'; });
+$('ar').addEventListener('input',e=>$('vAr').textContent=e.target.value+' s');
+function startRec(){
+  if(!running||!recDest){ $('fname').textContent='avvia prima l\'ascolto, poi registra'; return; }
+  recChunks=[];
+  let mime='audio/webm'; try{ if(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime='audio/webm;codecs=opus'; }catch(e){}
+  try{ recorder=new MediaRecorder(recDest.stream,{mimeType:mime}); }catch(e){ recorder=new MediaRecorder(recDest.stream); }
+  recorder.ondataavailable=ev=>{ if(ev.data&&ev.data.size) recChunks.push(ev.data); };
+  recorder.onstop=()=>{ const blob=new Blob(recChunks,{type:recorder.mimeType||'audio/webm'}); const url=URL.createObjectURL(blob);
+    const a=$('recDl'); a.href=url; a.style.display='inline'; a.textContent='⬇ scarica registrazione ('+(blob.size/1048576).toFixed(1)+' MB)'; };
+  recorder.start(); recording=true; $('recBtn').classList.add('on'); $('recBtn').textContent='■ Ferma registrazione'; $('recDl').style.display='none';
+}
+function stopRec(){ if(recorder&&recording){ try{recorder.stop();}catch(e){} } recording=false; $('recBtn').classList.remove('on'); $('recBtn').textContent='● Registra'; }
+$('recBtn').addEventListener('click',()=>{ recording?stopRec():startRec(); });
+$('bands').addEventListener('click',e=>{ if(e.target.classList.contains('chip')) e.target.classList.toggle('on'); });
+$('lat').addEventListener('click',e=>{ if(e.target.dataset.l){ document.querySelectorAll('#lat span').forEach(s=>s.classList.remove('on')); e.target.classList.add('on'); lateralita=e.target.dataset.l; } });
+
+// microfono
+$('micBtn').addEventListener('click',async()=>{
+  if(micOn){ if(micStream) micStream.getTracks().forEach(t=>t.stop()); if(voiceGain) voiceGain.disconnect();
+    micOn=false; $('micBtn').classList.remove('on'); $('micBtn').textContent='🎙 Attiva microfono'; $('micStat').textContent='microfono spento'; $('micStat').className='micstat'; return; }
+  try{ ensureCtx(); if(ctx.state==='suspended') await ctx.resume();
+    micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    micSource=ctx.createMediaStreamSource(micStream);
+    voiceHP=ctx.createBiquadFilter(); voiceHP.type='highpass'; voiceHP.frequency.value=+$('vhp').value; voiceHP.Q.value=0.7;
+    voiceShelf=ctx.createBiquadFilter(); voiceShelf.type='highshelf'; voiceShelf.frequency.value=2000; voiceShelf.gain.value=+$('vhi').value;
+    voiceGain=ctx.createGain(); voiceGain.gain.value=+$('vlev').value/100*0.8;
+    micSource.connect(voiceHP); voiceHP.connect(voiceShelf); voiceShelf.connect(voiceGain); voiceGain.connect(ctx.destination); if(recDest) voiceGain.connect(recDest);
+    micOn=true; $('micBtn').classList.add('on'); $('micBtn').textContent='■ Spegni microfono'; $('micStat').textContent='microfono attivo — parla'; $('micStat').className='micstat ok';
+  }catch(err){ $('micStat').textContent='microfono non disponibile (serve HTTPS / permesso)'; $('micStat').className='micstat err'; }
+});
+$('vhp').addEventListener('input',e=>{ $('vVHp').textContent=e.target.value+' Hz'; if(voiceHP) voiceHP.frequency.value=+e.target.value; });
+$('vhi').addEventListener('input',e=>{ $('vVHi').textContent='+'+e.target.value+' dB'; if(voiceShelf) voiceShelf.gain.value=+e.target.value; });
+$('vlev').addEventListener('input',e=>{ $('vVlev').textContent=e.target.value+'%'; if(voiceGain) voiceGain.gain.value=+e.target.value/100*0.8; });
+
+// parto sonoro — manuale, senza tempo
+document.querySelectorAll('.chip[data-t]').forEach(c=>c.addEventListener('click',()=>{ document.querySelectorAll('.chip[data-t]').forEach(x=>x.classList.remove('sel')); c.classList.add('sel'); birthTarget=c.dataset.t; applyBpos(); }));
+function applyBpos(){ const v=+$('bpos').value; const hz=Math.round(20*Math.pow(8000/20,v/100));
+  $('vBpos').textContent=(v<3?'spettro pieno · ':(v>96?'solo acuti · ':''))+hz+' Hz';
+  if(birthTarget==='music'&&birthHP) birthHP.frequency.value=hz;
+  if(birthTarget==='voice'&&voiceHP) voiceHP.frequency.value=hz; }
+$('bpos').addEventListener('input',applyBpos);
+
+// transcranico / binaurale
+$('trTog').addEventListener('click',()=>{ const on=$('trTog').classList.toggle('on'); $('trTogL').textContent=on?'attiva':'spenta'; if(trGain) trGain.gain.value=on?(+$('trlev').value/100*0.6):0; updTrPanel(); });
+$('pre').addEventListener('input',e=>{ $('vPre').textContent=e.target.value+' ms'; if(airDelay) airDelay.delayTime.value=+e.target.value/1000; updTrPanel(); });
+$('trhi').addEventListener('input',e=>{ $('vTrHi').textContent='+'+e.target.value+' dB'; if(trShelf) trShelf.gain.value=+e.target.value; updTrPanel(); });
+$('trlev').addEventListener('input',e=>{ $('vTrL').textContent=e.target.value+'%'; if(trGain&&$('trTog').classList.contains('on')) trGain.gain.value=+e.target.value/100*0.6; updTrPanel(); });
+$('binTog').addEventListener('click',()=>{ const on=$('binTog').classList.toggle('on'); $('binTogL').textContent=on?'attivi':'spenti'; if(binGain) binGain.gain.value=on?(+$('bin').value/100*0.5):0; updBeatPanel(); });
+$('car').addEventListener('input',e=>{ const car=+e.target.value; $('vCar').textContent=car+' Hz'; if(oscL){ const beat=+$('beat').value/10; oscL.frequency.value=car-beat/2; oscR.frequency.value=car+beat/2; } });
+$('beat').addEventListener('input',e=>{ const beat=+e.target.value/10; $('vBeat').textContent=beat.toFixed(1)+' Hz · '+waveName(beat); if(oscL){ const car=+$('car').value; oscL.frequency.value=car-beat/2; oscR.frequency.value=car+beat/2; } updBeatPanel(); });
+$('bin').addEventListener('input',e=>{ $('vBin').textContent=e.target.value+'%'; if(binGain&&$('binTog').classList.contains('on')) binGain.gain.value=+e.target.value/100*0.5; });
+
+// cornice
+$('aa').addEventListener('input',e=>$('vAa').textContent='−'+e.target.value+' dB');
+$('at').addEventListener('input',e=>$('vAt').textContent='~'+(e.target.value/100).toFixed(1)+' s');
+$('to').addEventListener('input',()=>{ const f=tornClin(); $('vTo').textContent=(f>=1000?(f/1000).toFixed(1)+'k':f)+' Hz'; });
+$('fa').addEventListener('input',e=>$('vFa').textContent='−'+e.target.value+' dB');
+$('ft').addEventListener('input',e=>$('vFt').textContent='~'+e.target.value+' ms');
+$('li').addEventListener('input',e=>$('vLi').textContent='~'+e.target.value+' ms');
+$('jp').addEventListener('input',e=>$('vJp').textContent=e.target.value+'%');
+$('rnd').addEventListener('input',e=>$('vRnd').textContent='±'+Math.round(e.target.value*0.7)+'%');
+$('vol').addEventListener('input',e=>{ $('vVol').textContent=e.target.value+'%'; if(outG) outG.gain.value=e.target.value/100; });
+$('to').dispatchEvent(new Event('input'));
+
+// --- CORNICE DAL PAZIENTE (iniettata dal gestionale) ---
+function applyCornice(){
+  const c=window.MAPS_CORNICE; if(!c) return;
+  if(c.lateralita){ document.querySelectorAll('#lat span').forEach(s=>s.classList.toggle('on', s.dataset.l===c.lateralita)); lateralita=c.lateralita; }
+  if(c.tornante_hz){ const v=Math.round(100*Math.log(c.tornante_hz/125)/Math.log(10500/125)); $('to').value=clamp(v,0,100); $('to').dispatchEvent(new Event('input')); }
+  if(c.atten_freq_db!=null){ $('fa').value=clamp(c.atten_freq_db,0,50); $('fa').dispatchEvent(new Event('input')); }
+  const b=$('cornice'); if(b){ b.style.display='block';
+    const th=c.tornante_hz>=1000?(c.tornante_hz/1000).toFixed(1)+'k':c.tornante_hz;
+    const lat=c.lateralita==='dx'?'destro':(c.lateralita==='sx'?'sinistro':'alternato');
+    b.innerHTML='🩺 Impostazioni dai test di <b>'+(c.paziente||'')+'</b>'+(c.data_esame?' · audiometria '+c.data_esame:'')+' · privilegia orecchio <b>'+lat+'</b> · dominanza dicotica '+(c.dominanza||'n/d')+' · tornante clinico <b>'+th+' Hz</b> · attenuazione '+c.atten_freq_db+' dB'; }
+}
+applyCornice();
+
+// --- MODALITA' DI STIMOLAZIONE (b/f/m/r) ---
+const MODES={
+  potential:{bands:'all', to:1000, jp:0,  fa:10},
+  focus:   {bands:[1000,1300,1600,2000,2600], to:2000, jp:25, fa:12},
+  motor:   {bands:[250,500,725], to:500, jp:25, fa:10},
+  ricarica:{bands:[3300,4100,5100,5800,6500,8200], to:5000, jp:25, fa:14},
+  growth:  {bands:'all', to:1000, jp:0,  fa:0},
+  libero:  {bands:'all', to:1000, jp:20, fa:12}
+};
+let applyingMode=false;
+function setMode(m){ const c=MODES[m]; if(!c) return;
+  applyingMode=true;
+  document.querySelectorAll('#bands .chip').forEach(ch=>{ const f=+ch.dataset.f; ch.classList.toggle('on', c.bands==='all'?true:c.bands.includes(f)); });
+  const v=Math.round(100*Math.log(c.to/125)/Math.log(10500/125)); $('to').value=clamp(v,0,100); $('to').dispatchEvent(new Event('input'));
+  $('jp').value=c.jp; $('jp').dispatchEvent(new Event('input'));
+  $('fa').value=c.fa; $('fa').dispatchEvent(new Event('input'));
+  document.querySelectorAll('.btn.mode').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
+  applyingMode=false;
+}
+document.querySelectorAll('.btn.mode').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.m)));
+// se tocchi a mano un cursore/banda, esci dal preset (torni in personalizzato)
+function exitPreset(){ if(applyingMode) return; document.querySelectorAll('.btn.mode').forEach(b=>b.classList.remove('on')); }
+['to','fa','ft','li','jp','aa','at','rnd','vol'].forEach(id=>{ const el=$(id); if(el) el.addEventListener('input',exitPreset); });
+$('bands').addEventListener('click',e=>{ if(e.target.classList.contains('chip')) exitPreset(); });
+$('lat').addEventListener('click',e=>{ if(e.target.dataset.l) exitPreset(); });
+
+/* ============ LIBRERIA R2 (jukebox studio) ============ */
+const R2_BASE = "https://pub-6779dbf6c3774d10bab0e4d5573d0630.r2.dev";
+const POOL_LAVORO = {bach:12, mozart:28, vivaldi:7, celtica:21, jazz:6, country:9, ambient:71};
+const POOL_RIPOSO = {nature:3, gregoriano:1, ambient:71};
+// mappa famiglia -> modalità suggerita (si imposta da sola quando scegli il brano)
+const FAM_MODE = {bach:'potential', mozart:'potential', vivaldi:'potential', celtica:'focus',
+                  jazz:'ricarica', country:'motor', ambient:'potential', nature:'growth', gregoriano:'growth'};
+
+function braniDi(fam){ const n=(POOL_LAVORO[fam]||POOL_RIPOSO[fam]||0); const a=[];
+  for(let i=1;i<=n;i++) a.push(`${fam}_${String(i).padStart(2,'0')}`); return a; }
+
+function urlBrano(nome){ const fam=nome.split('_')[0]; return `${R2_BASE}/${fam}/${nome}.flac`; }
+
+function caricaBrano(nome, modAuto){
+  const u=urlBrano(nome);
+  $('url').value=u; $('urlBtn').click();
+  $('pickStat').textContent='▶ '+nome;
+  if(modAuto && FAM_MODE[nome.split('_')[0]]) setMode(FAM_MODE[nome.split('_')[0]]);
+}
+
+function renderBrani(fam){
+  const box=$('brani'); box.innerHTML='';
+  braniDi(fam).forEach(nome=>{
+    const b=document.createElement('span'); b.className='chip'; b.textContent=nome;
+    b.style.cursor='pointer';
+    b.addEventListener('click',()=>caricaBrano(nome,false));
+    box.appendChild(b);
+  });
+}
+
+// popola il menù famiglie
+(function initLib(){
+  const sel=$('famSel');
+  Object.keys(POOL_LAVORO).concat(Object.keys(POOL_RIPOSO).filter(f=>!POOL_LAVORO[f]))
+    .forEach(fam=>{ const o=document.createElement('option'); o.value=fam; o.textContent=fam; sel.appendChild(o); });
+  sel.addEventListener('change',()=>renderBrani(sel.value));
+  renderBrani(sel.value);
+})();
+
+function pescaDa(pool){ const fams=Object.keys(pool);
+  const tutti=[]; fams.forEach(f=>braniDi(f).forEach(n=>tutti.push(n)));
+  return tutti[Math.floor(Math.random()*tutti.length)]; }
+
+$('randFam').addEventListener('click',()=>{ const fam=$('famSel').value;
+  const lista=braniDi(fam); const nome=lista[Math.floor(Math.random()*lista.length)];
+  caricaBrano(nome,true); });
+$('randAll').addEventListener('click',()=>caricaBrano(pescaDa(POOL_LAVORO),true));
+$('randRest').addEventListener('click',()=>caricaBrano(pescaDa(POOL_RIPOSO),true));
+</script>
+</body>
+</html>

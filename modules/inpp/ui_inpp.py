@@ -736,11 +736,30 @@ def _render_prova(prova: dict, valori: dict, salt: int):
                     st.markdown(f"- **{k}** — {prova['scoring_specifico'][k]}")
             if has_video:
                 st.markdown("**Video esplicativo**")
-                try:
-                    st.video(prova["video_url"])
-                except Exception as e:
-                    st.caption(f"⚠️ video non riproducibile: {e}")
-                    st.caption(f"Link: {prova['video_url']}")
+                video_url_2 = prova.get("video_url_secondario")
+                if video_url_2:
+                    # Due video con etichette (es. fasce d'età diverse)
+                    label_1 = prova.get("video_label") or "Video 1"
+                    label_2 = prova.get("video_label_secondario") or "Video 2"
+                    tab1, tab2 = st.tabs([label_1, label_2])
+                    with tab1:
+                        try:
+                            st.video(prova["video_url"])
+                        except Exception as e:
+                            st.caption(f"⚠️ video non riproducibile: {e}")
+                            st.caption(f"Link: {prova['video_url']}")
+                    with tab2:
+                        try:
+                            st.video(video_url_2)
+                        except Exception as e:
+                            st.caption(f"⚠️ video non riproducibile: {e}")
+                            st.caption(f"Link: {video_url_2}")
+                else:
+                    try:
+                        st.video(prova["video_url"])
+                    except Exception as e:
+                        st.caption(f"⚠️ video non riproducibile: {e}")
+                        st.caption(f"Link: {prova['video_url']}")
             if prova.get("posturale"):
                 st.info(
                     "ℹ️ Riflesso **posturale**: clinicamente lo scoring si interpreta "

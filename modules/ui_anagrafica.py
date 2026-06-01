@@ -76,6 +76,252 @@ def _cap_lookup(cap: str) -> dict:
 
 
 @st.cache_data(show_spinner=False)
+def _carica_cap_comuni() -> dict:
+    """
+    Carica la mappa (COMUNE_UPPER, PROV_UPPER) -> CAP per i comuni italiani.
+
+    Tenta due formati in quest'ordine:
+
+    1. JSON formato matteocontrini/comuni-json (consigliato, completo: 7904 comuni
+       con supporto multi-CAP). Schema: lista di oggetti con campi `nome`, `sigla`,
+       `cap` (array di stringhe). Per i comuni multi-CAP (Roma, Milano, Napoli...)
+       memorizziamo solo il primo CAP MA marchiamo l'entrata come "multi" usando
+       una tupla speciale come valore, così la funzione di lookup può distinguere.
+
+    2. CSV con colonne Comune;Provincia;CAP (formato compatibile con
+       github.com/dakk/Italia.json o file analoghi).
+
+    Cerca i file in: cwd, modules/, parent di modules/, modules/data/.
+    Ritorna {} se nessun file utilizzabile è stato trovato.
+
+    I valori del dict sono:
+      - stringa "CAP" per comuni con un solo CAP
+      - lista di stringhe ["CAP1", "CAP2", ...] per comuni multi-CAP
+    """
+    import json
+    nomi_json = ["comuni.json", "comuni_italiani.json", "cap_comuni.json"]
+    nomi_csv = [
+        "cap_comuni_italiani.csv",
+        "comuni.csv",
+        "comuni_italiani.csv",
+        "comuni-italiani.csv",
+        "cap_comuni.csv",
+        "cap.csv",
+    ]
+    dir_modulo = os.path.dirname(os.path.abspath(__file__))
+    cartelle = [
+        ".",
+        dir_modulo,
+        os.path.join(dir_modulo, ".."),
+        os.path.join(dir_modulo, "data"),
+        os.path.join(dir_modulo, "..", "data"),
+    ]
+
+    def _try_load_json(path: str) -> dict | None:
+        try:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                return None
+            result: dict = {}
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                nome = (item.get("nome") or "").strip().upper()
+                sigla = (item.get("sigla") or "").strip().upper()
+                cap_field = item.get("cap")
+                # cap può essere lista di stringhe o singola stringa
+                if isinstance(cap_field, list):
+                    caps = [str(c).strip() for c in cap_field if str(c).strip()]
+                elif isinstance(cap_field, str) and cap_field.strip():
+                    caps = [cap_field.strip()]
+                else:
+                    caps = []
+                if not nome or not caps:
+                    continue
+                value = caps[0] if len(caps) == 1 else caps  # str o list
+                result[(nome, sigla)] = value
+                result.setdefault(nome, value)
+            return result if result else None
+        except Exception:
+            return None
+
+    def _try_load_csv(path: str) -> dict | None:
+        for sep in (";", ","):
+            try:
+                with open(path, "r", encoding="utf-8-sig") as f:
+                    reader = csv.DictReader(f, delimiter=sep)
+                    fns = reader.fieldnames or []
+                    fn_lc = {fn.strip().lower(): fn for fn in fns if fn}
+                    fn_comune = (
+                        fn_lc.get("comune") or fn_lc.get("nome")
+                        or fn_lc.get("paese") or fn_lc.get("denominazione")
+                    )
+                    fn_prov = (
+                        fn_lc.get("provincia") or fn_lc.get("prov")
+                        or fn_lc.get("sigla provincia")
+                        or fn_lc.get("sigla_provincia")
+                        or fn_lc.get("provinciasigla")
+                    )
+                    fn_cap = fn_lc.get("cap")
+                    if not fn_comune or not fn_cap:
+                        continue
+                    result: dict = {}
+                    for row in reader:
+                        comune = (row.get(fn_comune) or "").strip().upper()
+                        prov = ((row.get(fn_prov) or "").strip().upper()
+                                if fn_prov else "")
+                        cap = (row.get(fn_cap) or "").strip()
+                        if comune and cap:
+                            result[(comune, prov)] = cap
+                            result.setdefault(comune, cap)
+                    if result:
+                        return result
+            except Exception:
+                continue
+        return None
+
+    # Provo prima il JSON (più completo), poi il CSV
+    for nome in nomi_json:
+        for cartella in cartelle:
+            path = os.path.normpath(os.path.join(cartella, nome))
+            if os.path.exists(path):
+                loaded = _try_load_json(path)
+                if loaded:
+                    return loaded
+    for nome in nomi_csv:
+        for cartella in cartelle:
+            path = os.path.normpath(os.path.join(cartella, nome))
+            if os.path.exists(path):
+                loaded = _try_load_csv(path)
+                if loaded:
+                    return loaded
+    return {}
+
+
+# Set di città grandi con molti CAP, usato come fallback nel caso il dataset
+# usato (CSV) non distingua i multi-CAP. Quando si carica il JSON di
+# matteocontrini, il multi-CAP è determinato dai dati e questo set serve solo
+# come backup.
+_CITTA_MULTICAP = {
+    "ROMA", "MILANO", "NAPOLI", "TORINO", "PALERMO", "GENOVA",
+    "BOLOGNA", "FIRENZE", "BARI", "CATANIA", "VENEZIA", "VERONA",
+    "MESSINA", "PADOVA", "TRIESTE", "BRESCIA", "TARANTO", "PRATO",
+    "PARMA", "MODENA", "REGGIO CALABRIA", "REGGIO NELL'EMILIA",
+    "PERUGIA", "LIVORNO", "RAVENNA", "CAGLIARI", "FOGGIA", "RIMINI",
+    "SALERNO", "FERRARA", "SASSARI", "MONZA", "BERGAMO", "PESCARA",
+    "TRENTO", "VICENZA", "TERNI", "BOLZANO", "NOVARA", "PIACENZA",
+    "ANCONA", "LECCE", "LATINA", "BRINDISI",
+}
+
+
+def _citta_to_cap_status(citta_name: str, provincia: str = "") -> tuple[str, str]:
+    """
+    Lookup CAP per nome città usando i dati locali (JSON o CSV, no rete).
+    Ritorna una tupla (cap, status):
+      - cap: il CAP suggerito (stringa vuota se non disponibile)
+      - status: 'ok' | 'multi' | 'not_found' | 'no_lib'
+    """
+    if not citta_name:
+        return ("", "not_found")
+    nome_up = citta_name.strip().upper()
+    prov_up = provincia.strip().upper() if provincia else ""
+    mappa = _carica_cap_comuni()
+    if not mappa:
+        return ("", "no_lib")
+    # Cerco prima per (comune, provincia), poi solo per comune
+    val = None
+    if prov_up and (nome_up, prov_up) in mappa:
+        val = mappa[(nome_up, prov_up)]
+    elif nome_up in mappa:
+        val = mappa[nome_up]
+    if val is None:
+        return ("", "not_found")
+    # val è una stringa (CAP unico) o lista (multi-CAP)
+    if isinstance(val, list):
+        return ("", "multi")
+    if isinstance(val, str):
+        # Fallback: rispetta la lista hardcoded di città grandi anche se il
+        # dataset CSV non distingue i multi-CAP (capita coi CSV semplici).
+        if nome_up in _CITTA_MULTICAP:
+            return ("", "multi")
+        return (val, "ok")
+    return ("", "not_found")
+
+
+def _citta_to_cap(citta_name: str, provincia: str = "") -> str:
+    """Compat: ritorna solo il CAP (stringa vuota se non disponibile)."""
+    return _citta_to_cap_status(citta_name, provincia)[0]
+
+
+def _get_all_caps(citta_name: str, provincia: str = "") -> list:
+    """Restituisce TUTTI i CAP per una città (utile per le città multi-CAP).
+    Lista vuota se la città non è nel dataset."""
+    if not citta_name:
+        return []
+    nome_up = citta_name.strip().upper()
+    prov_up = provincia.strip().upper() if provincia else ""
+    mappa = _carica_cap_comuni()
+    if not mappa:
+        return []
+    val = None
+    if prov_up and (nome_up, prov_up) in mappa:
+        val = mappa[(nome_up, prov_up)]
+    elif nome_up in mappa:
+        val = mappa[nome_up]
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return list(val)
+    if isinstance(val, str):
+        return [val]
+    return []
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _street_to_cap_nominatim(indirizzo: str, citta: str, provincia: str = "") -> str:
+    """
+    Lookup CAP usando Nominatim (OpenStreetMap, gratuito, no API key) per
+    indirizzo + città. Risposta cached per 24h per non sovraccaricare il server.
+    Ritorna stringa CAP a 5 cifre se trovato, altrimenti "".
+
+    Usato come fallback per le città multi-CAP: dato l'indirizzo completo
+    (via + numero civico), Nominatim restituisce le coordinate e il CAP
+    della zona postale corrispondente.
+    """
+    if not indirizzo or not citta:
+        return ""
+    try:
+        import requests
+        import urllib.parse
+        query_parts = [indirizzo.strip(), citta.strip()]
+        if provincia:
+            query_parts.append(provincia.strip())
+        query_parts.append("Italia")
+        query = ", ".join(query_parts)
+        url = (
+            "https://nominatim.openstreetmap.org/search"
+            f"?q={urllib.parse.quote(query)}"
+            "&format=json&addressdetails=1&limit=1&countrycodes=it"
+        )
+        # User-Agent richiesto dalla policy d'uso di Nominatim
+        resp = requests.get(
+            url,
+            headers={"User-Agent": "GestionaleStudioTheOrganism/1.0"},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                postcode = (data[0].get("address", {}) or {}).get("postcode", "")
+                if postcode and len(postcode) == 5 and postcode.isdigit():
+                    return postcode
+    except Exception:
+        pass
+    return ""
+
+
+@st.cache_data(show_spinner=False)
 def _comuni_italiani() -> list[tuple[str, str]]:
     """
     Carica la lista (CITTA, PROV) dei comuni italiani dal CSV
@@ -141,7 +387,7 @@ def _row_to_plain_dict(row, cols):
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi"):
+def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi", ordine: str = "Alfabetico"):
     conn = _conn
     try:
         cur = conn.cursor()
@@ -159,7 +405,12 @@ def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi"):
         )
         if where:
             sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY cognome, nome"
+        if ordine == "Più recenti":
+            sql += " ORDER BY id DESC"
+        elif ordine == "Più vecchi":
+            sql += " ORDER BY id ASC"
+        else:
+            sql += " ORDER BY cognome, nome"
         cur.execute(sql)
         rows = cur.fetchall() or []
         cols = [d[0] for d in cur.description] if cur.description else []
@@ -492,19 +743,18 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
                                 value=r.get("indirizzo", "") or "",
                                 key=f"{key}_ind")
 
-    c8, c9, c10 = st.columns([1, 2, 1])
-    with c8:
-        cap = st.text_input("CAP", value=r.get("cap", "") or "",
-                             key=f"{key}_cap", max_chars=5)
-
-    # Autocomplete Città con ricerca-as-you-type. La selectbox di Streamlit
-    # ha già il filtro nativo per testo digitato.
-    comuni = _comuni_italiani()
-    opzioni = ["— seleziona —"] + [f"{c} ({p})" for c, p in comuni]
-
+    # ── Setup chiavi state per autocompletamento bidirezionale CAP ↔ Città ──
+    # last_cap_key e last_citta_key tengono traccia del "valore precedente"
+    # per rilevare quale dei due campi è stato modificato dall'utente
+    # ed evitare loop infiniti (CAP→Città→CAP→…).
     citta_sel_key = f"{key}_citta_sel"
     last_cap_key = f"{key}_last_cap"
+    last_citta_key = f"{key}_last_citta"
+    last_indirizzo_key = f"{key}_last_indirizzo"
     prov_view_key = f"{key}_prov_view"
+
+    comuni = _comuni_italiani()
+    opzioni = ["— seleziona —"] + [f"{c} ({p})" for c, p in comuni]
 
     # Stato iniziale del selectbox in base ai dati del paziente esistente
     def _label_iniziale() -> str:
@@ -521,13 +771,118 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
                     return opt
         return opzioni[0]
 
-    # Regola Streamlit: posso modificare session_state[widget_key] SOLO prima
-    # che il widget sia istanziato. CAP lookup va PRIMA del selectbox.
+    # Inizializzazione state (PRIMA di qualunque widget)
     if citta_sel_key not in st.session_state:
         st.session_state[citta_sel_key] = _label_iniziale()
-    if not is_nuovo and last_cap_key not in st.session_state:
+    if last_cap_key not in st.session_state:
         st.session_state[last_cap_key] = r.get("cap", "") or ""
+    if last_citta_key not in st.session_state:
+        st.session_state[last_citta_key] = st.session_state[citta_sel_key]
+    if last_indirizzo_key not in st.session_state:
+        st.session_state[last_indirizzo_key] = r.get("indirizzo", "") or ""
 
+    # ── Direzione Città → CAP (rilevata PRIMA di render del CAP widget) ──
+    # Si attiva quando cambia la città O l'indirizzo (utile per multi-CAP).
+    cap_status_key = f"{key}_cap_status"
+    curr_citta_sel = st.session_state[citta_sel_key]
+    prev_citta_sel = st.session_state[last_citta_key]
+    # L'indirizzo widget renderizza prima di questo blocco, quindi il suo state
+    # è già aggiornato al valore corrente.
+    curr_indirizzo = st.session_state.get(f"{key}_ind", "") or ""
+    prev_indirizzo = st.session_state[last_indirizzo_key]
+
+    city_changed = (curr_citta_sel != prev_citta_sel
+                    and curr_citta_sel
+                    and curr_citta_sel != "— seleziona —"
+                    and " (" in curr_citta_sel)
+    indirizzo_changed = (curr_indirizzo != prev_indirizzo
+                         and curr_indirizzo.strip())
+
+    if (city_changed or indirizzo_changed) and curr_citta_sel \
+            and curr_citta_sel != "— seleziona —" \
+            and " (" in curr_citta_sel:
+        nome_citta = curr_citta_sel.rsplit(" (", 1)[0]
+        sigla_prov = curr_citta_sel.rsplit(" (", 1)[1].rstrip(")")
+        cap_auto, status = _citta_to_cap_status(nome_citta, sigla_prov)
+        if cap_auto:
+            # Città con CAP unico → autocompila
+            st.session_state[f"{key}_cap"] = cap_auto
+            st.session_state[last_cap_key] = cap_auto
+            st.session_state[cap_status_key] = f"✓ CAP {cap_auto} suggerito"
+        elif status == "multi":
+            # Città multi-CAP: prova lookup via indirizzo con Nominatim/OSM
+            if curr_indirizzo.strip():
+                with st.spinner("🔍 Cerco il CAP dall'indirizzo..."):
+                    cap_strada = _street_to_cap_nominatim(
+                        curr_indirizzo, nome_citta, sigla_prov
+                    )
+                if cap_strada:
+                    st.session_state[f"{key}_cap"] = cap_strada
+                    st.session_state[last_cap_key] = cap_strada
+                    st.session_state[cap_status_key] = (
+                        f"✓ CAP {cap_strada} dedotto dall'indirizzo "
+                        f"'{curr_indirizzo}' (OpenStreetMap)"
+                    )
+                else:
+                    # Nominatim non ha trovato → mostra lista CAP disponibili
+                    caps_list = _get_all_caps(nome_citta, sigla_prov)
+                    sample = ", ".join(caps_list[:6])
+                    if len(caps_list) > 6:
+                        sample += f" … (+{len(caps_list) - 6} altri)"
+                    st.session_state[cap_status_key] = (
+                        f"ℹ️ {nome_citta.title()} ha {len(caps_list)} CAP. "
+                        f"Non sono riuscito a dedurlo da "
+                        f"'{curr_indirizzo}'. CAP disponibili: {sample}"
+                    )
+            else:
+                # Nessun indirizzo → mostra solo la lista
+                caps_list = _get_all_caps(nome_citta, sigla_prov)
+                sample = ", ".join(caps_list[:6])
+                if len(caps_list) > 6:
+                    sample += f" … (+{len(caps_list) - 6} altri)"
+                st.session_state[cap_status_key] = (
+                    f"ℹ️ {nome_citta.title()} ha {len(caps_list)} CAP. "
+                    f"Inserisci prima l'indirizzo per autocompilarlo, "
+                    f"oppure scegli tra: {sample}"
+                )
+        elif status == "not_found":
+            st.session_state[cap_status_key] = (
+                f"⚠️ {nome_citta.title()} non trovato nel database CAP "
+                "— inseriscilo a mano"
+            )
+        elif status == "no_lib":
+            st.session_state[cap_status_key] = (
+                "⚠️ File CAP non disponibile "
+                "(comuni.json o cap_comuni_italiani.csv mancante)"
+            )
+    st.session_state[last_citta_key] = curr_citta_sel
+    st.session_state[last_indirizzo_key] = curr_indirizzo
+
+    c8, c9, c10 = st.columns([1, 2, 1])
+    with c8:
+        cap = st.text_input("CAP", value=r.get("cap", "") or "",
+                             key=f"{key}_cap", max_chars=5)
+        # Diagnostica del lookup Città→CAP.
+        # Se c'è un messaggio recente del lookup lo mostro, altrimenti mostro
+        # lo stato del sistema (utile per capire al volo se il CSV è caricato).
+        _msg = st.session_state.get(cap_status_key, "")
+        if _msg:
+            st.caption(_msg)
+        else:
+            _mappa_test = _carica_cap_comuni()
+            if _mappa_test:
+                st.caption(
+                    f"💡 Lookup CAP attivo ({len(_mappa_test)} voci caricate)"
+                )
+            else:
+                st.caption(
+                    "⚠️ File CAP non disponibile "
+                    "(modules/comuni.json o modules/cap_comuni_italiani.csv mancante)"
+                )
+
+    # ── Direzione CAP → Città (esistente, invariata) ──
+    # Regola Streamlit: posso modificare session_state[widget_key] SOLO prima
+    # che il widget sia istanziato. CAP lookup va PRIMA del selectbox.
     prev_cap = st.session_state.get(last_cap_key, "")
     if cap and cap != prev_cap:
         info = _cap_lookup(cap)
@@ -535,6 +890,8 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
             target = f"{info['citta']} ({info['provincia']})"
             if target in opzioni:
                 st.session_state[citta_sel_key] = target
+                # Aggiorno anche last_citta per evitare il loop Città→CAP
+                st.session_state[last_citta_key] = target
         st.session_state[last_cap_key] = cap
 
     with c9:
@@ -874,6 +1231,7 @@ def render_anagrafica(conn) -> None:
     """Render principale anagrafica v3.0 - aggrid + dialog."""
 
     st.session_state.setdefault("ana_filtro", "Attivi")
+    st.session_state.setdefault("ana_ordine", "Alfabetico")
 
     # Messaggio post-rerun
     if msg := st.session_state.pop("ana_msg_success", None):
@@ -904,8 +1262,26 @@ def render_anagrafica(conn) -> None:
         st.session_state["ana_filtro"] = filtro
         st.rerun()
 
+    # Ordinamento
+    ordine = st.radio(
+        "Ordina per",
+        ["Alfabetico", "Più recenti", "Più vecchi"],
+        index=["Alfabetico", "Più recenti", "Più vecchi"].index(
+            st.session_state["ana_ordine"]
+        ),
+        horizontal=True,
+        key="ana_ordine_radio",
+    )
+    if ordine and ordine != st.session_state["ana_ordine"]:
+        st.session_state["ana_ordine"] = ordine
+        st.rerun()
+
     # Carico dati
-    pazienti = _carica_pazienti_full(conn, st.session_state["ana_filtro"])
+    pazienti = _carica_pazienti_full(
+        conn,
+        st.session_state["ana_filtro"],
+        st.session_state["ana_ordine"],
+    )
     st.caption(f"{len(pazienti)} paziente/i")
 
     if not pazienti:
@@ -921,6 +1297,7 @@ def render_anagrafica(conn) -> None:
     for p in pazienti:
         rows_df.append({
             "_id": p.get("id"),
+            "ID": p.get("id"),
             "Stato": _badge_stato(p.get("stato_paziente")),
             "Cognome": p.get("cognome", "") or "",
             "Nome": p.get("nome", "") or "",
@@ -947,9 +1324,21 @@ def render_anagrafica(conn) -> None:
         filter=True, sortable=True, resizable=True, floatingFilter=True,
     )
     gob.configure_column("_id", hide=True)
+
+    # Ordinamento iniziale aggrid coerente con la scelta utente
+    _ord = st.session_state.get("ana_ordine", "Alfabetico")
+    sort_cognome = "asc" if _ord == "Alfabetico" else None
+    sort_id = (
+        "desc" if _ord == "Più recenti"
+        else "asc" if _ord == "Più vecchi"
+        else None
+    )
+
+    gob.configure_column("ID", width=80, type=["numericColumn"],
+                          sort=sort_id, floatingFilter=False)
     gob.configure_column("Stato", width=80, pinned="left",
                           filter="agTextColumnFilter", floatingFilter=False)
-    gob.configure_column("Cognome", width=180, pinned="left", sort="asc")
+    gob.configure_column("Cognome", width=180, pinned="left", sort=sort_cognome)
     gob.configure_column("Nome", width=160)
     gob.configure_column("Data nascita", width=130)
     gob.configure_column("Età", width=80, type=["numericColumn"],
