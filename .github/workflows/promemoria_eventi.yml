@@ -16,7 +16,15 @@ jobs:
         run: |
           echo "Triggering promemoria eventi..."
           RESPONSE=$(curl -s -w "\n%{http_code}" \
-            "https://testgestionale.streamlit.app/cron_promemoria?token=${{ secrets.CRON_TOKEN }}")
+            "https://gestionale-the-organism.streamlit.app/cron_promemoria?token=${{ secrets.CRON_TOKEN }}")
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          CODE=$(echo "$RESPONSE" | tail -n 1)
+          echo "HTTP status: $CODE"
           echo "Risposta:"
-          echo "$RESPONSE"
-          # Nota: Streamlit Cloud risponde con HTML, il controllo è best-effort
+          echo "$BODY"
+          # Streamlit Cloud risponde con HTML: il controllo e' best-effort.
+          # Fallisce il job solo se la richiesta non e' andata a buon fine (status non 2xx).
+          if [ "$CODE" -lt 200 ] || [ "$CODE" -ge 300 ]; then
+            echo "::error::Endpoint promemoria ha risposto con status $CODE"
+            exit 1
+          fi
