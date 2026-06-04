@@ -206,16 +206,38 @@ def main() -> int:
     ids = [r[0] for r in cur.fetchall()]
     s1, s2 = (ids + [1, 2])[:2]
 
-    # nomi colonne reali di "pazienti" per inserire qualcosa di valido
-    cur.execute("SELECT column_name FROM information_schema.columns "
-                "WHERE table_schema='public' AND lower(table_name)='pazienti'")
-    pcols = {r[0].lower() for r in cur.fetchall()}
-    name_col = "cognome" if "cognome" in pcols else ("nome" if "nome" in pcols else None)
+    # nomi colonne di "pazienti" che sono OBBLIGATORIE (NOT NULL) e senza default:
+    # vanno riempite tutte, altrimenti l'insert finto fallisce.
+    cur.execute("""
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_schema='public' AND lower(table_name)='pazienti'
+          AND is_nullable='NO'
+          AND column_default IS NULL
+          AND column_name <> 'studio_id'
+          AND NOT (column_name='id')
+    """)
+    required = cur.fetchall()
 
     def add_paz(studio, etichetta):
         cur.execute(f"SET app.current_studio = '{studio}'")
-        if name_col:
-            cur.execute(f'INSERT INTO pazienti ("{name_col}") VALUES (%s)', (etichetta,))
+        cols, vals = [], []
+        for cname, dtype in required:
+            cols.append(f'"{cname}"')
+            d = (dtype or "").lower()
+            if any(t in d for t in ("char", "text")):
+                vals.append(etichetta)
+            elif "bool" in d:
+                vals.append(False)
+            elif any(t in d for t in ("int", "numeric", "double", "real", "decimal")):
+                vals.append(0)
+            elif "date" in d or "time" in d:
+                vals.append("2000-01-01")
+            else:
+                vals.append(etichetta)
+        if cols:
+            ph = ", ".join(["%s"] * len(vals))
+            cur.execute(f'INSERT INTO pazienti ({", ".join(cols)}) VALUES ({ph})', vals)
         else:
             cur.execute("INSERT INTO pazienti DEFAULT VALUES")
 
