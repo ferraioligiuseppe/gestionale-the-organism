@@ -225,12 +225,35 @@ def main() -> int:
         return label
 
     def crea_studio(label):
+        # colonne UNIQUE di studi: vanno valorizzate distinte anche se hanno un default
+        cur.execute("""
+            SELECT a.attname
+            FROM pg_index i
+            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            JOIN pg_class c ON c.oid = i.indrelid
+            WHERE c.relname = 'studi' AND i.indisunique
+              AND a.attname NOT IN ('id')
+        """)
+        unique_cols = {r[0].lower() for r in cur.fetchall()}
+
         cols, vals = ["nome"], [label]
-        for cname, dtype in required_cols("studi"):
-            if cname.lower() == "nome":
+        seen = {"nome"}
+        # tutte le colonne NOT NULL senza default + tutte le UNIQUE (anche con default)
+        cur.execute("""
+            SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema='public' AND lower(table_name)='studi'
+              AND column_name NOT IN ('id','studio_id')
+        """)
+        for cname, dtype, nullable, default in cur.fetchall():
+            lc = cname.lower()
+            if lc in seen:
                 continue
-            cols.append(f'"{cname}"')
-            vals.append(make_value(dtype, label))
+            must_fill = (nullable == "NO" and default is None) or (lc in unique_cols)
+            if must_fill:
+                cols.append(f'"{cname}"')
+                vals.append(make_value(dtype, label))
+                seen.add(lc)
         ph = ", ".join(["%s"] * len(vals))
         cur.execute(f'INSERT INTO studi ({", ".join(cols)}) VALUES ({ph}) RETURNING id', vals)
         return cur.fetchone()[0]
