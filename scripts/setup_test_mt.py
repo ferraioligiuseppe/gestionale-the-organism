@@ -127,15 +127,22 @@ def main() -> int:
         return 2
     log(f"Schema esportato ({os.path.getsize(schema_sql)} byte).")
 
-    # --- 2) Ricreo schema public del TEST e applico la struttura ---
-    log("Ripulisco lo schema 'public' del database di test e applico la struttura...")
+    # --- 2) Ripulisco il TEST (drop delle sole tabelle, senza toccare lo schema) e applico la struttura ---
+    # Nota: su OVH l'utente di solito NON è proprietario dello schema 'public',
+    # quindi non si può fare DROP SCHEMA. Droppiamo invece le tabelle di cui è proprietario.
+    log("Ripulisco il database di test (drop delle tabelle esistenti) e applico la struttura...")
+    drop_sql = (
+        "DO $$ DECLARE r record; BEGIN "
+        "FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname='public') LOOP "
+        "EXECUTE 'DROP TABLE IF EXISTS public.\"' || r.tablename || '\" CASCADE'; "
+        "END LOOP; END $$;"
+    )
     rp = subprocess.run(
-        ["psql", "--dbname", test, "-v", "ON_ERROR_STOP=0", "-c",
-         "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"],
+        ["psql", "--dbname", test, "-v", "ON_ERROR_STOP=0", "-c", drop_sql],
         capture_output=True, text=True, timeout=120,
     )
     if rp.returncode != 0:
-        log("ERRORE preparazione schema test:")
+        log("ERRORE pulizia tabelle test:")
         log(rp.stderr[:2000])
         return 2
     ra = subprocess.run(
