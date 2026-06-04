@@ -265,8 +265,30 @@ def main() -> int:
     cur.execute("SELECT current_setting('app.current_studio', true)")
     log(f"Diagnostica: app.current_studio attualmente = {cur.fetchone()[0]!r}")
 
+    # Elenco TUTTE le policy presenti su pazienti (per scoprire policy preesistenti permissive)
+    cur.execute("""
+        SELECT policyname, permissive, cmd, qual
+        FROM pg_policies WHERE schemaname='public' AND tablename='pazienti'
+        ORDER BY policyname
+    """)
+    pols = cur.fetchall()
+    log(f"Diagnostica: policy su pazienti = {len(pols)}")
+    for p in pols:
+        log(f"   - {p[0]} | permissive={p[1]} | cmd={p[2]} | qual={p[3]}")
+
     # --- 6) Test di isolamento ---
     log("\n===== TEST DI ISOLAMENTO =====")
+
+    # Diagnostica chirurgica: distribuzione reale degli studio_id nei pazienti finti.
+    # La leggo come PROPRIETARIO con RLS momentaneamente "vista piena": uso una query
+    # che mostra studio_id riga per riga sotto ciascun contesto.
+    for sx in (s1, s2):
+        cur.execute(f"SET app.current_studio = '{sx}'")
+        cur.execute("SELECT studio_id, count(*) FROM pazienti GROUP BY studio_id ORDER BY studio_id")
+        righe = cur.fetchall()
+        dett = ", ".join(f"studio_id={r[0]}→{r[1]}" for r in righe) or "(nessuna riga)"
+        log(f"Con app.current_studio={sx}: la query vede [{dett}]")
+
     cur.execute(f"SET app.current_studio = '{s1}'")
     cur.execute("SELECT count(*) FROM pazienti")
     n1 = cur.fetchone()[0]
