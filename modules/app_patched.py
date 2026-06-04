@@ -2042,12 +2042,16 @@ DATABASE_URL = "postgresql://...sslmode=require"
 
 Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
-def _connect_cached():
+def _connect_cached(studio_id: int = 1):
     _require_postgres_on_cloud()
     if _DB_BACKEND == "postgres":
         if not PSYCOPG2_AVAILABLE:
             raise RuntimeError("psycopg2 non disponibile. Aggiungi psycopg2-binary a requirements.txt")
 
+        try:
+            _sid = int(studio_id)
+        except (TypeError, ValueError):
+            _sid = 1
         try:
             conn = psycopg2.connect(
                 _DB_URL,
@@ -2056,7 +2060,7 @@ def _connect_cached():
                 keepalives_interval=10,
                 keepalives_count=5,
                 connect_timeout=10,
-                options="-c statement_timeout=30000",
+                options=f"-c statement_timeout=30000 -c app.current_studio={_sid}",
             )
         except Exception:
             # Non-leak diagnostics (does not print the URL)
@@ -2081,8 +2085,13 @@ def _connect_cached():
 
 
 def get_connection():
-
-    return _connect_cached()
+    # Legge lo studio della sessione (default 1) e apre la connessione con il
+    # contesto multi-tenant impostato (app.current_studio), come in app_core.
+    try:
+        _sid = int(st.session_state.get("studio_id", 1) or 1)
+    except Exception:
+        _sid = 1
+    return _connect_cached(_sid)
 
 def init_db() -> None:
     conn = get_connection()
