@@ -1,1 +1,53 @@
+name: Setup Ambiente Test Multi-Tenant
 
+# Esecuzione MANUALE (una tantum, ripetibile).
+# Copia la STRUTTURA del DB di produzione nel DB di test, applica la migrazione
+# multi-tenant (studio_id + RLS), crea 2 studi finti e collauda l'isolamento.
+# NON tocca mai la produzione: ne legge solo lo schema. Scrive solo sul DB di test.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  setup-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Installa pg_dump/psql (postgresql-client 17) e psycopg2
+        run: |
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          python -m pip install --upgrade pip
+          pip install "psycopg2-binary>=2.9.9"
+
+      - name: Scrivi i secrets in .streamlit/secrets.toml
+        env:
+          STREAMLIT_SECRETS: ${{ secrets.STREAMLIT_SECRETS }}
+        run: |
+          mkdir -p .streamlit
+          printf '%s' "$STREAMLIT_SECRETS" > .streamlit/secrets.toml
+          if [ ! -s .streamlit/secrets.toml ]; then
+            echo "::error::Il secret STREAMLIT_SECRETS è vuoto."
+            exit 1
+          fi
+
+      - name: Costruisci e collauda il DB di test
+        env:
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+        run: python scripts/setup_test_mt.py
+
+      - name: Rimuovi i secrets (sempre)
+        if: always()
+        run: rm -f .streamlit/secrets.toml
