@@ -200,11 +200,44 @@ def main() -> int:
     log(f"Migrazione applicata: {migrate_ok} tabelle ok, {migrate_skip} saltate.")
 
     # --- 4) Studi + pazienti finti ---
-    cur.execute("INSERT INTO studi(nome) VALUES ('Studio Test 1') ON CONFLICT DO NOTHING")
-    cur.execute("INSERT INTO studi(nome) VALUES ('Studio Test 2') ON CONFLICT DO NOTHING")
-    cur.execute("SELECT id FROM studi ORDER BY id LIMIT 2")
-    ids = [r[0] for r in cur.fetchall()]
-    s1, s2 = (ids + [1, 2])[:2]
+    import time
+    tag = str(int(time.time()))
+
+    def required_cols(table):
+        cur.execute("""
+            SELECT column_name, data_type FROM information_schema.columns
+            WHERE table_schema='public' AND lower(table_name)=lower(%s)
+              AND is_nullable='NO' AND column_default IS NULL
+              AND column_name NOT IN ('id','studio_id')
+        """, (table,))
+        return cur.fetchall()
+
+    def make_value(dtype, label):
+        d = (dtype or "").lower()
+        if any(x in d for x in ("char", "text")):
+            return label
+        if "bool" in d:
+            return False
+        if any(x in d for x in ("int", "numeric", "double", "real", "decimal")):
+            return 0
+        if "date" in d or "time" in d:
+            return "2000-01-01"
+        return label
+
+    def crea_studio(label):
+        cols, vals = ["nome"], [label]
+        for cname, dtype in required_cols("studi"):
+            if cname.lower() == "nome":
+                continue
+            cols.append(f'"{cname}"')
+            vals.append(make_value(dtype, label))
+        ph = ", ".join(["%s"] * len(vals))
+        cur.execute(f'INSERT INTO studi ({", ".join(cols)}) VALUES ({ph}) RETURNING id', vals)
+        return cur.fetchone()[0]
+
+    s1 = crea_studio(f"__TEST_A_{tag}")
+    s2 = crea_studio(f"__TEST_B_{tag}")
+    log(f"Studi finti creati: s1={s1}, s2={s2}")
 
     # nomi colonne di "pazienti" che sono OBBLIGATORIE (NOT NULL) e senza default:
     # vanno riempite tutte, altrimenti l'insert finto fallisce.
