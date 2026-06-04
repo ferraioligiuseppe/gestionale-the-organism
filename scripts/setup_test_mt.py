@@ -69,8 +69,19 @@ def load_prod_url() -> str:
     return ""
 
 
+def clean_url(raw: str) -> str:
+    """Estrae una stringa di connessione pulita, anche se incollata come
+    DATABASE_URL = "postgresql://..." o con virgolette/spazi attorno."""
+    raw = (raw or "").strip()
+    m = re.search(r'postgres(?:ql)?://[^\s"\']+', raw)
+    u = m.group(0) if m else raw.strip().strip('"').strip("'")
+    if u.startswith("postgres://"):
+        u = "postgresql://" + u[len("postgres://"):]
+    return u
+
+
 def norm(u: str) -> str:
-    return ("postgresql://" + u[len("postgres://"):]) if u.startswith("postgres://") else u
+    return clean_url(u)
 
 
 def dbname_of(url: str) -> str:
