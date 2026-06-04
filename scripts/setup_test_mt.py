@@ -249,7 +249,23 @@ def main() -> int:
         log(f"ERRORE inserimento pazienti finti: {e}")
         return 2
 
-    # --- 5) Test di isolamento ---
+    # --- 5) Diagnostica RLS prima del test ---
+    cur.execute("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='pazienti'")
+    diag = cur.fetchone()
+    cur.execute("SELECT current_user, current_setting('is_superuser')")
+    who = cur.fetchone()
+    cur.execute("SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user")
+    bypass = cur.fetchone()
+    cur.execute("SELECT pg_get_userbyid(relowner) FROM pg_class WHERE relname='pazienti'")
+    owner = cur.fetchone()[0]
+    log(f"\nDiagnostica: utente={who[0]} superuser={who[1]} "
+        f"BYPASSRLS={bypass[0] if bypass else '?'} | proprietario tabella pazienti={owner}")
+    if diag:
+        log(f"Diagnostica pazienti: RLS attiva={diag[0]}  FORCE attiva={diag[1]}")
+    cur.execute("SELECT current_setting('app.current_studio', true)")
+    log(f"Diagnostica: app.current_studio attualmente = {cur.fetchone()[0]!r}")
+
+    # --- 6) Test di isolamento ---
     log("\n===== TEST DI ISOLAMENTO =====")
     cur.execute(f"SET app.current_studio = '{s1}'")
     cur.execute("SELECT count(*) FROM pazienti")
