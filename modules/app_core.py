@@ -1996,9 +1996,10 @@ class _PgConn:
     Aggiunge keepalive automatico: se la connessione Postgres è scaduta/ibernata,
     la ricrea trasparentemente prima di restituire il cursore.
     """
-    def __init__(self, conn):
+    def __init__(self, conn, options="-c statement_timeout=30000"):
         self._conn = conn
         self._db_url = _DB_URL  # salvato per reconnect
+        self._options = options  # include app.current_studio: va riusato a ogni riconnessione
 
     def _ensure_alive(self):
         """Verifica che la connessione sia viva; riconnette se necessario."""
@@ -2020,7 +2021,7 @@ class _PgConn:
                     keepalives_interval=10,
                     keepalives_count=5,
                     connect_timeout=10,
-                    options="-c statement_timeout=30000",
+                    options=self._options,
                 )
             except Exception as e:
                 raise RuntimeError(f"Impossibile riconnettersi al DB: {e}") from e
@@ -2254,6 +2255,7 @@ def _connect_cached(studio_id: int = 1):
         except (TypeError, ValueError):
             _sid = 1
 
+        _opts = f"-c statement_timeout=30000 -c app.current_studio={_sid}"
         try:
             conn = psycopg2.connect(
                 _DB_URL,
@@ -2262,7 +2264,7 @@ def _connect_cached(studio_id: int = 1):
                 keepalives_interval=10,
                 keepalives_count=5,
                 connect_timeout=10,
-                options=f"-c statement_timeout=30000 -c app.current_studio={_sid}",
+                options=_opts,
             )
         except Exception:
             # Non-leak diagnostics (does not print the URL)
@@ -2278,7 +2280,7 @@ def _connect_cached(studio_id: int = 1):
             })
             st.stop()
 
-        return _PgConn(conn)
+        return _PgConn(conn, options=_opts)
 
     # SQLite (locale / fallback)
     conn = sqlite3.connect(SQLITE_DB_PATH)
