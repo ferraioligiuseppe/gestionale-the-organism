@@ -108,6 +108,8 @@ def main() -> int:
         if "nome" in by_name: valori["nome"] = nome
         if "sesso" in by_name: valori["sesso"] = sesso
         if "data_nascita" in by_name: valori["data_nascita"] = nascita
+        # stato: ATTIVO, così compaiono nella scheda "Attivi" (non solo in "Tutti")
+        if "stato_paziente" in by_name: valori["stato_paziente"] = "ATTIVO"
 
         # riempi tutte le altre colonne OBBLIGATORIE (NOT NULL senza default)
         for cname, dtype, nullable, default in cols_info:
