@@ -49,6 +49,7 @@ SOTTOSEZIONI = {
     ],
     AREA_VALUTAZIONE: [
         "📋 Anamnesi The Organism",
+        "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica",
         "📚 DSA — Apprendimento",
         "👓 Optometria comportamentale",

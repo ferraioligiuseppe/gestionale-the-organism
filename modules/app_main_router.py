@@ -326,6 +326,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except Exception as e:
                 st.error(f"Modulo anamnesi non disponibile: {e}")
             return
+        if sotto == "👁️ Anamnesi visiva":
+            try:
+                from .ui_anamnesi_visiva import render_anamnesi_visiva
+                render_anamnesi_visiva(conn, paz_id)
+            except Exception as e:
+                st.error(f"Modulo anamnesi visiva non disponibile: {e}")
+            return
         if sotto == "🧠 NPS — Neuropsicologica":
             try:
                 from .ui_nps_completo import render_nps_completo
