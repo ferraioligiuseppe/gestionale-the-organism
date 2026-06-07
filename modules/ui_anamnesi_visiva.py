@@ -95,6 +95,39 @@ def _salva(conn, paz_id: int, dati: dict) -> None:
         st.error(f"Errore nel salvataggio: {e}")
 
 
+def sintesi_anamnesi(conn, paz_id: int) -> str:
+    """Sintesi (markdown) dell'anamnesi visiva per diagnosi/relazione/stampa.
+    Restituisce stringa vuota se non c'è anamnesi salvata."""
+    try:
+        d = _carica(conn, paz_id)
+    except Exception:
+        return ""
+    if not d:
+        return ""
+    righe = []
+    if d.get("motivo"):
+        righe.append(f"Motivo della visita: {d['motivo']}")
+    sint = list(d.get("sintomi") or [])
+    if d.get("sintomi_altro"):
+        sint.append(d["sintomi_altro"])
+    if sint:
+        righe.append("Sintomi: " + ", ".join(sint))
+    sv = []
+    if d.get("occhiali"):
+        sv.append("occhiali: " + d["occhiali"] +
+                  (f" ({d['occhiali_dett']})" if d.get("occhiali_dett") else ""))
+    if d.get("lac"):
+        sv.append("lenti a contatto: " + d["lac"] +
+                  (f" ({d['lac_dett']})" if d.get("lac_dett") else ""))
+    if d.get("ultima_visita"):
+        sv.append("ultima visita oculistica: " + d["ultima_visita"])
+    if sv:
+        righe.append("Storia visiva: " + "; ".join(sv))
+    if not righe:
+        return ""
+    return "### Anamnesi (sintesi)\n" + "\n".join(righe)
+
+
 # ── UI ──────────────────────────────────────────────────────────────────
 def render_anamnesi_visiva(conn, paz_id: int) -> None:
     st.subheader("👁️ Anamnesi visiva / optometrica")

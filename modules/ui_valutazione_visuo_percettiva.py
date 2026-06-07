@@ -973,6 +973,13 @@ Randot: {bino.get("randot","nd")} sec d arco
 ### Accomodazione
 Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
 MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
+            try:
+                from modules.ui_anamnesi_visiva import sintesi_anamnesi
+                _anam = sintesi_anamnesi(conn, pid)
+                if _anam:
+                    corpo = _anam + "\n\n" + corpo
+            except Exception:
+                pass
             if diagnosi: corpo += f"\n\n### Diagnosi\n{diagnosi}"
             if piano:    corpo += f"\n\n### Piano terapeutico\n{piano}"
             titolo_prof2 = (d.get("intestazione",{}).get("titolo_prof","") or
@@ -1268,6 +1275,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         "F. Profilo funzionale",
         "G. Prescrizione",
         "H. Sports Vision",
+        "👁️ Anamnesi",
     ])
 
     with tabs[0]:
@@ -1313,3 +1321,10 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         dati.update(_sez_h(paz_id, stored))
         if st.button("Salva note Sports Vision", key=f"sv_h_{paz_id}"):
             _salva(conn, paz_id, dati)
+
+    with tabs[9]:
+        try:
+            from modules.ui_anamnesi_visiva import render_anamnesi_visiva
+            render_anamnesi_visiva(conn, paz_id)
+        except Exception as e:
+            st.error(f"Anamnesi visiva non disponibile: {e}")
