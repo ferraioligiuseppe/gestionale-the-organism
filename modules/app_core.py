@@ -1428,10 +1428,12 @@ def ensure_auth_schema(conn):
           password_hash TEXT NOT NULL,
           is_active BOOLEAN NOT NULL DEFAULT TRUE,
           must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+          studio_id BIGINT NOT NULL DEFAULT 1,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           last_login_at TIMESTAMPTZ
         );
         """)
+        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1;")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS auth_roles (
           id BIGSERIAL PRIMARY KEY,
@@ -1502,17 +1504,32 @@ def _audit(conn, user_id: int | None, action: str, entity: str | None = None, en
             pass
 
 def _get_user_by_username(conn, username: str):
-    cur = conn.cursor()
+    # Prima prova con studio_id (multi-tenant); se la colonna non esiste ancora,
+    # ripiega sulla query senza studio_id (studio 1 di default). Così il login
+    # funziona sempre, anche su DB non ancora migrati.
     try:
+        cur = conn.cursor()
         cur.execute("""
-            SELECT id, username, email, password_hash, is_active, must_change_password
+            SELECT id, username, email, password_hash, is_active, must_change_password, COALESCE(studio_id, 1)
             FROM auth_users
             WHERE username = %s
         """, (username,))
         return cur.fetchone()
-    finally:
-        try: cur.close()
+    except Exception:
+        try: conn.rollback()
         except Exception: pass
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT id, username, email, password_hash, is_active, must_change_password, 1
+                FROM auth_users
+                WHERE username = %s
+            """, (username,))
+            return cur.fetchone()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            return None
 
 def _get_roles_for_user(conn, user_id: int) -> list[str]:
     cur = conn.cursor()
@@ -1640,6 +1657,7 @@ def login(get_conn) -> bool:
         p_in = password or ""
         if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
+            st.session_state["studio_id"] = 1
             st.session_state["user"] = {
                 "id": None,
                 "username": u_in,
@@ -1661,7 +1679,7 @@ def login(get_conn) -> bool:
             _audit(conn, None, "LOGIN_FAIL", meta={"username": username.strip()})
             return False
 
-        user_id, uname, email, pwd_hash, is_active, must_change = row
+        user_id, uname, email, pwd_hash, is_active, must_change, _studio_id = row
         if not is_active:
             st.error("Utente disattivato.")
             _audit(conn, user_id, "LOGIN_FAIL_DISABLED", meta={})
@@ -1710,6 +1728,10 @@ def login(get_conn) -> bool:
             pass
 
         st.session_state["logged_in"] = True
+        try:
+            st.session_state["studio_id"] = int(_studio_id or 1)
+        except Exception:
+            st.session_state["studio_id"] = 1
         st.session_state["user"] = {
             "id": int(user_id),
             "username": str(uname),
