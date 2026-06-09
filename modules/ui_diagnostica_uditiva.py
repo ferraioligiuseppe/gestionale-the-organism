@@ -641,135 +641,153 @@ def _ui_calibrazione(conn):
 # Tab 4: Test Tonale
 # ─────────────────────────────────────────────────────────────────────────────
 
+_TONALE_CONSOLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
+body{padding:8px;background:#f8f7f4;color:#1a1a1a}
+.card{background:#fff;border:1px solid #d4cec5;border-radius:10px;padding:12px 16px}
+.freq{font-size:30px;font-weight:600;color:#1d9e75;text-align:center;line-height:1}
+.sub{font-size:11px;color:#8a8a8a;text-align:center;margin:2px 0 8px}
+.db{font-size:46px;font-weight:600;text-align:center;line-height:1.05}
+.dblbl{font-size:11px;color:#8a8a8a;text-align:center;margin-bottom:8px}
+input[type=range]{width:100%;accent-color:#1d9e75;margin:2px 0}
+button{font-family:inherit;font-size:13px;padding:7px 10px;border-radius:8px;border:1.5px solid #d4cec5;background:#fff;color:#4a4a4a;cursor:pointer}
+button:hover{background:#e1f5ee;border-color:#1d9e75;color:#0f6e56}
+button.primary{background:#1d9e75;border-color:#1d9e75;color:#fff;font-size:16px;padding:11px;width:100%;margin-top:8px}
+.row{display:flex;gap:6px;margin-top:8px}
+.row button{flex:1}
+.hint{font-size:10.5px;color:#8a8a8a;margin-top:8px;text-align:center;line-height:1.4}
+</style></head><body>
+<div class="card">
+  <div class="freq">__FREQLBL__</div>
+  <div class="sub">Orecchio __EAR__ &middot; Via __VIA__ &middot; durata __DUR__s</div>
+  <div class="db" id="dbVal">__DBINIT__</div>
+  <div class="dblbl">dB HL &middot; offset cuffie __CALOFF__ dB</div>
+  <input type="range" id="dbSlider" min="-20" max="90" step="5" value="__DBINIT__" oninput="setDb(this.value)">
+  <button class="primary" onclick="play()">&#9654;&nbsp; Invia tono &nbsp;<small style="opacity:.8">[Spazio]</small></button>
+  <div class="row">
+    <button onclick="step(-5)">&minus;5</button>
+    <button onclick="step(-1)">&minus;1</button>
+    <button onclick="step(1)">+1</button>
+    <button onclick="step(5)">+5</button>
+    <button onclick="stopTone()">&#9632; Stop</button>
+  </div>
+  <div class="hint">Cerca la soglia qui: l'audio &egrave; istantaneo, nessuna ricarica.<br>Trovata la soglia, registra il valore con &laquo;Valida soglia&raquo; qui sotto.</div>
+</div>
+<script>
+var FREQ=__FREQ__, PAN=__PAN__, DUR=__DUR__, CALOFF=__CALOFFNUM__;
+var db=__DBINIT__, actx=null, curO=null, curG=null;
+function getCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx;}
+function render(){document.getElementById('dbVal').textContent=db;var s=document.getElementById('dbSlider');if(s&&parseInt(s.value)!==db)s.value=db;}
+function setDb(v){db=parseInt(v);render();}
+function step(d){db=Math.max(-20,Math.min(90,db+d));render();}
+function stopTone(){try{var t=getCtx().currentTime;if(curG){curG.gain.cancelScheduledValues(t);curG.gain.setTargetAtTime(0,t,0.01);}if(curO){curO.stop(t+0.05);}}catch(e){}curO=null;curG=null;}
+function play(){
+  var ctx=getCtx();stopTone();
+  var dbEff=db+CALOFF;
+  var amp=Math.pow(10,(dbEff-90)/20)*0.85;amp=Math.max(0.0008,Math.min(0.95,amp));
+  var o=ctx.createOscillator(),g=ctx.createGain(),p=ctx.createStereoPanner();
+  p.pan.value=PAN;o.frequency.value=FREQ;o.type='sine';
+  var t0=ctx.currentTime;
+  g.gain.setValueAtTime(0,t0);
+  g.gain.linearRampToValueAtTime(amp,t0+0.02);
+  g.gain.setValueAtTime(amp,t0+DUR-0.05);
+  g.gain.linearRampToValueAtTime(0,t0+DUR);
+  o.connect(g);g.connect(p);p.connect(ctx.destination);
+  o.start();o.stop(t0+DUR+0.02);
+  curO=o;curG=g;
+}
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();play();}
+  else if(e.code==='ArrowUp'){e.preventDefault();step(5);}
+  else if(e.code==='ArrowDown'){e.preventDefault();step(-5);}
+});
+render();
+</script></body></html>"""
+
+
 def _ui_test_tonale(conn, paz_id, operatore):
     st.subheader("Test tonale audiometrico")
-    st.caption("Via aerea (AC) e ossea (BC) · WebAudio zero latenza · Metodo Hipérion · Curva Tomatis")
+    st.caption("Via aerea (AC) e ossea (BC) · WebAudio istantaneo · Metodo Hipérion · Curva Tomatis")
 
-    # Shortcut tastiera JS
     import streamlit.components.v1 as _sc
-    _sc.html("""<script>
-(function(){if(window._kbdBound)return;window._kbdBound=true;
-document.addEventListener('keydown',function(e){
-  var tag=document.activeElement?document.activeElement.tagName:'';
-  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
-  if(e.code==='ArrowUp'){e.preventDefault();var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.trim()==='+5 [↑]')b.click();});}
-  if(e.code==='ArrowDown'){e.preventDefault();var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.trim()==='-5 [↓]')b.click();});}
-  if(e.key==='r'||e.key==='R'){var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.includes('RISPONDE')&&!b.textContent.includes('NON'))b.click();});}
-  if(e.key==='n'||e.key==='N'){var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.includes('NON RISPONDE'))b.click();});}
-  if(e.key==='v'||e.key==='V'){var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.includes('VALIDA'))b.click();});}
-});})();
-</script><div style="display:none">k</div>""", height=0)
-
     ss = st.session_state
 
-    c1,c2,c3 = st.columns(3)
-    with c1: ear = st.selectbox("Orecchio", ["OD - Destro","OS - Sinistro"], key="tt_ear_v3")
-    with c2: via = st.selectbox("Via", ["AC - Aerea","BC - Ossea"], key="tt_via_v3")
-    with c3: dur_str = st.select_slider("Durata tono", ["1.0","1.5","2.0","2.5","3.0"], value="2.0", key="tt_dur_v3")
+    # ── Parametri di stimolo (nativi: cambiano di rado) ──────────────────────
+    c1, c2, c3 = st.columns(3)
+    with c1: ear = st.selectbox("Orecchio", ["OD - Destro", "OS - Sinistro"], key="tt_ear_v3")
+    with c2: via = st.selectbox("Via", ["AC - Aerea", "BC - Ossea"], key="tt_via_v3")
+    with c3: dur_str = st.select_slider("Durata tono", ["1.0", "1.5", "2.0", "2.5", "3.0"],
+                                        value="2.0", key="tt_dur_v3")
+
+    cur_f = st.selectbox("Frequenza", FREQS_TON,
+                         format_func=lambda f: str(f) if f < 1000 else f"{f//1000}k Hz",
+                         key="tt_freq_v3")
 
     ear_code = "OD" if "OD" in ear else "OS"
     via_code = "ac" if "AC" in via else "bc"
     dur = float(dur_str)
+    fi = FREQS_TON.index(cur_f)
 
-    c1,c2 = st.columns(2)
-    with c1: cur_f = st.selectbox("Frequenza", FREQS_TON,
-                                   format_func=lambda f: str(f) if f<1000 else f"{f//1000}k Hz",
-                                   key="tt_freq_v3")
-    with c2: cur_db = st.slider("Livello dB HL", -20, 90, 30, 5, key="tt_db_v3")
-
-    # Offset calibrazione
+    # Offset di calibrazione (per orecchio), iniettato nella console
     cal_offset = ss.get("cal_profilo_globale", {}).get(f"offset_{ear_code.lower()}", 0)
-    db_eff = cur_db + cal_offset
-
-    # Tono WebAudio — istantaneo
     pan_val = 0.9 if ear_code == "OD" else -0.9
-    amp_expr = f"Math.pow(10,({db_eff}-90)/20)*0.85"
-    _sc.html(f"""<script>
-(function(){{
-  if(!window._lastTonParams) window._lastTonParams = {{}};
-  var p = {{f:{int(cur_f)},db:{db_eff},ear:'{ear_code}',dur:{dur}}};
-  var lp = window._lastTonParams;
-  if(lp.f===p.f && lp.db===p.db && lp.ear===p.ear && lp.dur===p.dur) return;
-  window._lastTonParams = p;
-  window._curTonParams = p;
-}})();
-</script><div style="display:none">p</div>""", height=0)
+    db_init = int(ss.get(f"tt_soglie_{ear_code}_{via_code}_v3", {}).get(fi, 30))
 
-    # Pulsante invia tono
-    if st.button(f"▶  Invia tono  [SPAZIO] — {cur_f}Hz {db_eff}dB {ear_code}",
-                 type="primary", key="tt_play_v3", use_container_width=True):
-        _sc.html(f"""<script>
-(function(){{
-  var a=new(window.AudioContext||window.webkitAudioContext)();
-  if(a.state==='suspended')a.resume();
-  var o=a.createOscillator(),g=a.createGain(),p=a.createStereoPanner();
-  p.pan.value={pan_val};o.frequency.value={int(cur_f)};o.type='sine';
-  var amp={amp_expr};amp=Math.max(0.001,Math.min(0.95,amp));
-  g.gain.setValueAtTime(0,a.currentTime);
-  g.gain.linearRampToValueAtTime(amp,a.currentTime+0.02);
-  g.gain.setValueAtTime(amp,a.currentTime+{dur}-0.05);
-  g.gain.linearRampToValueAtTime(0,a.currentTime+{dur});
-  o.connect(g);g.connect(p);p.connect(a.destination);
-  o.start();o.stop(a.currentTime+{dur});
-}})();
-</script><div style="display:none">t</div>""", height=0)
-        if cal_offset != 0:
-            st.caption(f"Offset calibrazione applicato: {cal_offset:+d} dB")
+    # ── Console audio autonoma: AudioContext persistente, zero ricariche ─────
+    console = (_TONALE_CONSOLE_HTML
+               .replace("__FREQ__", str(int(cur_f)))
+               .replace("__FREQLBL__", FLABELS_TON[fi] + " Hz")
+               .replace("__EAR__", ear_code)
+               .replace("__VIA__", via_code.upper())
+               .replace("__PAN__", str(pan_val))
+               .replace("__DUR__", str(dur))
+               .replace("__CALOFF__", f"{cal_offset:+d}")
+               .replace("__CALOFFNUM__", str(cal_offset))
+               .replace("__DBINIT__", str(db_init)))
+    _sc.html(console, height=340)
 
-    # Regolazione rapida
-    d1,d2,d3,d4 = st.columns(4)
-    if d1.button("-5 [↓]", key="tt_m5_v3", use_container_width=True):
-        st.session_state["tt_db_v3"] = max(-20, cur_db - 5)
-    if d2.button("+5 [↑]", key="tt_p5_v3", use_container_width=True):
-        st.session_state["tt_db_v3"] = min(90, cur_db + 5)
-    if d3.button("-1", key="tt_m1_v3", use_container_width=True):
-        st.session_state["tt_db_v3"] = max(-20, cur_db - 1)
-    if d4.button("+1", key="tt_p1_v3", use_container_width=True):
-        st.session_state["tt_db_v3"] = min(90, cur_db + 1)
+    if cal_offset:
+        st.caption(f"Offset calibrazione cuffie applicato: {cal_offset:+d} dB")
 
-    # Pad risposta
-    st.divider()
-    st.caption("R = risponde · N = non risponde · V = valida")
-    p1,p2,p3,p4 = st.columns(4)
-    risp    = p1.button("✓ RISPONDE [R]",     key="tt_si_v3",  use_container_width=True)
-    no_risp = p2.button("✗ NON RISPONDE [N]", key="tt_no_v3",  use_container_width=True)
-    valida  = p3.button("✅ VALIDA [V]",       key="tt_val_v3", type="primary", use_container_width=True)
-    p4.button("→ Successiva",                  key="tt_next_v3",use_container_width=True)
+    # ── Registrazione soglia (nativa → salva davvero) ────────────────────────
+    key_s = f"tt_soglie_{ear_code}_{via_code}_v3"
+    if key_s not in ss:
+        ss[key_s] = {}
+    rc1, rc2 = st.columns([2, 1])
+    with rc1:
+        soglia = st.number_input(
+            f"Soglia trovata — {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} (dB HL)",
+            -20, 120, db_init, 5, key="tt_soglia_in_v3")
+    with rc2:
+        st.write("")
+        st.write("")
+        if st.button("✓ Valida soglia", type="primary", use_container_width=True, key="tt_val_v3"):
+            ss[key_s][fi] = int(soglia)
+            st.success(f"Registrata: {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} = {int(soglia)} dB HL")
 
-    if risp:
-        ss["tt_last_resp_v3"] = cur_db
-        st.info(f"Risponde a {cur_db} dB — abbassa e reinvia il tono")
-    if no_risp:
-        st.warning(f"Non risponde a {cur_db} dB — alza il livello")
-    if valida:
-        last = ss.get("tt_last_resp_v3", cur_db)
-        key_s = f"tt_soglie_{ear_code}_{via_code}_v3"
-        if key_s not in ss: ss[key_s] = {}
-        ss[key_s][FREQS_TON.index(cur_f)] = last
-        ss["tt_last_resp_v3"] = None
-        st.success(f"Soglia: {cur_f} Hz {ear_code} {via_code.upper()} = {last} dB HL")
-
-    # Soglie registrate
+    # ── Soglie registrate ────────────────────────────────────────────────────
     st.divider()
     st.markdown("**Soglie registrate**")
-    sc1,sc2,sc3,sc4 = st.columns(4)
-    for col, (ek,vk,label,color) in zip([sc1,sc2,sc3,sc4],[
-        ("OD","ac","OD AC","#c0392b"),("OS","ac","OS AC","#2980b9"),
-        ("OD","bc","OD BC","#8e44ad"),("OS","bc","OS BC","#16a085"),
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    for col, (ek, vk, label, color) in zip([sc1, sc2, sc3, sc4], [
+        ("OD", "ac", "OD AC", "#c0392b"), ("OS", "ac", "OS AC", "#2980b9"),
+        ("OD", "bc", "OD BC", "#8e44ad"), ("OS", "bc", "OS BC", "#16a085"),
     ]):
         col.markdown(f"<b style='color:{color};font-size:11px'>{label}</b>", unsafe_allow_html=True)
         soglie = ss.get(f"tt_soglie_{ek}_{vk}_v3", {})
-        for fi, v in sorted(soglie.items()):
+        for fii, v in sorted(soglie.items()):
             col.markdown(
                 f"<span style='border:1px solid {color};border-radius:6px;"
                 f"padding:1px 5px;font-size:11px;color:{color};"
-                f"display:inline-block;margin:1px'>{FLABELS_TON[fi]}:{v}</span>",
+                f"display:inline-block;margin:1px'>{FLABELS_TON[fii]}:{v}</span>",
                 unsafe_allow_html=True)
 
-    # Curva Tomatis
+    # ── Curva Tomatis ─────────────────────────────────────────────────────────
     st.divider()
     st.markdown("**Curva Tomatis** (valori target dB HL)")
-    if "tt_tomatis_v3" not in ss: ss["tt_tomatis_v3"] = list(TOMATIS_STD)
+    if "tt_tomatis_v3" not in ss:
+        ss["tt_tomatis_v3"] = list(TOMATIS_STD)
     tc = st.columns(11)
     for i, lbl in enumerate(FLABELS_TON):
         v = tc[i].number_input(lbl, -30, 10, int(ss["tt_tomatis_v3"][i]), 1, key=f"tt_tm{i}_v3")
@@ -777,22 +795,22 @@ document.addEventListener('keydown',function(e){
     if st.button("Ripristina standard", key="tt_tm_rst_v3"):
         ss["tt_tomatis_v3"] = list(TOMATIS_STD)
 
-    # Grafico + EQ
-    od_ac = [ss.get("tt_soglie_OD_ac_v3",{}).get(i) for i in range(11)]
-    os_ac = [ss.get("tt_soglie_OS_ac_v3",{}).get(i) for i in range(11)]
-    tom   = ss.get("tt_tomatis_v3", list(TOMATIS_STD))
+    # ── Grafico + EQ ──────────────────────────────────────────────────────────
+    od_ac = [ss.get("tt_soglie_OD_ac_v3", {}).get(i) for i in range(11)]
+    os_ac = [ss.get("tt_soglie_OS_ac_v3", {}).get(i) for i in range(11)]
+    tom = ss.get("tt_tomatis_v3", list(TOMATIS_STD))
 
     if any(v is not None for v in od_ac + os_ac):
         st.divider()
         _disegna_audiogramma(od_ac, os_ac, tom)
-        eq_od = [round(tom[i]-od_ac[i],1) if od_ac[i] is not None else None for i in range(11)]
-        eq_os = [round(tom[i]-os_ac[i],1) if os_ac[i] is not None else None for i in range(11)]
+        eq_od = [round(tom[i] - od_ac[i], 1) if od_ac[i] is not None else None for i in range(11)]
+        eq_os = [round(tom[i] - os_ac[i], 1) if os_ac[i] is not None else None for i in range(11)]
         st.markdown("**Delta EQ terapeutico** (Tomatis − soglia paziente)")
         ec = st.columns(11)
-        for i,(lbl,vod,vos) in enumerate(zip(FLABELS_TON,eq_od,eq_os)):
+        for i, (lbl, vod, vos) in enumerate(zip(FLABELS_TON, eq_od, eq_os)):
             v = vod if vod is not None else vos
             if v is not None:
-                cc = "green" if v>3 else "red" if v<-3 else "orange"
+                cc = "green" if v > 3 else "red" if v < -3 else "orange"
                 ec[i].markdown(
                     f"<div style='text-align:center'><b style='color:{cc}'>{v:+.0f}</b>"
                     f"<br><small style='color:#888'>{lbl}</small></div>",
@@ -801,12 +819,12 @@ document.addEventListener('keydown',function(e){
     st.divider()
     nota_ton = st.text_input("Note audiogramma", key="tt_note_v3")
     if st.button("Salva audiogramma", type="primary", key="tt_save_v3"):
-        od_bc = [ss.get("tt_soglie_OD_bc_v3",{}).get(i) for i in range(11)]
-        os_bc = [ss.get("tt_soglie_OS_bc_v3",{}).get(i) for i in range(11)]
-        eq_od2 = [round(tom[i]-od_ac[i],1) if od_ac[i] is not None else 0 for i in range(11)]
-        n = sum(1 for v in od_ac+os_ac if v is not None)
-        dati = {"od_ac":od_ac,"os_ac":os_ac,"od_bc":od_bc,"os_bc":os_bc,
-                "tomatis":tom,"eq_od":eq_od2}
+        od_bc = [ss.get("tt_soglie_OD_bc_v3", {}).get(i) for i in range(11)]
+        os_bc = [ss.get("tt_soglie_OS_bc_v3", {}).get(i) for i in range(11)]
+        eq_od2 = [round(tom[i] - od_ac[i], 1) if od_ac[i] is not None else 0 for i in range(11)]
+        n = sum(1 for v in od_ac + os_ac if v is not None)
+        dati = {"od_ac": od_ac, "os_ac": os_ac, "od_bc": od_bc, "os_bc": os_bc,
+                "tomatis": tom, "eq_od": eq_od2}
         if _salva(conn, paz_id, "Audiogramma", dati, float(n), f"{n} soglie", operatore, nota_ton):
             st.success(f"Audiogramma salvato — {n} soglie.")
 
