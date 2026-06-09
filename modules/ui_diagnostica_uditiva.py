@@ -192,54 +192,94 @@ def _salva(conn, paz_id, tipo, dati, punteggio, classificazione, operatore="", n
         st.error(f"Errore salvataggio: {e}"); return False
 
 def _fetch_pazienti(conn):
-    cur = conn.cursor()
-    candidates = ['Pazienti','pazienti','Patients','patients']
-    try:
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        for r in cur.fetchall():
-            t = r[0] if not isinstance(r, dict) else r.get('name','')
-            if ('paz' in t.lower() or 'patient' in t.lower()) and t not in candidates:
-                candidates.insert(0, t)
-    except Exception:
-        try:
-            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-            for r in cur.fetchall():
-                t = r[0] if not isinstance(r, dict) else r.get('table_name','')
-                if 'paz' in t.lower() or 'patient' in t.lower():
-                    candidates.insert(0, t)
-        except Exception: pass
+    """Recupera (id, cognome, nome) dei pazienti su SQLite o PostgreSQL.
 
-    def get_cols(table):
+    Nota: su PostgreSQL una query fallita aborta l'intera transazione, quindi
+    NON usiamo più 'sqlite_master' come sonda (fallirebbe e bloccherebbe tutto).
+    Proviamo prima lo stile PostgreSQL (information_schema) e solo in caso di
+    errore ricadiamo su SQLite, con rollback difensivo a ogni fallimento.
+    """
+    def _safe_rollback():
         try:
+            conn.rollback()
+        except Exception:
+            pass
+
+    # Pulisce un'eventuale transazione già abortita ereditata da query precedenti
+    _safe_rollback()
+    cur = conn.cursor()
+
+    # ── Elenco tabelle candidate ─────────────────────────────────────────────
+    candidates = []
+    try:  # stile PostgreSQL — funziona su PG, fallisce (pulito) su SQLite
+        cur.execute("SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema='public'")
+        for r in cur.fetchall():
+            t = r[0] if not isinstance(r, dict) else r.get('table_name', '')
+            if t and ('paz' in t.lower() or 'patient' in t.lower()):
+                candidates.append(t)
+    except Exception:
+        _safe_rollback()
+        try:  # fallback SQLite
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            for r in cur.fetchall():
+                t = r[0] if not isinstance(r, dict) else r.get('name', '')
+                if t and ('paz' in t.lower() or 'patient' in t.lower()):
+                    candidates.append(t)
+        except Exception:
+            _safe_rollback()
+    for t in ['pazienti', 'Pazienti', 'patients', 'Patients']:
+        if t not in candidates:
+            candidates.append(t)
+
+    # ── Colonne di una tabella ───────────────────────────────────────────────
+    def get_cols(table):
+        try:  # stile PostgreSQL
+            cur.execute("SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema='public' AND table_name=%s", (table,))
+            cols = [r[0] if not isinstance(r, dict) else r.get('column_name', '')
+                    for r in cur.fetchall()]
+            if cols:
+                return cols
+        except Exception:
+            _safe_rollback()
+        try:  # fallback SQLite
             cur.execute(f'PRAGMA table_info("{table}")')
             return [r[1] for r in cur.fetchall()]
         except Exception:
-            try:
-                cur.execute("SELECT column_name FROM information_schema.columns "
-                            "WHERE table_schema='public' AND table_name=%s", (table,))
-                return [r[0] for r in cur.fetchall()]
-            except Exception: return []
+            _safe_rollback()
+            return []
 
     def pick(cols, cands):
         s = set(cols)
         for c in cands:
-            if c in s: return c
+            if c in s:
+                return c
         low = {x.lower(): x for x in cols}
         for c in cands:
-            if c.lower() in low: return low[c.lower()]
+            if c.lower() in low:
+                return low[c.lower()]
         return None
 
+    # ── Lettura pazienti ─────────────────────────────────────────────────────
     for table in candidates:
         cols = get_cols(table)
-        if not cols: continue
+        if not cols:
+            continue
         idc = pick(cols, ['id'])
-        cc  = pick(cols, ['Cognome','cognome','LastName','last_name'])
-        nc  = pick(cols, ['Nome','nome','FirstName','first_name'])
-        if not (idc and cc and nc): continue
+        cc = pick(cols, ['Cognome', 'cognome', 'LastName', 'last_name', 'surname'])
+        nc = pick(cols, ['Nome', 'nome', 'FirstName', 'first_name'])
+        if not (idc and cc and nc):
+            continue
         try:
-            cur.execute(f'SELECT "{idc}","{cc}","{nc}" FROM "{table}" ORDER BY "{cc}","{nc}"')
-            return cur.fetchall()
-        except Exception: continue
+            cur.execute(f'SELECT "{idc}","{cc}","{nc}" FROM "{table}" '
+                        f'ORDER BY "{cc}","{nc}"')
+            rows = cur.fetchall()
+            if rows:
+                return rows
+        except Exception:
+            _safe_rollback()
+            continue
     return []
 
 # ─────────────────────────────────────────────────────────────────────────────
