@@ -1463,6 +1463,19 @@ def ensure_auth_schema(conn):
         ('admin'),('vision'),('osteo'),('segreteria'),('clinico')
         ON CONFLICT (name) DO NOTHING;
         """)
+        # Le tabelle di SISTEMA/globali non devono mai essere filtrate per studio.
+        # Se un setup precedente vi ha lasciato attivo il filtro (RLS), il login di
+        # utenti di altri studi fallirebbe e la lista utenti risulterebbe parziale.
+        # Qui lo disattiviamo in modo sicuro (idempotente).
+        for _t in ("auth_users", "auth_roles", "auth_user_roles", "auth_audit_log",
+                   "studi", "utenti_meta", "abbonamenti"):
+            try:
+                cur.execute(f"ALTER TABLE {_t} NO FORCE ROW LEVEL SECURITY;")
+                cur.execute(f"ALTER TABLE {_t} DISABLE ROW LEVEL SECURITY;")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         conn.commit()
     finally:
         try: cur.close()
