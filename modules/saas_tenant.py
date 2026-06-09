@@ -489,9 +489,16 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
     st.title("🏥 Il mio studio")
 
     cfg = PIANI.get(piano, PIANI["professional"])
-    tab_piano, tab_utenti, tab_moduli = st.tabs([
-        "💳 Piano attivo", "👥 Utenti", "📦 Moduli abilitati"
+    tab_piano, tab_utenti, tab_moduli, tab_intest = st.tabs([
+        "💳 Piano attivo", "👥 Utenti", "📦 Moduli abilitati", "🧾 Intestazione"
     ])
+
+    with tab_intest:
+        try:
+            from modules.ui_intestazione_studio import render_intestazione_studio
+            render_intestazione_studio(meta_conn, studio_id)
+        except Exception as e:
+            st.error(f"Intestazione non disponibile: {e}")
 
     with tab_piano:
         st.markdown(f"### Piano: **{cfg['nome']}**")
