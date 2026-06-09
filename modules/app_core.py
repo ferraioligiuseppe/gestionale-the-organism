@@ -1518,6 +1518,14 @@ def _get_user_by_username(conn, username: str):
     except Exception:
         try: conn.rollback()
         except Exception: pass
+        # Auto-migrazione: prova ad aggiungere la colonna mancante, poi ripiega.
+        try:
+            cur = conn.cursor()
+            cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
         try:
             cur = conn.cursor()
             cur.execute("""
