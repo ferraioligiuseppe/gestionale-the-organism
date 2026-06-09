@@ -1694,7 +1694,7 @@ def login(get_conn) -> bool:
             st.warning("✅ Accesso di emergenza attivo (break-glass). Disattivalo nei Secrets dopo aver sistemato gli utenti.")
             st.rerun()
             return True  # breakglass: st.rerun() dovrebbe interrompere, ma per sicurezza
-        row = _get_user_by_username(conn, username.strip())
+        row = _get_user_by_username(conn, username.strip().lower())
         if not row:
             st.error("Credenziali errate.")
             _audit(conn, None, "LOGIN_FAIL", meta={"username": username.strip()})
