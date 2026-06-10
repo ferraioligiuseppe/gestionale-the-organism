@@ -32,35 +32,39 @@ def _pnev_logo_path():
         return p
     return None
 
+def _carta_intestata_bytes():
+    try:
+        import base64
+        import streamlit as st
+        intest = st.session_state.get("intestazione_studio") or {}
+        b64 = intest.get("carta_intestata_base64")
+        if b64:
+            return base64.b64decode(b64)
+    except Exception:
+        pass
+    return None
+
+def _draw_bg_carta(c):
+    data = _carta_intestata_bytes()
+    if not data:
+        return False
+    try:
+        from reportlab.lib.utils import ImageReader
+        img = ImageReader(io.BytesIO(data))
+        c.drawImage(img, 0, 0, width=W, height=H, preserveAspectRatio=False, mask="auto")
+        return True
+    except Exception:
+        return False
+
 def draw_intestazione(c, professionista="", titolo=""):
+    if _draw_bg_carta(c):
+        return
     logo = _logo_path()
-    c.setFont("Helvetica-Bold", 11)
-    c.setFillColor(colors.black)
-    c.drawString(1.8*cm, H - 1.3*cm, professionista)
-    c.setFont("Helvetica", 9)
-    c.setFillColor(GRIGIO)
-    c.drawString(1.8*cm, H - 1.9*cm, titolo)
-    if logo:
-        lw, lh = 6.0*cm, 2.2*cm
-        c.drawImage(logo, W-1.8*cm-lw, H-0.8*cm-lh,
-                    width=lw, height=lh, preserveAspectRatio=True, mask="auto")
-    c.setStrokeColor(VERDE)
-    c.setLineWidth(3)
-    c.line(1.8*cm, H-3.1*cm, W-1.8*cm, H-3.1*cm)
-    c.setLineWidth(0.8)
-    c.line(1.8*cm, H-3.4*cm, W-1.8*cm, H-3.4*cm)
-    c.setFont("Helvetica", 7); c.setFillColor(GRIGIO)
-    c.drawCentredString(W/2, H-3.9*cm, INDIRIZZO)
-    c.drawCentredString(W/2, H-4.25*cm, CONTATTI)
 
 def draw_footer(c):
+    if _carta_intestata_bytes():
+        return
     c.setStrokeColor(VERDE); c.setLineWidth(0.8)
-    c.line(1.8*cm, 2.2*cm, W-1.8*cm, 2.2*cm)
-    c.setFont("Helvetica-Bold", 8); c.setFillColor(colors.black)
-    c.drawCentredString(W/2, 1.7*cm, INDIRIZZO)
-    c.setFont("Helvetica", 8)
-    c.drawCentredString(W/2, 1.2*cm, CONTATTI)
-
 def genera_ricetta(professionista, titolo, rx) -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
