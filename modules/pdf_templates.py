@@ -104,6 +104,37 @@ def genera_ricetta(professionista, titolo, rx) -> bytes:
     c.save(); buf.seek(0)
     return buf.read()
 
+def _wrap_width(c, testo, font, size, max_w):
+    """Manda a capo 'testo' in righe non piu' larghe di max_w (misura reale)."""
+    parole = testo.split(" ")
+    righe, cur = [], ""
+    for p in parole:
+        prova = (cur + " " + p).strip()
+        if (not cur) or c.stringWidth(prova, font, size) <= max_w:
+            cur = prova
+        else:
+            righe.append(cur)
+            cur = p
+    righe.append(cur)
+    return righe
+
+
+def _draw_justified(c, line, x0, yt, font, size, max_w):
+    """Disegna 'line' giustificata: allarga gli spazi fino a max_w."""
+    words = line.split(" ")
+    words = [w for w in words if w != ""]
+    if len(words) <= 1:
+        c.drawString(x0, yt, line)
+        return
+    words_w = sum(c.stringWidth(w, font, size) for w in words)
+    gaps = len(words) - 1
+    extra = (max_w - words_w) / gaps
+    x = x0
+    for w in words:
+        c.drawString(x, yt, w)
+        x += c.stringWidth(w, font, size) + extra
+
+
 def genera_carta_intestata(professionista, titolo,
                             paziente, data, titolo_doc,
                             corpo_testo="") -> bytes:
@@ -151,24 +182,32 @@ def genera_carta_intestata(professionista, titolo,
     except Exception:
         pass
 
-    # Corpo testo (semplice, riga per riga)
+    # Corpo testo: a-capo per larghezza + giustificato (tranne titoli e ultime righe)
     if corpo_testo:
+        x0 = 1.8*cm
+        max_w = W - x0 - 4.2*cm   # margine destro ampio: libera la fascia della grafica
         yt = y2 - 0.9*cm
-        c.setFont("Helvetica", 10); c.setFillColor(colors.black)
         for riga in corpo_testo.split("\n"):
             if riga.startswith("###"):
-                c.setFont("Helvetica-Bold", 11)
-                c.setFillColor(VERDE)
-                c.drawString(1.8*cm, yt, riga.replace("###","").strip())
-                c.setFont("Helvetica", 10); c.setFillColor(colors.black)
+                font, size, col, heading = "Helvetica-Bold", 11, VERDE, True
+                testo = riga.replace("###", "").strip()
             else:
-                c.drawString(1.8*cm, yt, riga[:110])
-            yt -= 0.55*cm
-            if yt < (5.5*cm if has_carta else 3.5*cm):
-                draw_footer(c)
-                c.showPage()
-                draw_intestazione(c, professionista, titolo)
-                yt = H - (5.0*cm if has_carta else 4.5*cm)
+                font, size, col, heading = "Helvetica", 10, colors.black, False
+                testo = riga
+            c.setFont(font, size); c.setFillColor(col)
+            lines = _wrap_width(c, testo, font, size, max_w)
+            for idx, sl in enumerate(lines):
+                is_last = (idx == len(lines) - 1)
+                if (not heading) and (not is_last) and sl.strip():
+                    _draw_justified(c, sl, x0, yt, font, size, max_w)
+                else:
+                    c.drawString(x0, yt, sl)
+                yt -= 0.55*cm
+                if yt < 5.5*cm:
+                    draw_footer(c)
+                    c.showPage()
+                    draw_intestazione(c, professionista, titolo)
+                    yt = H - 5.0*cm
 
     # Firma
     yt_firma = 6.5*cm if has_carta else 5.5*cm
