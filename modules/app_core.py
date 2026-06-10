@@ -1679,6 +1679,11 @@ def login(get_conn) -> bool:
         if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
             st.session_state["studio_id"] = 1
+            try:
+                from modules.ui_intestazione_studio import get_intestazione_studio
+                st.session_state["intestazione_studio"] = get_intestazione_studio(conn, 1)
+            except Exception:
+                pass
             st.session_state["user"] = {
                 "id": None,
                 "username": u_in,
@@ -1753,6 +1758,11 @@ def login(get_conn) -> bool:
             st.session_state["studio_id"] = int(_studio_id or 1)
         except Exception:
             st.session_state["studio_id"] = 1
+        try:
+            from modules.ui_intestazione_studio import get_intestazione_studio
+            st.session_state["intestazione_studio"] = get_intestazione_studio(conn, st.session_state["studio_id"])
+        except Exception:
+            pass
         st.session_state["user"] = {
             "id": int(user_id),
             "username": str(uname),
