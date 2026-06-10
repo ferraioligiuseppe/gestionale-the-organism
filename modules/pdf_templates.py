@@ -114,24 +114,14 @@ def genera_carta_intestata(professionista, titolo,
     c.line(1.8*cm, y2-0.4*cm, W-1.8*cm, y2-0.4*cm)
 
     # Corpo testo (semplice, riga per riga)
-    if corpo_testo:
-        yt = y2 - 0.9*cm
-        c.setFont("Helvetica", 10); c.setFillColor(colors.black)
-        for riga in corpo_testo.split("\n"):
-            if riga.startswith("###"):
-                c.setFont("Helvetica-Bold", 11)
-                c.setFillColor(VERDE)
-                c.drawString(1.8*cm, yt, riga.replace("###","").strip())
-                c.setFont("Helvetica", 10); c.setFillColor(colors.black)
-            else:
-                c.drawString(1.8*cm, yt, riga[:110])
-            yt -= 0.55*cm
-            if yt < 3.5*cm:
-                draw_footer(c)
-                c.showPage()
-                draw_intestazione(c, professionista, titolo)
-                yt = H - 4.5*cm
+    try:
+        from modules.relazione_testi import intro_pnev, bibliografia
+        corpo_testo = intro_pnev() + "\n" + (corpo_testo or "") + "\n\n" + bibliografia()
+    except Exception:
+        pass
 
+    # Corpo testo (semplice, riga per riga)
+    if corpo_testo:
     # Firma
     yt_firma = 5.5*cm
     c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.5)
