@@ -33,6 +33,7 @@ def _pnev_logo_path():
     return None
 
 def _carta_intestata_bytes():
+    """Bytes dell'immagine carta intestata dello studio attivo (o None)."""
     try:
         import base64
         import streamlit as st
@@ -45,26 +46,55 @@ def _carta_intestata_bytes():
     return None
 
 def _draw_bg_carta(c):
+    """Disegna la carta intestata a piena pagina se presente. True se disegnata."""
     data = _carta_intestata_bytes()
     if not data:
         return False
     try:
         from reportlab.lib.utils import ImageReader
         img = ImageReader(io.BytesIO(data))
-        c.drawImage(img, 0, 0, width=W, height=H, preserveAspectRatio=False, mask="auto")
+        c.drawImage(img, 0, 0, width=W, height=H,
+                    preserveAspectRatio=False, mask="auto")
         return True
     except Exception:
         return False
 
 def draw_intestazione(c, professionista="", titolo=""):
+    # Se lo studio ha una carta intestata, la usiamo come sfondo e saltiamo
+    # l'intestazione "costruita" (logo+righe), perché la grafica la contiene già.
     if _draw_bg_carta(c):
         return
     logo = _logo_path()
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(colors.black)
+    c.drawString(1.8*cm, H - 1.3*cm, professionista)
+    c.setFont("Helvetica", 9)
+    c.setFillColor(GRIGIO)
+    c.drawString(1.8*cm, H - 1.9*cm, titolo)
+    if logo:
+        lw, lh = 6.0*cm, 2.2*cm
+        c.drawImage(logo, W-1.8*cm-lw, H-0.8*cm-lh,
+                    width=lw, height=lh, preserveAspectRatio=True, mask="auto")
+    c.setStrokeColor(VERDE)
+    c.setLineWidth(3)
+    c.line(1.8*cm, H-3.1*cm, W-1.8*cm, H-3.1*cm)
+    c.setLineWidth(0.8)
+    c.line(1.8*cm, H-3.4*cm, W-1.8*cm, H-3.4*cm)
+    c.setFont("Helvetica", 7); c.setFillColor(GRIGIO)
+    c.drawCentredString(W/2, H-3.9*cm, INDIRIZZO)
+    c.drawCentredString(W/2, H-4.25*cm, CONTATTI)
 
 def draw_footer(c):
+    # Con carta intestata il piè di pagina è già nella grafica: non disegnare nulla.
     if _carta_intestata_bytes():
         return
     c.setStrokeColor(VERDE); c.setLineWidth(0.8)
+    c.line(1.8*cm, 2.2*cm, W-1.8*cm, 2.2*cm)
+    c.setFont("Helvetica-Bold", 8); c.setFillColor(colors.black)
+    c.drawCentredString(W/2, 1.7*cm, INDIRIZZO)
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(W/2, 1.2*cm, CONTATTI)
+
 def genera_ricetta(professionista, titolo, rx) -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -90,6 +120,7 @@ def genera_carta_intestata(professionista, titolo,
 
     # Usiamo canvas diretto per l intestazione + frame per il testo
     c = canvas.Canvas(buf, pagesize=A4)
+    has_carta = bool(_carta_intestata_bytes())
     draw_intestazione(c, professionista, titolo)
 
     # Titolo documento
@@ -113,7 +144,7 @@ def genera_carta_intestata(professionista, titolo,
     c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.3)
     c.line(1.8*cm, y2-0.4*cm, W-1.8*cm, y2-0.4*cm)
 
-    # Corpo testo (semplice, riga per riga)
+    # Intro PNEV in TESTA e Bibliografia in CODA (testi da relazione_testi.py)
     try:
         from modules.relazione_testi import intro_pnev, bibliografia
         corpo_testo = intro_pnev() + "\n" + (corpo_testo or "") + "\n\n" + bibliografia()
@@ -122,8 +153,25 @@ def genera_carta_intestata(professionista, titolo,
 
     # Corpo testo (semplice, riga per riga)
     if corpo_testo:
+        yt = y2 - 0.9*cm
+        c.setFont("Helvetica", 10); c.setFillColor(colors.black)
+        for riga in corpo_testo.split("\n"):
+            if riga.startswith("###"):
+                c.setFont("Helvetica-Bold", 11)
+                c.setFillColor(VERDE)
+                c.drawString(1.8*cm, yt, riga.replace("###","").strip())
+                c.setFont("Helvetica", 10); c.setFillColor(colors.black)
+            else:
+                c.drawString(1.8*cm, yt, riga[:110])
+            yt -= 0.55*cm
+            if yt < (5.5*cm if has_carta else 3.5*cm):
+                draw_footer(c)
+                c.showPage()
+                draw_intestazione(c, professionista, titolo)
+                yt = H - (5.0*cm if has_carta else 4.5*cm)
+
     # Firma
-    yt_firma = 5.5*cm
+    yt_firma = 6.5*cm if has_carta else 5.5*cm
     c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.5)
     c.line(1.8*cm, yt_firma, W/2-1*cm, yt_firma)
     c.setFont("Helvetica", 8); c.setFillColor(GRIGIO)
