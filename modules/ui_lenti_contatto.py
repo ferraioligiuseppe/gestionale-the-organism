@@ -32,6 +32,14 @@ try:
 except Exception:
     LAC_BRIDGE_OK = False
 
+# MOTORE SAGITTALE (STEP 2/3) - drop-in validato Toffoli + sclerale + fluoresceina
+try:
+    from modules.lac.lac_engine_sag import (calcola_corneale, calcola_sclerale,
+        stima_clearance, render_fluorescein, lente_lacrimale)
+    SAG_OK = True
+except Exception:
+    SAG_OK = False
+
 
 try:
     from reportlab.lib.pagesizes import A4
@@ -168,7 +176,7 @@ def _select_paziente(conn):
     sel = st.selectbox("Paziente", options=options, format_func=lambda x: x[1], key="lac_sc_paz")
     return sel[0], sel[1]
 
-CATEGORIE = ["Morbida sferica","Torica","Multifocale / Presbiopia","RGP","Ortho-K / Inversa","Custom avanzata"]
+CATEGORIE = ["Morbida sferica","Torica","Multifocale / Presbiopia","RGP","Ortho-K / Inversa","Cheratocono","Custom avanzata"]
 DIFFETTI = ["Miopia","Ipermetropia","Astigmatismo","Presbiopia","Miopia + Astigmatismo","Ipermetropia + Astigmatismo","Presbiopia + Astigmatismo","Presbiopia + Miopia","Presbiopia + Ipermetropia"]
 ALGORITMI = ["ESA 002","Toffoli","Clinico personalizzato"]
 MODELLI = ["Automatico","C6 OBL","C6 TI","C6 AS TI","C6 OBL MF"]
@@ -387,9 +395,21 @@ def _build_curves(categoria, difetto, algoritmo, modello_prod, rx_sfera, rx_cil,
         return {"modello_prod": modello if modello_prod != "Automatico" else "C6 OBL", "sottotipo": "ESA Ortho-6", "lente_bc_mm": esa["r0"], "lente_rb_mm": esa["r0"], "lente_diam_mm": esa["TD"], "lente_potere_d": esa["PWR"], "lente_cilindro_d": 0.0, "lente_asse_cil": None, "lente_add_d": 0.0, "ordine": esa, "fluor": fluor, "design":"mio"}
 
     if categoria == "Ortho-K / Inversa" and algoritmo == "Toffoli" and rx_sfera < 0:
-        t = toffoli_calc_self(k_med, abs(target_orthok) if target_orthok else abs(rx_sfera))
-        fluor = _estimate_clearance(k_med, t, "mio")
-        return {"modello_prod": modello if modello_prod != "Automatico" else "C6 OBL", "sottotipo":"Toffoli-inspired", "lente_bc_mm":t["RB"], "lente_rb_mm":t["RB"], "lente_diam_mm":t["TD"], "lente_potere_d": t["PWR"], "lente_cilindro_d":0.0, "lente_asse_cil":None, "lente_add_d":0.0, "ordine":t, "fluor":fluor, "design":"mio"}
+        miop = abs(target_orthok) if target_orthok else abs(rx_sfera)
+        if SAG_OK:
+            t = calcola_corneale("inversa", k_med, e_val, miopia=miop, fattore=0.5)
+            fluor = stima_clearance(t, "inversa")
+            sotto = "Toffoli sagittale (validato)"
+        else:
+            t = toffoli_calc_self(k_med, miop)
+            fluor = _estimate_clearance(k_med, t, "mio")
+            sotto = "Toffoli-inspired"
+        return {"modello_prod": modello if modello_prod != "Automatico" else "C6 OBL", "sottotipo":sotto, "lente_bc_mm":t["RB"], "lente_rb_mm":t["RB"], "lente_diam_mm":t["TD"], "lente_potere_d": t["PWR"], "lente_cilindro_d":0.0, "lente_asse_cil":None, "lente_add_d":0.0, "ordine":t, "fluor":fluor, "design":"mio"}
+
+    if categoria == "Cheratocono" and SAG_OK:
+        kc = calcola_corneale("cheratocono", k_med, e_val)
+        fluor = stima_clearance(kc, "cheratocono")
+        return {"modello_prod": modello if modello_prod != "Automatico" else "C6 KC", "sottotipo":"Cheratocono sagittale", "lente_bc_mm":kc["RB"], "lente_rb_mm":kc["RB"], "lente_diam_mm":kc["TD"], "lente_potere_d": round(rx_sfera,2), "lente_cilindro_d":0.0, "lente_asse_cil":None, "lente_add_d":0.0, "ordine":kc, "fluor":fluor, "design":"kc"}
 
     if rx_sfera > 0 and categoria in ("Custom avanzata","RGP","Ortho-K / Inversa"):
         h = hyperopia_calc_self(k_med, rx_sfera)
@@ -415,6 +435,12 @@ def _build_curves(categoria, difetto, algoritmo, modello_prod, rx_sfera, rx_cil,
 
 # Fluorescein simulation / export
 def _plot_fluorescein_simulation(proposta: dict, title: str = ""):
+    _ord = proposta.get("ordine", {})
+    if SAG_OK and isinstance(_ord, dict) and _ord.get("geometria"):
+        try:
+            return render_fluorescein(_ord, titolo=title)
+        except Exception:
+            pass
     fluor = proposta.get("fluor") or {}
     central = fluor.get("central_um", 110)
     reverse_u = fluor.get("reverse_um", 160)
