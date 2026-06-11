@@ -647,9 +647,13 @@ def ui_lenti_contatto():
         with h2: data_scheda = st.text_input("Data scheda", value=_today_str())
         with h3: operatore = st.text_input("Operatore", value="")
         with h4: salva_bil = st.checkbox("Salva entrambi", value=True)
+    demo_mode = False
     if not paziente_id:
-        st.info("Seleziona un paziente per iniziare.")
-        return
+        demo_mode = st.checkbox("🧪 Modalità prova (calcola e visualizza senza paziente; non salva)", value=True, key="lac_demo")
+        if not demo_mode:
+            st.info("Seleziona un paziente per iniziare.")
+            return
+        paziente_id, paziente_label = -1, "PROVA (non salvato)"
 
     tab0,tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Import topografo","Nuova lente","Risultato","Fluoresceina","Ordine produttore","Salvataggio","Storico"])
 
@@ -719,7 +723,9 @@ def ui_lenti_contatto():
             st.info("Niente da salvare: calcola prima la proposta.")
         else:
             st.markdown(f"**Paziente:** {data_in['paziente_label']}")
-            if st.button("Salva lente/i nel database", type="primary", use_container_width=True):
+            if data_in.get("paziente_id", -1) < 0:
+                st.warning("Modalità prova: salvataggio disabilitato (nessun paziente reale selezionato).")
+            elif st.button("Salva lente/i nel database", type="primary", use_container_width=True):
                 try:
                     ids=[]
                     ids.append(salva_lente_contatto(conn, (build_payload(data_in["paziente_id"], data_in["data_scheda"], "OD", data_in["operatore"], data_in["od"], props["od"]) if LAC_BRIDGE_OK else _build_payload(data_in["paziente_id"], data_in["data_scheda"], "OD", data_in["operatore"], data_in["od"], props["od"]))))
