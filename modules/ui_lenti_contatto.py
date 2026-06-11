@@ -543,12 +543,32 @@ def _ui_eye_form(prefix, label):
     with r2: rx_cil = st.number_input("Cilindro", step=0.25, value=0.0, format="%.2f", key=f"{prefix}_cil")
     with r3: rx_asse = st.number_input("Asse", min_value=0, max_value=180, value=0, key=f"{prefix}_asse")
     with r4: rx_add = st.number_input("ADD", step=0.25, value=0.0, format="%.2f", key=f"{prefix}_add")
+    ku1, ku2 = st.columns([1.2, 1])
+    with ku1:
+        kunit = st.radio("Oftalmometria", ["mm", "diottrie"], horizontal=True, key=f"{prefix}_kunit")
+    with ku2:
+        kidx = st.selectbox("Indice cheratom. (n)", [1.3375, 1.336, 1.332], index=0, key=f"{prefix}_kidx")
+    _nk = (kidx - 1.0) * 1000.0  # 1.3375 -> 337.5
     t1,t2,t3,t4,t5 = st.columns(5)
-    with t1: k1 = st.number_input("K1 (mm)", step=0.01, value=float(st.session_state.get(f"{prefix}_topo_k1",7.80)), format="%.2f", key=f"{prefix}_k1")
-    with t2: k2 = st.number_input("K2 (mm)", step=0.01, value=float(st.session_state.get(f"{prefix}_topo_k2",7.90)), format="%.2f", key=f"{prefix}_k2")
+    if kunit == "mm":
+        with t1: k1 = st.number_input("K1 (mm)", step=0.01, value=float(st.session_state.get(f"{prefix}_topo_k1",7.80)), format="%.2f", key=f"{prefix}_k1")
+        with t2: k2 = st.number_input("K2 (mm)", step=0.01, value=float(st.session_state.get(f"{prefix}_topo_k2",7.90)), format="%.2f", key=f"{prefix}_k2")
+    else:
+        with t1:
+            k1d = st.number_input("K1 (D)", step=0.25, value=43.25, format="%.2f", key=f"{prefix}_k1d")
+            k1 = round(_nk / k1d, 2) if k1d else 7.80
+            st.caption(f"= {k1:.2f} mm")
+        with t2:
+            k2d = st.number_input("K2 (D)", step=0.25, value=42.75, format="%.2f", key=f"{prefix}_k2d")
+            k2 = round(_nk / k2d, 2) if k2d else 7.90
+            st.caption(f"= {k2:.2f} mm")
     with t3: asse_k = st.number_input("Asse K", min_value=0, max_value=180, value=int(st.session_state.get(f"{prefix}_topo_assek",90)), key=f"{prefix}_assek")
     with t4: hvid = st.number_input("HVID", step=0.10, value=float(st.session_state.get(f"{prefix}_topo_hvid",11.8)), format="%.2f", key=f"{prefix}_hvid")
     with t5: pup = st.number_input("Pupilla", step=0.10, value=float(st.session_state.get(f"{prefix}_topo_pup",3.5)), format="%.2f", key=f"{prefix}_pup")
+    if kunit == "mm":
+        st.caption(f"K medio: {round((k1+k2)/2,2)} mm = {round(_nk/((k1+k2)/2),2)} D  ·  n={kidx}")
+    else:
+        st.caption(f"K medio: {round((k1+k2)/2,2)} mm  ·  n={kidx}  (mm = {_nk:.1f}/D)")
     a1,a2 = st.columns(2)
     with a1: target = st.number_input("Target Ortho-K (D)", step=0.25, value=0.0, format="%.2f", key=f"{prefix}_target")
     with a2: e_val = st.number_input("E-value", step=0.01, value=0.50, format="%.2f", key=f"{prefix}_e")
