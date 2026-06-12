@@ -115,18 +115,20 @@ PRESET_CORNEALE = {
 }
 
 
-def _base_corneale(geometria, r0, miopia=0.0, fattore=0.0, offset=0.0):
+def _base_corneale(geometria, r0, miopia=0.0, fattore=0.0, offset=None):
     if geometria == "inversa":
         k_flat = (1.0 / r0) * CK
         k_base = k_flat - abs(miopia) - abs(fattore)
         return (1.0 / k_base) * CK
     if geometria == "cheratocono":
-        return r0 + (offset if offset else 0.10)   # leggermente piatta -> sfioramento
-    return r0 + offset                              # allineata
+        off = 0.10 if offset is None else offset   # default sfioramento apicale
+        return r0 + off
+    off = 0.0 if offset is None else offset         # normale: allineata
+    return r0 + off
 
 
 def calcola_corneale(geometria, r0, e, td=10.8, pwr=0.75,
-                     miopia=0.0, fattore=0.50, offset=0.0,
+                     miopia=0.0, fattore=0.50, offset=None,
                      semicorde=None, clearance=None):
     """
     Costruisce una lente corneale multicurva con motore sagittale.
