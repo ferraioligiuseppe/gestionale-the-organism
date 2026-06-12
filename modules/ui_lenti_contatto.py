@@ -35,7 +35,7 @@ except Exception:
 # MOTORE SAGITTALE (STEP 2/3) - drop-in validato Toffoli + sclerale + fluoresceina
 try:
     from modules.lac.lac_engine_sag import (calcola_corneale, calcola_sclerale,
-        stima_clearance, render_fluorescein, lente_lacrimale)
+        stima_clearance, render_fluorescein, lente_lacrimale, PRESET_CORNEALE)
     SAG_OK = True
 except Exception:
     SAG_OK = False
@@ -766,6 +766,71 @@ def load_storico_paziente(conn, paziente_id:int):
         try: cur.close()
         except Exception: pass
 
+def _ui_regolazione_manuale(eye_label, eye_input, prop):
+    """Editor interattivo: modifica base/semicorde/clearance, ricalcolo live."""
+    import pandas as pd
+    if not SAG_OK:
+        st.info("Motore sagittale non disponibile."); return None
+    cat = eye_input.get("categoria", "")
+    geo = "inversa" if cat == "Ortho-K / Inversa" else ("cheratocono" if cat == "Cheratocono" else None)
+    if geo is None:
+        st.info(f"{eye_label}: regolazione fine disponibile per geometrie costruttive (Cheratocono, Ortho-K/Inversa).")
+        return None
+    k1 = float(eye_input["k1"]); k2 = float(eye_input["k2"])
+    k_med = round((k1 + k2) / 2, 2); e_val = float(eye_input["e_val"])
+    o = prop.get("ordine", {}) or {}
+    cur_sc = list(o.get("_semicorde") or PRESET_CORNEALE[geo]["semicorde"])
+    cur_cl = list(o.get("_clearance") or PRESET_CORNEALE[geo]["clearance"])
+
+    st.markdown(f"#### {eye_label} - {geo}  (r0={k_med} mm, e={e_val})")
+    if geo == "inversa":
+        cc1, cc2 = st.columns(2)
+        miop = cc1.number_input("Miopia da ridurre (D)", 0.0, 10.0,
+            abs(float(eye_input.get("target") or eye_input.get("rx_sfera") or 0.0)), 0.25, key=f"man_{eye_label}_miop")
+        fatt = cc2.number_input("Fattore appiattimento (D)", 0.0, 2.0, 0.5, 0.25, key=f"man_{eye_label}_fatt")
+        off = None
+    else:
+        off = st.number_input("Appiattimento base vs apice (mm)", -0.20, 0.60, 0.10, 0.05, key=f"man_{eye_label}_off")
+        miop = 0.0; fatt = 0.5
+
+    st.caption("Modifica semicorde (Ø/2, mm) e clearance (mm). I raggi, il potere e la fluoresceina si aggiornano da soli.")
+    df = pd.DataFrame({"semicorda_mm": cur_sc, "clearance_mm": cur_cl})
+    df_e = st.data_editor(df, num_rows="dynamic", use_container_width=True, key=f"man_{eye_label}_tab")
+    try:
+        sc = [float(x) for x in df_e["semicorda_mm"].tolist() if pd.notna(x)]
+        cl = [float(x) for x in df_e["clearance_mm"].tolist() if pd.notna(x)]
+    except Exception:
+        st.warning("Valori non validi nella tabella."); return None
+    if len(sc) < 2 or len(sc) != len(cl):
+        st.warning("Servono almeno 2 zone con semicorda e clearance."); return None
+    if any(sc[i] >= sc[i + 1] for i in range(len(sc) - 1)):
+        st.warning("Le semicorde devono essere strettamente crescenti."); return None
+
+    new = calcola_corneale(geo, k_med, e_val, td=float(o.get("TD", 10.8)),
+                           miopia=miop, fattore=fatt, offset=off, semicorde=sc, clearance=cl)
+    if geo == "cheratocono":
+        lac = lente_lacrimale(new["RB"], max(k1, k2), float(eye_input.get("rx_sfera") or 0.0))
+        new["bvp_d"] = lac["bvp_ordine_d"]; new["potere_lacrimale_d"] = lac["potere_lacrimale_d"]; new["regola_potere"] = lac["regola"]
+    else:
+        new["bvp_d"] = 0.0; new["potere_nota"] = "Piano (Ortho-K)"
+    fluor = stima_clearance(new, geo)
+
+    _ps = _potere_lente_str(new)
+    if _ps: st.write(f"**Potere lente da ordinare (BVP):** {_ps}")
+    st.dataframe(pd.DataFrame(_curve_table(new), columns=["Zona", "Raggio (mm)", "Potere (D)", "Ø (mm)"]),
+                 hide_index=True, use_container_width=True)
+    try:
+        st.pyplot(render_fluorescein(new, titolo=f"{eye_label} (regolato)"), use_container_width=False)
+    except Exception:
+        pass
+
+    newprop = dict(prop)
+    newprop["ordine"] = new; newprop["fluor"] = fluor
+    newprop["lente_bc_mm"] = new["RB"]; newprop["lente_rb_mm"] = new["RB"]
+    newprop["lente_diam_mm"] = new["TD"]; newprop["lente_potere_d"] = new.get("bvp_d", newprop.get("lente_potere_d"))
+    return newprop
+
+
 def ui_lenti_contatto():
     st.title("👁️ Lenti a contatto")
     st.caption("Versione self-contained: clearance, fluoresceina, curve costruttive, export TXT/PDF")
@@ -791,7 +856,7 @@ def ui_lenti_contatto():
             return
         paziente_id, paziente_label = -1, "PROVA (non salvato)"
 
-    tab0,tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Import topografo","Nuova lente","Risultato","Fluoresceina","Ordine produttore","Salvataggio","Storico"])
+    tab0,tab1,tab2,tabREG,tab3,tab4,tab5,tab6 = st.tabs(["Import topografo","Nuova lente","Risultato","🛠 Regolazione manuale","Fluoresceina","Ordine produttore","Salvataggio","Storico"])
 
     with tab0:
         _import_topographer_section()
@@ -816,6 +881,24 @@ def ui_lenti_contatto():
             c1,c2 = st.columns(2)
             with c1: _render_result_box("OD", props["od"])
             with c2: _render_result_box("OS", props["os"])
+
+    with tabREG:
+        props = st.session_state.get("lac_sc_prop"); data_in = st.session_state.get("lac_sc_input")
+        if not props or not data_in:
+            st.info("Calcola prima una proposta lente.")
+        else:
+            st.caption("Regola a mano i parametri: il ricalcolo è immediato. Premi 'Applica' per usare i nuovi valori in Ordine/PDF/Salvataggio.")
+            e1,e2 = st.tabs(["OD","OS"])
+            with e1:
+                np_od = _ui_regolazione_manuale("OD", data_in["od"], props["od"])
+                if np_od and st.button("Applica alla proposta OD", key="apply_od", use_container_width=True):
+                    props["od"] = np_od; st.session_state["lac_sc_prop"] = props
+                    st.success("Proposta OD aggiornata."); st.rerun()
+            with e2:
+                np_os = _ui_regolazione_manuale("OS", data_in["os"], props["os"])
+                if np_os and st.button("Applica alla proposta OS", key="apply_os", use_container_width=True):
+                    props["os"] = np_os; st.session_state["lac_sc_prop"] = props
+                    st.success("Proposta OS aggiornata."); st.rerun()
 
     with tab3:
         props = st.session_state.get("lac_sc_prop")
