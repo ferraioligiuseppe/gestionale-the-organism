@@ -404,12 +404,16 @@ def _build_curves(categoria, difetto, algoritmo, modello_prod, rx_sfera, rx_cil,
             t = toffoli_calc_self(k_med, miop)
             fluor = _estimate_clearance(k_med, t, "mio")
             sotto = "Toffoli-inspired"
-        return {"modello_prod": modello if modello_prod != "Automatico" else "C6 OBL", "sottotipo":sotto, "lente_bc_mm":t["RB"], "lente_rb_mm":t["RB"], "lente_diam_mm":t["TD"], "lente_potere_d": t["PWR"], "lente_cilindro_d":0.0, "lente_asse_cil":None, "lente_add_d":0.0, "ordine":t, "fluor":fluor, "design":"mio"}
+        t["bvp_d"] = 0.0; t["potere_nota"] = "Piano (Ortho-K: la rimodellazione corregge il difetto)"
+        return {"modello_prod": modello if modello_prod != "Automatico" else "C6 OBL", "sottotipo":sotto, "lente_bc_mm":t["RB"], "lente_rb_mm":t["RB"], "lente_diam_mm":t["TD"], "lente_potere_d": 0.0, "lente_cilindro_d":0.0, "lente_asse_cil":None, "lente_add_d":0.0, "ordine":t, "fluor":fluor, "design":"mio"}
 
     if categoria == "Cheratocono" and SAG_OK:
         kc = calcola_corneale("cheratocono", k_med, e_val)
+        kflat = max(float(k1), float(k2))  # raggio piu' piatto = K piatto
+        lac = lente_lacrimale(kc["RB"], kflat, rx_sfera)
+        kc["potere_lacrimale_d"] = lac["potere_lacrimale_d"]; kc["bvp_d"] = lac["bvp_ordine_d"]; kc["regola_potere"] = lac["regola"]
         fluor = stima_clearance(kc, "cheratocono")
-        return {"modello_prod": modello if modello_prod != "Automatico" else "C6 KC", "sottotipo":"Cheratocono sagittale", "lente_bc_mm":kc["RB"], "lente_rb_mm":kc["RB"], "lente_diam_mm":kc["TD"], "lente_potere_d": round(rx_sfera,2), "lente_cilindro_d":0.0, "lente_asse_cil":None, "lente_add_d":0.0, "ordine":kc, "fluor":fluor, "design":"kc"}
+        return {"modello_prod": modello if modello_prod != "Automatico" else "C6 KC", "sottotipo":"Cheratocono sagittale", "lente_bc_mm":kc["RB"], "lente_rb_mm":kc["RB"], "lente_diam_mm":kc["TD"], "lente_potere_d": lac["bvp_ordine_d"], "lente_cilindro_d":0.0, "lente_asse_cil":None, "lente_add_d":0.0, "ordine":kc, "fluor":fluor, "design":"kc"}
 
     if rx_sfera > 0 and categoria in ("Custom avanzata","RGP","Ortho-K / Inversa"):
         h = hyperopia_calc_self(k_med, rx_sfera)
@@ -590,12 +594,124 @@ def _ui_eye_form(prefix, label):
     note = st.text_area("Note lente / ordine", value="", height=100, key=f"{prefix}_note")
     return locals()
 
+def _curve_table(o):
+    """Righe leggibili (Zona, Raggio mm, Potere D, diametro mm) dal dizionario curve."""
+    rows = []
+    rb = o.get("RB") or o.get("BC")
+    if rb:
+        try: rows.append(("Base (BOZR)", rb, round(337.5/float(rb), 2), o.get("ZO", "")))
+        except Exception: rows.append(("Base (BOZR)", rb, "", o.get("ZO", "")))
+    for i in range(1, 6):
+        rk = o.get(f"r{i}")
+        if rk:
+            try: rows.append((f"Periferica {i}", rk, round(337.5/float(rk), 2), o.get(f"d{i}", "")))
+            except Exception: rows.append((f"Periferica {i}", rk, "", o.get(f"d{i}", "")))
+    if o.get("TD"):
+        rows.append(("Diametro totale (TD)", "", "", o.get("TD")))
+    return rows
+
+
+def _potere_lente_str(o):
+    if o.get("potere_nota"):
+        return f"{o.get('bvp_d', 0.0)} D - {o['potere_nota']}"
+    if o.get("bvp_d") is not None:
+        lac = o.get("potere_lacrimale_d")
+        reg = o.get("regola_potere", "")
+        extra = f"  (lacrimale {lac} D, {reg})" if lac is not None else ""
+        return f"{o.get('bvp_d')} D{extra}"
+    return None
+
+
+def _build_lab_pdf(od_prop, os_prop, paziente_label, data_scheda, operatore):
+    """PDF ordine strutturato e leggibile da un laboratorio (OD/OS affiancati)."""
+    if not REPORTLAB_OK:
+        return b""
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    W, H = A4
+    ml = 15 * mm
+
+    def header():
+        c.setFillColorRGB(0.114, 0.420, 0.267)  # verde brand 1D6B44
+        c.setFont("Helvetica-Bold", 15)
+        c.drawString(ml, H - 18 * mm, "Studio The Organism - Ordine lenti a contatto")
+        c.setFillColorRGB(0, 0, 0)
+        c.setFont("Helvetica", 9)
+        c.drawString(ml, H - 25 * mm, f"Paziente: {paziente_label}    Data: {data_scheda}    Operatore: {operatore or '-'}")
+        c.setLineWidth(0.5); c.line(ml, H - 28 * mm, W - ml, H - 28 * mm)
+
+    def eye_block(x, ytop, occhio, prop):
+        o = prop.get("ordine", {}) or {}
+        fluor = prop.get("fluor", {}) or {}
+        y = ytop
+        c.setFont("Helvetica-Bold", 12)
+        c.setFillColorRGB(0.114, 0.420, 0.267)
+        c.drawString(x, y, occhio); c.setFillColorRGB(0, 0, 0); y -= 6 * mm
+        c.setFont("Helvetica", 9)
+        meta = [
+            ("Modello", prop.get("modello_prod", "")),
+            ("Geometria", o.get("geometria", prop.get("sottotipo", ""))),
+            ("Materiale", prop.get("lente_materiale", "")),
+        ]
+        for k, v in meta:
+            if v: c.drawString(x, y, f"{k}: {v}"); y -= 4.5 * mm
+        # potere
+        ps = _potere_lente_str(o)
+        if ps is None:
+            ps = f"{prop.get('lente_potere_d', '')} D"
+        c.setFont("Helvetica-Bold", 9); c.drawString(x, y, f"Potere (BVP): {ps}"); c.setFont("Helvetica", 9); y -= 5 * mm
+        if prop.get("lente_cilindro_d"):
+            c.drawString(x, y, f"Cilindro: {prop.get('lente_cilindro_d')}  Asse: {prop.get('lente_asse_cil')}"); y -= 4.5 * mm
+        if prop.get("lente_add_d"):
+            c.drawString(x, y, f"ADD: {prop.get('lente_add_d')}"); y -= 4.5 * mm
+        y -= 2 * mm
+        # tabella curve
+        c.setFont("Helvetica-Bold", 9); c.drawString(x, y, "Curve costruttive"); c.setFont("Helvetica", 8); y -= 5 * mm
+        c.drawString(x, y, "Zona"); c.drawString(x + 32 * mm, y, "Raggio mm"); c.drawString(x + 55 * mm, y, "Pot. D"); c.drawString(x + 72 * mm, y, "Diam mm"); y -= 4 * mm
+        for zona, rmm, pot, diam in _curve_table(o):
+            c.drawString(x, y, str(zona)[:22]); c.drawString(x + 32 * mm, y, str(rmm)); c.drawString(x + 55 * mm, y, str(pot)); c.drawString(x + 72 * mm, y, str(diam)); y -= 4 * mm
+        y -= 3 * mm
+        # clearance
+        if fluor:
+            c.setFont("Helvetica-Bold", 9); c.drawString(x, y, "Clearance / fluoresceina"); c.setFont("Helvetica", 8); y -= 5 * mm
+            for lbl, key in [("Centrale", "central_um"), ("Reverse", "reverse_um"), ("Landing", "landing_um"), ("Edge lift", "edge_um")]:
+                if fluor.get(key) is not None:
+                    c.drawString(x, y, f"{lbl}: {fluor.get(key)} um"); y -= 4 * mm
+            if fluor.get("pattern"):
+                c.drawString(x, y, f"Pattern: {fluor.get('pattern')}"); y -= 4 * mm
+        nota = prop.get("lente_note") or prop.get("note")
+        if nota:
+            y -= 2 * mm; c.setFont("Helvetica-Oblique", 8)
+            c.drawString(x, y, f"Note: {str(nota)[:60]}"); c.setFont("Helvetica", 8)
+        return y
+
+    header()
+    ytop = H - 36 * mm
+    eye_block(ml, ytop, "OD", od_prop)
+    eye_block(W / 2 + 5 * mm, ytop, "OS", os_prop)
+    c.setFont("Helvetica", 7); c.setFillColorRGB(0.4, 0.4, 0.4)
+    c.drawString(ml, 12 * mm, "Valori teorici da verificare con lente di prova e fluoresceina. Arrotondare alla disponibilita' del fornitore.")
+    c.save(); buf.seek(0)
+    return buf.getvalue()
+
+
 def _render_result_box(title, proposta):
     st.markdown(f"#### {title}")
     for k,v in [("Modello", proposta.get("modello_prod","")),("Sottotipo", proposta.get("sottotipo","")),("BC", proposta.get("lente_bc_mm","")),("RB", proposta.get("lente_rb_mm","")),("Diametro", proposta.get("lente_diam_mm","")),("Potere", proposta.get("lente_potere_d","")),("Cilindro", proposta.get("lente_cilindro_d","")),("Asse", proposta.get("lente_asse_cil","")),("ADD", proposta.get("lente_add_d",""))]:
         st.write(f"**{k}:** {v}")
+    o = proposta.get("ordine", {})
+    _ps = _potere_lente_str(o)
+    if _ps:
+        st.write(f"**Potere lente da ordinare (BVP):** {_ps}")
     st.markdown("##### Curve costruttive")
-    st.json(proposta.get("ordine", {}))
+    _rows = _curve_table(o)
+    if _rows:
+        import pandas as _pd
+        st.dataframe(_pd.DataFrame(_rows, columns=["Zona","Raggio (mm)","Potere (D)","Ø (mm)"]), hide_index=True, use_container_width=True)
+        with st.expander("Dati grezzi (JSON)"):
+            st.json(o)
+    else:
+        st.json(o)
     fluor = proposta.get("fluor") or {}
     if fluor:
         st.markdown("##### Clearance stimata")
@@ -732,8 +848,8 @@ def ui_lenti_contatto():
                 st.text_area("Ordine produttore OS", value=os_txt, height=420, key="ordprod_os")
             st.download_button("Esporta ordine TXT", data=txt.encode("utf-8"), file_name="ordine_lenti_contatto.txt", mime="text/plain", use_container_width=True)
             if REPORTLAB_OK:
-                pdf = _build_pdf_export(txt)
-                st.download_button("Esporta ordine PDF", data=pdf, file_name="ordine_lenti_contatto.pdf", mime="application/pdf", use_container_width=True)
+                pdf = _build_lab_pdf(props["od"], props["os"], data_in["paziente_label"], data_in["data_scheda"], data_in["operatore"])
+                st.download_button("Esporta ordine PDF (laboratorio)", data=pdf, file_name="ordine_lenti_contatto.pdf", mime="application/pdf", use_container_width=True)
             else:
                 st.info("Export PDF non disponibile: manca reportlab.")
 
