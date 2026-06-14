@@ -309,6 +309,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📥 Import pazienti":
             from .sections.ui_cliniche import render_import_section
             render_import_section(); return
+        if sotto == "🔗 Sincronizza pnev.it":
+            from .ui_sync_pnev import render_sync_pnev
+            render_sync_pnev(conn); return
 
     # ── AREA VALUTAZIONE ──────────────────────────────────────────────
     elif area == AREA_VALUTAZIONE:
