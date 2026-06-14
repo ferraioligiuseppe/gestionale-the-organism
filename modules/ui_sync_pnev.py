@@ -162,27 +162,49 @@ def _importa_paziente(conn, nome: str, cognome: str, email: str):
 # ════════════════════════════════════════════════════════════════════
 
 def _http_get_json(url: str):
-    """GET JSON con messaggi d'errore chiari."""
+    """GET JSON con messaggi d'errore chiari. Si presenta come un browser
+    (alcuni plugin di protezione bloccano le richieste 'robot')."""
     req = urllib.request.Request(url)
     req.add_header("Accept", "application/json")
+    req.add_header("User-Agent",
+                   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/124.0 Safari/537.36")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8", errors="replace")
+            status = getattr(resp, "status", None) or resp.getcode()
+            try:
+                st.session_state["maps_debug"] = {
+                    "status": status,
+                    "lunghezza": len(raw),
+                    "inizio_risposta": raw[:300],
+                }
+            except Exception:
+                pass
+            return json.loads(raw)
     except urllib.error.HTTPError as e:
         corpo = ""
         try:
-            corpo = e.read().decode("utf-8")[:300]
+            corpo = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            pass
+        try:
+            st.session_state["maps_debug"] = {"status": e.code, "inizio_risposta": corpo}
         except Exception:
             pass
         if e.code == 403:
-            raise RuntimeError("Chiave non valida (403): controlla che 'maps_key' "
-                               "coincida con PNEV_MAPS_KEY nel PHP su pnev.it.")
+            raise RuntimeError("Chiave non valida o richiesta bloccata (403): "
+                               "controlla 'maps_key' e il plugin di protezione su pnev.it.")
         if e.code == 404:
             raise RuntimeError("Endpoint non trovato (404): il filo PHP non è "
                                "attivo su pnev.it, oppure l'URL è sbagliato.")
         raise RuntimeError(f"Errore HTTP {e.code} da pnev.it. {corpo}")
     except urllib.error.URLError as e:
         raise RuntimeError(f"Impossibile contattare pnev.it: {e.reason}")
+    except json.JSONDecodeError:
+        raise RuntimeError("pnev.it ha risposto, ma non con dati validi (probabile "
+                           "blocco di un plugin di protezione). Vedi «Dettagli tecnici».")
 
 
 def _url_maps(base_url: str, key: str, **params) -> str:
@@ -302,6 +324,15 @@ def render_sync_pnev(conn=None):
                 st.write("•", r)
 
     studenti = st.session_state.get("maps_studenti")
+
+    # Riquadro diagnostico: cosa ha risposto pnev.it
+    dbg = st.session_state.get("maps_debug")
+    if dbg:
+        with st.expander("🔧 Dettagli tecnici (cosa ha risposto pnev.it)"):
+            st.write(f"Stato HTTP: **{dbg.get('status')}** · lunghezza risposta: "
+                     f"{dbg.get('lunghezza','?')} caratteri")
+            st.code((dbg.get("inizio_risposta") or "")[:300] or "(vuota)")
+
     if studenti is None:
         st.info("Premi «Leggi pazienti MAPS» per scaricare gli iscritti al corso MAPS.")
         return
