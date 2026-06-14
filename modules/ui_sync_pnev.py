@@ -438,5 +438,86 @@ def render_sync_pnev(conn=None):
             st.write(f"• {u.get('name','')} (id WP {u.get('id')})")
 
 
+# ════════════════════════════════════════════════════════════════════
+#  SYNC AUTOMATICO (chiamato dal cron notturno)
+# ════════════════════════════════════════════════════════════════════
+
+def processa_sync_pnev(conn=None, dry_run: bool = False) -> dict:
+    """Sync automatico: legge gli iscritti MAPS da pnev.it, esclude spam/test,
+    salta chi c'e' gia\u0300 (per email) e importa i nuovi (origine pnev.it, fa_maps=1).
+    Pensata per il cron notturno. Ritorna un report.
+
+    Se dry_run=True non scrive nulla: dice solo cosa farebbe.
+    """
+    if conn is None:
+        conn = get_connection()
+
+    report = {
+        "letti": 0,
+        "gia_presenti": 0,
+        "esclusi_test": 0,
+        "importati": 0,
+        "errori": [],
+        "dettaglio": [],
+    }
+
+    cfg = st.secrets.get("pnev_wp", {})
+    base_url = cfg.get("base_url", "")
+    maps_key = cfg.get("maps_key", "")
+    course_id = cfg.get("maps_course_id", "")
+    if not (base_url and maps_key and course_id):
+        report["errori"].append(
+            "Config pnev_wp incompleta (base_url / maps_key / maps_course_id).")
+        return report
+
+    _ensure_colonne(conn)
+
+    try:
+        studenti = _fetch_studenti_maps(base_url, maps_key, course_id)
+    except Exception as e:
+        report["errori"].append(f"Lettura pnev.it: {e}")
+        return report
+
+    report["letti"] = len(studenti)
+    pazienti = _carica_pazienti(conn)
+
+    visti = set()
+    for u in studenti:
+        em = _norm_email(u.get("email"))
+        if not em:
+            continue
+        if em in pazienti:
+            report["gia_presenti"] += 1
+            continue
+        if em in visti:
+            continue
+        visti.add(em)
+        if _is_test(u):
+            report["esclusi_test"] += 1
+            continue
+
+        nome, cognome = _split_nome(u.get("name", ""))
+        if dry_run:
+            report["importati"] += 1
+            report["dettaglio"].append(
+                {"azione": "IMPORTEREBBE", "nome": u.get("name", ""), "email": em})
+            continue
+        try:
+            _importa_paziente(conn, nome, cognome, em)
+            report["importati"] += 1
+            report["dettaglio"].append(
+                {"azione": "importato", "nome": u.get("name", ""), "email": em})
+        except Exception as e:
+            report["errori"].append(f"{em}: {e}")
+
+    if not dry_run:
+        try:
+            conn.commit()
+        except Exception:
+            pass
+
+    return report
+
+
 # Alias di comodo
 ui_sync_pnev = render_sync_pnev
