@@ -40,6 +40,35 @@ from modules.app_core import get_connection
 
 VERDE = "#1D6B44"
 
+# Domini "usa e getta" e parole tipiche degli account di prova/sistema
+JUNK_DOMAINS = {"gufum.com", "jazipo.com", "fanwn.com", "okcdeals.com"}
+
+
+def _is_test(u) -> bool:
+    """Riconosce gli account di test/sistema (da escludere di default)."""
+    name = (u.get("name") or "").strip().lower()
+    email = (u.get("email") or "").strip().lower()
+    dom = email.split("@")[-1] if "@" in email else ""
+    if dom in JUNK_DOMAINS:
+        return True
+    if "rossiwebmedia" in dom:
+        return True
+    if any(kw in name for kw in ("test", "prova", "demo")):
+        return True
+    if name in {"pnev", "user", "stimolazione uditiva", "stimolazione uditiva1"}:
+        return True
+    return False
+
+
+def _rerun():
+    try:
+        st.rerun()
+    except Exception:
+        try:
+            st.experimental_rerun()
+        except Exception:
+            pass
+
 
 # ════════════════════════════════════════════════════════════════════
 #  HELPERS DB
@@ -244,31 +273,52 @@ def render_sync_pnev(conn=None):
         st.info("Imposta `maps_course_id` nei Secrets (usa il pulsante qui sopra per trovarlo).")
         return
 
-    # --- Lettura iscritti MAPS ---
-    if not st.button("📥 Leggi pazienti MAPS da pnev.it", type="primary"):
-        st.info("Premi il pulsante per scaricare gli iscritti al corso MAPS.")
+    # --- Lettura iscritti MAPS (resta in memoria, non sparisce) ---
+    cc = st.columns([2, 1])
+    if cc[0].button("📥 Leggi pazienti MAPS da pnev.it", type="primary"):
+        with st.spinner("Lettura iscritti MAPS…"):
+            try:
+                st.session_state["maps_studenti"] = _fetch_studenti_maps(
+                    base_url, maps_key, course_id)
+                st.session_state.pop("maps_import_result", None)
+            except RuntimeError as e:
+                st.error(str(e)); return
+            except Exception as e:
+                st.error(f"Errore imprevisto: {e}"); return
+    if cc[1].button("🧹 Pulisci schermata"):
+        st.session_state.pop("maps_studenti", None)
+        st.session_state.pop("maps_import_result", None)
+
+    # Messaggio persistente dell'ultimo import
+    res = st.session_state.get("maps_import_result")
+    if res:
+        ok, ko = res
+        if ok:
+            st.success(f"✅ Importati {ok} pazienti (origine pnev.it, in percorso MAPS). "
+                       "Premi di nuovo «Leggi pazienti MAPS» per aggiornare i conteggi.")
+        if ko:
+            st.error("Alcuni non importati:")
+            for r in ko:
+                st.write("•", r)
+
+    studenti = st.session_state.get("maps_studenti")
+    if studenti is None:
+        st.info("Premi «Leggi pazienti MAPS» per scaricare gli iscritti al corso MAPS.")
         return
 
-    with st.spinner("Lettura iscritti MAPS…"):
-        try:
-            studenti = _fetch_studenti_maps(base_url, maps_key, course_id)
-        except RuntimeError as e:
-            st.error(str(e))
-            return
-        except Exception as e:
-            st.error(f"Errore imprevisto: {e}")
-            return
-        pazienti = _carica_pazienti(conn)
+    pazienti = _carica_pazienti(conn)
 
-    # Classificazione
+    # Classificazione (i NUOVI sono deduplicati per email: la chiave è una sola)
     agganciati, nuovi, senza_email = [], [], []
+    visti = set()
     for u in studenti:
         em = _norm_email(u.get("email"))
         if not em:
             senza_email.append(u)
         elif em in pazienti:
             agganciati.append((u, pazienti[em]))
-        else:
+        elif em not in visti:
+            visti.add(em)
             nuovi.append(u)
 
     email_maps = {_norm_email(u.get("email")) for u in studenti if u.get("email")}
@@ -282,23 +332,32 @@ def render_sync_pnev(conn=None):
 
     st.divider()
 
-    # --- NUOVI: importabili ---
+    # --- NUOVI: importabili (tutti, tranne i test esclusi) ---
     st.subheader("🆕 Iscritti MAPS non ancora nel gestionale")
     if not nuovi:
         st.success("Nessun nuovo paziente da importare: sei in pari. 🎉")
     else:
-        st.caption("Spunta chi vuoi importare, poi premi «Importa selezionati».")
-        sel = []
-        for u in nuovi:
-            nome, cognome = _split_nome(u.get("name", ""))
-            etichetta = f"{u.get('name','')}  ·  {u.get('email','')}"
-            if st.checkbox(etichetta, key=f"imp_{u.get('id')}", value=True):
-                sel.append((u, nome, cognome))
+        def _lab(u):
+            return f"{u.get('name','')} · {u.get('email','')}"
+        lab2u = {_lab(u): u for u in nuovi}
+        esclusi_def = [_lab(u) for u in nuovi if _is_test(u)]
 
-        if st.button(f"⬇️ Importa selezionati ({len(sel)})", type="primary",
-                     disabled=not sel):
+        st.caption("Li importo tutti. Gli account di test sono già esclusi qui sotto: "
+                   "puoi toglierne o aggiungerne. La lista NON sparisce più quando li tocchi.")
+        esclusi = st.multiselect(
+            "🚫 Da NON importare (test/sistema):",
+            options=list(lab2u.keys()),
+            default=esclusi_def,
+        )
+        esclusi_set = set(esclusi)
+        da_importare = [u for lab, u in lab2u.items() if lab not in esclusi_set]
+        st.write(f"➡️ **{len(da_importare)}** da importare · 🚫 **{len(esclusi)}** esclusi")
+
+        if st.button(f"⬇️ Importa {len(da_importare)} pazienti", type="primary",
+                     disabled=not da_importare):
             ok, ko = 0, []
-            for u, nome, cognome in sel:
+            for u in da_importare:
+                nome, cognome = _split_nome(u.get("name", ""))
                 try:
                     _importa_paziente(conn, nome, cognome, u.get("email"))
                     ok += 1
@@ -308,13 +367,9 @@ def render_sync_pnev(conn=None):
                 conn.commit()
             except Exception:
                 pass
-            if ok:
-                st.success(f"Importati {ok} pazienti (origine pnev.it, in percorso MAPS). "
-                           "Ricarica per aggiornare i conteggi.")
-            if ko:
-                st.error("Alcuni non importati:")
-                for r in ko:
-                    st.write("•", r)
+            st.session_state["maps_import_result"] = (ok, ko)
+            st.session_state.pop("maps_studenti", None)  # forza una rilettura pulita
+            _rerun()
 
     st.divider()
 
