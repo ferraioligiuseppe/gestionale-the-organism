@@ -36,7 +36,9 @@ import urllib.error
 
 import streamlit as st
 
-from modules.app_core import get_connection
+# NB: get_connection si importa SOLO quando serve davvero (dentro le funzioni,
+# se conn non viene passata). Importarlo qui in cima tirerebbe dentro tutto
+# app_core (matplotlib ecc.), che nel cron leggero non c'è.
 
 
 VERDE = "#1D6B44"
@@ -255,6 +257,7 @@ def _fetch_studenti_maps(base_url: str, key: str, course_ids):
 
 def render_sync_pnev(conn=None):
     if conn is None:
+        from modules.app_core import get_connection
         conn = get_connection()
 
     _ensure_colonne(conn)
@@ -463,6 +466,7 @@ def processa_sync_pnev(conn=None, dry_run: bool = False) -> dict:
     Se dry_run=True non scrive nulla: dice solo cosa farebbe.
     """
     if conn is None:
+        from modules.app_core import get_connection
         conn = get_connection()
 
     report = {
