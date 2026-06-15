@@ -29,6 +29,7 @@ Segreti richiesti in .streamlit/secrets.toml:
 from __future__ import annotations
 
 import json
+import time
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -229,11 +230,23 @@ def _norm_course_ids(value) -> str:
 
 
 def _fetch_studenti_maps(base_url: str, key: str, course_ids):
+    """Legge gli iscritti MAPS. Se la risposta torna VUOTA (tipico blocco
+    momentaneo lato pnev.it), riprova fino a 3 volte prima di arrendersi."""
     corsi = _norm_course_ids(course_ids)
-    data = _http_get_json(_url_maps(base_url, key, course=corsi))
-    if not isinstance(data, dict):
-        raise RuntimeError("Risposta inattesa da pnev.it.")
-    return data.get("students", []) or []
+    ultimo = []
+    for tentativo in range(3):
+        try:
+            data = _http_get_json(_url_maps(base_url, key, course=corsi))
+            studenti = (data.get("students") or []) if isinstance(data, dict) else []
+            if studenti:
+                return studenti      # ok: risposta piena
+            ultimo = studenti        # vuota: riprovo tra poco
+        except RuntimeError:
+            if tentativo == 2:
+                raise                # ultimo tentativo fallito: segnalo l'errore
+        if tentativo < 2:
+            time.sleep(2)
+    return ultimo
 
 
 # ════════════════════════════════════════════════════════════════════
