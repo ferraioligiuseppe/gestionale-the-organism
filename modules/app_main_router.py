@@ -312,6 +312,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🔗 Sincronizza pnev.it":
             from .ui_sync_pnev import render_sync_pnev
             render_sync_pnev(conn); return
+        if sotto == "🚀 Trasferisci a pnev.it":
+            from .ui_trasferimento_pnev import render_trasferimento_pnev
+            render_trasferimento_pnev(conn); return
 
     # ── AREA VALUTAZIONE ──────────────────────────────────────────────
     elif area == AREA_VALUTAZIONE:

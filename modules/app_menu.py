@@ -47,6 +47,7 @@ SOTTOSEZIONI = {
         "🔒 Privacy & Consensi",
         "📥 Import pazienti",
         "🔗 Sincronizza pnev.it",
+        "🚀 Trasferisci a pnev.it",
     ],
     AREA_VALUTAZIONE: [
         "📋 Anamnesi The Organism",
