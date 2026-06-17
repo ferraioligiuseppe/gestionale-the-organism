@@ -315,6 +315,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🚀 Trasferisci a pnev.it":
             from .ui_trasferimento_pnev import render_trasferimento_pnev
             render_trasferimento_pnev(conn); return
+        if sotto == "🎧 Screening uditivo":
+            from .ui_screening_link import render_screening_link
+            render_screening_link(conn); return
 
     # ── AREA VALUTAZIONE ──────────────────────────────────────────────
     elif area == AREA_VALUTAZIONE:
