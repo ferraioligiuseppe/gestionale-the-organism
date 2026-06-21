@@ -9,7 +9,7 @@ import streamlit as st
 
 from .app_menu import (
     AREE_ORDINE, SOTTOSEZIONI,
-    AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_TEST_NEUROEVOL, AREA_TEST_LIVE,
+    AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_VALUTAZIONE_VISIVA, AREA_TEST_NEUROEVOL, AREA_TEST_LIVE,
     AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA,
     AREA_MARKETING, AREA_STUDIO,
 )
@@ -373,6 +373,53 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "👓 Optometria comportamentale":
             st.info("Sezione in costruzione — usa la Valutazione visiva (VVF) per ora.")
             return
+
+    # ── AREA VALUTAZIONE VISIVA ───────────────────────────────────────
+    elif area == AREA_VALUTAZIONE_VISIVA:
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
+        if not paz_id:
+            return
+        if sotto == "👁️ Anamnesi visiva":
+            try:
+                from .ui_anamnesi_visiva import render_anamnesi_visiva
+                render_anamnesi_visiva(conn, paz_id)
+            except Exception as e:
+                st.error(f"Modulo anamnesi visiva non disponibile: {e}")
+            return
+        if sotto == "👓 Optometria comportamentale":
+            st.info("Sezione in costruzione — usa la Valutazione visiva (VVF) per ora.")
+            return
+        if sotto == "👁️ Valutazione visuo-percettiva":
+            try:
+                from .ui_valutazione_visuo_percettiva import render_valutazione_visuo_percettiva
+                cur2 = conn.cursor()
+                cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
+                paz_rec = cur2.fetchone()
+                if paz_rec and not isinstance(paz_rec, dict):
+                    cols = [d[0] for d in cur2.description]
+                    paz_rec = dict(zip(cols, paz_rec))
+                render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
+            except Exception as e:
+                st.error(f"Errore valutazione visuo-percettiva: {e}")
+            return
+        if sotto == "🔢 DEM interattivo":
+            try:
+                from .gestionale_new_modules import render_nuovi_moduli
+                render_nuovi_moduli(conn, "DEM")
+            except ImportError as e:
+                st.error(f"Modulo DEM non disponibile: {e}")
+            return
+        if sotto == "👁️ K-D interattivo":
+            try:
+                from .gestionale_new_modules import render_nuovi_moduli
+                render_nuovi_moduli(conn, "KD")
+            except ImportError as e:
+                st.error(f"Modulo K-D non disponibile: {e}")
+            return
+        if sotto == "👁️ Eye tracking":
+            from .sections.ui_cliniche import render_gaze_section
+            render_gaze_section(); return
 
     # ── AREA TEST NEUROEVOLUTIVI ──────────────────────────────────────
     elif area == AREA_TEST_NEUROEVOL:
