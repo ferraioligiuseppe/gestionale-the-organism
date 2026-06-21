@@ -654,34 +654,44 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     Costruisce il menu a 7 aree nella sidebar.
     Ritorna (area_corrente, sottosezione_corrente).
     """
-    # ── Selezione area ────────────────────────────────────────────────
+    # ── Menu a fisarmonica: ogni area è un pannello che si apre/chiude ──
     st.sidebar.markdown("### The Organism")
 
-    area = st.sidebar.radio(
-        "Area",
-        AREE_ORDINE,
-        key="nav_area",
-        label_visibility="collapsed",
-    )
+    def _voci_area(a):
+        vs = SOTTOSEZIONI.get(a, [])
+        if not is_admin:
+            vs = [v for v in vs if "Admin" not in v and "Utenti" not in v
+                  and "Debug" not in v and "demo" not in v.lower()]
+        return vs
 
-    st.sidebar.markdown("---")
+    # selezione corrente (persistente tra i refresh)
+    if st.session_state.get("nav_area_sel") not in AREE_ORDINE:
+        st.session_state["nav_area_sel"] = AREE_ORDINE[0]
+    cur_area = st.session_state["nav_area_sel"]
 
-    # ── Sottosezione nell'area ────────────────────────────────────────
-    voci = SOTTOSEZIONI.get(area, [])
+    voci_cur = _voci_area(cur_area)
+    if st.session_state.get("nav_sotto_sel") not in voci_cur:
+        st.session_state["nav_sotto_sel"] = voci_cur[0] if voci_cur else None
+    cur_sotto = st.session_state["nav_sotto_sel"]
 
-    # Filtra admin-only
-    if not is_admin:
-        voci = [v for v in voci if "Admin" not in v and "Utenti" not in v
-                and "Debug" not in v and "demo" not in v.lower()]
+    for a in AREE_ORDINE:
+        voci = _voci_area(a)
+        if not voci:
+            continue
+        with st.sidebar.expander(a, expanded=(a == cur_area)):
+            for v in voci:
+                attivo = (a == cur_area and v == cur_sotto)
+                if st.button(v, key=f"navbtn::{a}::{v}",
+                             use_container_width=True,
+                             type="primary" if attivo else "secondary"):
+                    st.session_state["nav_area_sel"] = a
+                    st.session_state["nav_sotto_sel"] = v
+                    try:
+                        st.rerun()
+                    except Exception:
+                        st.experimental_rerun()
 
-    sotto = st.sidebar.radio(
-        area,
-        voci,
-        key=f"nav_sotto_{area}",
-        label_visibility="visible",
-    )
-
-    return area, sotto
+    return st.session_state["nav_area_sel"], st.session_state["nav_sotto_sel"]
 
 
 def dispatch_smart_section(*, area: str, sotto: str,
