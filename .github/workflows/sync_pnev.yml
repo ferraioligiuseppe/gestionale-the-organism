@@ -1,0 +1,58 @@
+name: Sync Pazienti pnev.it
+
+# Importa ogni giorno i nuovi iscritti al corso MAPS dentro il gestionale,
+# collegandosi DIRETTAMENTE al database (come i promemoria eventi), senza
+# passare dall'app Streamlit. Esclude spam/test e salta chi c'e' gia' (per email).
+
+on:
+  schedule:
+    # 05:30 UTC = circa le 07:30 in Italia (prima dei promemoria delle 08:00).
+    # I cron schedulati girano dal branch di default (main).
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Prova senza importare davvero? (true / false)"
+        required: false
+        default: "true"
+
+concurrency:
+  group: sync-pnev
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Installa dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          pip install "streamlit>=1.40,<1.46" "psycopg2-binary>=2.9.9"
+
+      - name: Scrivi i secrets in .streamlit/secrets.toml
+        env:
+          STREAMLIT_SECRETS: ${{ secrets.STREAMLIT_SECRETS }}
+        run: |
+          mkdir -p .streamlit
+          printf '%s' "$STREAMLIT_SECRETS" > .streamlit/secrets.toml
+          if [ ! -s .streamlit/secrets.toml ]; then
+            echo "::error::Il secret STREAMLIT_SECRETS è vuoto o non configurato."
+            exit 1
+          fi
+
+      - name: Esegui sync
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: python scripts/sync_pnev.py
+
+      - name: Rimuovi i secrets (sempre)
+        if: always()
+        run: rm -f .streamlit/secrets.toml

@@ -309,6 +309,15 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📥 Import pazienti":
             from .sections.ui_cliniche import render_import_section
             render_import_section(); return
+        if sotto == "🔗 Sincronizza pnev.it":
+            from .ui_sync_pnev import render_sync_pnev
+            render_sync_pnev(conn); return
+        if sotto == "🚀 Trasferisci a pnev.it":
+            from .ui_trasferimento_pnev import render_trasferimento_pnev
+            render_trasferimento_pnev(conn); return
+        if sotto == "🎧 Screening uditivo":
+            from .ui_screening_link import render_screening_link
+            render_screening_link(conn); return
 
     # ── AREA VALUTAZIONE ──────────────────────────────────────────────
     elif area == AREA_VALUTAZIONE:
@@ -325,6 +334,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 render_anamnesi_the_organism(conn, paz_id)
             except Exception as e:
                 st.error(f"Modulo anamnesi non disponibile: {e}")
+            return
+        if sotto == "👁️ Anamnesi visiva":
+            try:
+                from .ui_anamnesi_visiva import render_anamnesi_visiva
+                render_anamnesi_visiva(conn, paz_id)
+            except Exception as e:
+                st.error(f"Modulo anamnesi visiva non disponibile: {e}")
             return
         if sotto == "🧠 NPS — Neuropsicologica":
             try:

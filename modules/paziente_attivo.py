@@ -131,6 +131,79 @@ def reset_paziente_attivo() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+#  CREAZIONE RAPIDA PAZIENTE (inline nel dialog)
+# ════════════════════════════════════════════════════════════════════
+
+def _parse_dn(s):
+    """Prova a interpretare una data digitata. Ritorna (date|None, errore|None)."""
+    s = (s or "").strip()
+    if not s:
+        return None, None
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d/%m/%y"):
+        try:
+            return datetime.datetime.strptime(s, fmt).date(), None
+        except Exception:
+            pass
+    return None, "Data nascita non valida (usa GG/MM/AAAA)"
+
+
+def _crea_paziente_rapido(conn, cognome, nome, dn_str, sesso, telefono):
+    """Crea un paziente con i campi minimi. Ritorna (id|None, errore|None)."""
+    data_iso = None
+    if (dn_str or "").strip():
+        d, err = _parse_dn(dn_str)
+        if err:
+            return None, err
+        data_iso = d.isoformat() if d else None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO pazienti (cognome, nome, data_nascita, sesso, telefono, stato_paziente) "
+            "VALUES (%s,%s,%s,%s,%s,'ATTIVO') RETURNING id",
+            (cognome.strip().upper(), nome.strip().title(), data_iso,
+             (sesso or None), (telefono.strip() or None)),
+        )
+        row = cur.fetchone()
+        pid = int(row["id"] if isinstance(row, dict) else row[0])
+        conn.commit()
+        try:
+            _carica_lista_pazienti.clear()
+        except Exception:
+            pass
+        return pid, None
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None, f"Errore nella creazione: {e}"
+
+
+def _form_nuovo_paziente(conn):
+    """Form compatto per creare al volo un paziente e renderlo attivo."""
+    with st.form("form_nuovo_paziente_rapido", clear_on_submit=False):
+        c1, c2 = st.columns(2)
+        cognome = c1.text_input("Cognome *", key="np_cognome")
+        nome = c2.text_input("Nome *", key="np_nome")
+        c3, c4 = st.columns(2)
+        dn = c3.text_input("Data nascita (GG/MM/AAAA)", key="np_dn")
+        sesso = c4.selectbox("Sesso", ["", "M", "F"], key="np_sesso")
+        tel = st.text_input("Telefono", key="np_tel")
+        ok = st.form_submit_button("➕ Crea e seleziona", type="primary",
+                                   use_container_width=True)
+    if ok:
+        if not cognome.strip() or not nome.strip():
+            st.error("Cognome e Nome sono obbligatori.")
+            return
+        pid, err = _crea_paziente_rapido(conn, cognome, nome, dn, sesso, tel)
+        if err:
+            st.error(err)
+            return
+        set_paziente_attivo(conn, pid)
+        st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════
 #  DIALOG SELEZIONE
 # ════════════════════════════════════════════════════════════════════
 
@@ -138,7 +211,9 @@ def reset_paziente_attivo() -> None:
 def _dialog_seleziona(conn):
     pazienti = _carica_lista_pazienti(conn)
     if not pazienti:
-        st.info("Nessun paziente attivo registrato.")
+        st.info("Nessun paziente registrato. Puoi aggiungerne uno qui sotto.")
+        st.markdown("##### ➕ Nuovo paziente")
+        _form_nuovo_paziente(conn)
         if st.button("Chiudi"):
             st.rerun()
         return
@@ -162,6 +237,11 @@ def _dialog_seleziona(conn):
         ]
 
     st.caption(f"{len(pazienti)} paziente/i")
+
+    # Nuovo paziente al volo (si apre da solo se la ricerca non trova nessuno)
+    with st.expander("➕ Nuovo paziente",
+                     expanded=(bool(cerca.strip()) and len(pazienti) == 0)):
+        _form_nuovo_paziente(conn)
 
     # Tabella ag-grid
     try:

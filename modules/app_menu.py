@@ -46,9 +46,13 @@ SOTTOSEZIONI = {
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",
         "📥 Import pazienti",
+        "🔗 Sincronizza pnev.it",
+        "🚀 Trasferisci a pnev.it",
+        "🎧 Screening uditivo",
     ],
     AREA_VALUTAZIONE: [
         "📋 Anamnesi The Organism",
+        "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica",
         "📚 DSA — Apprendimento",
         "👓 Optometria comportamentale",

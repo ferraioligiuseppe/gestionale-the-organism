@@ -1428,10 +1428,12 @@ def ensure_auth_schema(conn):
           password_hash TEXT NOT NULL,
           is_active BOOLEAN NOT NULL DEFAULT TRUE,
           must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+          studio_id BIGINT NOT NULL DEFAULT 1,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           last_login_at TIMESTAMPTZ
         );
         """)
+        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1;")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS auth_roles (
           id BIGSERIAL PRIMARY KEY,
@@ -1461,6 +1463,19 @@ def ensure_auth_schema(conn):
         ('admin'),('vision'),('osteo'),('segreteria'),('clinico')
         ON CONFLICT (name) DO NOTHING;
         """)
+        # Le tabelle di SISTEMA/globali non devono mai essere filtrate per studio.
+        # Se un setup precedente vi ha lasciato attivo il filtro (RLS), il login di
+        # utenti di altri studi fallirebbe e la lista utenti risulterebbe parziale.
+        # Qui lo disattiviamo in modo sicuro (idempotente).
+        for _t in ("auth_users", "auth_roles", "auth_user_roles", "auth_audit_log",
+                   "studi", "utenti_meta", "abbonamenti"):
+            try:
+                cur.execute(f"ALTER TABLE {_t} NO FORCE ROW LEVEL SECURITY;")
+                cur.execute(f"ALTER TABLE {_t} DISABLE ROW LEVEL SECURITY;")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         conn.commit()
     finally:
         try: cur.close()
@@ -1502,17 +1517,40 @@ def _audit(conn, user_id: int | None, action: str, entity: str | None = None, en
             pass
 
 def _get_user_by_username(conn, username: str):
-    cur = conn.cursor()
+    # Prima prova con studio_id (multi-tenant); se la colonna non esiste ancora,
+    # ripiega sulla query senza studio_id (studio 1 di default). Così il login
+    # funziona sempre, anche su DB non ancora migrati.
     try:
+        cur = conn.cursor()
         cur.execute("""
-            SELECT id, username, email, password_hash, is_active, must_change_password
+            SELECT id, username, email, password_hash, is_active, must_change_password, COALESCE(studio_id, 1)
             FROM auth_users
             WHERE username = %s
         """, (username,))
         return cur.fetchone()
-    finally:
-        try: cur.close()
+    except Exception:
+        try: conn.rollback()
         except Exception: pass
+        # Auto-migrazione: prova ad aggiungere la colonna mancante, poi ripiega.
+        try:
+            cur = conn.cursor()
+            cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT id, username, email, password_hash, is_active, must_change_password, 1
+                FROM auth_users
+                WHERE username = %s
+            """, (username,))
+            return cur.fetchone()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            return None
 
 def _get_roles_for_user(conn, user_id: int) -> list[str]:
     cur = conn.cursor()
@@ -1640,6 +1678,12 @@ def login(get_conn) -> bool:
         p_in = password or ""
         if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
+            st.session_state["studio_id"] = 1
+            try:
+                from modules.ui_intestazione_studio import get_intestazione_studio
+                st.session_state["intestazione_studio"] = get_intestazione_studio(conn, 1)
+            except Exception:
+                pass
             st.session_state["user"] = {
                 "id": None,
                 "username": u_in,
@@ -1655,13 +1699,13 @@ def login(get_conn) -> bool:
             st.warning("✅ Accesso di emergenza attivo (break-glass). Disattivalo nei Secrets dopo aver sistemato gli utenti.")
             st.rerun()
             return True  # breakglass: st.rerun() dovrebbe interrompere, ma per sicurezza
-        row = _get_user_by_username(conn, username.strip())
+        row = _get_user_by_username(conn, username.strip().lower())
         if not row:
             st.error("Credenziali errate.")
             _audit(conn, None, "LOGIN_FAIL", meta={"username": username.strip()})
             return False
 
-        user_id, uname, email, pwd_hash, is_active, must_change = row
+        user_id, uname, email, pwd_hash, is_active, must_change, _studio_id = row
         if not is_active:
             st.error("Utente disattivato.")
             _audit(conn, user_id, "LOGIN_FAIL_DISABLED", meta={})
@@ -1710,6 +1754,15 @@ def login(get_conn) -> bool:
             pass
 
         st.session_state["logged_in"] = True
+        try:
+            st.session_state["studio_id"] = int(_studio_id or 1)
+        except Exception:
+            st.session_state["studio_id"] = 1
+        try:
+            from modules.ui_intestazione_studio import get_intestazione_studio
+            st.session_state["intestazione_studio"] = get_intestazione_studio(conn, st.session_state["studio_id"])
+        except Exception:
+            pass
         st.session_state["user"] = {
             "id": int(user_id),
             "username": str(uname),
@@ -1996,9 +2049,10 @@ class _PgConn:
     Aggiunge keepalive automatico: se la connessione Postgres è scaduta/ibernata,
     la ricrea trasparentemente prima di restituire il cursore.
     """
-    def __init__(self, conn):
+    def __init__(self, conn, options="-c statement_timeout=30000"):
         self._conn = conn
         self._db_url = _DB_URL  # salvato per reconnect
+        self._options = options  # include app.current_studio: va riusato a ogni riconnessione
 
     def _ensure_alive(self):
         """Verifica che la connessione sia viva; riconnette se necessario."""
@@ -2020,7 +2074,7 @@ class _PgConn:
                     keepalives_interval=10,
                     keepalives_count=5,
                     connect_timeout=10,
-                    options="-c statement_timeout=30000",
+                    options=self._options,
                 )
             except Exception as e:
                 raise RuntimeError(f"Impossibile riconnettersi al DB: {e}") from e
@@ -2240,13 +2294,21 @@ DATABASE_URL = "postgresql://...sslmode=require"
 Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
 @st.cache_resource
-def _connect_cached():
-    """Connessione DB con cache — creata UNA VOLTA per sessione. Elimina latenza multipla."""
+def _connect_cached(studio_id: int = 1):
+    """Connessione DB con cache — UNA per studio. Imposta app.current_studio
+    a livello di connessione: l'isolamento multi-tenant (RLS) è quindi garantito
+    dal database, e ogni studio ha la sua connessione (niente race condition)."""
     _require_postgres_on_cloud()
     if _DB_BACKEND == "postgres":
         if not PSYCOPG2_AVAILABLE:
             raise RuntimeError("psycopg2 non disponibile. Aggiungi psycopg2-binary a requirements.txt")
 
+        try:
+            _sid = int(studio_id)
+        except (TypeError, ValueError):
+            _sid = 1
+
+        _opts = f"-c statement_timeout=30000 -c app.current_studio={_sid}"
         try:
             conn = psycopg2.connect(
                 _DB_URL,
@@ -2255,7 +2317,7 @@ def _connect_cached():
                 keepalives_interval=10,
                 keepalives_count=5,
                 connect_timeout=10,
-                options="-c statement_timeout=30000",
+                options=_opts,
             )
         except Exception:
             # Non-leak diagnostics (does not print the URL)
@@ -2271,7 +2333,7 @@ def _connect_cached():
             })
             st.stop()
 
-        return _PgConn(conn)
+        return _PgConn(conn, options=_opts)
 
     # SQLite (locale / fallback)
     conn = sqlite3.connect(SQLITE_DB_PATH)
@@ -2280,8 +2342,14 @@ def _connect_cached():
 
 
 def get_connection():
-
-    return _connect_cached()
+    # Legge lo studio della sessione (default 1 = studio attuale/produzione) e
+    # restituisce la connessione dedicata a quello studio. Firma invariata: i
+    # moduli continuano a chiamare get_connection() senza modifiche.
+    try:
+        _sid = int(st.session_state.get("studio_id", 1) or 1)
+    except Exception:
+        _sid = 1
+    return _connect_cached(_sid)
 
 def init_db() -> None:
     conn = get_connection()

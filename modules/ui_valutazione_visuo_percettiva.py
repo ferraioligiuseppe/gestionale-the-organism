@@ -973,6 +973,13 @@ Randot: {bino.get("randot","nd")} sec d arco
 ### Accomodazione
 Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
 MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
+            try:
+                from modules.ui_anamnesi_visiva import sintesi_anamnesi
+                _anam = sintesi_anamnesi(conn, pid)
+                if _anam:
+                    corpo = _anam + "\n\n" + corpo
+            except Exception:
+                pass
             if diagnosi: corpo += f"\n\n### Diagnosi\n{diagnosi}"
             if piano:    corpo += f"\n\n### Piano terapeutico\n{piano}"
             titolo_prof2 = (d.get("intestazione",{}).get("titolo_prof","") or
@@ -1260,6 +1267,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
     st.markdown("---")
     tabs = st.tabs([
         "Intestazione",
+        "👁️ Anamnesi",
         "A. Stato refrattivo",
         "B. Equilibrio binoculare",
         "C. Accomodazione",
@@ -1276,40 +1284,47 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
             _salva(conn, paz_id, dati)
 
     with tabs[1]:
+        try:
+            from modules.ui_anamnesi_visiva import render_anamnesi_visiva
+            render_anamnesi_visiva(conn, paz_id)
+        except Exception as e:
+            st.error(f"Anamnesi visiva non disponibile: {e}")
+
+    with tabs[2]:
         dati.update(_sez_a(paz_id, stored))
         if st.button("Salva sezione A", key=f"sv_a_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[2]:
+    with tabs[3]:
         dati.update(_sez_b(paz_id, stored))
         if st.button("Salva sezione B", key=f"sv_b_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[3]:
+    with tabs[4]:
         dati.update(_sez_c(paz_id, stored))
         if st.button("Salva sezione C", key=f"sv_c_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[4]:
+    with tabs[5]:
         dati.update(_sez_d(paz_id, stored))
         if st.button("Salva sezione D", key=f"sv_d_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[5]:
+    with tabs[6]:
         dati.update(_sez_e(paz_id, stored))
         if st.button("Salva sezione E", key=f"sv_e_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[6]:
+    with tabs[7]:
         dati.update(_sez_f(paz_id, dati))
 
-    with tabs[7]:
+    with tabs[8]:
         extra = _sez_g(conn, paz_id, dati, paziente)
         dati.update(extra)
         if st.button("Salva diagnosi e piano", key=f"sv_g_{paz_id}", type="primary"):
             _salva(conn, paz_id, dati)
 
-    with tabs[8]:
+    with tabs[9]:
         dati.update(_sez_h(paz_id, stored))
         if st.button("Salva note Sports Vision", key=f"sv_h_{paz_id}"):
             _salva(conn, paz_id, dati)

@@ -54,6 +54,22 @@ def _get_role_id(conn, role_name: str):
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
+def _lista_studi(conn):
+    """Ritorna [(id, nome), ...] degli studi. Fallback: [(1, 'Studio')]."""
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, COALESCE(nome, 'Studio '||id) AS nome FROM studi ORDER BY id")
+        out = []
+        for r in cur.fetchall():
+            if isinstance(r, dict):
+                out.append((int(r["id"]), str(r["nome"])))
+            else:
+                out.append((int(r[0]), str(r[1])))
+        return out or [(1, "Studio")]
+    except Exception:
+        return [(1, "Studio")]
+
+
 def render_gestione_utenti(conn, is_admin) -> None:
     """Entry point - blocca accesso se non admin."""
 
@@ -294,6 +310,15 @@ def _render_form_nuovo_utente(conn) -> None:
         help="Questo nome appare su ricette, relazioni e PDF"
     )
 
+    _studi = _lista_studi(conn)
+    studio_sel = st.selectbox(
+        "Studio di appartenenza *",
+        options=[s[0] for s in _studi],
+        format_func=lambda i: next((n for (sid, n) in _studi if sid == i), str(i)),
+        key="nu_studio",
+        help="L'utente vedrà e gestirà SOLO i dati di questo studio."
+    )
+
     c3, c4 = st.columns(2)
     with c3:
         pw1 = st.text_input("Password *", type="password", key="nu_pw1",
@@ -323,11 +348,13 @@ def _render_form_nuovo_utente(conn) -> None:
     st.markdown("---")
     if st.button("Crea utente", type="primary", key="nu_salva"):
         _crea_utente(conn, username, email, pw1, pw2, ruoli_sel, must_change,
-                     display_name=st.session_state.get("nu_display_name",""))
+                     display_name=st.session_state.get("nu_display_name",""),
+                     studio_id=st.session_state.get("nu_studio", 1))
 
 
 def _crea_utente(conn, username: str, email: str, pw1: str, pw2: str,
-                 ruoli: list, must_change: bool, display_name: str = "") -> None:
+                 ruoli: list, must_change: bool, display_name: str = "",
+                 studio_id: int = 1) -> None:
 
     # Validazioni
     if not username.strip():
@@ -359,11 +386,11 @@ def _crea_utente(conn, username: str, email: str, pw1: str, pw2: str,
         ph = _pwd_hash(pw1)
         cur.execute(
             "INSERT INTO auth_users(username, email, password_hash, "
-            "is_active, must_change_password) "
-            "VALUES (%s,%s,%s,TRUE,%s) RETURNING id",
+            "is_active, must_change_password, studio_id) "
+            "VALUES (%s,%s,%s,TRUE,%s,%s) RETURNING id",
             (username.strip().lower(),
              email.strip() or None,
-             ph, must_change)
+             ph, must_change, int(studio_id or 1))
         )
         row = cur.fetchone()
         uid = int(row["id"] if isinstance(row, dict) else row[0])

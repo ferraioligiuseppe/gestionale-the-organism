@@ -32,7 +32,38 @@ def _pnev_logo_path():
         return p
     return None
 
+def _carta_intestata_bytes():
+    """Bytes dell'immagine carta intestata dello studio attivo (o None)."""
+    try:
+        import base64
+        import streamlit as st
+        intest = st.session_state.get("intestazione_studio") or {}
+        b64 = intest.get("carta_intestata_base64")
+        if b64:
+            return base64.b64decode(b64)
+    except Exception:
+        pass
+    return None
+
+def _draw_bg_carta(c):
+    """Disegna la carta intestata a piena pagina se presente. True se disegnata."""
+    data = _carta_intestata_bytes()
+    if not data:
+        return False
+    try:
+        from reportlab.lib.utils import ImageReader
+        img = ImageReader(io.BytesIO(data))
+        c.drawImage(img, 0, 0, width=W, height=H,
+                    preserveAspectRatio=False, mask="auto")
+        return True
+    except Exception:
+        return False
+
 def draw_intestazione(c, professionista="", titolo=""):
+    # Se lo studio ha una carta intestata, la usiamo come sfondo e saltiamo
+    # l'intestazione "costruita" (logo+righe), perché la grafica la contiene già.
+    if _draw_bg_carta(c):
+        return
     logo = _logo_path()
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(colors.black)
@@ -54,6 +85,9 @@ def draw_intestazione(c, professionista="", titolo=""):
     c.drawCentredString(W/2, H-4.25*cm, CONTATTI)
 
 def draw_footer(c):
+    # Con carta intestata il piè di pagina è già nella grafica: non disegnare nulla.
+    if _carta_intestata_bytes():
+        return
     c.setStrokeColor(VERDE); c.setLineWidth(0.8)
     c.line(1.8*cm, 2.2*cm, W-1.8*cm, 2.2*cm)
     c.setFont("Helvetica-Bold", 8); c.setFillColor(colors.black)
@@ -69,6 +103,37 @@ def genera_ricetta(professionista, titolo, rx) -> bytes:
     draw_footer(c)
     c.save(); buf.seek(0)
     return buf.read()
+
+def _wrap_width(c, testo, font, size, max_w):
+    """Manda a capo 'testo' in righe non piu' larghe di max_w (misura reale)."""
+    parole = testo.split(" ")
+    righe, cur = [], ""
+    for p in parole:
+        prova = (cur + " " + p).strip()
+        if (not cur) or c.stringWidth(prova, font, size) <= max_w:
+            cur = prova
+        else:
+            righe.append(cur)
+            cur = p
+    righe.append(cur)
+    return righe
+
+
+def _draw_justified(c, line, x0, yt, font, size, max_w):
+    """Disegna 'line' giustificata: allarga gli spazi fino a max_w."""
+    words = line.split(" ")
+    words = [w for w in words if w != ""]
+    if len(words) <= 1:
+        c.drawString(x0, yt, line)
+        return
+    words_w = sum(c.stringWidth(w, font, size) for w in words)
+    gaps = len(words) - 1
+    extra = (max_w - words_w) / gaps
+    x = x0
+    for w in words:
+        c.drawString(x, yt, w)
+        x += c.stringWidth(w, font, size) + extra
+
 
 def genera_carta_intestata(professionista, titolo,
                             paziente, data, titolo_doc,
@@ -86,6 +151,7 @@ def genera_carta_intestata(professionista, titolo,
 
     # Usiamo canvas diretto per l intestazione + frame per il testo
     c = canvas.Canvas(buf, pagesize=A4)
+    has_carta = bool(_carta_intestata_bytes())
     draw_intestazione(c, professionista, titolo)
 
     # Titolo documento
@@ -109,27 +175,42 @@ def genera_carta_intestata(professionista, titolo,
     c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.3)
     c.line(1.8*cm, y2-0.4*cm, W-1.8*cm, y2-0.4*cm)
 
-    # Corpo testo (semplice, riga per riga)
+    # Intro PNEV in TESTA e Bibliografia in CODA (testi da relazione_testi.py)
+    try:
+        from modules.relazione_testi import intro_pnev, bibliografia
+        corpo_testo = intro_pnev() + "\n" + (corpo_testo or "") + "\n\n" + bibliografia()
+    except Exception:
+        pass
+
+    # Corpo testo: a-capo per larghezza + giustificato (tranne titoli e ultime righe)
     if corpo_testo:
+        x0 = 1.8*cm
+        max_w = W - x0 - 4.2*cm   # margine destro ampio: libera la fascia della grafica
         yt = y2 - 0.9*cm
-        c.setFont("Helvetica", 10); c.setFillColor(colors.black)
         for riga in corpo_testo.split("\n"):
             if riga.startswith("###"):
-                c.setFont("Helvetica-Bold", 11)
-                c.setFillColor(VERDE)
-                c.drawString(1.8*cm, yt, riga.replace("###","").strip())
-                c.setFont("Helvetica", 10); c.setFillColor(colors.black)
+                font, size, col, heading = "Helvetica-Bold", 11, VERDE, True
+                testo = riga.replace("###", "").strip()
             else:
-                c.drawString(1.8*cm, yt, riga[:110])
-            yt -= 0.55*cm
-            if yt < 3.5*cm:
-                draw_footer(c)
-                c.showPage()
-                draw_intestazione(c, professionista, titolo)
-                yt = H - 4.5*cm
+                font, size, col, heading = "Helvetica", 10, colors.black, False
+                testo = riga
+            c.setFont(font, size); c.setFillColor(col)
+            lines = _wrap_width(c, testo, font, size, max_w)
+            for idx, sl in enumerate(lines):
+                is_last = (idx == len(lines) - 1)
+                if (not heading) and (not is_last) and sl.strip():
+                    _draw_justified(c, sl, x0, yt, font, size, max_w)
+                else:
+                    c.drawString(x0, yt, sl)
+                yt -= 0.55*cm
+                if yt < 5.5*cm:
+                    draw_footer(c)
+                    c.showPage()
+                    draw_intestazione(c, professionista, titolo)
+                    yt = H - 5.0*cm
 
     # Firma
-    yt_firma = 5.5*cm
+    yt_firma = 6.5*cm if has_carta else 5.5*cm
     c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.5)
     c.line(1.8*cm, yt_firma, W/2-1*cm, yt_firma)
     c.setFont("Helvetica", 8); c.setFillColor(GRIGIO)

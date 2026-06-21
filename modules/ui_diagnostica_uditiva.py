@@ -192,54 +192,94 @@ def _salva(conn, paz_id, tipo, dati, punteggio, classificazione, operatore="", n
         st.error(f"Errore salvataggio: {e}"); return False
 
 def _fetch_pazienti(conn):
-    cur = conn.cursor()
-    candidates = ['Pazienti','pazienti','Patients','patients']
-    try:
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        for r in cur.fetchall():
-            t = r[0] if not isinstance(r, dict) else r.get('name','')
-            if ('paz' in t.lower() or 'patient' in t.lower()) and t not in candidates:
-                candidates.insert(0, t)
-    except Exception:
-        try:
-            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-            for r in cur.fetchall():
-                t = r[0] if not isinstance(r, dict) else r.get('table_name','')
-                if 'paz' in t.lower() or 'patient' in t.lower():
-                    candidates.insert(0, t)
-        except Exception: pass
+    """Recupera (id, cognome, nome) dei pazienti su SQLite o PostgreSQL.
 
-    def get_cols(table):
+    Nota: su PostgreSQL una query fallita aborta l'intera transazione, quindi
+    NON usiamo più 'sqlite_master' come sonda (fallirebbe e bloccherebbe tutto).
+    Proviamo prima lo stile PostgreSQL (information_schema) e solo in caso di
+    errore ricadiamo su SQLite, con rollback difensivo a ogni fallimento.
+    """
+    def _safe_rollback():
         try:
+            conn.rollback()
+        except Exception:
+            pass
+
+    # Pulisce un'eventuale transazione già abortita ereditata da query precedenti
+    _safe_rollback()
+    cur = conn.cursor()
+
+    # ── Elenco tabelle candidate ─────────────────────────────────────────────
+    candidates = []
+    try:  # stile PostgreSQL — funziona su PG, fallisce (pulito) su SQLite
+        cur.execute("SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema='public'")
+        for r in cur.fetchall():
+            t = r[0] if not isinstance(r, dict) else r.get('table_name', '')
+            if t and ('paz' in t.lower() or 'patient' in t.lower()):
+                candidates.append(t)
+    except Exception:
+        _safe_rollback()
+        try:  # fallback SQLite
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            for r in cur.fetchall():
+                t = r[0] if not isinstance(r, dict) else r.get('name', '')
+                if t and ('paz' in t.lower() or 'patient' in t.lower()):
+                    candidates.append(t)
+        except Exception:
+            _safe_rollback()
+    for t in ['pazienti', 'Pazienti', 'patients', 'Patients']:
+        if t not in candidates:
+            candidates.append(t)
+
+    # ── Colonne di una tabella ───────────────────────────────────────────────
+    def get_cols(table):
+        try:  # stile PostgreSQL
+            cur.execute("SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema='public' AND table_name=%s", (table,))
+            cols = [r[0] if not isinstance(r, dict) else r.get('column_name', '')
+                    for r in cur.fetchall()]
+            if cols:
+                return cols
+        except Exception:
+            _safe_rollback()
+        try:  # fallback SQLite
             cur.execute(f'PRAGMA table_info("{table}")')
             return [r[1] for r in cur.fetchall()]
         except Exception:
-            try:
-                cur.execute("SELECT column_name FROM information_schema.columns "
-                            "WHERE table_schema='public' AND table_name=%s", (table,))
-                return [r[0] for r in cur.fetchall()]
-            except Exception: return []
+            _safe_rollback()
+            return []
 
     def pick(cols, cands):
         s = set(cols)
         for c in cands:
-            if c in s: return c
+            if c in s:
+                return c
         low = {x.lower(): x for x in cols}
         for c in cands:
-            if c.lower() in low: return low[c.lower()]
+            if c.lower() in low:
+                return low[c.lower()]
         return None
 
+    # ── Lettura pazienti ─────────────────────────────────────────────────────
     for table in candidates:
         cols = get_cols(table)
-        if not cols: continue
+        if not cols:
+            continue
         idc = pick(cols, ['id'])
-        cc  = pick(cols, ['Cognome','cognome','LastName','last_name'])
-        nc  = pick(cols, ['Nome','nome','FirstName','first_name'])
-        if not (idc and cc and nc): continue
+        cc = pick(cols, ['Cognome', 'cognome', 'LastName', 'last_name', 'surname'])
+        nc = pick(cols, ['Nome', 'nome', 'FirstName', 'first_name'])
+        if not (idc and cc and nc):
+            continue
         try:
-            cur.execute(f'SELECT "{idc}","{cc}","{nc}" FROM "{table}" ORDER BY "{cc}","{nc}"')
-            return cur.fetchall()
-        except Exception: continue
+            cur.execute(f'SELECT "{idc}","{cc}","{nc}" FROM "{table}" '
+                        f'ORDER BY "{cc}","{nc}"')
+            rows = cur.fetchall()
+            if rows:
+                return rows
+        except Exception:
+            _safe_rollback()
+            continue
     return []
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -281,12 +321,19 @@ def ui_diagnostica_uditiva(conn=None):
     st.header("Diagnostica Uditiva Funzionale")
     st.caption("Fisher · SCAP-A · Calibrazione · Test Tonale · Lateralità · Selettività · Johansen")
 
+    ss = st.session_state
     if conn is None: conn = _get_conn()
-    _init_db(conn)
+    # init una sola volta per sessione (evita un giro DB a ogni rerun)
+    if not ss.get("_du_init"):
+        _init_db(conn); ss["_du_init"] = True
     cur = conn.cursor()
 
-    # Selezione paziente
-    rows = _fetch_pazienti(conn)
+    # Selezione paziente — lista in cache di sessione (evita query DB ad ogni interazione)
+    if st.button("🔄 Aggiorna lista pazienti", key="du_refresh"):
+        ss.pop("_du_paz_cache", None); st.rerun()
+    if "_du_paz_cache" not in ss:
+        ss["_du_paz_cache"] = _fetch_pazienti(conn)
+    rows = ss["_du_paz_cache"]
     if not rows:
         st.info("Nessun paziente registrato."); return
 
@@ -472,304 +519,290 @@ def _ui_scapa(conn, paz_id, operatore):
 # Tab 3: Calibrazione cuffie
 # ─────────────────────────────────────────────────────────────────────────────
 
-CAL_WIZARD_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
+_CAL_CONSOLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
-body{padding:10px;background:#f8f7f4;color:#1a1a1a}
-.steps{display:flex;gap:0;margin-bottom:14px;position:relative}
-.steps::before{content:'';position:absolute;top:17px;left:22px;right:22px;height:2px;background:#d4cec5;z-index:0}
-.step{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;z-index:1}
-.dot{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;border:2px solid #d4cec5;background:#f8f7f4;color:#8a8a8a;transition:all .3s}
-.dot.active{background:#1d9e75;border-color:#1d9e75;color:#fff}
-.dot.done{background:#e1f5ee;border-color:#1d9e75;color:#1d9e75}
-.step-lbl{font-size:9px;color:#8a8a8a;text-align:center;max-width:66px}
-.card{background:#fff;border:1px solid #d4cec5;border-radius:10px;padding:12px 14px;margin-bottom:8px}
-h3{font-size:13px;font-weight:500;margin-bottom:3px}
-.cap{font-size:11px;color:#8a8a8a;margin-bottom:8px;line-height:1.4}
-button{font-family:inherit;font-size:12px;padding:5px 10px;border-radius:7px;border:1.5px solid #d4cec5;background:#fff;color:#4a4a4a;cursor:pointer}
-button:hover{background:#e1f5ee;border-color:#1d9e75;color:#0f6e56}
-button.primary{background:#1d9e75;border-color:#1d9e75;color:#fff}
-button:disabled{opacity:.35;cursor:not-allowed}
-.btn-row{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-.sec{display:none}.sec.on{display:block}
-.metric{background:#f8f7f4;border-radius:7px;padding:8px 10px;text-align:center}
-.metric .v{font-size:18px;font-weight:500}.metric .l{font-size:10px;color:#8a8a8a;margin-top:2px}
-.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0}
-.row{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}
-.row label{min-width:110px;font-size:11px;color:#4a4a4a}
-input[type=number]{width:70px;padding:4px 6px;border-radius:6px;border:1px solid #d4cec5;font-size:13px;text-align:center}
-input[type=text]{flex:1;padding:4px 8px;border-radius:6px;border:1px solid #d4cec5;font-size:12px}
-.status{font-size:12px;padding:5px 9px;border-radius:6px;margin:6px 0}
-.ok{background:#e1f5ee;color:#0f6e56}.warn{background:#fef7ec;color:#7a4f0a}.info{background:#ebf5fb;color:#154360}
+body{padding:8px;background:#f8f7f4;color:#1a1a1a}
+.card{background:#fff;border:1px solid #d4cec5;border-radius:10px;padding:12px 16px}
+.freq{font-size:28px;font-weight:600;color:#1d9e75;text-align:center;line-height:1}
+.sub{font-size:11px;color:#8a8a8a;text-align:center;margin:3px 0 10px}
+button{font-family:inherit;font-size:16px;padding:12px;border-radius:8px;border:1.5px solid #1d9e75;background:#1d9e75;color:#fff;cursor:pointer;width:100%}
+button.off{background:#fff;color:#0f6e56}
+button.on{background:#c0392b;border-color:#c0392b;color:#fff}
+.hint{font-size:10.5px;color:#8a8a8a;margin-top:9px;text-align:center;line-height:1.4}
 </style></head><body>
-<div class="steps">
-  <div class="step"><div class="dot active" id="d0">1</div><div class="step-lbl">Setup</div></div>
-  <div class="step"><div class="dot" id="d1">2</div><div class="step-lbl">Posizione</div></div>
-  <div class="step"><div class="dot" id="d2">3</div><div class="step-lbl">Misura</div></div>
-  <div class="step"><div class="dot" id="d3">4</div><div class="step-lbl">Profilo</div></div>
+<div class="card">
+  <div class="freq">__FREQLBL__</div>
+  <div class="sub">Orecchio __EAR__ &middot; livello __LEVEL__ dB HL</div>
+  <button class="off" id="btn" onclick="toggle()">&#9654;&nbsp; Avvia tono continuo</button>
+  <div class="hint">Tieni il fonometro al centro del padiglione, leggi i dB(A) stabili,<br>poi ferma il tono e inserisci il valore qui sotto.</div>
 </div>
-<div class="sec on" id="s0">
-<div class="card"><h3>Setup iniziale</h3><p class="cap">Verifica che tutto sia pronto prima di iniziare.</p>
-<svg width="100%" viewBox="0 0 680 140" style="margin:6px 0 10px">
-<g transform="translate(50,15)"><path d="M45 30 Q45 6 85 6 Q125 6 125 30" fill="none" stroke="#1d9e75" stroke-width="6" stroke-linecap="round"/>
-<ellipse cx="45" cy="44" rx="16" ry="22" fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"/>
-<ellipse cx="125" cy="44" rx="16" ry="22" fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"/>
-<text x="85" y="82" text-anchor="middle" style="font-size:10px;fill:#8a8a8a">Cuffie</text></g>
-<line x1="228" y1="46" x2="258" y2="46" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#a1)"/>
-<defs><marker id="a1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L8 5L1 9" fill="none" stroke="#8a8a8a" stroke-width="1.5"/></marker></defs>
-<g transform="translate(266,12)"><rect x="0" y="0" width="106" height="68" rx="5" fill="#e1f5ee" stroke="#1d9e75" stroke-width="1.5"/>
-<rect x="7" y="9" width="92" height="48" rx="3" fill="#1d9e75" opacity="0.1"/>
-<rect x="33" y="68" width="40" height="5" rx="2" fill="#d4cec5"/>
-<text x="53" y="37" text-anchor="middle" style="font-size:10px;fill:#1d9e75;font-weight:500">PC - Volume MAX</text>
-<text x="53" y="51" text-anchor="middle" style="font-size:10px;fill:#8a8a8a">EQ sistema OFF</text></g>
-<line x1="384" y1="46" x2="414" y2="46" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#a1)"/>
-<g transform="translate(424,8)"><rect x="10" y="0" width="48" height="82" rx="7" fill="#2c2c2a" stroke="#444" stroke-width="1.5"/>
-<rect x="16" y="9" width="36" height="54" rx="2" fill="#0c447c"/>
-<text x="34" y="26" text-anchor="middle" style="font-size:8px;fill:#44cc88">dB(A)</text>
-<text x="34" y="44" text-anchor="middle" style="font-size:16px;fill:#44cc88;font-weight:600">73</text>
-<circle cx="34" cy="74" r="4" fill="#555"/>
-<text x="34" y="100" text-anchor="middle" style="font-size:10px;fill:#8a8a8a">Fonometro</text>
-<text x="34" y="112" text-anchor="middle" style="font-size:9px;fill:#ba7517">smartphone ok</text></g>
-</svg>
-<label style="display:flex;gap:7px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" id="ck1" onchange="chk()"> Cuffie collegate, volume PC al massimo</label>
-<label style="display:flex;gap:7px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" id="ck2" onchange="chk()"> EQ sistema e audio enhancer disattivati</label>
-<label style="display:flex;gap:7px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" id="ck3" onchange="chk()"> Fonometro pronto (Decibel X, NIOSH SLM, Sound Meter)</label>
-<label style="display:flex;gap:7px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" id="ck4" onchange="chk()"> Stanza silenziosa</label>
-<div id="ckSt" class="status warn" style="margin-top:8px">Spunta tutti i requisiti per continuare.</div></div>
-<div class="btn-row"><button class="primary" id="b0" onclick="go(1)" disabled>Avanti</button></div></div>
-
-<div class="sec" id="s1">
-<div class="card"><h3>Posizionamento microfono</h3><p class="cap">La posizione esatta del microfono e critica per la misura.</p>
-<svg width="100%" viewBox="0 0 680 180">
-<text x="170" y="16" text-anchor="middle" style="font-size:12px;font-weight:500;fill:#0f6e56">CORRETTO</text>
-<ellipse cx="170" cy="100" rx="55" ry="65" fill="#e1f5ee" stroke="#1d9e75" stroke-width="2"/>
-<ellipse cx="170" cy="100" rx="35" ry="44" fill="#1d9e75" opacity="0.1"/>
-<circle cx="170" cy="100" r="10" fill="#ba7517"><animate attributeName="r" values="10;14;10" dur="1.5s" repeatCount="indefinite"/></circle>
-<circle cx="170" cy="100" r="5" fill="#fff"/>
-<circle cx="252" cy="18" r="12" fill="#1d9e75"/>
-<path d="M245 18 L250 24 L259 12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
-<text x="170" y="176" text-anchor="middle" style="font-size:11px;fill:#8a8a8a">Mic al centro del padiglione</text>
-<line x1="340" y1="16" x2="340" y2="168" stroke="#d4cec5" stroke-width="0.5" stroke-dasharray="4,3"/>
-<text x="510" y="16" text-anchor="middle" style="font-size:12px;font-weight:500;fill:#a32d2d">ERRATO</text>
-<ellipse cx="510" cy="100" rx="55" ry="65" fill="#fcebeb" stroke="#e24b4a" stroke-width="2"/>
-<circle cx="548" cy="55" r="10" fill="#ba7517"/><circle cx="548" cy="55" r="5" fill="#fff"/>
-<line x1="546" y1="67" x2="528" y2="84" stroke="#a32d2d" stroke-width="1.5" stroke-dasharray="3,2"/>
-<circle cx="592" cy="18" r="12" fill="#e24b4a"/>
-<line x1="585" y1="12" x2="599" y2="24" stroke="#fff" stroke-width="2.5"/>
-<line x1="599" y1="12" x2="585" y2="24" stroke="#fff" stroke-width="2.5"/>
-<text x="510" y="176" text-anchor="middle" style="font-size:11px;fill:#8a8a8a">Mic fuori asse</text>
-</svg>
-<div class="status info">Premi leggermente il padiglione sul microfono per sigillare.</div></div>
-<div class="btn-row"><button onclick="go(0)">Indietro</button><button class="primary" onclick="go(2)">Avanti</button></div></div>
-
-<div class="sec" id="s2">
-<div class="card"><h3>Misura frequenza per frequenza</h3><p class="cap">Per ogni frequenza: invia il tono dal tab Test Tonale, leggi il fonometro, inserisci il valore e conferma.</p>
-<div style="display:flex;gap:10px;align-items:center;margin:8px 0">
-  <div id="fchips" style="display:flex;flex-wrap:wrap;gap:4px;flex:1"></div>
-  <div style="text-align:center;min-width:65px"><div style="font-size:26px;font-weight:600;color:#1d9e75" id="curFreq">1000</div><div style="font-size:11px;color:#8a8a8a">Hz</div></div>
-</div>
-<div class="row"><label>dB(A) misurato OD</label><input type="number" id="splOD" value="73" min="30" max="120"><button onclick="adj('splOD',-1)">-1</button><button onclick="adj('splOD',1)">+1</button></div>
-<div class="row"><label>dB(A) misurato OS</label><input type="number" id="splOS" value="72" min="30" max="120"><button onclick="adj('splOS',-1)">-1</button><button onclick="adj('splOS',1)">+1</button></div>
-<div class="btn-row"><button class="primary" onclick="confFreq()">Conferma questa frequenza</button><button onclick="nextFreq()">Freq. successiva</button></div>
-<div id="misStatus" class="status info">Inserisci il valore letto sul fonometro e conferma.</div>
-<div id="misGrid" style="margin-top:8px;display:none"><div style="font-size:11px;color:#8a8a8a;margin-bottom:4px">Misure confermate:</div><div class="grid3" id="misValues"></div></div></div>
-<div class="btn-row"><button onclick="go(1)">Indietro</button><button class="primary" onclick="go(3)">Salva profilo</button></div></div>
-
-<div class="sec" id="s3">
-<div class="card"><h3>Salva profilo di calibrazione globale</h3><p class="cap">Questo profilo verra usato per tutti i test finche non viene aggiornato.</p>
-<div id="riepilogo" style="margin-bottom:10px"></div>
-<div class="row"><label>Marca cuffie</label><input type="text" id="brand" value=""></div>
-<div class="row"><label>Modello</label><input type="text" id="model" value=""></div>
-<div class="row"><label>Note</label><input type="text" id="note" placeholder="es. Voltcraft SL-451, foam coupler"></div>
-<div id="salvato" class="status ok" style="display:none">Profilo salvato.</div></div>
-<div class="btn-row"><button onclick="go(2)">Indietro</button><button class="primary" onclick="salva()">Salva profilo globale</button></div></div>
-
 <script>
-const FREQS=[1000,2000,4000,6000,8000,500,250];
-let cur=0,misure={};
-function go(n){document.querySelectorAll('.sec').forEach((s,i)=>s.classList.toggle('on',i===n));[0,1,2,3].forEach(i=>{const d=document.getElementById('d'+i);d.classList.remove('active','done');if(i<n)d.classList.add('done');else if(i===n)d.classList.add('active');});if(n===2)buildChips();if(n===3)buildRiep();}
-function chk(){const ok=[1,2,3,4].every(i=>document.getElementById('ck'+i).checked);document.getElementById('b0').disabled=!ok;document.getElementById('ckSt').textContent=ok?'Tutto pronto!':'Spunta tutti i requisiti.';document.getElementById('ckSt').className='status '+(ok?'ok':'warn');}
-function buildChips(){const c=document.getElementById('fchips');c.innerHTML='';FREQS.forEach((f,i)=>{const d=document.createElement('div');const done=misure[f]!==undefined;const isC=i===cur;d.style.cssText='padding:3px 8px;border-radius:9px;font-size:11px;cursor:pointer;border:1px solid '+(isC?'#1d9e75':done?'#1d9e75':'#d4cec5')+';background:'+(isC?'#1d9e75':done?'#e1f5ee':'#f8f7f4')+';color:'+(isC?'#fff':done?'#0f6e56':'#8a8a8a');d.textContent=(f>=1000?f/1000+'k':f)+'Hz'+(done?' v':'');d.onclick=()=>{cur=i;document.getElementById('curFreq').textContent=FREQS[i];buildChips();};c.appendChild(d);});document.getElementById('curFreq').textContent=FREQS[cur];}
-function adj(id,d){const el=document.getElementById(id);el.value=parseInt(el.value)+d;}
-function confFreq(){const f=FREQS[cur];misure[f]={od:parseInt(document.getElementById('splOD').value),os:parseInt(document.getElementById('splOS').value)};document.getElementById('misStatus').textContent='Confermato '+f+' Hz';document.getElementById('misStatus').className='status ok';buildChips();buildMisGrid();if(cur<FREQS.length-1){cur++;document.getElementById('curFreq').textContent=FREQS[cur];buildChips();}}
-function nextFreq(){if(cur<FREQS.length-1){cur++;buildChips();}}
-function buildMisGrid(){const g=document.getElementById('misValues');g.innerHTML='';document.getElementById('misGrid').style.display=Object.keys(misure).length?'block':'none';Object.entries(misure).forEach(([f,m])=>{const d=document.createElement('div');d.className='metric';const offOD=m.od-70,offOS=m.os-70;d.innerHTML='<div class="v" style="font-size:13px">'+(f>=1000?f/1000+'k':f)+'Hz</div><div style="font-size:11px;color:'+(Math.abs(offOD)<3?'#1d9e75':'#ba7517')+'">OD '+(offOD>=0?'+':'')+offOD+'</div><div style="font-size:11px;color:'+(Math.abs(offOS)<3?'#1d9e75':'#ba7517')+'">OS '+(offOS>=0?'+':'')+offOS+'</div>';g.appendChild(d);});}
-function buildRiep(){const r=document.getElementById('riepilogo');if(!Object.keys(misure).length){r.innerHTML='<div class="status warn">Nessuna misura. Torna al passo precedente.</div>';return;}const avgOD=Math.round(Object.values(misure).reduce((a,m)=>a+m.od,0)/Object.keys(misure).length);const avgOS=Math.round(Object.values(misure).reduce((a,m)=>a+m.os,0)/Object.keys(misure).length);r.innerHTML='<div class="grid3"><div class="metric"><div class="v">'+avgOD+'</div><div class="l">Media OD dB</div></div><div class="metric"><div class="v">'+avgOS+'</div><div class="l">Media OS dB</div></div><div class="metric"><div class="v">'+Object.keys(misure).length+'/7</div><div class="l">Freq. misurate</div></div></div>';}
-function salva(){const data={brand:document.getElementById('brand').value,model:document.getElementById('model').value,note:document.getElementById('note').value,misure:misure};window.parent.postMessage({type:'streamlit:setComponentValue',value:JSON.stringify(data)},'*');document.getElementById('salvato').style.display='block';[0,1,2,3].forEach(i=>document.getElementById('d'+i).classList.add('done'));}
-buildChips();
+var FREQ=__FREQ__, PAN=__PAN__, LEVEL=__LEVEL__;
+var actx=null, osc=null, g=null, playing=false;
+function getCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx;}
+function start(){
+  var ctx=getCtx();
+  var amp=Math.pow(10,(LEVEL-90)/20)*0.85;amp=Math.max(0.0008,Math.min(0.95,amp));
+  osc=ctx.createOscillator();g=ctx.createGain();var p=ctx.createStereoPanner();
+  p.pan.value=PAN;osc.frequency.value=FREQ;osc.type='sine';
+  g.gain.setValueAtTime(0,ctx.currentTime);g.gain.linearRampToValueAtTime(amp,ctx.currentTime+0.06);
+  osc.connect(g);g.connect(p);p.connect(ctx.destination);osc.start();playing=true;
+  var b=document.getElementById('btn');b.textContent='\u25A0  Ferma tono';b.className='on';
+}
+function stop(){
+  try{var ctx=getCtx();if(g)g.gain.linearRampToValueAtTime(0,ctx.currentTime+0.06);if(osc)osc.stop(ctx.currentTime+0.12);}catch(e){}
+  osc=null;g=null;playing=false;
+  var b=document.getElementById('btn');b.textContent='\u25B6  Avvia tono continuo';b.className='off';
+}
+function toggle(){if(playing)stop();else start();}
 </script></body></html>"""
+
 
 def _ui_calibrazione(conn):
     st.subheader("Calibrazione cuffie")
-    st.caption("Wizard guidato 4 passi · Profilo globale · SVG animate")
+    st.caption("Misura l'uscita reale delle cuffie con un fonometro e salva l'offset globale")
+    ss = st.session_state
+    import streamlit.components.v1 as _sc
 
-    import streamlit.components.v1 as _stc
-    result = _stc.html(CAL_WIZARD_HTML, height=700, scrolling=True)
+    with st.expander("Requisiti prima di iniziare", expanded=False):
+        st.markdown(
+            "- Cuffie collegate, **volume del PC al massimo**\n"
+            "- EQ di sistema e \"audio enhancer\" **disattivati**\n"
+            "- Fonometro pronto (app: Decibel X, NIOSH SLM, Sound Meter)\n"
+            "- Stanza silenziosa\n"
+            "- Microfono al **centro del padiglione**, premuto leggermente per sigillare")
 
-    if result:
-        try:
-            data = json.loads(result) if isinstance(result, str) else result
-            if data and data.get("misure"):
-                misure = data["misure"]
-                vals_od = [m["od"] for m in misure.values()]
-                vals_os = [m["os"] for m in misure.values()]
-                avg_od = round(sum(vals_od)/len(vals_od)) if vals_od else 70
-                avg_os = round(sum(vals_os)/len(vals_os)) if vals_os else 70
-                st.session_state["cal_profilo_globale"] = {
-                    "brand": data.get("brand",""),
-                    "model": data.get("model",""),
-                    "offset_od": avg_od - 70,
-                    "offset_os": avg_os - 70,
-                    "misure": misure,
-                }
-                st.success(
-                    f"Profilo salvato: {data.get('brand','')} {data.get('model','')} — "
-                    f"OD: {avg_od-70:+d} dB · OS: {avg_os-70:+d} dB"
-                )
-        except Exception:
-            pass
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        cf = st.selectbox("Frequenza", [1000, 2000, 4000, 500, 250, 6000, 8000],
+                          format_func=lambda f: f"{f//1000}k Hz" if f >= 1000 else f"{f} Hz",
+                          key="cal_f")
+    with c2:
+        ce = st.selectbox("Orecchio", ["OD - Destro", "OS - Sinistro"], key="cal_ear")
+    with c3:
+        level = st.number_input("Livello presentato (dB HL)", 50, 90, 80, 5, key="cal_level",
+                                help="Livello a cui la console emette il tono. Usa 80-90 per leggere bene il fonometro.")
+    ce_code = "OD" if "OD" in ce else "OS"
+    pan = 0.9 if ce_code == "OD" else -0.9
+    flbl = f"{cf//1000}k Hz" if cf >= 1000 else f"{cf} Hz"
 
-    profilo = st.session_state.get("cal_profilo_globale")
+    console = (_CAL_CONSOLE_HTML
+               .replace("__FREQ__", str(int(cf)))
+               .replace("__FREQLBL__", flbl)
+               .replace("__EAR__", ce_code)
+               .replace("__PAN__", str(pan))
+               .replace("__LEVEL__", str(int(level))))
+    _sc.html(console, height=210)
+
+    # Inserimento misura (nativo → salva davvero)
+    if "cal_misure" not in ss:
+        ss["cal_misure"] = {}  # "freq_ear" -> {"measured": x, "level": y}
+    m1, m2 = st.columns([2, 1])
+    with m1:
+        measured = st.number_input(
+            f"dB(A) letto sul fonometro — {flbl} {ce_code}", 30, 120, int(level), 1, key="cal_meas")
+    with m2:
+        st.write("")
+        st.write("")
+        if st.button("Registra misura", use_container_width=True, key="cal_reg"):
+            ss["cal_misure"][f"{cf}_{ce_code}"] = {"measured": int(measured), "level": int(level)}
+            st.success(f"Registrata: {flbl} {ce_code} → letto {int(measured)} dB(A) a {int(level)} dB HL")
+
+    # Misure registrate
+    if ss["cal_misure"]:
+        st.markdown("**Misure registrate**")
+        for k, v in sorted(ss["cal_misure"].items()):
+            off = v["level"] - v["measured"]
+            st.markdown(
+                f"<span style='border:1px solid #1d9e75;border-radius:6px;padding:2px 7px;"
+                f"font-size:12px;color:#0f6e56;display:inline-block;margin:2px'>"
+                f"{k.replace('_',' ')} · letto {v['measured']} dB(A) · offset {off:+d}</span>",
+                unsafe_allow_html=True)
+        if st.button("Azzera misure", key="cal_clear"):
+            ss["cal_misure"] = {}
+            st.rerun()
+
+    # Offset per orecchio: offset = livello presentato − misurato (sposta verso l'alto se le cuffie sono basse)
+    od = [v["level"] - v["measured"] for k, v in ss["cal_misure"].items() if k.endswith("_OD")]
+    os_ = [v["level"] - v["measured"] for k, v in ss["cal_misure"].items() if k.endswith("_OS")]
+    off_od = round(sum(od) / len(od)) if od else 0
+    off_os = round(sum(os_) / len(os_)) if os_ else 0
+
+    st.divider()
+    cc1, cc2, cc3 = st.columns(3)
+    prev = ss.get("cal_profilo_globale", {})
+    brand = cc1.text_input("Marca cuffie", prev.get("brand", ""), key="cal_brand")
+    model = cc2.text_input("Modello", prev.get("model", ""), key="cal_model")
+    cc3.metric("Offset OD / OS", f"{off_od:+d} / {off_os:+d} dB")
+
+    if st.button("💾 Salva profilo globale", type="primary", key="cal_save"):
+        ss["cal_profilo_globale"] = {
+            "brand": brand, "model": model,
+            "offset_od": off_od, "offset_os": off_os,
+            "misure": dict(ss["cal_misure"]),
+        }
+        st.success(f"Profilo salvato: {brand} {model} — OD {off_od:+d} dB · OS {off_os:+d} dB. "
+                   "Verrà applicato automaticamente nel Test Tonale.")
+
+    profilo = ss.get("cal_profilo_globale")
     if profilo:
         st.info(
             f"Profilo attivo: **{profilo.get('brand','')} {profilo.get('model','')}** — "
-            f"Offset OD: {profilo.get('offset_od',0):+d} dB · "
-            f"OS: {profilo.get('offset_os',0):+d} dB"
-        )
+            f"Offset OD: {profilo.get('offset_od',0):+d} dB · OS: {profilo.get('offset_os',0):+d} dB")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab 4: Test Tonale
 # ─────────────────────────────────────────────────────────────────────────────
 
+_TONALE_CONSOLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
+body{padding:8px;background:#f8f7f4;color:#1a1a1a}
+.card{background:#fff;border:1px solid #d4cec5;border-radius:10px;padding:12px 16px}
+.freq{font-size:30px;font-weight:600;color:#1d9e75;text-align:center;line-height:1}
+.sub{font-size:11px;color:#8a8a8a;text-align:center;margin:2px 0 8px}
+.db{font-size:46px;font-weight:600;text-align:center;line-height:1.05}
+.dblbl{font-size:11px;color:#8a8a8a;text-align:center;margin-bottom:8px}
+input[type=range]{width:100%;accent-color:#1d9e75;margin:2px 0}
+button{font-family:inherit;font-size:13px;padding:7px 10px;border-radius:8px;border:1.5px solid #d4cec5;background:#fff;color:#4a4a4a;cursor:pointer}
+button:hover{background:#e1f5ee;border-color:#1d9e75;color:#0f6e56}
+button.primary{background:#1d9e75;border-color:#1d9e75;color:#fff;font-size:16px;padding:11px;width:100%;margin-top:8px}
+.row{display:flex;gap:6px;margin-top:8px}
+.row button{flex:1}
+.hint{font-size:10.5px;color:#8a8a8a;margin-top:8px;text-align:center;line-height:1.4}
+</style></head><body>
+<div class="card">
+  <div class="freq">__FREQLBL__</div>
+  <div class="sub">Orecchio __EAR__ &middot; Via __VIA__ &middot; durata __DUR__s</div>
+  <div class="db" id="dbVal">__DBINIT__</div>
+  <div class="dblbl">dB HL &middot; offset cuffie __CALOFF__ dB</div>
+  <input type="range" id="dbSlider" min="-20" max="90" step="5" value="__DBINIT__" oninput="setDb(this.value)">
+  <button class="primary" onclick="play()">&#9654;&nbsp; Invia tono &nbsp;<small style="opacity:.8">[Spazio]</small></button>
+  <div class="row">
+    <button onclick="step(-5)">&minus;5</button>
+    <button onclick="step(-1)">&minus;1</button>
+    <button onclick="step(1)">+1</button>
+    <button onclick="step(5)">+5</button>
+    <button onclick="stopTone()">&#9632; Stop</button>
+  </div>
+  <div class="hint">Cerca la soglia qui: l'audio &egrave; istantaneo, nessuna ricarica.<br>Trovata la soglia, registra il valore con &laquo;Valida soglia&raquo; qui sotto.</div>
+</div>
+<script>
+var FREQ=__FREQ__, PAN=__PAN__, DUR=__DUR__, CALOFF=__CALOFFNUM__;
+var db=__DBINIT__, actx=null, curO=null, curG=null;
+function getCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx;}
+function render(){document.getElementById('dbVal').textContent=db;var s=document.getElementById('dbSlider');if(s&&parseInt(s.value)!==db)s.value=db;}
+function setDb(v){db=parseInt(v);render();}
+function step(d){db=Math.max(-20,Math.min(90,db+d));render();}
+function stopTone(){try{var t=getCtx().currentTime;if(curG){curG.gain.cancelScheduledValues(t);curG.gain.setTargetAtTime(0,t,0.01);}if(curO){curO.stop(t+0.05);}}catch(e){}curO=null;curG=null;}
+function play(){
+  var ctx=getCtx();stopTone();
+  var dbEff=db+CALOFF;
+  var amp=Math.pow(10,(dbEff-90)/20)*0.85;amp=Math.max(0.0008,Math.min(0.95,amp));
+  var o=ctx.createOscillator(),g=ctx.createGain(),p=ctx.createStereoPanner();
+  p.pan.value=PAN;o.frequency.value=FREQ;o.type='sine';
+  var t0=ctx.currentTime;
+  g.gain.setValueAtTime(0,t0);
+  g.gain.linearRampToValueAtTime(amp,t0+0.02);
+  g.gain.setValueAtTime(amp,t0+DUR-0.05);
+  g.gain.linearRampToValueAtTime(0,t0+DUR);
+  o.connect(g);g.connect(p);p.connect(ctx.destination);
+  o.start();o.stop(t0+DUR+0.02);
+  curO=o;curG=g;
+}
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();play();}
+  else if(e.code==='ArrowUp'){e.preventDefault();step(5);}
+  else if(e.code==='ArrowDown'){e.preventDefault();step(-5);}
+});
+render();
+</script></body></html>"""
+
+
 def _ui_test_tonale(conn, paz_id, operatore):
     st.subheader("Test tonale audiometrico")
-    st.caption("Via aerea (AC) e ossea (BC) · WebAudio zero latenza · Metodo Hipérion · Curva Tomatis")
+    st.caption("Via aerea (AC) e ossea (BC) · WebAudio istantaneo · Metodo Hipérion · Curva Tomatis")
 
-    # Shortcut tastiera JS
     import streamlit.components.v1 as _sc
-    _sc.html("""<script>
-(function(){if(window._kbdBound)return;window._kbdBound=true;
-document.addEventListener('keydown',function(e){
-  var tag=document.activeElement?document.activeElement.tagName:'';
-  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
-  if(e.code==='ArrowUp'){e.preventDefault();var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.trim()==='+5 [↑]')b.click();});}
-  if(e.code==='ArrowDown'){e.preventDefault();var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.trim()==='-5 [↓]')b.click();});}
-  if(e.key==='r'||e.key==='R'){var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.includes('RISPONDE')&&!b.textContent.includes('NON'))b.click();});}
-  if(e.key==='n'||e.key==='N'){var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.includes('NON RISPONDE'))b.click();});}
-  if(e.key==='v'||e.key==='V'){var btns=window.parent.document.querySelectorAll('button');btns.forEach(function(b){if(b.textContent.includes('VALIDA'))b.click();});}
-});})();
-</script><div style="display:none">k</div>""", height=0)
-
     ss = st.session_state
 
-    c1,c2,c3 = st.columns(3)
-    with c1: ear = st.selectbox("Orecchio", ["OD - Destro","OS - Sinistro"], key="tt_ear_v3")
-    with c2: via = st.selectbox("Via", ["AC - Aerea","BC - Ossea"], key="tt_via_v3")
-    with c3: dur_str = st.select_slider("Durata tono", ["1.0","1.5","2.0","2.5","3.0"], value="2.0", key="tt_dur_v3")
+    # ── Parametri di stimolo (nativi: cambiano di rado) ──────────────────────
+    c1, c2, c3 = st.columns(3)
+    with c1: ear = st.selectbox("Orecchio", ["OD - Destro", "OS - Sinistro"], key="tt_ear_v3")
+    with c2: via = st.selectbox("Via", ["AC - Aerea", "BC - Ossea"], key="tt_via_v3")
+    with c3: dur_str = st.select_slider("Durata tono", ["1.0", "1.5", "2.0", "2.5", "3.0"],
+                                        value="2.0", key="tt_dur_v3")
+
+    cur_f = st.selectbox("Frequenza", FREQS_TON,
+                         format_func=lambda f: str(f) if f < 1000 else f"{f//1000}k Hz",
+                         key="tt_freq_v3")
 
     ear_code = "OD" if "OD" in ear else "OS"
     via_code = "ac" if "AC" in via else "bc"
     dur = float(dur_str)
+    fi = FREQS_TON.index(cur_f)
 
-    c1,c2 = st.columns(2)
-    with c1: cur_f = st.selectbox("Frequenza", FREQS_TON,
-                                   format_func=lambda f: str(f) if f<1000 else f"{f//1000}k Hz",
-                                   key="tt_freq_v3")
-    with c2: cur_db = st.slider("Livello dB HL", -20, 90, 30, 5, key="tt_db_v3")
-
-    # Offset calibrazione
+    # Offset di calibrazione (per orecchio), iniettato nella console
     cal_offset = ss.get("cal_profilo_globale", {}).get(f"offset_{ear_code.lower()}", 0)
-    db_eff = cur_db + cal_offset
-
-    # Tono WebAudio — istantaneo
     pan_val = 0.9 if ear_code == "OD" else -0.9
-    amp_expr = f"Math.pow(10,({db_eff}-90)/20)*0.85"
-    _sc.html(f"""<script>
-(function(){{
-  if(!window._lastTonParams) window._lastTonParams = {{}};
-  var p = {{f:{int(cur_f)},db:{db_eff},ear:'{ear_code}',dur:{dur}}};
-  var lp = window._lastTonParams;
-  if(lp.f===p.f && lp.db===p.db && lp.ear===p.ear && lp.dur===p.dur) return;
-  window._lastTonParams = p;
-  window._curTonParams = p;
-}})();
-</script><div style="display:none">p</div>""", height=0)
+    db_init = int(ss.get(f"tt_soglie_{ear_code}_{via_code}_v3", {}).get(fi, 30))
 
-    # Pulsante invia tono
-    if st.button(f"▶  Invia tono  [SPAZIO] — {cur_f}Hz {db_eff}dB {ear_code}",
-                 type="primary", key="tt_play_v3", use_container_width=True):
-        _sc.html(f"""<script>
-(function(){{
-  var a=new(window.AudioContext||window.webkitAudioContext)();
-  if(a.state==='suspended')a.resume();
-  var o=a.createOscillator(),g=a.createGain(),p=a.createStereoPanner();
-  p.pan.value={pan_val};o.frequency.value={int(cur_f)};o.type='sine';
-  var amp={amp_expr};amp=Math.max(0.001,Math.min(0.95,amp));
-  g.gain.setValueAtTime(0,a.currentTime);
-  g.gain.linearRampToValueAtTime(amp,a.currentTime+0.02);
-  g.gain.setValueAtTime(amp,a.currentTime+{dur}-0.05);
-  g.gain.linearRampToValueAtTime(0,a.currentTime+{dur});
-  o.connect(g);g.connect(p);p.connect(a.destination);
-  o.start();o.stop(a.currentTime+{dur});
-}})();
-</script><div style="display:none">t</div>""", height=0)
-        if cal_offset != 0:
-            st.caption(f"Offset calibrazione applicato: {cal_offset:+d} dB")
+    # ── Console audio autonoma: AudioContext persistente, zero ricariche ─────
+    console = (_TONALE_CONSOLE_HTML
+               .replace("__FREQ__", str(int(cur_f)))
+               .replace("__FREQLBL__", FLABELS_TON[fi] + " Hz")
+               .replace("__EAR__", ear_code)
+               .replace("__VIA__", via_code.upper())
+               .replace("__PAN__", str(pan_val))
+               .replace("__DUR__", str(dur))
+               .replace("__CALOFF__", f"{cal_offset:+d}")
+               .replace("__CALOFFNUM__", str(cal_offset))
+               .replace("__DBINIT__", str(db_init)))
+    _sc.html(console, height=340)
 
-    # Regolazione rapida
-    d1,d2,d3,d4 = st.columns(4)
-    if d1.button("-5 [↓]", key="tt_m5_v3", use_container_width=True):
-        st.session_state["tt_db_v3"] = max(-20, cur_db - 5)
-    if d2.button("+5 [↑]", key="tt_p5_v3", use_container_width=True):
-        st.session_state["tt_db_v3"] = min(90, cur_db + 5)
-    if d3.button("-1", key="tt_m1_v3", use_container_width=True):
-        st.session_state["tt_db_v3"] = max(-20, cur_db - 1)
-    if d4.button("+1", key="tt_p1_v3", use_container_width=True):
-        st.session_state["tt_db_v3"] = min(90, cur_db + 1)
+    if cal_offset:
+        st.caption(f"Offset calibrazione cuffie applicato: {cal_offset:+d} dB")
 
-    # Pad risposta
-    st.divider()
-    st.caption("R = risponde · N = non risponde · V = valida")
-    p1,p2,p3,p4 = st.columns(4)
-    risp    = p1.button("✓ RISPONDE [R]",     key="tt_si_v3",  use_container_width=True)
-    no_risp = p2.button("✗ NON RISPONDE [N]", key="tt_no_v3",  use_container_width=True)
-    valida  = p3.button("✅ VALIDA [V]",       key="tt_val_v3", type="primary", use_container_width=True)
-    p4.button("→ Successiva",                  key="tt_next_v3",use_container_width=True)
+    # ── Registrazione soglia (nativa → salva davvero) ────────────────────────
+    key_s = f"tt_soglie_{ear_code}_{via_code}_v3"
+    if key_s not in ss:
+        ss[key_s] = {}
+    rc1, rc2 = st.columns([2, 1])
+    with rc1:
+        soglia = st.number_input(
+            f"Soglia trovata — {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} (dB HL)",
+            -20, 120, db_init, 5, key="tt_soglia_in_v3")
+    with rc2:
+        st.write("")
+        st.write("")
+        if st.button("✓ Valida soglia", type="primary", use_container_width=True, key="tt_val_v3"):
+            ss[key_s][fi] = int(soglia)
+            st.success(f"Registrata: {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} = {int(soglia)} dB HL")
 
-    if risp:
-        ss["tt_last_resp_v3"] = cur_db
-        st.info(f"Risponde a {cur_db} dB — abbassa e reinvia il tono")
-    if no_risp:
-        st.warning(f"Non risponde a {cur_db} dB — alza il livello")
-    if valida:
-        last = ss.get("tt_last_resp_v3", cur_db)
-        key_s = f"tt_soglie_{ear_code}_{via_code}_v3"
-        if key_s not in ss: ss[key_s] = {}
-        ss[key_s][FREQS_TON.index(cur_f)] = last
-        ss["tt_last_resp_v3"] = None
-        st.success(f"Soglia: {cur_f} Hz {ear_code} {via_code.upper()} = {last} dB HL")
-
-    # Soglie registrate
+    # ── Soglie registrate ────────────────────────────────────────────────────
     st.divider()
     st.markdown("**Soglie registrate**")
-    sc1,sc2,sc3,sc4 = st.columns(4)
-    for col, (ek,vk,label,color) in zip([sc1,sc2,sc3,sc4],[
-        ("OD","ac","OD AC","#c0392b"),("OS","ac","OS AC","#2980b9"),
-        ("OD","bc","OD BC","#8e44ad"),("OS","bc","OS BC","#16a085"),
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    for col, (ek, vk, label, color) in zip([sc1, sc2, sc3, sc4], [
+        ("OD", "ac", "OD AC", "#c0392b"), ("OS", "ac", "OS AC", "#2980b9"),
+        ("OD", "bc", "OD BC", "#8e44ad"), ("OS", "bc", "OS BC", "#16a085"),
     ]):
         col.markdown(f"<b style='color:{color};font-size:11px'>{label}</b>", unsafe_allow_html=True)
         soglie = ss.get(f"tt_soglie_{ek}_{vk}_v3", {})
-        for fi, v in sorted(soglie.items()):
+        for fii, v in sorted(soglie.items()):
             col.markdown(
                 f"<span style='border:1px solid {color};border-radius:6px;"
                 f"padding:1px 5px;font-size:11px;color:{color};"
-                f"display:inline-block;margin:1px'>{FLABELS_TON[fi]}:{v}</span>",
+                f"display:inline-block;margin:1px'>{FLABELS_TON[fii]}:{v}</span>",
                 unsafe_allow_html=True)
 
-    # Curva Tomatis
+    # ── Curva Tomatis ─────────────────────────────────────────────────────────
     st.divider()
     st.markdown("**Curva Tomatis** (valori target dB HL)")
-    if "tt_tomatis_v3" not in ss: ss["tt_tomatis_v3"] = list(TOMATIS_STD)
+    if "tt_tomatis_v3" not in ss:
+        ss["tt_tomatis_v3"] = list(TOMATIS_STD)
     tc = st.columns(11)
     for i, lbl in enumerate(FLABELS_TON):
         v = tc[i].number_input(lbl, -30, 10, int(ss["tt_tomatis_v3"][i]), 1, key=f"tt_tm{i}_v3")
@@ -777,22 +810,22 @@ document.addEventListener('keydown',function(e){
     if st.button("Ripristina standard", key="tt_tm_rst_v3"):
         ss["tt_tomatis_v3"] = list(TOMATIS_STD)
 
-    # Grafico + EQ
-    od_ac = [ss.get("tt_soglie_OD_ac_v3",{}).get(i) for i in range(11)]
-    os_ac = [ss.get("tt_soglie_OS_ac_v3",{}).get(i) for i in range(11)]
-    tom   = ss.get("tt_tomatis_v3", list(TOMATIS_STD))
+    # ── Grafico + EQ ──────────────────────────────────────────────────────────
+    od_ac = [ss.get("tt_soglie_OD_ac_v3", {}).get(i) for i in range(11)]
+    os_ac = [ss.get("tt_soglie_OS_ac_v3", {}).get(i) for i in range(11)]
+    tom = ss.get("tt_tomatis_v3", list(TOMATIS_STD))
 
     if any(v is not None for v in od_ac + os_ac):
         st.divider()
         _disegna_audiogramma(od_ac, os_ac, tom)
-        eq_od = [round(tom[i]-od_ac[i],1) if od_ac[i] is not None else None for i in range(11)]
-        eq_os = [round(tom[i]-os_ac[i],1) if os_ac[i] is not None else None for i in range(11)]
+        eq_od = [round(tom[i] - od_ac[i], 1) if od_ac[i] is not None else None for i in range(11)]
+        eq_os = [round(tom[i] - os_ac[i], 1) if os_ac[i] is not None else None for i in range(11)]
         st.markdown("**Delta EQ terapeutico** (Tomatis − soglia paziente)")
         ec = st.columns(11)
-        for i,(lbl,vod,vos) in enumerate(zip(FLABELS_TON,eq_od,eq_os)):
+        for i, (lbl, vod, vos) in enumerate(zip(FLABELS_TON, eq_od, eq_os)):
             v = vod if vod is not None else vos
             if v is not None:
-                cc = "green" if v>3 else "red" if v<-3 else "orange"
+                cc = "green" if v > 3 else "red" if v < -3 else "orange"
                 ec[i].markdown(
                     f"<div style='text-align:center'><b style='color:{cc}'>{v:+.0f}</b>"
                     f"<br><small style='color:#888'>{lbl}</small></div>",
@@ -801,12 +834,12 @@ document.addEventListener('keydown',function(e){
     st.divider()
     nota_ton = st.text_input("Note audiogramma", key="tt_note_v3")
     if st.button("Salva audiogramma", type="primary", key="tt_save_v3"):
-        od_bc = [ss.get("tt_soglie_OD_bc_v3",{}).get(i) for i in range(11)]
-        os_bc = [ss.get("tt_soglie_OS_bc_v3",{}).get(i) for i in range(11)]
-        eq_od2 = [round(tom[i]-od_ac[i],1) if od_ac[i] is not None else 0 for i in range(11)]
-        n = sum(1 for v in od_ac+os_ac if v is not None)
-        dati = {"od_ac":od_ac,"os_ac":os_ac,"od_bc":od_bc,"os_bc":os_bc,
-                "tomatis":tom,"eq_od":eq_od2}
+        od_bc = [ss.get("tt_soglie_OD_bc_v3", {}).get(i) for i in range(11)]
+        os_bc = [ss.get("tt_soglie_OS_bc_v3", {}).get(i) for i in range(11)]
+        eq_od2 = [round(tom[i] - od_ac[i], 1) if od_ac[i] is not None else 0 for i in range(11)]
+        n = sum(1 for v in od_ac + os_ac if v is not None)
+        dati = {"od_ac": od_ac, "os_ac": os_ac, "od_bc": od_bc, "os_bc": os_bc,
+                "tomatis": tom, "eq_od": eq_od2}
         if _salva(conn, paz_id, "Audiogramma", dati, float(n), f"{n} soglie", operatore, nota_ton):
             st.success(f"Audiogramma salvato — {n} soglie.")
 
