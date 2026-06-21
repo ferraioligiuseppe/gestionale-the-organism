@@ -84,11 +84,14 @@ def main() -> int:
     try:
         import psycopg2
         import psycopg2.extras
+        # IMPORTANTE: impostiamo anche app.current_studio (come fa l'app al login),
+        # altrimenti la Row-Level Security sulla tabella pazienti blocca le scritture.
+        # Studio The Organism = 1.
         conn = psycopg2.connect(
             url,
             cursor_factory=psycopg2.extras.DictCursor,
             connect_timeout=15,
-            options="-c statement_timeout=60000",
+            options="-c statement_timeout=60000 -c app.current_studio=1",
         )
         conn.autocommit = False
     except Exception as e:
