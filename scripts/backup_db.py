@@ -114,12 +114,17 @@ def run_pg_dump(url: str, out_path: str) -> bool:
         "--format=custom",
         "--no-owner",
         "--no-acl",
+        "--enable-row-security",   # rispetta la RLS invece di bloccarsi sulle tabelle protette
         "--file", out_path,
         "--dbname", url,
     ]
+    # Dichiara il contesto studio (come fa l'app), così la RLS lascia leggere le righe.
+    # Studio The Organism = 1.
+    dump_env = dict(os.environ)
+    dump_env["PGOPTIONS"] = "-c app.current_studio=1"
     log("Avvio pg_dump...")
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, env=dump_env)
     except FileNotFoundError:
         log("ERRORE: pg_dump non trovato. Il workflow deve installare postgresql-client.")
         return False
