@@ -521,10 +521,15 @@ def processa_sync_pnev(conn=None, dry_run: bool = False) -> dict:
             continue
         try:
             _importa_paziente(conn, nome, cognome, em)
+            conn.commit()                      # ogni paziente confermato subito
             report["importati"] += 1
             report["dettaglio"].append(
                 {"azione": "importato", "nome": u.get("name", ""), "email": em})
         except Exception as e:
+            try:
+                conn.rollback()                # pulisce la transazione: il prossimo riparte pulito
+            except Exception:
+                pass
             report["errori"].append(f"{em}: {e}")
 
     if not dry_run:
