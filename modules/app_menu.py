@@ -64,6 +64,7 @@ SOTTOSEZIONI = {
         "🔢 DEM interattivo",
         "👁️ K-D interattivo",
         "👁️ Eye tracking",
+        "👁️ Lenti a contatto",
     ],
     AREA_TEST_NEUROEVOL: [
         "🧬 INPP — Valutazione diagnostica",
@@ -74,7 +75,6 @@ SOTTOSEZIONI = {
     AREA_QUESTIONARI: [
         "📋 Questionari remoti",
         "🎮 Esercizi Wordwall",
-        "👁️ Lenti a contatto",
         "🦴 Osteopatia",
         "📸 Photoref AI",
     ],
