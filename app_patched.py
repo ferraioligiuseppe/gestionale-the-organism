@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
+from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
 from modules.stimolazione_uditiva.ui_orl_eq import ui_orl_eq
 from modules.ui_lenti_inverse import ui_lenti_inverse
 
@@ -28,7 +29,7 @@ try:
 except Exception:
     PSYCOPG2_AVAILABLE = False
 
-USE_S3 = False  # Disabilitato: archiviamo su Neon (BYTEA) e/o altri canali
+USE_S3 = False  # Disabilitato: archiviamo su Postgres (BYTEA) e/o altri canali
 
 
 
@@ -798,7 +799,7 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
 if APP_MODE == "test":
     debug_secrets_auth()
 if APP_MODE == "test":
-    st.warning("⚠️ MODALITÀ TEST — database separato (Neon TEST).")
+    st.warning("⚠️ MODALITÀ TEST — database separato (OVH TEST).")
 from datetime import date, datetime
 from typing import Optional, Dict
 from letterhead_pdf import build_pdf_with_letterhead
@@ -1997,12 +1998,12 @@ def _sidebar_db_indicator():
     try:
         if _is_streamlit_cloud():
             if _DB_BACKEND == "postgres" and _DB_URL:
-                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
+                st.sidebar.success("🟢 DB: PostgreSQL (OVH)")
             else:
-                st.sidebar.error("🔴 DB: PostgreSQL (Neon) NON configurato")
+                st.sidebar.error("🔴 DB: PostgreSQL (OVH) NON configurato")
         else:
             if _DB_BACKEND == "postgres" and _DB_URL:
-                st.sidebar.success("🟢 DB: PostgreSQL (Neon)")
+                st.sidebar.success("🟢 DB: PostgreSQL (OVH)")
             else:
                 # locale / test
                 db_path = os.getenv("SQLITE_DB_PATH", "the_organism_gestionale_TEST.db")
@@ -2014,7 +2015,7 @@ def _require_postgres_on_cloud():
     # Mostra sempre l'indicatore, anche in caso di errore
     _sidebar_db_indicator()
     if _is_streamlit_cloud() and _DB_BACKEND != "postgres":
-        st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (Neon).")
+        st.error("❌ DATABASE_URL mancante nei Secrets: in Streamlit Cloud il gestionale richiede PostgreSQL (OVH).")
         diag = _secrets_diagnostics()
         st.write("Diagnostica Secrets (senza valori):")
         st.write({
@@ -2048,11 +2049,19 @@ def _connect_cached():
             raise RuntimeError("psycopg2 non disponibile. Aggiungi psycopg2-binary a requirements.txt")
 
         try:
-            conn = psycopg2.connect(_DB_URL)
+            conn = psycopg2.connect(
+                _DB_URL,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+                connect_timeout=10,
+                options="-c statement_timeout=30000",
+            )
         except Exception:
             # Non-leak diagnostics (does not print the URL)
             u = _DB_URL or ""
-            st.error("❌ Errore connessione PostgreSQL (Neon). La DATABASE_URL non sembra in un formato valido per psycopg2.")
+            st.error("❌ Errore connessione PostgreSQL (OVH). La DATABASE_URL non sembra in un formato valido per psycopg2.")
             st.write({
                 "db_url_len": len(u),
                 "db_url_has_whitespace": any(ch.isspace() for ch in u),
@@ -2335,7 +2344,7 @@ def init_db() -> None:
         return
 
     # -------------------------
-    # PostgreSQL (Neon) init
+    # PostgreSQL (OVH) init
     # -------------------------
     # Nota: usiamo tipi compatibili e vincoli FK corretti.
         # Anamnesi (Valutazione PNEV) – tabella centrale (PostgreSQL)
@@ -6362,7 +6371,7 @@ def ui_osteopatia_section():
     paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
     if not paz_list:
         st.error("Nessun paziente trovato nel database (AUTO).")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
+        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su OVH.")
         if paz_table or paz_colmap:
             st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
         return
@@ -6423,7 +6432,7 @@ def ui_dashboard_evolutiva():
     paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
     if not paz_list:
         st.error("Nessun paziente trovato nel database (AUTO).")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
+        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su OVH.")
         if paz_table or paz_colmap:
             st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
         return
@@ -6462,7 +6471,7 @@ def ui_dashboard_evolutiva():
         )
         rows = cur.fetchall()
     except Exception:
-        # se la tabella non esiste ancora (cloud/Neon), la creo e riprovo
+        # se la tabella non esiste ancora (cloud), la creo e riprovo
         _ensure_relazioni_cliniche_table(conn)
         try:
             cur.execute(
@@ -6527,7 +6536,7 @@ def ui_dashboard_evolutiva():
 def ui_debug_db():
     import streamlit as st
     st.header("🛠️ Debug DB (The Organism)")
-    st.caption("Questa schermata NON mostra credenziali. Serve solo a capire tabelle/colonne presenti su Neon.")
+    st.caption("Questa schermata NON mostra credenziali. Serve solo a capire tabelle/colonne presenti su OVH.")
 
     conn = get_connection()
     tables = _debug_list_tables(conn)
@@ -6565,11 +6574,11 @@ def ui_debug_db():
 
 def ui_import_pazienti():
     import streamlit as st
-    st.header("📥 Import Pazienti su Neon (Cloud)")
-    st.caption("Carica un file CSV o Excel con almeno: Cognome, Nome (consigliato anche Data_Nascita). I dati verranno inseriti su Neon.")
+    st.header("📥 Import Pazienti su OVH (Cloud)")
+    st.caption("Carica un file CSV o Excel con almeno: Cognome, Nome (consigliato anche Data_Nascita). I dati verranno inseriti su OVH.")
 
     if _DB_BACKEND != "postgres":
-        st.error("Import disponibile solo con PostgreSQL (Neon). Configura [db].DATABASE_URL nei Secrets.")
+        st.error("Import disponibile solo con PostgreSQL (OVH). Configura [db].DATABASE_URL nei Secrets.")
         return
 
     up = st.file_uploader("Carica CSV / XLSX", type=["csv", "xlsx"])
@@ -6615,7 +6624,7 @@ def ui_import_pazienti():
     st.subheader("Mapping (auto)")
     st.write({"Cognome": col_cognome, "Nome": col_nome, "Data_Nascita": col_dn})
 
-    if st.button("Importa su Neon"):
+    if st.button("Importa su OVH"):
         try:
             init_db()
         except Exception:
@@ -7150,7 +7159,7 @@ def ui_privacy_pdf():
             digest = _sha256_bytes(pdf_bytes)
             key = f"consensi/{pid}/template/privacy_{doc_type}_{digest[:10]}.pdf"
 
-            ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
+            ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Postgres)")
             if not ok_s3:
                 st.error(f"Upload S3 disabilitato: {msg_s3}")
                 return
@@ -7369,11 +7378,11 @@ def ui_public_sign_page():
         digest = _sha256_bytes(final_pdf)
         ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f"consensi/{pid}/firmati/privacy_{doc_type}/online_{ts}_{digest[:10]}.pdf"
-        ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Neon)")
+        ok_s3, msg_s3 = (True, "S3 disabilitato (archiviazione su Postgres)")
         ok_upload = ok_s3
         if not ok_upload:
             st.error(f"Upload S3 disabilitato: {msg_s3}")
-            st.warning("Documento archiviato su Neon. (S3 disabilitato). Il PDF verrà comunque inviato via email se configurata.")
+            st.warning("Documento archiviato su OVH. (S3 disabilitato). Il PDF verrà comunque inviato via email se configurata.")
         else:
             _db_insert_documento(conn, int(pid), f"privacy_{doc_type}_online", key, digest, f"privacy_{doc_type}_online.pdf")
 
@@ -7428,12 +7437,12 @@ def ui_public_sign_page():
         _send_email_with_pdf(to_list, subject, body, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
     except Exception as e:
         email_ok = False
-        st.warning(f"Consenso archiviato su Neon, ma invio email non riuscito: {e}")
+        st.warning(f"Consenso archiviato su OVH, ma invio email non riuscito: {e}")
 
     if email_ok:
-        st.success("✅ Consenso archiviato su Neon e inviato via email. Puoi chiudere questa pagina.")
+        st.success("✅ Consenso archiviato su Postgres e inviato via email. Puoi chiudere questa pagina.")
     else:
-        st.success("✅ Consenso archiviato su Neon. Puoi chiudere questa pagina.")
+        st.success("✅ Consenso archiviato su OVH. Puoi chiudere questa pagina.")
 
 # ======================================
 # AUDIOGRAMMA FUNZIONALE (TEST) – MVP
@@ -9507,14 +9516,7 @@ def main():
     if is_admin():
         sections.append("👥 Utenti / Ruoli")
 
-    if APP_MODE == "test":
-        sections.append("🎧 Audiogramma funzionale (TEST)")
-        sections.append("🎧 ORL + EQ (MODULO)")
-        sections.append("🩺 Esami ORL – soglie tonali (TEST)")
-        sections.append("🎚️ EQ stimolazione uditiva (TEST)")
-        sections.append("🎧 Stimolazione uditiva (TEST)")
-        sections.append("🔧 Calibrazione cuffie (TEST)")
-        sections.append("🧹 Pulizia DB (TEST)")
+
     sezione = st.sidebar.radio("Vai a", sections)
 
     # routing alle varie sezioni
@@ -9546,6 +9548,8 @@ def main():
         ui_import_pazienti()
     elif sezione == "👥 Utenti / Ruoli":
         ui_gestione_utenti(get_connection)
+    elif sezione == "🔉 Diagnostica Uditiva":
+        _ui_diag_uditiva()
     elif sezione == "🔧 Calibrazione cuffie (TEST)":
         ui_calibrazione_cuffie_test()
     elif sezione == "🎧 Audiogramma funzionale (TEST)":
@@ -9573,7 +9577,7 @@ except Exception:
     DocxTemplate = None
 
 def _ensure_relazioni_cliniche_table(conn):
-    """Crea la tabella relazioni_cliniche sia su SQLite che su PostgreSQL (Neon)."""
+    """Crea la tabella relazioni_cliniche sia su SQLite che su PostgreSQL (OVH)."""
     cur = conn.cursor()
     # Prova prima sintassi PostgreSQL (psycopg2)
     try:
@@ -9749,7 +9753,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     paz_list, paz_table, paz_colmap = fetch_pazienti_for_select(conn)
     if not paz_list:
         st.error("Nessun paziente trovato nel database (AUTO).")
-        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su Neon.")
+        st.info("Apri la sezione 🛠️ Debug DB per vedere quali tabelle sono presenti su OVH.")
         if paz_table or paz_colmap:
             st.caption(f"Rilevato: {paz_table} • Colonne: {paz_colmap}")
         return
