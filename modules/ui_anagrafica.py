@@ -1371,6 +1371,13 @@ def render_anagrafica(conn) -> None:
         })
     df = pd.DataFrame(rows_df)
 
+    # Età come intero nullable: evita il mix int/"" (object) che rompe la
+    # serializzazione pyarrow di AgGrid (ArrowTypeError: Expected bytes).
+    try:
+        df["Età"] = pd.to_numeric(df["Età"], errors="coerce").astype("Int64")
+    except Exception:
+        df["Età"] = df["Età"].astype(str)
+
     # Import lazy aggrid
     try:
         from st_aggrid import (
