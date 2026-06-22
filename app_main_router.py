@@ -9,8 +9,9 @@ import streamlit as st
 
 from .app_menu import (
     AREE_ORDINE, SOTTOSEZIONI,
-    AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_TEST_LIVE,
-    AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA, AREA_STUDIO,
+    AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_VALUTAZIONE_VISIVA, AREA_TEST_NEUROEVOL, AREA_TEST_LIVE,
+    AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA,
+    AREA_MARKETING, AREA_STUDIO,
 )
 
 
@@ -271,29 +272,76 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             _render_dashboard(conn)
             return
         if sotto == "👤 Anagrafica pazienti":
-            from .pazienti import render_pazienti_section
-            render_pazienti_section(); return
+            try:
+                from .ui_anagrafica import render_anagrafica
+                render_anagrafica(conn)
+            except Exception as e:
+                import traceback
+                st.error(f"Errore anagrafica: {e}")
+                with st.expander("Dettagli tecnici"):
+                    st.code(traceback.format_exc())
+            return
+        if sotto == "🎟️ Coupon OF / SDS":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
+            try:
+                from modules import app_core
+                app_core.ui_coupons()
+            except Exception as e:
+                st.error(f"Errore coupon: {e}")
+            return
         if sotto == "📅 Sedute / Terapie":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             from .sections.ui_cliniche import render_sedute_section
             render_sedute_section(); return
         if sotto == "🔒 Privacy & Consensi":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
             from .privacy.ui_privacy_section import render_privacy_section
             render_privacy_section(); return
         if sotto == "📥 Import pazienti":
             from .sections.ui_cliniche import render_import_section
             render_import_section(); return
+        if sotto == "🔗 Sincronizza pnev.it":
+            from .ui_sync_pnev import render_sync_pnev
+            render_sync_pnev(conn); return
+        if sotto == "🚀 Trasferisci a pnev.it":
+            from .ui_trasferimento_pnev import render_trasferimento_pnev
+            render_trasferimento_pnev(conn); return
+        if sotto == "🎧 Screening uditivo":
+            from .ui_screening_link import render_screening_link
+            render_screening_link(conn); return
 
     # ── AREA VALUTAZIONE ──────────────────────────────────────────────
     elif area == AREA_VALUTAZIONE:
-        paz_id, _ = _seleziona_paziente(conn, "val")
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
         if not paz_id:
             return
         if sotto == "🔬 PNEV":
             from .pnev.ui_pnev import render_pnev_section
             render_pnev_section(); return
-        if sotto == "👁️ Valutazione visiva (VVF)":
-            from .sections.ui_cliniche import render_vision_section
-            render_vision_section(); return
+        if sotto == "📋 Anamnesi The Organism":
+            try:
+                from .ui_anamnesi_the_organism import render_anamnesi_the_organism
+                render_anamnesi_the_organism(conn, paz_id)
+            except Exception as e:
+                st.error(f"Modulo anamnesi non disponibile: {e}")
+            return
+        if sotto == "👁️ Anamnesi visiva":
+            try:
+                from .ui_anamnesi_visiva import render_anamnesi_visiva
+                render_anamnesi_visiva(conn, paz_id)
+            except Exception as e:
+                st.error(f"Modulo anamnesi visiva non disponibile: {e}")
+            return
         if sotto == "🧠 NPS — Neuropsicologica":
             try:
                 from .ui_nps_completo import render_nps_completo
@@ -326,9 +374,95 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             st.info("Sezione in costruzione — usa la Valutazione visiva (VVF) per ora.")
             return
 
+    # ── AREA VALUTAZIONE VISIVA ───────────────────────────────────────
+    elif area == AREA_VALUTAZIONE_VISIVA:
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
+        if not paz_id:
+            return
+        if sotto == "👁️ Anamnesi visiva":
+            try:
+                from .ui_anamnesi_visiva import render_anamnesi_visiva
+                render_anamnesi_visiva(conn, paz_id)
+            except Exception as e:
+                st.error(f"Modulo anamnesi visiva non disponibile: {e}")
+            return
+        if sotto == "👓 Optometria comportamentale":
+            st.info("Sezione in costruzione — usa la Valutazione visiva (VVF) per ora.")
+            return
+        if sotto == "👁️ Valutazione visuo-percettiva":
+            try:
+                from .ui_valutazione_visuo_percettiva import render_valutazione_visuo_percettiva
+                cur2 = conn.cursor()
+                cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
+                paz_rec = cur2.fetchone()
+                if paz_rec and not isinstance(paz_rec, dict):
+                    cols = [d[0] for d in cur2.description]
+                    paz_rec = dict(zip(cols, paz_rec))
+                render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
+            except Exception as e:
+                st.error(f"Errore valutazione visuo-percettiva: {e}")
+            return
+        if sotto == "🔢 DEM interattivo":
+            try:
+                from .gestionale_new_modules import render_nuovi_moduli
+                render_nuovi_moduli(conn, "DEM")
+            except ImportError as e:
+                st.error(f"Modulo DEM non disponibile: {e}")
+            return
+        if sotto == "👁️ K-D interattivo":
+            try:
+                from .gestionale_new_modules import render_nuovi_moduli
+                render_nuovi_moduli(conn, "KD")
+            except ImportError as e:
+                st.error(f"Modulo K-D non disponibile: {e}")
+            return
+        if sotto == "👁️ Eye tracking":
+            from .sections.ui_cliniche import render_gaze_section
+            render_gaze_section(); return
+        if sotto == "👁️ Lenti a contatto":
+            from .ui_lenti_contatto import ui_lenti_contatto
+            ui_lenti_contatto(); return
+
+    # ── AREA TEST NEUROEVOLUTIVI ──────────────────────────────────────
+    elif area == AREA_TEST_NEUROEVOL:
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
+        if not paz_id:
+            return
+        if sotto == "👁️ Valutazione visuo-percettiva":
+            try:
+                from .ui_valutazione_visuo_percettiva import render_valutazione_visuo_percettiva
+                cur2 = conn.cursor()
+                cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
+                paz_rec = cur2.fetchone()
+                if paz_rec and not isinstance(paz_rec, dict):
+                    cols = [d[0] for d in cur2.description]
+                    paz_rec = dict(zip(cols, paz_rec))
+                render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
+            except Exception as e:
+                st.error(f"Errore valutazione visuo-percettiva: {e}")
+            return
+        if sotto == "🧬 INPP — Valutazione diagnostica":
+            try:
+                from .inpp import render_inpp
+                cur2 = conn.cursor()
+                cur2.execute("SELECT cognome, nome FROM Pazienti WHERE id=%s", (paz_id,))
+                row = cur2.fetchone()
+                cur2.close()
+                if row:
+                    nome = f"{row[0]} {row[1]}".strip()
+                else:
+                    nome = "Paziente"
+                render_inpp(conn, paz_id, nome)
+            except Exception as e:
+                st.error(f"Errore modulo INPP: {e}")
+            return
+
     # ── AREA TEST LIVE ────────────────────────────────────────────────
     elif area == AREA_TEST_LIVE:
-        paz_id, _ = _seleziona_paziente(conn, "test")
+        from .paziente_attivo import header_paziente_attivo
+        paz_id = header_paziente_attivo(conn)
         if not paz_id:
             return
         if sotto == "🔢 DEM interattivo":
@@ -352,17 +486,31 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except ImportError as e:
                 st.error(f"Modulo somministrazione non disponibile: {e}")
             return
+        if sotto == "👁️ Eye tracking":
+            from .sections.ui_cliniche import render_gaze_section
+            render_gaze_section(); return
 
     # ── AREA QUESTIONARI ──────────────────────────────────────────────
     elif area == AREA_QUESTIONARI:
         if sotto == "📋 Questionari remoti":
-            paz_id, _ = _seleziona_paziente(conn, "qrem")
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
             if paz_id:
                 try:
                     from .ui_questionari import render_questionari_section
                     render_questionari_section(conn, paz_id)
                 except ImportError as e:
                     st.error(f"Modulo questionari non disponibile: {e}")
+            return
+        if sotto == "🎮 Esercizi Wordwall":
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if paz_id:
+                try:
+                    from .ui_wordwall import render_wordwall
+                    render_wordwall(conn, paz_id)
+                except ImportError as e:
+                    st.error(f"Modulo Wordwall non disponibile: {e}")
             return
         if sotto == "👁️ Lenti a contatto":
             from .ui_lenti_contatto import ui_lenti_contatto
@@ -380,9 +528,17 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA REPORT & AI ──────────────────────────────────────────────
     elif area == AREA_REPORT_AI:
-        if sotto == "🤖 Relazioni cliniche (AI)":
-            from .sections.ui_cliniche import render_relazioni_section
-            render_relazioni_section(); return
+        if sotto in ("🤖 Relazioni cliniche (AI)", "📝 Relazione clinica"):
+            from .paziente_attivo import header_paziente_attivo
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
+            try:
+                from .ui_relazione_clinica import render_relazione_clinica
+                render_relazione_clinica(conn)
+            except Exception as e:
+                st.error(f"Errore relazione clinica: {e}")
+            return
         if sotto in ("🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
                      "📊 Export statistici", "🧪 Caso demo"):
             mappa = {
@@ -395,7 +551,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 from .gestionale_new_modules import render_nuovi_moduli
                 paz_id = None
                 if sotto in ("🎯 Piano Vision Therapy", "📄 Report PDF con grafici"):
-                    paz_id, _ = _seleziona_paziente(conn, "rep")
+                    from .paziente_attivo import header_paziente_attivo
+                    paz_id = header_paziente_attivo(conn)
+                    if not paz_id:
+                        return
                 render_nuovi_moduli(conn, mappa[sotto], paziente_id=paz_id)
             except ImportError as e:
                 st.error(f"Modulo non disponibile: {e}")
@@ -403,38 +562,32 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA AUDIOLOGIA ───────────────────────────────────────────────
     elif area == AREA_AUDIOLOGIA:
-        if sotto == "🔉 Diagnostica uditiva":
+        from .paziente_attivo import header_paziente_attivo
+        # L'header serve solo per i moduli che richiedono un paziente
+        _audio_map = {
+            "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
+            "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
+            "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
+            "🧭 Percorsi MAPS":          ("ui_percorsi",              "ui_percorsi"),
+            "🎧 Bilancio uditivo":       ("ui_bilancio_uditivo",      "ui_bilancio_uditivo"),
+            "📊 Audiometria funzionale": ("ui_audiometria_funzionale","ui_audiometria_funzionale"),
+        }
+        if sotto in _audio_map:
+            paz_id = header_paziente_attivo(conn)
+            if not paz_id:
+                return
+            mod_name, fn_name = _audio_map[sotto]
             try:
-                from .ui_diagnostica_uditiva import ui_diagnostica_uditiva
-                ui_diagnostica_uditiva()
-            except ImportError:
-                from .sections.ui_cliniche import render_vision_section
-                st.info("Usa la sezione Diagnostica Uditiva dal menu originale.")
+                import importlib
+                m  = importlib.import_module(f"modules.{mod_name}")
+                fn = getattr(m, fn_name)
+                try:
+                    fn(conn=conn)
+                except TypeError:
+                    fn()
+            except Exception as e_audio:
+                st.error(f"Errore {sotto}: {e_audio}")
             return
-        if sotto == "🎵 Stimolazione passiva":
-            try:
-                from .ui_stimolazione_passiva import ui_stimolazione_passiva
-                ui_stimolazione_passiva()
-            except ImportError:
-                st.info("Modulo Stimolazione Passiva.")
-            return
-        if sotto == "🎧 Bilancio uditivo":
-            try:
-                from .ui_bilancio_uditivo import ui_bilancio_uditivo
-                ui_bilancio_uditivo()
-            except ImportError:
-                st.info("Modulo Bilancio Uditivo.")
-            return
-        if sotto == "📊 Audiometria funzionale":
-            try:
-                from .ui_audiometria_funzionale import ui_audiometria_funzionale
-                ui_audiometria_funzionale()
-            except ImportError:
-                st.info("Modulo Audiometria Funzionale.")
-            return
-        if sotto == "👁️ Eye tracking":
-            from .sections.ui_cliniche import render_gaze_section
-            render_gaze_section(); return
         if sotto == "📖 Lettura avanzata":
             try:
                 from .reading.ui_reading_dom import ui_reading_dom
@@ -443,11 +596,28 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Modulo Lettura non disponibile: {e}")
             return
 
+    # ── AREA MARKETING ────────────────────────────────────────────────
+    elif area == AREA_MARKETING:
+        if sotto == "📅 Eventi e iscrizioni":
+            try:
+                from .eventi.ui_eventi import render_eventi_section
+                render_eventi_section()
+            except ImportError as e:
+                st.error(f"Modulo Eventi non disponibile: {e}")
+            return
+
     # ── AREA STUDIO ───────────────────────────────────────────────────
     elif area == AREA_STUDIO:
         if sotto == "📊 Dashboard incassi":
             from .sections.ui_cliniche import render_dashboard_section
             render_dashboard_section(); return
+        if sotto == "👤 Il mio profilo":
+            try:
+                from .ui_profilo_professionista import render_profilo_professionista
+                render_profilo_professionista(conn)
+            except Exception as e:
+                st.error(f"Errore profilo: {e}")
+            return
         if sotto == "🏥 Il mio studio":
             try:
                 from .saas_tenant import render_gestione_studio
@@ -458,8 +628,12 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Modulo Studio non disponibile: {e}")
             return
         if sotto == "👥 Utenti / Ruoli":
-            from .sections.ui_cliniche import render_utenti_section
-            render_utenti_section(lambda: conn); return
+            try:
+                from .ui_gestione_utenti import render_gestione_utenti
+                render_gestione_utenti(conn, is_admin)
+            except Exception as e:
+                st.error(f"Modulo gestione utenti non disponibile: {e}")
+            return
         if sotto == "⚙️ Platform Admin":
             try:
                 from .saas_tenant import render_admin_saas
@@ -537,7 +711,7 @@ def dispatch_main_section(*, sezione: str,
     _legacy_map = {
         "Pazienti":                      (AREA_PAZIENTI,    "👤 Anagrafica pazienti"),
         "Valutazione PNEV":              (AREA_VALUTAZIONE, "🔬 PNEV"),
-        "Valutazioni visive / oculistiche": (AREA_VALUTAZIONE, "👁️ Valutazione visiva (VVF)"),
+        "Valutazioni visive / oculistiche": (AREA_VALUTAZIONE, "👁️ Valutazione visuo-percettiva"),
         "Sedute / Terapie":              (AREA_PAZIENTI,    "📅 Sedute / Terapie"),
         "Osteopatia":                    (AREA_QUESTIONARI, "🦴 Osteopatia"),
         "Dashboard incassi":             (AREA_STUDIO,      "📊 Dashboard incassi"),
@@ -549,7 +723,6 @@ def dispatch_main_section(*, sezione: str,
         " Eye Tracking":                 (AREA_AUDIOLOGIA,  "👁️ Eye tracking"),
         " Lettura Avanzata DOM":         (AREA_AUDIOLOGIA,  "📖 Lettura avanzata"),
         "🔉 Diagnostica Uditiva":        (AREA_AUDIOLOGIA,  "🔉 Diagnostica uditiva"),
-        "🎵 Stimolazione Passiva":       (AREA_AUDIOLOGIA,  "🎵 Stimolazione passiva"),
         "🧠 Terapia":                    (AREA_VALUTAZIONE, "⚡ Funzioni esecutive"),
         "🧠 NPS — Valutazione Neuropsicologica": (AREA_VALUTAZIONE, "🧠 NPS — Neuropsicologica"),
         "📚 DSA — Apprendimento":        (AREA_VALUTAZIONE, "📚 DSA — Apprendimento"),

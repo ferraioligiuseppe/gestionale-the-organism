@@ -19,7 +19,41 @@ def _get_user():
     return st.session_state.get("user") or {}
 
 def _prof():
-    return _get_user().get("username", "The Organism")
+    u = _get_user()
+    profilo = u.get("profilo",{}) or {}
+    # 1. Costruisce da profilo_json se compilato correttamente
+    titolo_p = profilo.get("titolo","").strip()
+    nome_p   = profilo.get("nome","").strip()
+    if nome_p:
+        return f"{titolo_p} {nome_p}".strip()
+    # 2. display_name dal DB
+    dn = u.get("display_name","")
+    if dn and len(dn) > 3: return dn
+    # 3. email formattata
+    email = u.get("email","")
+    if email and "@" in email:
+        return email.split("@")[0].replace("."," ").replace("_"," ").title()
+    # 4. username
+    username = u.get("username","The Organism")
+    return username if username not in ("admin","") else "The Organism Studio"
+
+def _titolo_prof():
+    u = _get_user()
+    spec = (u.get("specializzazioni","") or
+            u.get("profilo",{}).get("specializzazioni","") or "").strip()
+    # Scarta valori non validi (sigla provincia, troppo corti)
+    if len(spec) <= 3 or spec.isupper():
+        spec = ""
+    return spec if spec else "Optometrista Comportamentale"
+
+def _fmt_data_it(iso_str):
+    """Converte YYYY-MM-DD in GG/MM/AAAA."""
+    if not iso_str: return ""
+    try:
+        d = datetime.date.fromisoformat(str(iso_str)[:10])
+        return d.strftime("%d/%m/%Y")
+    except Exception:
+        return str(iso_str)[:10]
 
 def _sk(sez, campo, pid):
     return f"vvp_{pid}_{sez}_{campo}"
@@ -53,9 +87,9 @@ def _salva(conn, pid, dati):
         else:
             cur.execute(
                 "INSERT INTO valutazioni_visive "
-                "(paziente_id, data_valutazione, professionista, visita_json) "
-                "VALUES (%s,%s,%s,%s::jsonb)",
-                (pid, datetime.date.today().isoformat(), _prof(), dump))
+                "(paziente_id, data_valutazione, professionista, visita_json, pagato) "
+                "VALUES (%s,%s,%s,%s::jsonb,%s)",
+                (pid, datetime.date.today().isoformat(), _prof(), dump, 0))
         conn.commit()
         st.success("Salvato.")
     except Exception as e:
@@ -64,9 +98,14 @@ def _salva(conn, pid, dati):
         st.error(f"Errore: {e}")
 
 def _num(label, key, val=0.0, step=0.25, fmt="%.2f", mn=None, mx=None):
-    kw = {"value": float(val or 0), "step": step, "format": fmt, "key": key}
-    if mn is not None: kw["min_value"] = mn
-    if mx is not None: kw["max_value"] = mx
+    # Assicura coerenza di tipo tra value e step
+    if isinstance(step, int):
+        v = int(float(val or 0))
+    else:
+        v = float(val or 0)
+    kw = {"value": v, "step": step, "format": fmt, "key": key}
+    if mn is not None: kw["min_value"] = type(v)(mn)
+    if mx is not None: kw["max_value"] = type(v)(mx)
     return st.number_input(label, **kw)
 
 def _txt(label, key, val="", h=None):
@@ -113,9 +152,63 @@ def _intestazione(pid, paziente, stored):
         data_vis = st.date_input("Data visita",
                                   value=datetime.date.today(), key=s("data"))
     with c4:
-        professionista = st.text_input("Professionista",
-                                        value=d.get("professionista") or _prof(),
-                                        key=s("prof"))
+        _prof_placeholder = d.get("professionista") or _prof()
+
+    # Selettore professionista dal DB
+    st.markdown("**Professionista che esegue la valutazione:**")
+    try:
+        cur_p = conn.cursor()
+        cur_p.execute(
+            "SELECT id, username, display_name, profilo_json "
+            "FROM auth_users WHERE is_active=TRUE ORDER BY username"
+        )
+        utenti_db = cur_p.fetchall() or []
+        
+        def _build_prof_option(u):
+            if isinstance(u, dict):
+                dn = u.get("display_name","") or ""
+                pj = u.get("profilo_json") or {}
+                un = u.get("username","")
+            else:
+                dn = u[2] or ""
+                pj = u[3] or {}
+                un = u[1]
+            if isinstance(pj, str):
+                import json as _j
+                try: pj = _j.loads(pj)
+                except: pj = {}
+            spec = pj.get("specializzazioni","") if pj else ""
+            label = dn if dn else un
+            return label, spec, dn or un
+
+        opzioni_prof = [_build_prof_option(u) for u in utenti_db]
+        labels_prof  = [f"{l} — {s}" if s else l for l,s,_ in opzioni_prof]
+
+        # Default: utente loggato
+        prof_loggato = _prof()
+        default_idx  = 0
+        for i,(l,s,dn) in enumerate(opzioni_prof):
+            if dn == prof_loggato or l == prof_loggato:
+                default_idx = i; break
+
+        sel_idx = st.selectbox(
+            "Professionista",
+            options=range(len(labels_prof)),
+            format_func=lambda i: labels_prof[i],
+            index=default_idx,
+            key=s("prof_sel"),
+            label_visibility="collapsed"
+        )
+        prof_sel_label, prof_sel_spec, prof_sel_dn = opzioni_prof[sel_idx]
+        professionista = prof_sel_dn
+        titolo_sel     = prof_sel_spec
+
+    except Exception as e:
+        # Fallback campo testo
+        professionista = st.text_input(
+            "Professionista", value=d.get("professionista") or _prof(),
+            key=s("prof_fb"), label_visibility="collapsed")
+        titolo_sel = _titolo_prof()
 
     c5, c6, c7 = st.columns(3)
     with c5:
@@ -136,7 +229,9 @@ def _intestazione(pid, paziente, stored):
 
     return {"intestazione": {
         "eta_vis": eta_vis, "data_vis": str(data_vis),
-        "professionista": professionista, "referente": referente,
+        "professionista": professionista,
+        "titolo_prof": titolo_sel if "titolo_sel" in dir() else _titolo_prof(),
+        "referente": referente,
         "sesso": sesso, "occhio": occhio, "mano": mano, "piede": piede,
         "note": note_int,
     }}
@@ -205,16 +300,135 @@ def _sez_a(pid, stored):
 
     # Acuita visiva
     st.markdown("#### Acuita visiva")
-    av_cols = ["Nat OD","Nat OS","Nat OO","Corr OD","Corr OS","Corr OO"]
-    av_vals = {}
-    cc = st.columns(6)
-    for i,k in enumerate(av_cols):
-        key_k = k.lower().replace(" ","_")
-        with cc[i]:
-            av_vals[key_k] = st.text_input(k, value=d.get("av",{}).get(key_k,""),
-                                             key=s(f"av_{key_k}"))
+
+    # Scala di notazione
+    SCALE_AV = {
+        "Decimale": ["","10/10","9/10","8/10","7/10","6/10","5/10",
+                     "4/10","3/10","2/10","1/10","0.5/10","< 0.5/10"],
+        "Snellen 6m": ["","6/6","6/7.5","6/9","6/12","6/18","6/24",
+                       "6/36","6/48","6/60","PL","NPL"],
+        "Snellen 20ft":["","20/20","20/25","20/30","20/40","20/50",
+                        "20/70","20/100","20/150","20/200","CF","PL","NPL"],
+        "logMAR": ["","0.0","0.1","0.2","0.3","0.4","0.5",
+                   "0.6","0.7","0.8","0.9","1.0","1.3"],
+        "Libero": None,
+    }
+
+    scala_sel = st.selectbox("Scala acuita visiva",
+                              list(SCALE_AV.keys()),
+                              index=list(SCALE_AV.keys()).index(
+                                  d.get("av_scala","Decimale")),
+                              key=s("av_scala"))
+
+    AV_RIGHE = [
+        ("nat_l_od",  "nat_l_os",  "nat_l_oo",  "Naturale lontano"),
+        ("nat_v_od",  "nat_v_os",  "nat_v_oo",  "Naturale vicino"),
+        ("corr_l_od", "corr_l_os", "corr_l_oo", "Corretta lontano"),
+        ("corr_v_od", "corr_v_os", "corr_v_oo", "Corretta vicino"),
+        ("ph_od",     "ph_os",     "",           "Foro stenopeico"),
+    ]
+
+    av_vals = dict(d.get("av", {}))
+    av_scala = scala_sel
+    opzioni = SCALE_AV.get(scala_sel)
+
+    # Intestazione tabella
+    hcols = st.columns([2.5, 1.5, 1.5, 1.5, 0.8, 0.8])
+    for col, label in zip(hcols, ["", "OD", "OS", "OO", "Ricetta", "Rel."]):
+        col.markdown(f"**{label}**")
+
+    # Riga di selezione per ricetta
+    ricetta_key = s("av_riga_ricetta")
+    if ricetta_key not in st.session_state:
+        st.session_state[ricetta_key] = d.get("av_riga_ricetta", "corr_l")
+
+    for key_od, key_os, key_oo, label in AV_RIGHE:
+        row_id = key_od.replace("_od","")
+        cols = st.columns([2.5, 1.5, 1.5, 1.5, 0.8, 0.8])
+        with cols[0]:
+            st.caption(label)
+        with cols[1]:
+            if opzioni:
+                av_vals[key_od] = st.selectbox(f"OD {label}", opzioni,
+                    index=opzioni.index(av_vals.get(key_od,"")) if av_vals.get(key_od,"") in opzioni else 0,
+                    key=s(f"av_{key_od}"), label_visibility="collapsed")
+            else:
+                av_vals[key_od] = st.text_input("OD", value=av_vals.get(key_od,""),
+                    key=s(f"av_{key_od}"), label_visibility="collapsed")
+        with cols[2]:
+            if key_os:
+                if opzioni:
+                    av_vals[key_os] = st.selectbox(f"OS {label}", opzioni,
+                        index=opzioni.index(av_vals.get(key_os,"")) if av_vals.get(key_os,"") in opzioni else 0,
+                        key=s(f"av_{key_os}"), label_visibility="collapsed")
+                else:
+                    av_vals[key_os] = st.text_input("OS", value=av_vals.get(key_os,""),
+                        key=s(f"av_{key_os}"), label_visibility="collapsed")
+        with cols[3]:
+            if key_oo:
+                if opzioni:
+                    av_vals[key_oo] = st.selectbox(f"OO {label}", opzioni,
+                        index=opzioni.index(av_vals.get(key_oo,"")) if av_vals.get(key_oo,"") in opzioni else 0,
+                        key=s(f"av_{key_oo}"), label_visibility="collapsed")
+                else:
+                    av_vals[key_oo] = st.text_input("OO", value=av_vals.get(key_oo,""),
+                        key=s(f"av_{key_oo}"), label_visibility="collapsed")
+            else:
+                st.empty()
+        with cols[4]:
+            if st.radio("R", [row_id],
+                        index=0 if st.session_state.get(ricetta_key)==row_id else 0,
+                        key=s(f"rx_radio_{row_id}"),
+                        label_visibility="collapsed",
+                        format_func=lambda x: ""):
+                st.session_state[ricetta_key] = row_id
+        with cols[5]:
+            rel_key = s(f"av_rel_{row_id}")
+            if rel_key not in st.session_state:
+                st.session_state[rel_key] = row_id in d.get("av_relazione", ["nat_l","corr_l"])
+            st.checkbox("", key=rel_key, label_visibility="collapsed")
+
+    # Professionista valutazione
+    st.markdown("**Professionista che ha eseguito la valutazione AV:**")
+    prof_av = st.text_input(
+        "Professionista AV",
+        value=d.get("av_prof") or d.get("intestazione",{}).get("professionista") or _prof(),
+        key=s("av_prof"),
+        label_visibility="collapsed",
+        placeholder="Nome professionista..."
+    )
+
+    # Anteprima live
+    riga_rx_id = st.session_state.get(ricetta_key, "corr_l")
+    od_key  = f"{riga_rx_id}_od"
+    os_key  = f"{riga_rx_id}_os"
+    oo_key  = f"{riga_rx_id}_oo"
+    av_od   = av_vals.get(od_key, "—")
+    av_os   = av_vals.get(os_key, "—")
+    av_oo   = av_vals.get(oo_key, "—")
+    riga_label = next((l for k,_,_,l in AV_RIGHE if k.replace("_od","")==riga_rx_id), riga_rx_id)
+
+    righe_rel = [row_id for k_od,_,_,_ in AV_RIGHE
+                 for row_id in [k_od.replace("_od","")]
+                 if st.session_state.get(s(f"av_rel_{row_id}"), False)]
+
+    st.markdown("---")
+    st.markdown("**Anteprima ricetta:**")
+    st.code(
+        f"Acuita visiva ({riga_label}) [{scala_sel}]\n"
+        f"  OD: {av_od or 'n.d.'}\n"
+        f"  OS: {av_os or 'n.d.'}\n"
+        f"  OO: {av_oo or 'n.d.'}\n"
+        f"Esaminato da: {prof_av}",
+        language="text"
+    )
 
     note = _txt("Note sezione A", s("note"), d.get("note",""), h=68)
+
+    av_riga_ricetta = st.session_state.get(ricetta_key, "corr_l")
+    av_relazione = [row_id for k_od,_,_,_ in AV_RIGHE
+                    for row_id in [k_od.replace("_od","")]
+                    if st.session_state.get(s(f"av_rel_{row_id}"), False)]
 
     return {"sez_a": {
         "k1_od_mm":k1_od_mm,"k1_od_D":k1_od_D,"k2_od_mm":k2_od_mm,"k2_od_D":k2_od_D,
@@ -222,7 +436,11 @@ def _sez_a(pid, stored):
         "df_od":df_od,"df_os":df_os,"farmaco":farmaco,
         "rc_od":rc_od,"rc_os":rc_os,"ar_od":ar_od,"ar_os":ar_os,
         "rs_od":rs_od,"rs_os":rs_os,"add_v":add_v,"add_i":add_i,"dp":dp,
-        "av":av_vals,"note":note,
+        "av":av_vals,"av_scala":scala_sel,
+        "av_riga_ricetta":av_riga_ricetta,
+        "av_relazione":av_relazione,
+        "av_prof":prof_av,
+        "note":note,
     }}
 
 
@@ -308,10 +526,10 @@ def _sez_b(pid, stored):
     c7,c8 = st.columns(2)
     with c7:
         jv_16 = _num("#16 Jump 16BO/4BI (c/min)", s("jv_16"),
-                      d.get("jv_16",0), step=1, fmt="%.0f")
+                      d.get("jv_16",0), step=1.0, fmt="%.0f")
     with c8:
         jv_8  = _num("#17 Jump 8BO/8BI (c/min)",  s("jv_8"),
-                      d.get("jv_8",0), step=1, fmt="%.0f")
+                      d.get("jv_8",0), step=1.0, fmt="%.0f")
 
     # PPC
     st.markdown("#### PPC — Punto Prossimo di Convergenza")
@@ -398,9 +616,9 @@ def _sez_c(pid, stored):
     c1,c2 = st.columns(2)
     with c1:
         fl_od = _num("Flipper +/-2.00 OD (c/30sec)", s("fl_od"),
-                      d.get("fl_od",0), step=1, fmt="%.0f")
+                      d.get("fl_od",0), step=1.0, fmt="%.0f")
         fl_os = _num("Flipper +/-2.00 OS (c/30sec)", s("fl_os"),
-                      d.get("fl_os",0), step=1, fmt="%.0f")
+                      d.get("fl_os",0), step=1.0, fmt="%.0f")
     with c2:
         fl_diff_od = st.multiselect("Difficolta OD", ["Con +","Con -","Entrambi"],
                                      default=d.get("fl_diff_od",[]),
@@ -485,14 +703,14 @@ def _sez_d(pid, stored):
 
     st.markdown("#### Visual Tracking Test")
     c6,c7,c8 = st.columns(3)
-    with c6: vtt_tempo  = _num("Tempo (sec)", s("vtt_t"), d.get("vtt_t",0), step=1, fmt="%.0f")
+    with c6: vtt_tempo  = _num("Tempo (sec)", s("vtt_t"), d.get("vtt_t",0), step=1.0, fmt="%.0f")
     with c7: vtt_errori = st.number_input("Errori", value=int(d.get("vtt_e",0)),
                                            min_value=0, step=1, key=s("vtt_e"))
     with c8: vtt_score  = _txt("Score/Livello", s("vtt_s"), d.get("vtt_s",""))
 
     st.markdown("#### Test linee intrecciate (Tracking)")
     c9,c10 = st.columns(2)
-    with c9:  lin_tempo  = _num("Tempo (sec)", s("lin_t"), d.get("lin_t",0), step=1, fmt="%.0f")
+    with c9:  lin_tempo  = _num("Tempo (sec)", s("lin_t"), d.get("lin_t",0), step=1.0, fmt="%.0f")
     with c10: lin_errori = st.number_input("Errori", value=int(d.get("lin_e",0)),
                                             min_value=0, step=1, key=s("lin_e"))
 
@@ -673,98 +891,153 @@ def _sez_g(conn, pid, d, paziente):
                     gd.get("piano",""), h=100)
 
     st.markdown("---")
+    st.markdown("**Genera documenti:**")
+
+    # Campo titolo professionale per i PDF
+    titolo_pdf = st.text_input(
+        "Titolo/specializzazione per il PDF",
+        value=_titolo_prof(),
+        key=f"titolo_pdf_{pid}",
+        placeholder="Neuropsicologo - Optometrista Comportamentale",
+        help="Appare sotto il nome nell intestazione. Puoi modificarlo prima di stampare."
+    )
+
     rx = d.get("sez_a",{})
     ob = d.get("sez_e",{})
 
-    c1,c2,c3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
+
     with c1:
-        if st.button("Genera Ricetta PDF", key=s("btn_rx"), type="primary"):
-            _pdf_ricetta(pid, cog, nom, dn, rx, prof)
+        try:
+            from modules.pdf_templates import genera_ricetta
+            rs_od = rx.get("rs_od",{}); rs_os = rx.get("rs_os",{})
+            add_v = float(rx.get("add_v") or 0)
+            add_i = float(rx.get("add_i") or 0)
+            def _sf_add(base_rx, add):
+                sf = float(base_rx.get("sf") or 0)
+                return {"sf": round(sf+add,2), "cil": base_rx.get("cil",0), "ax": base_rx.get("ax",0)}
+            rx_pdf = {
+                "paziente": f"{cog} {nom}".strip(),
+                "data":     datetime.date.today().strftime("%d/%m/%Y"),
+                "lontano":    {"od": rs_od, "os": rs_os},
+                "intermedio": {"od": _sf_add(rs_od, add_i) if add_i else {}, "os": _sf_add(rs_os, add_i) if add_i else {}},
+                "vicino":     {"od": _sf_add(rs_od, add_v) if add_v else {}, "os": _sf_add(rs_os, add_v) if add_v else {}},
+                "dp": str(rx.get("dp","63")),
+                "lenti": rx.get("lenti_consigliate",[]),
+                "note": rx.get("note_rx",""),
+            }
+            titolo_prof = (d.get("intestazione",{}).get("titolo_prof","") or
+                        st.session_state.get(f"titolo_pdf_{pid}","") or
+                        _titolo_prof())
+            pdf_rx = genera_ricetta(prof, titolo_prof, rx_pdf)
+            st.download_button(
+                "Scarica Ricetta PDF",
+                data=pdf_rx,
+                file_name=f"ricetta_{cog}_{nom}_{datetime.date.today()}.pdf",
+                mime="application/pdf",
+                key=s("dl_rx"),
+                type="primary"
+            )
+        except Exception as e:
+            st.error(f"Errore ricetta: {e}")
+
     with c2:
         if ob.get("anomalie_n",0)>0 or ob.get("iop_alta"):
             if st.button("Lettera invio oculista", key=s("btn_inv")):
                 _pdf_lettera(pid, cog, nom, dn, ob, prof)
+        else:
+            st.caption("Nessuna anomalia — lettera non necessaria")
+
     with c3:
-        if st.button("Relazione clinica PDF", key=s("btn_rel")):
-            _pdf_relazione(pid, cog, nom, dn, d, prof, diagnosi, piano)
+        try:
+            from modules.pdf_templates import genera_carta_intestata
+            data_vis = d.get("intestazione",{}).get("data_vis","")
+            try:
+                data_vis_fmt = datetime.date.fromisoformat(str(data_vis)[:10]).strftime("%d/%m/%Y")
+            except Exception:
+                data_vis_fmt = datetime.date.today().strftime("%d/%m/%Y")
+            rs_od2 = rx.get("rs_od",{}); rs_os2 = rx.get("rs_os",{})
+            bino = d.get("sez_b",{}); acc = d.get("sez_c",{})
+            def _f(v):
+                try:
+                    fv=float(v or 0); return f"+{fv:.2f}" if fv>=0 else f"{fv:.2f}"
+                except: return str(v or "nd")
+            paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}"
+            corpo = f"""### Refrazione soggettiva
+OD: {_f(rs_od2.get("sf"))} / {_f(rs_od2.get("cil"))} x {rs_od2.get("ax",0)} gradi  -  Visus {rs_od2.get("acuita","nd")}
+OS: {_f(rs_os2.get("sf"))} / {_f(rs_os2.get("cil"))} x {rs_os2.get("ax",0)} gradi  -  Visus {rs_os2.get("acuita","nd")}
+
+### Equilibrio binoculare
+Cover test lontano: {bino.get("ct_l","nd")}  |  Cover test vicino: {bino.get("ct_v","nd")}
+PPC: {bino.get("ppc_acc_rot","nd")} / {bino.get("ppc_acc_rec","nd")} cm  |  AC/A: {bino.get("aca","nd")}
+Randot: {bino.get("randot","nd")} sec d arco
+
+### Accomodazione
+Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
+MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
+            try:
+                from modules.ui_anamnesi_visiva import sintesi_anamnesi
+                _anam = sintesi_anamnesi(conn, pid)
+                if _anam:
+                    corpo = _anam + "\n\n" + corpo
+            except Exception:
+                pass
+            if diagnosi: corpo += f"\n\n### Diagnosi\n{diagnosi}"
+            if piano:    corpo += f"\n\n### Piano terapeutico\n{piano}"
+            titolo_prof2 = (d.get("intestazione",{}).get("titolo_prof","") or
+                         st.session_state.get(f"titolo_pdf_{pid}","") or
+                         _titolo_prof())
+            pdf_rel = genera_carta_intestata(
+                professionista=prof, titolo=titolo_prof2,
+                paziente=paz_str, data=data_vis_fmt,
+                titolo_doc="RELAZIONE CLINICA VISUO-PERCETTIVA",
+                corpo_testo=corpo,
+            )
+            st.download_button(
+                "Scarica Relazione PDF",
+                data=pdf_rel,
+                file_name=f"relazione_{cog}_{nom}_{datetime.date.today()}.pdf",
+                mime="application/pdf",
+                key=s("dl_rel")
+            )
+        except Exception as e:
+            st.error(f"Errore relazione: {e}")
 
     return {"sez_g": {"diag": diagnosi, "piano": piano}}
 
 
-def _pdf_ricetta(pid, cog, nom, dn, rx, prof):
+def _pdf_ricetta(pid, cog, nom, dn, rx_visita, prof):
     try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-        from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER
-        import io
+        from modules.pdf_templates import genera_ricetta
+        rs_od = rx_visita.get("rs_od",{}); rs_os = rx_visita.get("rs_os",{})
+        add_v = float(rx_visita.get("add_v") or 0)
+        add_i = float(rx_visita.get("add_i") or 0)
 
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=A4,
-                                rightMargin=56,leftMargin=56,topMargin=56,bottomMargin=56)
-        VERDE = colors.HexColor("#1D6B44")
-        sT = ParagraphStyle("t",fontSize=18,fontName="Helvetica-Bold",
-                             textColor=VERDE,alignment=TA_CENTER,spaceAfter=4)
-        sS = ParagraphStyle("s",fontSize=9,fontName="Helvetica",
-                             textColor=colors.gray,alignment=TA_CENTER,spaceAfter=2)
-        sH = ParagraphStyle("h",fontSize=12,fontName="Helvetica-Bold",
-                             textColor=VERDE,spaceAfter=4,spaceBefore=10)
-        sB = ParagraphStyle("b",fontSize=10,fontName="Helvetica",spaceAfter=4,leading=14)
+        def _sf_add(base_rx, add):
+            sf = float(base_rx.get("sf") or 0)
+            return {"sf": round(sf+add,2),
+                    "cil": base_rx.get("cil",0),
+                    "ax":  base_rx.get("ax",0)}
 
-        def _f(v): return f"+{v:.2f}" if float(v or 0)>=0 else f"{float(v or 0):.2f}"
-        sod = rx.get("rs_od",{}); sos = rx.get("rs_os",{})
-
-        story = [
-            Paragraph("The Organism", sT),
-            Paragraph("Studio di Optometria Comportamentale e Neuropsicologia", sS),
-            Paragraph(f"Professionista: {prof}", sS),
-            Spacer(1,15),
-            HRFlowable(width="100%",thickness=1.5,color=VERDE),
-            Spacer(1,10),
-            Paragraph("PRESCRIZIONE OTTICA", sH),
-            Paragraph(
-                f"Paziente: <b>{cog} {nom}</b> | Nato/a: {dn} | "
-                f"Data: {datetime.date.today().strftime('%d/%m/%Y')}", sB),
-            Spacer(1,12),
-        ]
-        tbl = Table([
-            ["","SF","CIL","AX","Acuita"],
-            ["OD",_f(sod.get("sf")),_f(sod.get("cil")),
-             str(sod.get("ax",0))+"g",sod.get("acuita","—")],
-            ["OS",_f(sos.get("sf")),_f(sos.get("cil")),
-             str(sos.get("ax",0))+"g",sos.get("acuita","—")],
-        ], colWidths=[50,70,70,60,80])
-        tbl.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),VERDE),
-            ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-            ("ALIGN",(0,0),(-1,-1),"CENTER"),
-            ("FONTSIZE",(0,0),(-1,-1),10),
-            ("GRID",(0,0),(-1,-1),0.5,colors.HexColor("#D3D1C7")),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#F1EFE8")]),
-            ("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),
-        ]))
-        story.append(tbl)
-        if rx.get("add_v"):
-            story.append(Spacer(1,6))
-            story.append(Paragraph(f"ADD vicino: +{float(rx['add_v']):.2f} D", sB))
-        if rx.get("add_i"):
-            story.append(Paragraph(f"ADD intermedia: +{float(rx['add_i']):.2f} D", sB))
-        if rx.get("dp"):
-            story.append(Paragraph(f"Distanza pupillare: {float(rx['dp']):.1f} mm", sB))
-        story.append(Spacer(1,30))
-        story.append(HRFlowable(width="100%",thickness=0.5,color=colors.gray))
-        story.append(Spacer(1,8))
-        story.append(Paragraph(f"Firma: _______________________  {prof}", sB))
-        doc.build(story)
-        buf.seek(0)
-        st.download_button("Scarica Ricetta PDF", data=buf,
+        rx = {
+            "paziente": f"{cog} {nom}".strip(),
+            "data":     datetime.date.today().strftime("%d/%m/%Y"),
+            "lontano":    {"od": rs_od, "os": rs_os},
+            "intermedio": {"od": _sf_add(rs_od, add_i) if add_i else {},
+                           "os": _sf_add(rs_os, add_i) if add_i else {}},
+            "vicino":     {"od": _sf_add(rs_od, add_v) if add_v else {},
+                           "os": _sf_add(rs_os, add_v) if add_v else {}},
+            "dp":   str(rx_visita.get("dp","63")),
+            "lenti": rx_visita.get("lenti_consigliate",[]),
+            "note":  rx_visita.get("note_rx",""),
+        }
+        titolo = rx_visita.get("titolo_prof","Optometrista Comportamentale")
+        pdf_bytes = genera_ricetta(prof, titolo, rx)
+        st.download_button("Scarica Ricetta PDF", data=pdf_bytes,
             file_name=f"ricetta_{cog}_{nom}_{datetime.date.today()}.pdf",
             mime="application/pdf", key=f"dl_rx_{pid}")
     except Exception as e:
         st.error(f"Errore ricetta: {e}")
-
 
 def _pdf_lettera(pid, cog, nom, dn, ob, prof):
     try:
@@ -827,78 +1100,69 @@ def _pdf_lettera(pid, cog, nom, dn, ob, prof):
 
 def _pdf_relazione(pid, cog, nom, dn, d, prof, diagnosi, piano):
     try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-        from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER
-        import io
+        from modules.pdf_templates import genera_carta_intestata
+        import datetime as _dt
 
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=A4,
-                                rightMargin=56,leftMargin=56,topMargin=56,bottomMargin=56)
-        VERDE = colors.HexColor("#1D6B44")
-        sT = ParagraphStyle("t",fontSize=18,fontName="Helvetica-Bold",textColor=VERDE,alignment=TA_CENTER)
-        sS = ParagraphStyle("s",fontSize=9,fontName="Helvetica",textColor=colors.gray,alignment=TA_CENTER)
-        sH = ParagraphStyle("h",fontSize=12,fontName="Helvetica-Bold",textColor=VERDE,spaceAfter=4,spaceBefore=10)
-        sB = ParagraphStyle("b",fontSize=10,fontName="Helvetica",spaceAfter=4,leading=15)
+        rx   = d.get("sez_a",{})
+        bino = d.get("sez_b",{})
+        ob   = d.get("sez_e",{})
+        acc  = d.get("sez_c",{})
 
-        rx = d.get("sez_a",{}); b = d.get("sez_b",{})
-        ob = d.get("sez_e",{}); c = d.get("sez_c",{})
+        data_vis = d.get("intestazione",{}).get("data_vis","")
+        try:
+            data_vis_fmt = _dt.date.fromisoformat(str(data_vis)[:10]).strftime("%d/%m/%Y")
+        except Exception:
+            data_vis_fmt = _dt.date.today().strftime("%d/%m/%Y")
 
-        def _f(v): return f"+{float(v or 0):.2f}" if float(v or 0)>=0 else f"{float(v or 0):.2f}"
+        def _f(v):
+            try:
+                fv = float(v or 0)
+                return f"+{fv:.2f}" if fv>=0 else f"{fv:.2f}"
+            except: return str(v or "nd")
+
         sod = rx.get("rs_od",{}); sos = rx.get("rs_os",{})
+        paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}"
 
-        story = [
-            Paragraph("The Organism", sT),
-            Paragraph("Studio di Optometria Comportamentale e Neuropsicologia", sS),
-            Paragraph(f"Professionista: {prof}", sS),
-            Spacer(1,15),
-            HRFlowable(width="100%",thickness=1.5,color=VERDE),Spacer(1,8),
-            Paragraph("RELAZIONE CLINICA VISUO-PERCETTIVA", sH),
-            Paragraph(
-                f"Paziente: <b>{cog} {nom}</b> | Nato/a: {dn} | "
-                f"Data visita: {d.get('intestazione',{}).get('data_vis', datetime.date.today().strftime('%Y-%m-%d'))}", sB),
-            Spacer(1,10),
-            Paragraph("Refrazione soggettiva", sH),
-            Paragraph(
-                f"OD: {_f(sod.get('sf'))} / {_f(sod.get('cil'))} x {sod.get('ax',0)}g — Visus {sod.get('acuita','nd')}<br/>"
-                f"OS: {_f(sos.get('sf'))} / {_f(sos.get('cil'))} x {sos.get('ax',0)}g — Visus {sos.get('acuita','nd')}", sB),
-            Paragraph("Equilibrio binoculare", sH),
-            Paragraph(
-                f"Cover test lontano: {b.get('ct_l','nd')} | Cover test vicino: {b.get('ct_v','nd')}<br/>"
-                f"PPC accomodativo: {b.get('ppc_acc_rot','nd')} / {b.get('ppc_acc_rec','nd')} cm | "
-                f"AC/A: {b.get('aca','nd')}", sB),
-            Paragraph("Accomodazione", sH),
-            Paragraph(
-                f"Push-Up OD: {c.get('pu_od','nd')} D | OS: {c.get('pu_os','nd')} D<br/>"
-                f"MEM OD: {c.get('mem_od','nd')} D | OS: {c.get('mem_os','nd')} D", sB),
-            Paragraph("Esame obiettivo", sH),
-            Paragraph(
-                f"IOP OD: {ob.get('iop_od','nd')} / OS: {ob.get('iop_os','nd')} mmHg | "
-                f"Pachimetria OD: {ob.get('pach_od','nd')} / OS: {ob.get('pach_os','nd')} um", sB),
-        ]
+        corpo = f"""### Refrazione soggettiva
+OD: {_f(sod.get("sf"))} / {_f(sod.get("cil"))} x {sod.get("ax",0)} gradi  -  Visus {sod.get("acuita","nd")}
+OS: {_f(sos.get("sf"))} / {_f(sos.get("cil"))} x {sos.get("ax",0)} gradi  -  Visus {sos.get("acuita","nd")}
+
+### Equilibrio binoculare
+Cover test lontano: {bino.get("ct_l","nd")}  |  Cover test vicino: {bino.get("ct_v","nd")}
+PPC accomodativo: {bino.get("ppc_acc_rot","nd")} / {bino.get("ppc_acc_rec","nd")} cm
+AC/A: {bino.get("aca","nd")}  |  Worth lontano: {bino.get("worth_l","nd")}
+Randot: {bino.get("randot","nd")} sec d arco
+
+### Accomodazione
+Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
+MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D
+Facilita accomodativa OD: {acc.get("fl_od","nd")} c/30sec  |  OS: {acc.get("fl_os","nd")} c/30sec
+
+### Esame obiettivo
+IOP OD: {ob.get("iop_od","nd")}  /  OS: {ob.get("iop_os","nd")} mmHg
+Pachimetria OD: {ob.get("pach_od","nd")}  /  OS: {ob.get("pach_os","nd")} um"""
+
         if diagnosi:
-            story += [Paragraph("Diagnosi", sH), Paragraph(diagnosi, sB)]
+            corpo += f"\n\n### Diagnosi\n{diagnosi}"
         if piano:
-            story += [Paragraph("Piano terapeutico", sH), Paragraph(piano, sB)]
-        story += [
-            Spacer(1,30),
-            HRFlowable(width="100%",thickness=0.5,color=colors.gray),Spacer(1,8),
-            Paragraph(f"Firma: _______________________  {prof}<br/>The Organism Studio", sB),
-        ]
-        doc.build(story)
-        buf.seek(0)
-        st.download_button("Scarica Relazione PDF", data=buf,
+            corpo += f"\n\n### Piano terapeutico\n{piano}"
+
+        titolo = d.get("intestazione",{}).get("professionista") or prof
+        titolo_prof = _titolo_prof()
+
+        pdf_bytes = genera_carta_intestata(
+            professionista=prof,
+            titolo=titolo_prof,
+            paziente=paz_str,
+            data=data_vis_fmt,
+            titolo_doc="RELAZIONE CLINICA VISUO-PERCETTIVA",
+            corpo_testo=corpo,
+        )
+        st.download_button("Scarica Relazione PDF", data=pdf_bytes,
             file_name=f"relazione_{cog}_{nom}_{datetime.date.today()}.pdf",
             mime="application/pdf", key=f"dl_rel_{pid}")
     except Exception as e:
         st.error(f"Errore relazione: {e}")
-
-
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE H — SPORTS VISION (placeholder)
-# ══════════════════════════════════════════════════════════════════════
 
 def _sez_h(pid, stored):
     st.markdown("### H — Sports Vision")
@@ -928,8 +1192,86 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
     stored = _carica(conn, paz_id)
     dati   = dict(stored)
 
+    # ── Selettore professionista in cima ─────────────────────────────
+    try:
+        cur_p = conn.cursor()
+        cur_p.execute(
+            "SELECT id, username, display_name, profilo_json "
+            "FROM auth_users WHERE is_active=TRUE ORDER BY username"
+        )
+        utenti_db = cur_p.fetchall() or []
+
+        def _parse_prof_row(u):
+            if isinstance(u, dict):
+                dn = u.get("display_name","") or ""
+                pj = u.get("profilo_json") or {}
+                un = u.get("username","")
+            else:
+                dn = u[2] or ""; pj = u[3] or {}; un = u[1]
+            if isinstance(pj, str):
+                import json as _j
+                try: pj = _j.loads(pj)
+                except: pj = {}
+            if not isinstance(pj, dict): pj = {}
+
+            # Legge i campi separati dal profilo_json
+            titolo_pj = pj.get("titolo","").strip()
+            nome_pj   = pj.get("nome","").strip()
+            spec_pj   = pj.get("specializzazioni","").strip()
+
+            # Costruisce nome display
+            if nome_pj:
+                # Ha compilato il profilo correttamente
+                nome_display = f"{titolo_pj} {nome_pj}".strip()
+            elif dn:
+                # Usa display_name dal DB
+                nome_display = dn
+            else:
+                nome_display = un
+
+            # Specializzazioni valide
+            if spec_pj and len(spec_pj) > 3 and not spec_pj.isupper():
+                spec = spec_pj
+            else:
+                spec = ""
+
+            return nome_display, spec
+
+        opzioni   = [_parse_prof_row(u) for u in utenti_db]
+        labels    = [f"{n} — {s}" if s else n for n,s in opzioni]
+
+        # Default: utente loggato
+        prof_corrente = _prof()
+        default_idx = 0
+        for i,(n,s) in enumerate(opzioni):
+            if n == prof_corrente:
+                default_idx = i; break
+
+        col_prof, _ = st.columns([2,3])
+        with col_prof:
+            sel_idx = st.selectbox(
+                "Professionista che esegue la valutazione",
+                options=range(len(labels)),
+                format_func=lambda i: labels[i],
+                index=default_idx,
+                key=f"vvp_prof_sel_{paz_id}"
+            )
+
+        _prof_nome, _prof_spec = opzioni[sel_idx]
+        # Salva in dati per i PDF
+        if "intestazione" not in dati:
+            dati["intestazione"] = {}
+        dati["intestazione"]["professionista"] = _prof_nome
+        dati["intestazione"]["titolo_prof"]    = _prof_spec or "Optometrista Comportamentale"
+
+    except Exception:
+        _prof_nome = _prof()
+        _prof_spec = _titolo_prof()
+
+    st.markdown("---")
     tabs = st.tabs([
         "Intestazione",
+        "👁️ Anamnesi",
         "A. Stato refrattivo",
         "B. Equilibrio binoculare",
         "C. Accomodazione",
@@ -946,40 +1288,47 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
             _salva(conn, paz_id, dati)
 
     with tabs[1]:
+        try:
+            from modules.ui_anamnesi_visiva import render_anamnesi_visiva
+            render_anamnesi_visiva(conn, paz_id)
+        except Exception as e:
+            st.error(f"Anamnesi visiva non disponibile: {e}")
+
+    with tabs[2]:
         dati.update(_sez_a(paz_id, stored))
         if st.button("Salva sezione A", key=f"sv_a_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[2]:
+    with tabs[3]:
         dati.update(_sez_b(paz_id, stored))
         if st.button("Salva sezione B", key=f"sv_b_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[3]:
+    with tabs[4]:
         dati.update(_sez_c(paz_id, stored))
         if st.button("Salva sezione C", key=f"sv_c_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[4]:
+    with tabs[5]:
         dati.update(_sez_d(paz_id, stored))
         if st.button("Salva sezione D", key=f"sv_d_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[5]:
+    with tabs[6]:
         dati.update(_sez_e(paz_id, stored))
         if st.button("Salva sezione E", key=f"sv_e_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[6]:
+    with tabs[7]:
         dati.update(_sez_f(paz_id, dati))
 
-    with tabs[7]:
+    with tabs[8]:
         extra = _sez_g(conn, paz_id, dati, paziente)
         dati.update(extra)
         if st.button("Salva diagnosi e piano", key=f"sv_g_{paz_id}", type="primary"):
             _salva(conn, paz_id, dati)
 
-    with tabs[8]:
+    with tabs[9]:
         dati.update(_sez_h(paz_id, stored))
         if st.button("Salva note Sports Vision", key=f"sv_h_{paz_id}"):
             _salva(conn, paz_id, dati)

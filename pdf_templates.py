@@ -231,6 +231,13 @@ def _draw_corpo_ricetta(c, rx):
             return f"+{f:.2f}" if f>0 else f"{f:.2f}"
         except: return str(v)
 
+    def _fax(v):
+        # L'asse è in gradi (0–180): niente segno, niente decimali.
+        if v is None or v == "" or v == 0: return ""
+        try:
+            return str(int(round(float(v))))
+        except: return str(v).lstrip("+")
+
     def tabo(cx, cy, r=2.3*cm, label=""):
         c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.5)
         c.arc(cx-r, cy-r, cx+r, cy+r, startAng=0, extent=180)
@@ -259,6 +266,16 @@ def _draw_corpo_ricetta(c, rx):
     c.drawString(1.8*cm, y_sig, "Sig.")
     c.line(3.5*cm, y_sig, W-1.8*cm, y_sig)
 
+    # Riempie le righe Sig. e Data col nome paziente e la data
+    _paz = str(rx.get("paziente", "")).strip()
+    _dat = str(rx.get("data", "")).strip()
+    if _paz:
+        c.setFont("Helvetica", 12); c.setFillColor(colors.black)
+        c.drawString(3.7*cm, y_sig+0.08*cm, _paz)
+    if _dat:
+        c.setFont("Helvetica", 10); c.setFillColor(colors.black)
+        c.drawString(W-5.9*cm, y_sig+0.58*cm, _dat)
+
     y_tabo = H - 9.2*cm
     tabo(W/2-5.5*cm, y_tabo, label="Occhio Destro")
     tabo(W/2+5.5*cm, y_tabo, label="Occhio Sinistro")
@@ -286,7 +303,7 @@ def _draw_corpo_ricetta(c, rx):
         x0 = 1.8*cm
         for k in ["sf","cil","ax"]:
             c.rect(x0, yr-0.38*cm, cw, 0.65*cm)
-            v = _f(od.get(k))
+            v = _fax(od.get(k)) if k == "ax" else _f(od.get(k))
             if v:
                 c.setFont("Helvetica",9); c.setFillColor(colors.black)
                 c.drawCentredString(x0+cw/2, yr-0.05*cm, v)
@@ -297,7 +314,7 @@ def _draw_corpo_ricetta(c, rx):
         x0 = W/2+2.5*cm
         for k in ["sf","cil","ax"]:
             c.rect(x0, yr-0.38*cm, cw, 0.65*cm)
-            v = _f(os.get(k))
+            v = _fax(os.get(k)) if k == "ax" else _f(os.get(k))
             if v:
                 c.setFont("Helvetica",9); c.setFillColor(colors.black)
                 c.drawCentredString(x0+cw/2, yr-0.05*cm, v)
