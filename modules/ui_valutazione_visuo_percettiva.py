@@ -89,7 +89,7 @@ def _salva(conn, pid, dati):
                 "INSERT INTO valutazioni_visive "
                 "(paziente_id, data_valutazione, professionista, visita_json, pagato) "
                 "VALUES (%s,%s,%s,%s::jsonb,%s)",
-                (pid, datetime.date.today().isoformat(), _prof(), dump, False))
+                (pid, datetime.date.today().isoformat(), _prof(), dump, 0))
         conn.commit()
         st.success("Salvato.")
     except Exception as e:
