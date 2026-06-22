@@ -87,9 +87,9 @@ def _salva(conn, pid, dati):
         else:
             cur.execute(
                 "INSERT INTO valutazioni_visive "
-                "(paziente_id, data_valutazione, professionista, visita_json) "
-                "VALUES (%s,%s,%s,%s::jsonb)",
-                (pid, datetime.date.today().isoformat(), _prof(), dump))
+                "(paziente_id, data_valutazione, professionista, visita_json, pagato) "
+                "VALUES (%s,%s,%s,%s::jsonb,%s)",
+                (pid, datetime.date.today().isoformat(), _prof(), dump, 0))
         conn.commit()
         st.success("Salvato.")
     except Exception as e:
@@ -917,6 +917,8 @@ def _sez_g(conn, pid, d, paziente):
                 sf = float(base_rx.get("sf") or 0)
                 return {"sf": round(sf+add,2), "cil": base_rx.get("cil",0), "ax": base_rx.get("ax",0)}
             rx_pdf = {
+                "paziente": f"{cog} {nom}".strip(),
+                "data":     datetime.date.today().strftime("%d/%m/%Y"),
                 "lontano":    {"od": rs_od, "os": rs_os},
                 "intermedio": {"od": _sf_add(rs_od, add_i) if add_i else {}, "os": _sf_add(rs_os, add_i) if add_i else {}},
                 "vicino":     {"od": _sf_add(rs_od, add_v) if add_v else {}, "os": _sf_add(rs_os, add_v) if add_v else {}},
@@ -1018,6 +1020,8 @@ def _pdf_ricetta(pid, cog, nom, dn, rx_visita, prof):
                     "ax":  base_rx.get("ax",0)}
 
         rx = {
+            "paziente": f"{cog} {nom}".strip(),
+            "data":     datetime.date.today().strftime("%d/%m/%Y"),
             "lontano":    {"od": rs_od, "os": rs_os},
             "intermedio": {"od": _sf_add(rs_od, add_i) if add_i else {},
                            "os": _sf_add(rs_os, add_i) if add_i else {}},
