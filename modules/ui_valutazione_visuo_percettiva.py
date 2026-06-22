@@ -1018,6 +1018,8 @@ def _pdf_ricetta(pid, cog, nom, dn, rx_visita, prof):
                     "ax":  base_rx.get("ax",0)}
 
         rx = {
+            "paziente": f"{cog} {nom}".strip(),
+            "data":     datetime.date.today().strftime("%d/%m/%Y"),
             "lontano":    {"od": rs_od, "os": rs_os},
             "intermedio": {"od": _sf_add(rs_od, add_i) if add_i else {},
                            "os": _sf_add(rs_os, add_i) if add_i else {}},
