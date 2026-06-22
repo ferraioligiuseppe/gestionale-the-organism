@@ -5089,9 +5089,110 @@ def ui_pazienti():
         conn.close()
         return
 
-    # Etichette ricche: id + Cognome Nome + data nascita + CF
-    options = []
+    # ══ INDICATORE "GIÀ VISITATO / MAI VISITATO" ════════════════════════
+    # Un paziente è "visitato" se ha almeno una Seduta, una anamnesi
+    # o una valutazione visiva registrata. La data più recente fa da
+    # "ultima visita". Ogni query è protetta: se una tabella manca,
+    # viene semplicemente saltata.
+    visited_last = {}
+
+    def _raccogli_visite(sql):
+        try:
+            c2 = conn.cursor()
+            c2.execute(sql)
+            for rr in (c2.fetchall() or []):
+                pid = rr.get("pid") if isinstance(rr, dict) else rr[0]
+                d = (rr.get("d") if isinstance(rr, dict)
+                     else (rr[1] if len(rr) > 1 else None))
+                if pid is None:
+                    continue
+                pid = int(pid)
+                ds = str(d)[:10] if d else ""
+                old = visited_last.get(pid, "")
+                if pid not in visited_last or (ds and ds > old):
+                    visited_last[pid] = ds or old
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    _raccogli_visite("SELECT paziente_id AS pid, MAX(Data_Ora) AS d FROM Sedute GROUP BY paziente_id")
+    _raccogli_visite("SELECT paziente_id AS pid, MAX(data_anamnesi) AS d FROM anamnesi GROUP BY paziente_id")
+    _raccogli_visite("SELECT paziente_id AS pid, NULL AS d FROM Valutazioni_Visive GROUP BY paziente_id")
+
+    def _data_it(ds):
+        try:
+            d = datetime.strptime(ds[:10], "%Y-%m-%d")
+            mesi = ["", "gen", "feb", "mar", "apr", "mag", "giu",
+                    "lug", "ago", "set", "ott", "nov", "dic"]
+            return f"{d.day} {mesi[d.month]} {d.year}"
+        except Exception:
+            return ds or ""
+
+    def _is_visited(rid):
+        return rid in visited_last
+
+    # ── Filtro per stato visita ──────────────────────────────────────────
+    filtro_visita = st.radio(
+        "Mostra",
+        ["Tutti", "Già visitati", "Mai visitati"],
+        horizontal=True,
+        key="elenco_filtro_visita",
+    )
+
+    rows_f = []
     for r in rows:
+        v = _is_visited(r["id"])
+        if filtro_visita == "Già visitati" and not v:
+            continue
+        if filtro_visita == "Mai visitati" and v:
+            continue
+        rows_f.append(r)
+
+    if not rows_f:
+        st.info("Nessun paziente per questo filtro.")
+        conn.close()
+        return
+
+    # ── Lista a colpo d'occhio (pallina verde = già visitato) ────────────
+    n_vis = sum(1 for r in rows_f if _is_visited(r["id"]))
+    n_mai = len(rows_f) - n_vis
+    st.caption(f"🟢 {n_vis} già visitati · ⚪ {n_mai} mai visitati")
+
+    righe_html = []
+    for r in rows_f:
+        rid = r["id"]
+        nascita_it = ""
+        if r["Data_Nascita"]:
+            try:
+                nascita_it = datetime.strptime(r["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                nascita_it = r["Data_Nascita"]
+        if _is_visited(rid):
+            dot = "background:#22a06b;"
+            ds = visited_last.get(rid, "")
+            stato = f"Ultima visita · {_data_it(ds)}" if ds else "Già visitato"
+            stato_col = "#7a8699;"
+        else:
+            dot = "background:transparent;border:1.5px solid #b6c0d0;"
+            stato = "Mai visitato"
+            stato_col = "#ee5a52;font-weight:600;"
+        nasc_txt = f"nato il {nascita_it}" if nascita_it else ""
+        righe_html.append(
+            "<div style='display:flex;align-items:center;gap:12px;background:#fff;"
+            "border:1px solid #dde3ed;border-radius:9px;padding:9px 14px;margin-bottom:6px'>"
+            f"<span style='width:10px;height:10px;border-radius:50%;flex:none;{dot}'></span>"
+            "<div style='flex:1;min-width:0'>"
+            f"<div style='font-size:14px;font-weight:600;color:#29354a'>{r['Cognome']} {r['Nome']}</div>"
+            f"<div style='font-size:11.5px;color:#8995a8'>{nasc_txt}</div></div>"
+            f"<div style='font-size:12px;color:{stato_col}'>{stato}</div></div>"
+        )
+    st.markdown("".join(righe_html), unsafe_allow_html=True)
+
+    # ── Selettore per modificare / archiviare (pallina nell'etichetta) ───
+    options = []
+    for r in rows_f:
         nascita_it = ""
         if r["Data_Nascita"]:
             try:
@@ -5099,7 +5200,8 @@ def ui_pazienti():
             except Exception:
                 nascita_it = r["Data_Nascita"]
         cf = (r["Codice_Fiscale"] or "").upper()
-        label = f"{r['id']} - {r['Cognome']} {r['Nome']}"
+        pallina = "🟢" if _is_visited(r["id"]) else "⚪"
+        label = f"{pallina} {r['id']} - {r['Cognome']} {r['Nome']}"
         extra = []
         if nascita_it:
             extra.append(f"nato il {nascita_it}")
@@ -5110,8 +5212,8 @@ def ui_pazienti():
         options.append(label)
 
     selected = st.selectbox("Seleziona un paziente per modificare / archiviare", options, key="pz_sel_mod")
-    sel_id = int(selected.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["id"] == sel_id)
+    sel_id = int("".join(ch for ch in selected.split(" - ", 1)[0] if ch.isdigit()))
+    rec = next(r for r in rows_f if r["id"] == sel_id)
 
     st.write(f"Stato attuale: **{rec['Stato_Paziente']}**")
 
