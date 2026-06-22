@@ -345,10 +345,16 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
                 reset_paziente_attivo()
                 pid = None
     if not pid and show_warning:
-        st.warning(
-            "⚠️ Nessun paziente selezionato. "
-            "Torna al menu principale e selezionane uno per continuare."
-        )
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.warning(
+                "⚠️ Nessun paziente selezionato. "
+                "Selezionane uno per continuare."
+            )
+        with c2:
+            if st.button("👤 Seleziona paziente", type="primary",
+                          key="gpa_select_inline", use_container_width=True):
+                _dialog_seleziona(conn)
     return pid
 
 
