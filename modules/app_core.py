@@ -207,10 +207,18 @@ def _detect_patient_table_and_cols(conn):
         except Exception:
             discovered = []
 
+    # Tabelle "paziente-simili" scoperte dinamicamente: vengono aggiunte
+    # SOLO in coda (append), così le tabelle canoniche ('pazienti'/'Pazienti')
+    # mantengono la priorità e non vengono scavalcate da tabelle secondarie
+    # come 'pazienti_visivi' (screening visivo), 'pazienti_pnev', ecc.
+    _escludi = ('visiv', 'screening', 'pnev', 'temp', 'tmp', 'backup',
+                'old', 'storico', 'log', 'archiv', 'staging')
     for t in discovered:
         tl = str(t).lower()
         if ('paz' in tl or 'patient' in tl) and t not in table_candidates:
-            table_candidates.insert(0, t)
+            if any(x in tl for x in _escludi):
+                continue
+            table_candidates.append(t)
 
     def pick(cols, candidates):
         cols_set = set(cols)
