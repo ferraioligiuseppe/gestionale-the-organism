@@ -25,17 +25,23 @@ CTZ = "Europe/Rome"
 # color = esadecimale SENZA '#'. Verrà passato a Google come %23color.
 PROFESSIONISTI = [
     {"nome": "Giuseppe Ferraioli", "ruolo": "Optometria / PNEV",
-     "cal_id": "dr.ferraioligiuseppe@gmail.com", "color": "039BE5"},
+     "cal_id": "dr.ferraioligiuseppe@gmail.com", "color": "039BE5",
+     "ical_url": "https://calendar.google.com/calendar/ical/dr.ferraioligiuseppe%40gmail.com/private-a8dd85a448a7ebad9ae183e226b788a1/basic.ics"},
     {"nome": "Alessandra Munno", "ruolo": "",
-     "cal_id": "19f10b52c488e38e35203fb4292ae5674dcd18a3e48a6cd7c19995ff141d50a9@group.calendar.google.com", "color": "0B8043"},
+     "cal_id": "19f10b52c488e38e35203fb4292ae5674dcd18a3e48a6cd7c19995ff141d50a9@group.calendar.google.com", "color": "0B8043",
+     "ical_url": "https://calendar.google.com/calendar/ical/19f10b52c488e38e35203fb4292ae5674dcd18a3e48a6cd7c19995ff141d50a9%40group.calendar.google.com/private-26e8aaef30a1829f6d9baf38ec466941/basic.ics"},
     {"nome": "Mariella Salvatore", "ruolo": "",
-     "cal_id": "44e8a5afcc974df13a87209999fd1647c7be15f438b04c7f81abf6c8abb2b533@group.calendar.google.com", "color": "8E24AA"},
+     "cal_id": "44e8a5afcc974df13a87209999fd1647c7be15f438b04c7f81abf6c8abb2b533@group.calendar.google.com", "color": "8E24AA",
+     "ical_url": "https://calendar.google.com/calendar/ical/44e8a5afcc974df13a87209999fd1647c7be15f438b04c7f81abf6c8abb2b533%40group.calendar.google.com/private-138821bf4e0af59ebec432aeb5924bca/basic.ics"},
     {"nome": "Cirillo Salvatore", "ruolo": "",
-     "cal_id": "centro.oculus@gmail.com", "color": "F4511E"},
-    {"nome": "Valentina", "ruolo": "Stanza del sale",
-     "cal_id": "92eb161615f5ca4eb20539bfe26371936d5b173c422f5de8c705779d2549cb6f@group.calendar.google.com", "color": "F6BF26"},
+     "cal_id": "centro.oculus@gmail.com", "color": "F4511E",
+     "ical_url": "https://calendar.google.com/calendar/ical/centro.oculus%40gmail.com/private-97aa83064121506edc6f73fdee6eb59a/basic.ics"},
+    {"nome": "Valentina Avitabile", "ruolo": "Stanza del sale",
+     "cal_id": "92eb161615f5ca4eb20539bfe26371936d5b173c422f5de8c705779d2549cb6f@group.calendar.google.com", "color": "F6BF26",
+     "ical_url": "https://calendar.google.com/calendar/ical/92eb161615f5ca4eb20539bfe26371936d5b173c422f5de8c705779d2549cb6f%40group.calendar.google.com/private-c8ef4a8a750fc314930c69f815638a08/basic.ics"},
     {"nome": "Erika D'Auria", "ruolo": "",
-     "cal_id": "355c715a188e72f65d544407c24d412f46ae3893db6c00abd6b860169894dfef@group.calendar.google.com", "color": "00897B"},
+     "cal_id": "355c715a188e72f65d544407c24d412f46ae3893db6c00abd6b860169894dfef@group.calendar.google.com", "color": "00897B",
+     "ical_url": "https://calendar.google.com/calendar/ical/355c715a188e72f65d544407c24d412f46ae3893db6c00abd6b860169894dfef%40group.calendar.google.com/private-ea6b66f683f3bf388eb0d344d8b1086a/basic.ics"},
 ]
 
 MODI = {
