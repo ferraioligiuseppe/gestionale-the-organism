@@ -75,6 +75,80 @@ def render_agenda(conn=None, is_admin: bool = False):
         st.warning("Nessun calendario configurato. Aggiungi gli ID calendario in modules/agenda.py.")
         return
 
+    # ══════════════════════════════════════════════════════════════════
+    #  📋 APPUNTAMENTI — lista letta dai calendari Google (feed iCal)
+    # ══════════════════════════════════════════════════════════════════
+    import datetime as _dt
+    st.markdown("### 📋 Appuntamenti")
+    cda, cgg, _sp = st.columns([1, 1, 2])
+    with cda:
+        giorno = st.date_input("Giorno", value=_dt.date.today(), key="agenda_giorno",
+                               format="DD/MM/YYYY")
+    with cgg:
+        ampiezza = st.radio("Periodo", ["Solo il giorno", "Fino a +7 gg"],
+                            index=0, key="agenda_ampiezza", label_visibility="collapsed")
+    g_da = giorno
+    g_a = giorno + _dt.timedelta(days=7) if ampiezza == "Fino a +7 gg" else giorno
+
+    try:
+        from .agenda_sync import appuntamenti
+        eventi, errori = appuntamenti(conn, attivi, g_da, g_a)
+    except Exception as e:
+        eventi, errori = [], [{"nome": "sistema", "motivo": str(e)}]
+
+    if eventi:
+        st.caption(f"{len(eventi)} appuntamento/i nel periodo")
+        ultima_data = None
+        for i, ev in enumerate(eventi):
+            if ev["data"] != ultima_data:
+                ultima_data = ev["data"]
+                st.markdown(f"**{ev['data'].strftime('%A %d/%m/%Y').capitalize()}**")
+            col1, col2, col3 = st.columns([1.2, 4, 1.6])
+            with col1:
+                ora = ev["ora"] or ("tutto il giorno" if ev["all_day"] else "—")
+                st.markdown(
+                    f"<span style='display:inline-block;width:9px;height:9px;border-radius:2px;"
+                    f"background:#{ev['prof_color']};margin-right:6px'></span>"
+                    f"<b>{ora}</b>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"{ev['titolo']}")
+                paz = ev.get("paziente")
+                sub = ev["prof_nome"]
+                if paz:
+                    sub += f" · 👤 {paz['cognome']} {paz['nome']}"
+                st.caption(sub)
+            with col3:
+                paz = ev.get("paziente")
+                if paz and paz.get("id"):
+                    if st.button("▶️ Apri visita", key=f"apri_visita_{i}",
+                                  use_container_width=True):
+                        try:
+                            from .paziente_attivo import set_paziente_attivo
+                            from .app_menu import AREA_PAZIENTI
+                            set_paziente_attivo(conn, int(paz["id"]))
+                            st.session_state["nav_area"] = AREA_PAZIENTI
+                            st.session_state[f"nav_sotto_{AREA_PAZIENTI}"] = "🏠 Dashboard"
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Impossibile aprire la visita: {_e}")
+                else:
+                    st.caption("paziente non riconosciuto")
+        st.caption("💡 Per collegare un appuntamento a un paziente, scrivi **Cognome Nome** nel titolo dell'evento su Google Calendar.")
+    elif errori:
+        st.warning(
+            "Non riesco a leggere gli appuntamenti da Google. Per i calendari "
+            "privati serve l'**indirizzo iCal segreto** di ciascuno "
+            "(Google Calendar → Impostazioni del calendario → *Integra calendario* "
+            "→ «Indirizzo segreto in formato iCal»). Mandameli e li collego."
+        )
+        with st.expander("Dettagli calendari non letti"):
+            for er in errori:
+                st.write(f"• {er['nome']}: {er['motivo']}")
+    else:
+        st.info("Nessun appuntamento nel periodo selezionato.")
+
+    st.markdown("---")
+
     # Barra controlli
     c1, c2 = st.columns([1, 2])
     with c1:
