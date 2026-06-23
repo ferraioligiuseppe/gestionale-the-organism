@@ -25,17 +25,23 @@ CTZ = "Europe/Rome"
 # color = esadecimale SENZA '#'. Verrà passato a Google come %23color.
 PROFESSIONISTI = [
     {"nome": "Giuseppe Ferraioli", "ruolo": "Optometria / PNEV",
-     "cal_id": "dr.ferraioligiuseppe@gmail.com", "color": "039BE5"},
+     "cal_id": "dr.ferraioligiuseppe@gmail.com", "color": "039BE5",
+     "ical_url": "https://calendar.google.com/calendar/ical/dr.ferraioligiuseppe%40gmail.com/private-a8dd85a448a7ebad9ae183e226b788a1/basic.ics"},
     {"nome": "Alessandra Munno", "ruolo": "",
-     "cal_id": "19f10b52c488e38e35203fb4292ae5674dcd18a3e48a6cd7c19995ff141d50a9@group.calendar.google.com", "color": "0B8043"},
+     "cal_id": "19f10b52c488e38e35203fb4292ae5674dcd18a3e48a6cd7c19995ff141d50a9@group.calendar.google.com", "color": "0B8043",
+     "ical_url": "https://calendar.google.com/calendar/ical/19f10b52c488e38e35203fb4292ae5674dcd18a3e48a6cd7c19995ff141d50a9%40group.calendar.google.com/private-26e8aaef30a1829f6d9baf38ec466941/basic.ics"},
     {"nome": "Mariella Salvatore", "ruolo": "",
-     "cal_id": "44e8a5afcc974df13a87209999fd1647c7be15f438b04c7f81abf6c8abb2b533@group.calendar.google.com", "color": "8E24AA"},
+     "cal_id": "44e8a5afcc974df13a87209999fd1647c7be15f438b04c7f81abf6c8abb2b533@group.calendar.google.com", "color": "8E24AA",
+     "ical_url": "https://calendar.google.com/calendar/ical/44e8a5afcc974df13a87209999fd1647c7be15f438b04c7f81abf6c8abb2b533%40group.calendar.google.com/private-138821bf4e0af59ebec432aeb5924bca/basic.ics"},
     {"nome": "Cirillo Salvatore", "ruolo": "",
-     "cal_id": "centro.oculus@gmail.com", "color": "F4511E"},
-    {"nome": "Valentina", "ruolo": "Stanza del sale",
-     "cal_id": "92eb161615f5ca4eb20539bfe26371936d5b173c422f5de8c705779d2549cb6f@group.calendar.google.com", "color": "F6BF26"},
+     "cal_id": "centro.oculus@gmail.com", "color": "F4511E",
+     "ical_url": "https://calendar.google.com/calendar/ical/centro.oculus%40gmail.com/private-97aa83064121506edc6f73fdee6eb59a/basic.ics"},
+    {"nome": "Valentina Avitabile", "ruolo": "Stanza del sale",
+     "cal_id": "92eb161615f5ca4eb20539bfe26371936d5b173c422f5de8c705779d2549cb6f@group.calendar.google.com", "color": "F6BF26",
+     "ical_url": "https://calendar.google.com/calendar/ical/92eb161615f5ca4eb20539bfe26371936d5b173c422f5de8c705779d2549cb6f%40group.calendar.google.com/private-c8ef4a8a750fc314930c69f815638a08/basic.ics"},
     {"nome": "Erika D'Auria", "ruolo": "",
-     "cal_id": "355c715a188e72f65d544407c24d412f46ae3893db6c00abd6b860169894dfef@group.calendar.google.com", "color": "00897B"},
+     "cal_id": "355c715a188e72f65d544407c24d412f46ae3893db6c00abd6b860169894dfef@group.calendar.google.com", "color": "00897B",
+     "ical_url": "https://calendar.google.com/calendar/ical/355c715a188e72f65d544407c24d412f46ae3893db6c00abd6b860169894dfef%40group.calendar.google.com/private-ea6b66f683f3bf388eb0d344d8b1086a/basic.ics"},
 ]
 
 MODI = {
@@ -74,6 +80,80 @@ def render_agenda(conn=None, is_admin: bool = False):
     if not attivi:
         st.warning("Nessun calendario configurato. Aggiungi gli ID calendario in modules/agenda.py.")
         return
+
+    # ══════════════════════════════════════════════════════════════════
+    #  📋 APPUNTAMENTI — lista letta dai calendari Google (feed iCal)
+    # ══════════════════════════════════════════════════════════════════
+    import datetime as _dt
+    st.markdown("### 📋 Appuntamenti")
+    cda, cgg, _sp = st.columns([1, 1, 2])
+    with cda:
+        giorno = st.date_input("Giorno", value=_dt.date.today(), key="agenda_giorno",
+                               format="DD/MM/YYYY")
+    with cgg:
+        ampiezza = st.radio("Periodo", ["Solo il giorno", "Fino a +7 gg"],
+                            index=0, key="agenda_ampiezza", label_visibility="collapsed")
+    g_da = giorno
+    g_a = giorno + _dt.timedelta(days=7) if ampiezza == "Fino a +7 gg" else giorno
+
+    try:
+        from .agenda_sync import appuntamenti
+        eventi, errori = appuntamenti(conn, attivi, g_da, g_a)
+    except Exception as e:
+        eventi, errori = [], [{"nome": "sistema", "motivo": str(e)}]
+
+    if eventi:
+        st.caption(f"{len(eventi)} appuntamento/i nel periodo")
+        ultima_data = None
+        for i, ev in enumerate(eventi):
+            if ev["data"] != ultima_data:
+                ultima_data = ev["data"]
+                st.markdown(f"**{ev['data'].strftime('%A %d/%m/%Y').capitalize()}**")
+            col1, col2, col3 = st.columns([1.2, 4, 1.6])
+            with col1:
+                ora = ev["ora"] or ("tutto il giorno" if ev["all_day"] else "—")
+                st.markdown(
+                    f"<span style='display:inline-block;width:9px;height:9px;border-radius:2px;"
+                    f"background:#{ev['prof_color']};margin-right:6px'></span>"
+                    f"<b>{ora}</b>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"{ev['titolo']}")
+                paz = ev.get("paziente")
+                sub = ev["prof_nome"]
+                if paz:
+                    sub += f" · 👤 {paz['cognome']} {paz['nome']}"
+                st.caption(sub)
+            with col3:
+                paz = ev.get("paziente")
+                if paz and paz.get("id"):
+                    if st.button("▶️ Apri visita", key=f"apri_visita_{i}",
+                                  use_container_width=True):
+                        try:
+                            from .paziente_attivo import set_paziente_attivo
+                            from .app_menu import AREA_PAZIENTI
+                            set_paziente_attivo(conn, int(paz["id"]))
+                            st.session_state["nav_area"] = AREA_PAZIENTI
+                            st.session_state[f"nav_sotto_{AREA_PAZIENTI}"] = "🏠 Dashboard"
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Impossibile aprire la visita: {_e}")
+                else:
+                    st.caption("paziente non riconosciuto")
+        st.caption("💡 Per collegare un appuntamento a un paziente, scrivi **Cognome Nome** nel titolo dell'evento su Google Calendar.")
+    elif errori:
+        st.warning(
+            "Non riesco a leggere gli appuntamenti da Google. Per i calendari "
+            "privati serve l'**indirizzo iCal segreto** di ciascuno "
+            "(Google Calendar → Impostazioni del calendario → *Integra calendario* "
+            "→ «Indirizzo segreto in formato iCal»). Mandameli e li collego."
+        )
+        with st.expander("Dettagli calendari non letti"):
+            for er in errori:
+                st.write(f"• {er['nome']}: {er['motivo']}")
+    else:
+        st.info("Nessun appuntamento nel periodo selezionato.")
+
+    st.markdown("---")
 
     # Barra controlli
     c1, c2 = st.columns([1, 2])
