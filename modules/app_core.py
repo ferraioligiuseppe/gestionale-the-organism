@@ -4262,73 +4262,6 @@ def _draw_prescrizione_occhiali_a5_on_canvas(
         c.drawString(left, bottom + 15, "Firma digitale (Google Form): " + firma_url[:110])
 
 
-
-
-
-
-def genera_prescrizione_occhiali_a4_pdf(
-    paziente,
-    data_prescrizione_iso: Optional[str],
-    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
-    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
-    sf_int_od: float, cil_int_od: float, ax_int_od: int,
-    sf_int_os: float, cil_int_os: float, ax_int_os: int,
-    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
-    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
-    lenti_scelte: list,
-    altri_trattamenti: str,
-    note: str,
-    con_cirillo: bool = True,
-) -> bytes:
-    """A4: sfondo intestazione (immagine) + prescrizione pulita + TABO con freccia asse cilindro."""
-    dati = {
-        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
-        "data": _safe_str(data_prescrizione_iso),
-        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
-        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
-        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
-        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
-        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
-        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
-        "lenti": lenti_scelte,
-        "altri_trattamenti": altri_trattamenti,
-        "note": note,
-    }
-    return _prescrizione_pdf_imagebg(A4, "a4", con_cirillo, dati)
-
-def genera_prescrizione_occhiali_a4_pdf(
-    paziente,
-    data_prescrizione_iso: Optional[str],
-    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
-    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
-    sf_int_od: float, cil_int_od: float, ax_int_od: int,
-    sf_int_os: float, cil_int_os: float, ax_int_os: int,
-    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
-    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
-    lenti_scelte: list,
-    altri_trattamenti: str,
-    note: str,
-    con_cirillo: bool = True,
-) -> bytes:
-    """
-    A5: SFONDO = immagine letterhead (The Organism) + overlay SOLO valori (tabella pulita).
-    Niente riquadri: zero accavallamenti.
-    """
-    dati = {
-        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
-        "data": _safe_str(data_prescrizione_iso),
-        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
-        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
-        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
-        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
-        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
-        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
-        "lenti": lenti_scelte,
-        "altri_trattamenti": altri_trattamenti,
-        "note": note,
-    }
-    return _prescrizione_pdf_imagebg(A5, "a5", con_cirillo, dati)
-
 def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
     """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
     L = mark_len_mm * mm
@@ -6053,6 +5986,13 @@ def ui_valutazioni_visive():
     conn = get_connection()
     cur = conn.cursor()
 
+    # Assicura colonne incasso su Valutazioni_Visive (idempotente)
+    try:
+        from modules.incasso import ensure_incasso_columns
+        ensure_incasso_columns(conn, "Valutazioni_Visive")
+    except Exception:
+        pass
+
     # Seleziona paziente (solo ATTIVI, con data nascita per distinguere omonimi)
     cur.execute(
         "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
@@ -6176,6 +6116,39 @@ def ui_valutazioni_visive():
         with col_os3:
             ax_ogg_os = st.number_input("OS AX oggettiva (°)", 0, 180, 0, 1, key="ax_ogg_os")
 
+        st.markdown("**Refrazione abituale (potere che il paziente già porta — SF / CIL / AX)**")
+        col_ab1, col_ab2, col_ab3 = st.columns(3)
+        with col_ab1:
+            sf_abit_od = st.number_input("OD SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_od")
+        with col_ab2:
+            cil_abit_od = st.number_input("OD CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_od")
+        with col_ab3:
+            ax_abit_od = st.number_input("OD AX abituale (°)", 0, 180, 0, 1, key="ax_abit_od")
+        col_ab4, col_ab5, col_ab6 = st.columns(3)
+        with col_ab4:
+            sf_abit_os = st.number_input("OS SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_os")
+        with col_ab5:
+            cil_abit_os = st.number_input("OS CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_os")
+        with col_ab6:
+            ax_abit_os = st.number_input("OS AX abituale (°)", 0, 180, 0, 1, key="ax_abit_os")
+        add_abit = st.number_input("Addizione abituale (D)", 0.0, 4.0, 0.0, 0.25, key="add_abit")
+
+        st.markdown("**Refrazione abituale (potere che il paziente già porta — SF / CIL / AX)**")
+        col_ab1, col_ab2, col_ab3 = st.columns(3)
+        with col_ab1:
+            sf_abit_od = st.number_input("OD SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_od")
+        with col_ab2:
+            cil_abit_od = st.number_input("OD CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_od")
+        with col_ab3:
+            ax_abit_od = st.number_input("OD AX abituale (°)", 0, 180, 0, 1, key="ax_abit_od")
+        col_ab4, col_ab5, col_ab6 = st.columns(3)
+        with col_ab4:
+            sf_abit_os = st.number_input("OS SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_os")
+        with col_ab5:
+            cil_abit_os = st.number_input("OS CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_os")
+        with col_ab6:
+            ax_abit_os = st.number_input("OS AX abituale (°)", 0, 180, 0, 1, key="ax_abit_os")
+        add_abit = st.number_input("Addizione abituale (D)", 0.0, 4.0, 0.0, 0.25, key="add_abit")
         st.markdown("**Refrazione soggettiva (SF / CIL / AX)**")
         col_od4, col_od5, col_od6 = st.columns(3)
         with col_od4:
@@ -6242,11 +6215,15 @@ def ui_valutazioni_visive():
         vitreo = st.text_area("Vitreo", "")
 
 
-        col7, col8 = st.columns(2)
-        with col7:
-            costo = st.number_input("Costo visita", min_value=0.0, step=5.0, value=0.0)
-        with col8:
-            pagato = st.checkbox("Pagato", value=False)
+        # --- Blocco incasso (riutilizzabile) ---
+        try:
+            from modules.incasso import campi_incasso
+            dati_incasso_vis = campi_incasso("val_vis")
+        except Exception as _e_inc:
+            dati_incasso_vis = None
+            st.caption(f"(Incasso non disponibile: {_e_inc})")
+        costo = 0.0   # mantenuto per compatibilità con la INSERT
+        pagato = False
 
         note_libere = st.text_area("Note cliniche libere (aggiuntive)")
 
@@ -6367,6 +6344,21 @@ ESAMI STRUTTURALI / FUNZIONALI
             ),
         )
         conn.commit()
+        # Salva incasso sulla riga appena inserita
+        if dati_incasso_vis is not None:
+            try:
+                from modules.incasso import salva_incasso, riepilogo_incasso
+                _cur2 = conn.cursor()
+                _cur2.execute(
+                    "SELECT id FROM Valutazioni_Visive WHERE paziente_id = ? "
+                    "ORDER BY id DESC LIMIT 1", (paz_id,))
+                _row = _cur2.fetchone()
+                _vid = (_row.get("id") if hasattr(_row, "get") else _row[0]) if _row else None
+                if _vid:
+                    _n, _r, _s = salva_incasso(conn, "Valutazioni_Visive", int(_vid), dati_incasso_vis)
+                    st.success("Incasso: " + riepilogo_incasso(_n, _r, _s))
+            except Exception as _e_si:
+                st.warning(f"Valutazione salvata, incasso non registrato: {_e_si}")
         st.success("Valutazione visiva salvata.")
 
     # ── Valutazione Visiva Funzionale — Batteria Completa ───────────────────

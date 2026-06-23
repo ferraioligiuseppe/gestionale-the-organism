@@ -298,6 +298,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     # ── PAZIENTI ──────────────────────────────────────────────────────
     if sotto == "🏠 Dashboard":
         _render_dashboard(conn); return True
+    if sotto == "📅 Agenda appuntamenti":
+        try:
+            from .agenda import render_agenda
+            render_agenda(conn, is_admin)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore agenda: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
     if sotto == "👤 Anagrafica pazienti":
         try:
             from .ui_anagrafica import render_anagrafica
