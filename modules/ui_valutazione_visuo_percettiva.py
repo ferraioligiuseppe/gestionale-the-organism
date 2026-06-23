@@ -91,6 +91,21 @@ def _salva(conn, pid, dati):
                 "VALUES (%s,%s,%s,%s::jsonb,%s)",
                 (pid, datetime.date.today().isoformat(), _prof(), dump, 0))
         conn.commit()
+        # Salva incasso sulla riga appena inserita/aggiornata
+        try:
+            from modules.incasso import salva_incasso, riepilogo_incasso, ensure_incasso_columns
+            ensure_incasso_columns(conn, "valutazioni_visive")
+            _cur2 = conn.cursor()
+            _cur2.execute(
+                "SELECT id FROM valutazioni_visive WHERE paziente_id = %s "
+                "ORDER BY id DESC LIMIT 1", (pid,))
+            _row2 = _cur2.fetchone()
+            _vid2 = (_row2.get("id") if hasattr(_row2, "get") else _row2[0]) if _row2 else None
+            if _vid2 and 'dati_incasso_vv' in st.session_state:
+                _n, _r, _s = salva_incasso(conn, "valutazioni_visive", int(_vid2), st.session_state['dati_incasso_vv'])
+                st.success("💶 Incasso: " + riepilogo_incasso(_n, _r, _s))
+        except Exception as _e_inc:
+            pass
         st.success("Salvato.")
     except Exception as e:
         try: conn.rollback()
@@ -287,6 +302,11 @@ def _sez_a(pid, stored):
     st.markdown("#### Autorefrattometro")
     ar_od = _rx_row("OD", "ar_od", d.get("ar_od",{}))
     ar_os = _rx_row("OS", "ar_os", d.get("ar_os",{}))
+
+    # Refrazione abituale (potere che il paziente già porta)
+    st.markdown("#### Refrazione abituale (lenti che porta già)")
+    ra_od = _rx_row("OD", "ra_od", d.get("ra_od",{}))
+    ra_os = _rx_row("OS", "ra_os", d.get("ra_os",{}))
 
     # Refrazione soggettiva
     st.markdown("#### Refrazione soggettiva")
@@ -1280,6 +1300,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         "F. Profilo funzionale",
         "G. Prescrizione",
         "H. Sports Vision",
+        "💶 Incasso",
     ])
 
     with tabs[0]:
@@ -1332,3 +1353,34 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         dati.update(_sez_h(paz_id, stored))
         if st.button("Salva note Sports Vision", key=f"sv_h_{paz_id}"):
             _salva(conn, paz_id, dati)
+
+    with tabs[10]:
+        st.markdown("#### 💶 Incasso visita")
+        try:
+            from modules.incasso import campi_incasso, salva_incasso, riepilogo_incasso, ensure_incasso_columns
+            ensure_incasso_columns(conn, "valutazioni_visive")
+            # Carica eventuali dati incasso già salvati
+            _cur_inc = conn.cursor()
+            _cur_inc.execute(
+                "SELECT id, inc_listino, inc_sconto_tipo, inc_sconto_val, "
+                "inc_incassato, inc_metodo, inc_nota, inc_netto, inc_residuo, inc_stato "
+                "FROM valutazioni_visive WHERE paziente_id = %s "
+                "ORDER BY id DESC LIMIT 1", (paz_id,))
+            _ric = _cur_inc.fetchone()
+            _vid_inc = None
+            _def_inc = {}
+            if _ric:
+                _vid_inc = int(_ric.get("id") if hasattr(_ric,"get") else _ric[0])
+                keys = ["id","inc_listino","inc_sconto_tipo","inc_sconto_val",
+                        "inc_incassato","inc_metodo","inc_nota","inc_netto","inc_residuo","inc_stato"]
+                _def_inc = dict(zip(keys, _ric)) if not hasattr(_ric,"get") else dict(_ric)
+            dati_inc = campi_incasso("vv_inc", defaults=_def_inc)
+            st.session_state['dati_incasso_vv'] = dati_inc
+            if st.button("💾 Salva incasso", key=f"sv_inc_{paz_id}", type="primary"):
+                if _vid_inc:
+                    _n, _r, _s = salva_incasso(conn, "valutazioni_visive", _vid_inc, dati_inc)
+                    st.success("💶 " + riepilogo_incasso(_n, _r, _s))
+                else:
+                    st.warning("Salva prima almeno una sezione della valutazione, poi registra l'incasso.")
+        except Exception as _e_tab_inc:
+            st.error(f"Blocco incasso non disponibile: {_e_tab_inc}")
