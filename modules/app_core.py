@@ -7292,6 +7292,85 @@ def ui_coupons():
         return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
 
     opt_paz = [_paz_label_coup(p) for p in pazienti]
+
+    # ════════════════════════════════════════════════════════════════
+    # 🔎 ELENCO E RICERCA — TUTTI I COUPON (sempre visibile)
+    # ════════════════════════════════════════════════════════════════
+    st.markdown("### 🔎 Tutti i coupon")
+    try:
+        cur.execute(
+            """
+            SELECT c.id, c.Tipo_Coupon, c.Codice_Coupon, c.Data_Assegnazione,
+                   c.Note, c.Utilizzato,
+                   p.Cognome, p.Nome
+            FROM Coupons c
+            LEFT JOIN Pazienti p ON p.id = c.paziente_id
+            ORDER BY c.Data_Assegnazione DESC, c.id DESC
+            """
+        )
+        tutti = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        tutti = []
+
+    fc1, fc2, fc3 = st.columns([3, 1, 1])
+    with fc1:
+        q_txt = st.text_input("Cerca (paziente o codice coupon)", "", key="coup_search")
+    with fc2:
+        f_tipo = st.selectbox("Tipo", ["Tutti", "OF", "SDS"], key="coup_f_tipo")
+    with fc3:
+        f_stato = st.selectbox("Stato", ["Tutti", "Non usato", "Usato"], key="coup_f_stato")
+
+    qt = q_txt.strip().lower()
+    righe = []
+    n_tot = n_usati = 0
+    for c in tutti:
+        nome_paz = f"{(c.get('Cognome') or '').strip()} {(c.get('Nome') or '').strip()}".strip() or "—"
+        codice = c.get("Codice_Coupon") or ""
+        tipo = c.get("Tipo_Coupon") or ""
+        usato = bool(c.get("Utilizzato"))
+        # filtri
+        if f_tipo != "Tutti" and tipo != f_tipo:
+            continue
+        if f_stato == "Usato" and not usato:
+            continue
+        if f_stato == "Non usato" and usato:
+            continue
+        if qt and qt not in nome_paz.lower() and qt not in str(codice).lower():
+            continue
+        data_it = ""
+        if c.get("Data_Assegnazione"):
+            try:
+                data_it = datetime.strptime(c["Data_Assegnazione"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                data_it = str(c["Data_Assegnazione"])
+        n_tot += 1
+        if usato:
+            n_usati += 1
+        righe.append({
+            "Paziente": nome_paz,
+            "Tipo": tipo,
+            "Codice": codice or "—",
+            "Data": data_it or "—",
+            "Stato": "✅ Usato" if usato else "🟡 Non usato",
+            "Note": c.get("Note") or "",
+        })
+
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Coupon trovati", n_tot)
+    k2.metric("✅ Usati", n_usati)
+    k3.metric("🟡 Da usare", n_tot - n_usati)
+
+    if righe:
+        st.dataframe(righe, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Nessun coupon corrisponde ai filtri.")
+
+    st.markdown("---")
+
     # === FIX paziente attivo globale ===
     from modules.paziente_attivo import get_paziente_attivo
     paz_id = get_paziente_attivo(conn)
