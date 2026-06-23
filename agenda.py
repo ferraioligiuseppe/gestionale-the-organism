@@ -1,0 +1,221 @@
+# -*- coding: utf-8 -*-
+"""
+╔══════════════════════════════════════════════════════════════════════╗
+║  AGENDA — vista calendari Google di tutti i professionisti           ║
+║                                                                      ║
+║  Strada 1 ("a vista"): mostra i Google Calendar dei professionisti   ║
+║  sovrapposti e colorati. Gli appuntamenti si creano/spostano dentro  ║
+║  Google Calendar; qui li vedi tutti insieme. I promemoria email li   ║
+║  manda Google in automatico.                                         ║
+║                                                                      ║
+║  PER AGGIUNGERE UN PROFESSIONISTA: aggiungi una riga a PROFESSIONISTI ║
+║  con nome, cal_id (l'ID calendario preso da Google) e un colore.     ║
+║  Lascia cal_id = "" per chi non ha ancora l'agenda (non viene        ║
+║  mostrato finché non lo compili).                                    ║
+╚══════════════════════════════════════════════════════════════════════╝
+"""
+
+import urllib.parse
+import streamlit as st
+import streamlit.components.v1 as components
+
+CTZ = "Europe/Rome"
+
+# ── Professionisti dello Studio ───────────────────────────────────────
+# color = esadecimale SENZA '#'. Verrà passato a Google come %23color.
+PROFESSIONISTI = [
+    {"nome": "Giuseppe Ferraioli", "ruolo": "Optometria / PNEV",
+     "cal_id": "dr.ferraioligiuseppe@gmail.com", "color": "039BE5",
+     "ical_url": "https://calendar.google.com/calendar/ical/dr.ferraioligiuseppe%40gmail.com/private-a8dd85a448a7ebad9ae183e226b788a1/basic.ics"},
+    {"nome": "Alessandra Munno", "ruolo": "",
+     "cal_id": "19f10b52c488e38e35203fb4292ae5674dcd18a3e48a6cd7c19995ff141d50a9@group.calendar.google.com", "color": "0B8043",
+     "ical_url": "https://calendar.google.com/calendar/ical/19f10b52c488e38e35203fb4292ae5674dcd18a3e48a6cd7c19995ff141d50a9%40group.calendar.google.com/private-26e8aaef30a1829f6d9baf38ec466941/basic.ics"},
+    {"nome": "Mariella Salvatore", "ruolo": "",
+     "cal_id": "44e8a5afcc974df13a87209999fd1647c7be15f438b04c7f81abf6c8abb2b533@group.calendar.google.com", "color": "8E24AA",
+     "ical_url": "https://calendar.google.com/calendar/ical/44e8a5afcc974df13a87209999fd1647c7be15f438b04c7f81abf6c8abb2b533%40group.calendar.google.com/private-138821bf4e0af59ebec432aeb5924bca/basic.ics"},
+    {"nome": "Cirillo Salvatore", "ruolo": "",
+     "cal_id": "centro.oculus@gmail.com", "color": "F4511E",
+     "ical_url": "https://calendar.google.com/calendar/ical/centro.oculus%40gmail.com/private-97aa83064121506edc6f73fdee6eb59a/basic.ics"},
+    {"nome": "Valentina Avitabile", "ruolo": "Stanza del sale",
+     "cal_id": "92eb161615f5ca4eb20539bfe26371936d5b173c422f5de8c705779d2549cb6f@group.calendar.google.com", "color": "F6BF26",
+     "ical_url": "https://calendar.google.com/calendar/ical/92eb161615f5ca4eb20539bfe26371936d5b173c422f5de8c705779d2549cb6f%40group.calendar.google.com/private-c8ef4a8a750fc314930c69f815638a08/basic.ics"},
+    {"nome": "Erika D'Auria", "ruolo": "",
+     "cal_id": "355c715a188e72f65d544407c24d412f46ae3893db6c00abd6b860169894dfef@group.calendar.google.com", "color": "00897B",
+     "ical_url": "https://calendar.google.com/calendar/ical/355c715a188e72f65d544407c24d412f46ae3893db6c00abd6b860169894dfef%40group.calendar.google.com/private-ea6b66f683f3bf388eb0d344d8b1086a/basic.ics"},
+]
+
+MODI = {
+    "Settimana": "WEEK",
+    "Giorno": "DAY",
+    "Mese": "MONTH",
+    "Elenco": "AGENDA",
+}
+
+
+def _build_embed_url(professionisti, mode: str) -> str:
+    base = "https://calendar.google.com/calendar/embed?"
+    parts = []
+    for p in professionisti:
+        cid = (p.get("cal_id") or "").strip()
+        if not cid:
+            continue
+        parts.append("src=" + urllib.parse.quote(cid, safe=""))
+        parts.append("color=%23" + (p.get("color") or "039BE5"))
+    parts.append("ctz=" + urllib.parse.quote(CTZ, safe=""))
+    parts.append("mode=" + mode)
+    parts.append("wkst=2")          # settimana inizia lunedì
+    parts.append("showTitle=0")
+    parts.append("showPrint=0")
+    parts.append("showCalendars=0")
+    parts.append("showTz=0")
+    return base + "&".join(parts)
+
+
+def render_agenda(conn=None, is_admin: bool = False):
+    st.header("📅 Agenda appuntamenti")
+
+    attivi = [p for p in PROFESSIONISTI if (p.get("cal_id") or "").strip()]
+    mancanti = [p for p in PROFESSIONISTI if not (p.get("cal_id") or "").strip()]
+
+    if not attivi:
+        st.warning("Nessun calendario configurato. Aggiungi gli ID calendario in modules/agenda.py.")
+        return
+
+    # ══════════════════════════════════════════════════════════════════
+    #  📋 APPUNTAMENTI — lista letta dai calendari Google (feed iCal)
+    # ══════════════════════════════════════════════════════════════════
+    import datetime as _dt
+    st.markdown("### 📋 Appuntamenti")
+    cda, cgg, _sp = st.columns([1, 1, 2])
+    with cda:
+        giorno = st.date_input("Giorno", value=_dt.date.today(), key="agenda_giorno",
+                               format="DD/MM/YYYY")
+    with cgg:
+        ampiezza = st.radio("Periodo", ["Solo il giorno", "Fino a +7 gg"],
+                            index=0, key="agenda_ampiezza", label_visibility="collapsed")
+    g_da = giorno
+    g_a = giorno + _dt.timedelta(days=7) if ampiezza == "Fino a +7 gg" else giorno
+
+    try:
+        from .agenda_sync import appuntamenti
+        eventi, errori = appuntamenti(conn, attivi, g_da, g_a)
+    except Exception as e:
+        eventi, errori = [], [{"nome": "sistema", "motivo": str(e)}]
+
+    if eventi:
+        st.caption(f"{len(eventi)} appuntamento/i nel periodo")
+        ultima_data = None
+        for i, ev in enumerate(eventi):
+            if ev["data"] != ultima_data:
+                ultima_data = ev["data"]
+                st.markdown(f"**{ev['data'].strftime('%A %d/%m/%Y').capitalize()}**")
+            col1, col2, col3 = st.columns([1.2, 4, 1.6])
+            with col1:
+                ora = ev["ora"] or ("tutto il giorno" if ev["all_day"] else "—")
+                st.markdown(
+                    f"<span style='display:inline-block;width:9px;height:9px;border-radius:2px;"
+                    f"background:#{ev['prof_color']};margin-right:6px'></span>"
+                    f"<b>{ora}</b>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"{ev['titolo']}")
+                paz = ev.get("paziente")
+                sub = ev["prof_nome"]
+                if paz:
+                    sub += f" · 👤 {paz['cognome']} {paz['nome']}"
+                st.caption(sub)
+            with col3:
+                paz = ev.get("paziente")
+                if paz and paz.get("id"):
+                    if st.button("▶️ Apri visita", key=f"apri_visita_{i}",
+                                  use_container_width=True):
+                        try:
+                            from .paziente_attivo import set_paziente_attivo
+                            from .app_menu import AREA_PAZIENTI
+                            set_paziente_attivo(conn, int(paz["id"]))
+                            st.session_state["nav_area"] = AREA_PAZIENTI
+                            st.session_state[f"nav_sotto_{AREA_PAZIENTI}"] = "🏠 Dashboard"
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Impossibile aprire la visita: {_e}")
+                else:
+                    st.caption("paziente non riconosciuto")
+        st.caption("💡 Per collegare un appuntamento a un paziente, scrivi **Cognome Nome** nel titolo dell'evento su Google Calendar.")
+    elif errori:
+        st.warning(
+            "Non riesco a leggere gli appuntamenti da Google. Per i calendari "
+            "privati serve l'**indirizzo iCal segreto** di ciascuno "
+            "(Google Calendar → Impostazioni del calendario → *Integra calendario* "
+            "→ «Indirizzo segreto in formato iCal»). Mandameli e li collego."
+        )
+        with st.expander("Dettagli calendari non letti"):
+            for er in errori:
+                st.write(f"• {er['nome']}: {er['motivo']}")
+    else:
+        st.info("Nessun appuntamento nel periodo selezionato.")
+
+    st.markdown("---")
+
+    # Barra controlli
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        scelta = st.radio("Vista", list(MODI.keys()), horizontal=True, index=0,
+                          key="agenda_mode")
+    with c2:
+        # Legenda colori professionisti
+        chips = []
+        for p in attivi:
+            chips.append(
+                f"<span style='display:inline-block;width:11px;height:11px;"
+                f"border-radius:3px;background:#{p['color']};margin:0 6px -1px 12px'></span>"
+                f"<span style='font-size:13px'>{p['nome']}"
+                + (f" · {p['ruolo']}" if p.get('ruolo') else "") + "</span>"
+            )
+        st.markdown(
+            "<div style='padding-top:6px'>" + "".join(chips) + "</div>",
+            unsafe_allow_html=True,
+        )
+
+    url = _build_embed_url(attivi, MODI[scelta])
+    components.html(
+        f'<iframe src="{url}" style="border:0;width:100%;height:720px" '
+        f'frameborder="0" scrolling="no"></iframe>',
+        height=735,
+    )
+
+    st.caption(
+        "Gli appuntamenti si creano e si modificano in Google Calendar "
+        "(da telefono o computer); qui li vedi tutti insieme. I promemoria "
+        "email li invia Google in automatico."
+    )
+
+    # ── Apri / modifica in Google Calendar ────────────────────────────
+    st.markdown("#### ✏️ Crea o modifica un appuntamento")
+    st.link_button(
+        "📅 Apri Google Calendar (tutti)",
+        "https://calendar.google.com/calendar/r",
+        use_container_width=False,
+    )
+    st.caption("Apre Google Calendar in una nuova scheda: lì aggiungi o sposti gli appuntamenti.")
+
+    with st.expander("Apri l'agenda di un singolo professionista"):
+        for p in attivi:
+            cid = urllib.parse.quote(p["cal_id"], safe="")
+            url_p = f"https://calendar.google.com/calendar/r?cid={cid}"
+            st.markdown(
+                f"<span style='display:inline-block;width:11px;height:11px;"
+                f"border-radius:3px;background:#{p['color']};margin:0 8px -1px 0'></span>"
+                f"<a href='{url_p}' target='_blank' style='text-decoration:none'>"
+                f"{p['nome']}" + (f" · {p['ruolo']}" if p.get('ruolo') else "") + " ↗</a>",
+                unsafe_allow_html=True,
+            )
+
+    if mancanti:
+        with st.expander(f"➕ Professionisti senza agenda ({len(mancanti)})"):
+            st.write(
+                "Per aggiungerli servono i loro **ID calendario** Google. "
+                "In Google Calendar: tre puntini sul calendario → "
+                "Impostazioni e condivisione → *Integra calendario* → "
+                "copia **ID calendario**. Poi me lo passi e lo collego."
+            )
+            for p in mancanti:
+                st.write(f"• {p['nome']}" + (f" — {p['ruolo']}" if p.get('ruolo') else ""))
