@@ -275,7 +275,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     from .paziente_attivo import header_paziente_attivo
 
     VOCI_CON_PAZIENTE = {
-        "🎟️ Coupon OF / SDS", "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
+        "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
         "🔬 PNEV", "📋 Anamnesi The Organism", "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
