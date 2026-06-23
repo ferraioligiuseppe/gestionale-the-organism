@@ -7475,7 +7475,7 @@ def ui_dashboard():
     with col1:
         data_da_str = st.text_input(
             "Dal (gg/mm/aaaa)",
-            oggi.strftime("%d/%m/%Y")
+            oggi.replace(day=1).strftime("%d/%m/%Y")
         )
 
     with col2:
@@ -7507,50 +7507,82 @@ def ui_dashboard():
     data_a_iso = data_a.isoformat()
 
     # =========================
-    # VALUTAZIONI VISIVE
+    # RACCOLTA DATI (con incasso reale + fallback campi vecchi)
     # =========================
+    prof_f = professionista_f.strip().lower()
 
-    query_v = """
-        SELECT Data_Valutazione AS Data, Professionista, Costo, Pagato
-        FROM Valutazioni_Visive
-        WHERE Data_Valutazione BETWEEN ? AND ?
-    """
+    def _eff_incassato(d):
+        """Incassato reale: usa inc_incassato se l'incasso nuovo è stato
+        compilato (inc_netto valorizzato), altrimenti ripiega sul vecchio
+        Costo quando Pagato è vero."""
+        netto = d.get("inc_netto")
+        if netto not in (None, ""):
+            try:
+                return float(d.get("inc_incassato") or 0.0)
+            except Exception:
+                return 0.0
+        # fallback vecchio schema
+        try:
+            if d.get("Pagato"):
+                return float(d.get("Costo") or 0.0)
+        except Exception:
+            pass
+        return 0.0
 
-    params_v = [data_da_iso, data_a_iso]
+    def _residuo(d):
+        r = d.get("inc_residuo")
+        try:
+            r = float(r) if r not in (None, "") else 0.0
+        except Exception:
+            r = 0.0
+        return r if r > 0.01 else 0.0
 
-    if professionista_f.strip():
-        query_v += " AND Professionista LIKE ?"
-        params_v.append(f"%{professionista_f.strip()}%")
+    def _raccogli(query, params, prof_key):
+        """Esegue la query in sicurezza; ritorna lista di dict normalizzati."""
+        try:
+            cur.execute(query, params)
+            rows = [dict(r) for r in cur.fetchall()]
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return []
+        out = []
+        for d in rows:
+            if prof_f:
+                pv = str(d.get(prof_key) or "").lower()
+                if prof_f not in pv:
+                    continue
+            out.append(d)
+        return out
 
-    cur.execute(query_v, params_v)
-    vis = cur.fetchall()
-
-    incasso_vis = sum((r["Costo"] or 0.0) for r in vis if r["Pagato"])
+    # --- Valutazioni visive (ora con inc_*) ---
+    vis = _raccogli(
+        "SELECT * FROM Valutazioni_Visive WHERE Data_Valutazione BETWEEN ? AND ?",
+        [data_da_iso, data_a_iso], "Professionista")
+    incasso_vis = sum(_eff_incassato(d) for d in vis)
+    residuo_vis = sum(_residuo(d) for d in vis)
     n_visite = len(vis)
 
-    # =========================
-    # SEDUTE
-    # =========================
-
-    query_s = """
-        SELECT Data_Seduta AS Data, Professionista, Terapia, Costo, Pagato
-        FROM Sedute
-        WHERE Data_Seduta BETWEEN ? AND ?
-    """
-
-    params_s = [data_da_iso, data_a_iso]
-
-    if professionista_f.strip():
-        query_s += " AND Professionista LIKE ?"
-        params_s.append(f"%{professionista_f.strip()}%")
-
-    cur.execute(query_s, params_s)
-    sed = cur.fetchall()
-
-    incasso_sed = sum((r["Costo"] or 0.0) for r in sed if r["Pagato"])
+    # --- Sedute / terapie (vecchio schema Costo/Pagato) ---
+    sed = _raccogli(
+        "SELECT * FROM Sedute WHERE Data_Seduta BETWEEN ? AND ?",
+        [data_da_iso, data_a_iso], "Professionista")
+    incasso_sed = sum(_eff_incassato(d) for d in sed)
+    residuo_sed = sum(_residuo(d) for d in sed)
     n_sedute = len(sed)
 
-    totale_generale = incasso_vis + incasso_sed
+    # --- Osteopatia (osteo_seduta, ora con inc_*) ---
+    ost = _raccogli(
+        "SELECT * FROM osteo_seduta WHERE data_seduta BETWEEN ? AND ?",
+        [data_da_iso, data_a_iso], "operatore")
+    incasso_ost = sum(_eff_incassato(d) for d in ost)
+    residuo_ost = sum(_residuo(d) for d in ost)
+    n_osteo = len(ost)
+
+    totale_generale = incasso_vis + incasso_sed + incasso_ost
+    residuo_totale = residuo_vis + residuo_sed + residuo_ost
 
     # =========================
     # KPI CARD
@@ -7558,21 +7590,14 @@ def ui_dashboard():
 
     st.markdown("### 📊 Panoramica")
 
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric(
-        label="Totale incassato",
-        value=f"€ {totale_generale:.2f}"
-    )
-
-    c2.metric(
-        label="Valutazioni visive",
-        value=n_visite
-    )
-
-    c3.metric(
-        label="Sedute / terapie",
-        value=n_sedute
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(label="💰 Totale incassato", value=f"€ {totale_generale:.2f}")
+    c2.metric(label="👁️ Valutazioni visive", value=n_visite)
+    c3.metric(label="🦴 Sedute osteopatia", value=n_osteo)
+    c4.metric(
+        label="🔴 Da incassare",
+        value=f"€ {residuo_totale:.2f}",
+        help="Somma dei residui ancora aperti (acconti/da saldare) nel periodo",
     )
 
     st.markdown("---")
@@ -7616,27 +7641,54 @@ def ui_dashboard():
     # DETTAGLIO INCASSI
     # =========================
 
-    col_vis, col_sed = st.columns(2)
+    col_vis, col_ost, col_sed = st.columns(3)
 
     with col_vis:
-
         st.markdown("#### 👁️ Valutazioni visive")
-
-        st.success(
-            f"Incasso nel periodo: € {incasso_vis:.2f}"
-        )
-
+        st.success(f"Incassato: € {incasso_vis:.2f}")
+        if residuo_vis > 0.01:
+            st.caption(f"🔴 Da incassare: € {residuo_vis:.2f}")
         st.caption(f"Numero visite: {n_visite}")
 
+    with col_ost:
+        st.markdown("#### 🦴 Osteopatia")
+        st.success(f"Incassato: € {incasso_ost:.2f}")
+        if residuo_ost > 0.01:
+            st.caption(f"🔴 Da incassare: € {residuo_ost:.2f}")
+        st.caption(f"Numero sedute: {n_osteo}")
+
     with col_sed:
-
         st.markdown("#### 🧠 Sedute / terapie")
-
-        st.success(
-            f"Incasso nel periodo: € {incasso_sed:.2f}"
-        )
-
+        st.success(f"Incassato: € {incasso_sed:.2f}")
+        if residuo_sed > 0.01:
+            st.caption(f"🔴 Da incassare: € {residuo_sed:.2f}")
         st.caption(f"Numero sedute: {n_sedute}")
+
+    st.markdown("---")
+
+    # =========================
+    # RIEPILOGO PER PROFESSIONISTA
+    # =========================
+    st.markdown("### 👥 Incassato per professionista")
+    per_prof = {}
+    for d in vis:
+        k = str(d.get("Professionista") or "—").strip() or "—"
+        per_prof[k] = per_prof.get(k, 0.0) + _eff_incassato(d)
+    for d in ost:
+        k = str(d.get("operatore") or "—").strip() or "—"
+        per_prof[k] = per_prof.get(k, 0.0) + _eff_incassato(d)
+    for d in sed:
+        k = str(d.get("Professionista") or "—").strip() or "—"
+        per_prof[k] = per_prof.get(k, 0.0) + _eff_incassato(d)
+
+    righe_prof = [
+        {"Professionista": k, "Incassato €": round(v, 2)}
+        for k, v in sorted(per_prof.items(), key=lambda x: -x[1]) if v > 0
+    ]
+    if righe_prof:
+        st.dataframe(righe_prof, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Nessun incasso nel periodo selezionato.")
 
     st.markdown("---")
 
@@ -7645,10 +7697,14 @@ def ui_dashboard():
     # =========================
 
     st.markdown("### 💰 Totale studio")
-
-    st.success(
-        f"Totale generale incassato nel periodo: € {totale_generale:.2f}"
-    )
+    cT1, cT2 = st.columns(2)
+    with cT1:
+        st.success(f"Totale incassato nel periodo: € {totale_generale:.2f}")
+    with cT2:
+        if residuo_totale > 0.01:
+            st.warning(f"🔴 Totale ancora da incassare: € {residuo_totale:.2f}")
+        else:
+            st.info("✅ Nessun residuo aperto nel periodo")
 
     conn.close()
 
