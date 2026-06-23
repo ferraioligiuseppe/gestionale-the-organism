@@ -21,6 +21,7 @@
 
 # ── Costanti aree (7 attive) ──────────────────────────────────────────
 AREA_PAZIENTI    = "👥 Pazienti"
+AREA_AGENDA      = "📅 Agenda"
 AREA_INVII       = "📨 Invii al paziente"
 AREA_VALUTAZIONE = "🔍 Valutazione funzionale"
 AREA_TEST_LIVE   = "🖥️ Test live"
@@ -44,6 +45,7 @@ AREA_MARKETING          = AREA_EVENTI
 
 AREE_ORDINE = [
     AREA_PAZIENTI,
+    AREA_AGENDA,
     AREA_INVII,
     AREA_VALUTAZIONE,
     AREA_TEST_LIVE,
@@ -64,6 +66,9 @@ SOTTOSEZIONI = {
         "📥 Import pazienti",
         "🔗 Sincronizza pnev.it",
         "🚀 Trasferisci a pnev.it",
+    ],
+    AREA_AGENDA: [
+        "📅 Agenda appuntamenti",
     ],
     AREA_INVII: [
         "📋 Questionari remoti",
