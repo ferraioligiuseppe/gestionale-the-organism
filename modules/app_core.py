@@ -7316,6 +7316,16 @@ def ui_coupons():
             pass
         tutti = []
 
+    # PostgreSQL restituisce i nomi colonna in minuscolo: leggo le chiavi
+    # in modo insensibile alle maiuscole/minuscole.
+    def _g(d, *names):
+        low = {str(k).lower(): v for k, v in d.items()}
+        for n in names:
+            v = low.get(n.lower())
+            if v not in (None, ""):
+                return v
+        return None
+
     fc1, fc2, fc3 = st.columns([3, 1, 1])
     with fc1:
         q_txt = st.text_input("Cerca (paziente o codice coupon)", "", key="coup_search")
@@ -7328,10 +7338,10 @@ def ui_coupons():
     righe = []
     n_tot = n_usati = 0
     for c in tutti:
-        nome_paz = f"{(c.get('Cognome') or '').strip()} {(c.get('Nome') or '').strip()}".strip() or "—"
-        codice = c.get("Codice_Coupon") or ""
-        tipo = c.get("Tipo_Coupon") or ""
-        usato = bool(c.get("Utilizzato"))
+        nome_paz = f"{(_g(c,'Cognome') or '').strip()} {(_g(c,'Nome') or '').strip()}".strip() or "—"
+        codice = _g(c, "Codice_Coupon") or ""
+        tipo = _g(c, "Tipo_Coupon") or ""
+        usato = bool(_g(c, "Utilizzato"))
         # filtri
         if f_tipo != "Tutti" and tipo != f_tipo:
             continue
@@ -7342,21 +7352,22 @@ def ui_coupons():
         if qt and qt not in nome_paz.lower() and qt not in str(codice).lower():
             continue
         data_it = ""
-        if c.get("Data_Assegnazione"):
+        _data_raw = _g(c, "Data_Assegnazione")
+        if _data_raw:
             try:
-                data_it = datetime.strptime(c["Data_Assegnazione"], "%Y-%m-%d").strftime("%d/%m/%Y")
+                data_it = datetime.strptime(str(_data_raw), "%Y-%m-%d").strftime("%d/%m/%Y")
             except Exception:
-                data_it = str(c["Data_Assegnazione"])
+                data_it = str(_data_raw)
         n_tot += 1
         if usato:
             n_usati += 1
         righe.append({
             "Paziente": nome_paz,
-            "Tipo": tipo,
+            "Tipo": tipo or "—",
             "Codice": codice or "—",
             "Data": data_it or "—",
             "Stato": "✅ Usato" if usato else "🟡 Non usato",
-            "Note": c.get("Note") or "",
+            "Note": _g(c, "Note") or "",
         })
 
     k1, k2, k3 = st.columns(3)
