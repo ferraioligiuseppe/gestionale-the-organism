@@ -6200,6 +6200,22 @@ def ui_valutazioni_visive():
             ax_abit_os = st.number_input("OS AX abituale (°)", 0, 180, 0, 1, key="ax_abit_os")
         add_abit = st.number_input("Addizione abituale (D)", 0.0, 4.0, 0.0, 0.25, key="add_abit")
 
+        st.markdown("**Refrazione abituale (potere che il paziente già porta — SF / CIL / AX)**")
+        col_ab1, col_ab2, col_ab3 = st.columns(3)
+        with col_ab1:
+            sf_abit_od = st.number_input("OD SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_od")
+        with col_ab2:
+            cil_abit_od = st.number_input("OD CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_od")
+        with col_ab3:
+            ax_abit_od = st.number_input("OD AX abituale (°)", 0, 180, 0, 1, key="ax_abit_od")
+        col_ab4, col_ab5, col_ab6 = st.columns(3)
+        with col_ab4:
+            sf_abit_os = st.number_input("OS SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_os")
+        with col_ab5:
+            cil_abit_os = st.number_input("OS CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_os")
+        with col_ab6:
+            ax_abit_os = st.number_input("OS AX abituale (°)", 0, 180, 0, 1, key="ax_abit_os")
+        add_abit = st.number_input("Addizione abituale (D)", 0.0, 4.0, 0.0, 0.25, key="add_abit")
         st.markdown("**Refrazione soggettiva (SF / CIL / AX)**")
         col_od4, col_od5, col_od6 = st.columns(3)
         with col_od4:
