@@ -108,6 +108,27 @@ def render_agenda(conn=None, is_admin: bool = False):
         "email li invia Google in automatico."
     )
 
+    # ── Apri / modifica in Google Calendar ────────────────────────────
+    st.markdown("#### ✏️ Crea o modifica un appuntamento")
+    st.link_button(
+        "📅 Apri Google Calendar (tutti)",
+        "https://calendar.google.com/calendar/r",
+        use_container_width=False,
+    )
+    st.caption("Apre Google Calendar in una nuova scheda: lì aggiungi o sposti gli appuntamenti.")
+
+    with st.expander("Apri l'agenda di un singolo professionista"):
+        for p in attivi:
+            cid = urllib.parse.quote(p["cal_id"], safe="")
+            url_p = f"https://calendar.google.com/calendar/r?cid={cid}"
+            st.markdown(
+                f"<span style='display:inline-block;width:11px;height:11px;"
+                f"border-radius:3px;background:#{p['color']};margin:0 8px -1px 0'></span>"
+                f"<a href='{url_p}' target='_blank' style='text-decoration:none'>"
+                f"{p['nome']}" + (f" · {p['ruolo']}" if p.get('ruolo') else "") + " ↗</a>",
+                unsafe_allow_html=True,
+            )
+
     if mancanti:
         with st.expander(f"➕ Professionisti senza agenda ({len(mancanti)})"):
             st.write(
