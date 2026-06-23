@@ -454,11 +454,50 @@ def _carica_ultimo_consenso(_conn, paz_id):
         return None
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _carica_visite(_conn):
+    """Ritorna {paziente_id: 'YYYY-MM-DD' ultima visita}.
+
+    Un paziente è "visitato" se ha almeno una seduta, una anamnesi o una
+    valutazione visiva registrata. La data piu' recente fa da "ultima visita".
+    Ogni query e' protetta: se una tabella manca, viene semplicemente saltata.
+    """
+    conn = _conn
+    visite: dict = {}
+
+    def _raccogli(sql):
+        try:
+            cur = conn.cursor()
+            cur.execute(sql)
+            for rr in (cur.fetchall() or []):
+                pid = rr.get("pid") if isinstance(rr, dict) else rr[0]
+                d = (rr.get("d") if isinstance(rr, dict)
+                     else (rr[1] if len(rr) > 1 else None))
+                if pid is None:
+                    continue
+                pid = int(pid)
+                ds = str(d)[:10] if d else ""
+                old = visite.get(pid, "")
+                if pid not in visite or (ds and ds > old):
+                    visite[pid] = ds or old
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    _raccogli("SELECT paziente_id AS pid, MAX(data_ora) AS d FROM sedute GROUP BY paziente_id")
+    _raccogli("SELECT paziente_id AS pid, MAX(data_anamnesi) AS d FROM anamnesi GROUP BY paziente_id")
+    _raccogli("SELECT paziente_id AS pid, NULL AS d FROM valutazioni_visive GROUP BY paziente_id")
+    return visite
+
+
 def _invalida_cache():
     try:
         _carica_pazienti_full.clear()
         _carica_paziente.clear()
         _carica_ultimo_consenso.clear()
+        _carica_visite.clear()
     except Exception:
         pass
 
@@ -1282,7 +1321,27 @@ def render_anagrafica(conn) -> None:
         st.session_state["ana_filtro"],
         st.session_state["ana_ordine"],
     )
-    st.caption(f"{len(pazienti)} paziente/i")
+
+    # Stato visite (🟢 gia' visitato / ⚪ mai visitato)
+    visite = _carica_visite(conn)
+
+    # Filtro per stato visita
+    filtro_visita = st.radio(
+        "Visite",
+        ["Tutti", "Già visitati", "Mai visitati"],
+        horizontal=True,
+        key="ana_filtro_visita",
+    )
+    if filtro_visita == "Già visitati":
+        pazienti = [p for p in pazienti if p.get("id") in visite]
+    elif filtro_visita == "Mai visitati":
+        pazienti = [p for p in pazienti if p.get("id") not in visite]
+
+    n_vis = sum(1 for p in pazienti if p.get("id") in visite)
+    st.caption(
+        f"{len(pazienti)} paziente/i · 🟢 {n_vis} già visitati · "
+        f"⚪ {len(pazienti) - n_vis} mai visitati"
+    )
 
     if not pazienti:
         st.info("Nessun paziente nel filtro corrente.")
@@ -1295,17 +1354,29 @@ def render_anagrafica(conn) -> None:
     import pandas as pd
     rows_df = []
     for p in pazienti:
+        _pid = p.get("id")
+        _visited = _pid in visite
+        _last = visite.get(_pid, "")
         rows_df.append({
-            "_id": p.get("id"),
-            "ID": p.get("id"),
+            "_id": _pid,
+            "ID": _pid,
             "Stato": _badge_stato(p.get("stato_paziente")),
+            "Visto": "🟢" if _visited else "⚪",
             "Cognome": p.get("cognome", "") or "",
             "Nome": p.get("nome", "") or "",
             "Data nascita": _fmt_dn(p.get("data_nascita")),
             "Età": _eta_anni(p.get("data_nascita")) or "",
+            "Ultima visita": (_fmt_dn(_last) if _last else ("sì" if _visited else "—")),
             "Telefono": p.get("telefono", "") or "",
         })
     df = pd.DataFrame(rows_df)
+
+    # Età come intero nullable: evita il mix int/"" (object) che rompe la
+    # serializzazione pyarrow di AgGrid (ArrowTypeError: Expected bytes).
+    try:
+        df["Età"] = pd.to_numeric(df["Età"], errors="coerce").astype("Int64")
+    except Exception:
+        df["Età"] = df["Età"].astype(str)
 
     # Import lazy aggrid
     try:
@@ -1338,9 +1409,12 @@ def render_anagrafica(conn) -> None:
                           sort=sort_id, floatingFilter=False)
     gob.configure_column("Stato", width=80, pinned="left",
                           filter="agTextColumnFilter", floatingFilter=False)
+    gob.configure_column("Visto", width=75, pinned="left",
+                          filter="agTextColumnFilter", floatingFilter=False)
     gob.configure_column("Cognome", width=180, pinned="left", sort=sort_cognome)
     gob.configure_column("Nome", width=160)
     gob.configure_column("Data nascita", width=130)
+    gob.configure_column("Ultima visita", width=130, floatingFilter=False)
     gob.configure_column("Età", width=80, type=["numericColumn"],
                           floatingFilter=False)
     gob.configure_column("Telefono", width=140, floatingFilter=False)

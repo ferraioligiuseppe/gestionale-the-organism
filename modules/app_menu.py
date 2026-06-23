@@ -1,41 +1,55 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║  APP MENU — Struttura a 7 aree                                      ║
+║  APP MENU — Struttura a 7 aree (v4, in ordine di visita)             ║
 ║                                                                     ║
 ║  AREE:                                                              ║
-║  1. 👥 Pazienti        — anagrafica, sedute, privacy, import        ║
-║  2. 🔬 Valutazione     — PNEV, VVF, NPS, DSA, PSY, FE              ║
-║  3. 🖥️ Test live        — DEM, K-D, somministrazione                ║
-║  4. 📋 Questionari     — link remoti, risposte, lenti, osteopatia   ║
-║  5. 🤖 Report & AI     — relazioni, piano VT, PDF, export           ║
-║  6. 🎧 Stimolazione uditiva MAPS — diagnostica, stimolazione, bilancio        ║
-║  7. ⚙️ Studio          — incassi, utenti, admin SaaS                ║
+║  1. 👥 Pazienti                                                     ║
+║  2. 📨 Invii al paziente                                            ║
+║  3. 🔍 Valutazione funzionale  (occhi + orecchie + riflessi insieme)║
+║  4. 🖥️ Test live                                                    ║
+║  5. 🎧 Terapia & relazione                                          ║
+║  6. 🎓 Formazione & professionisti                                  ║
+║  7. ⚙️ Studio                                                       ║
+║                                                                     ║
+║  NOTA: il routing (app_main_router._dispatch_sotto) aggancia ogni   ║
+║  voce SOLO al suo nome, non all'area. Quindi qui si possono         ║
+║  riorganizzare le aree liberamente senza toccare il router, purché  ║
+║  le etichette delle voci restino identiche a quelle del router.     ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
-# ── Costanti aree ─────────────────────────────────────────────────────
+# ── Costanti aree (7 attive) ──────────────────────────────────────────
 AREA_PAZIENTI    = "👥 Pazienti"
-AREA_VALUTAZIONE = "🔬 Valutazione"
-AREA_VALUTAZIONE_VISIVA = "👁️ Valutazione visiva"
-AREA_TEST_NEUROEVOL = "🧬 Test neuroevolutivi"
+AREA_INVII       = "📨 Invii al paziente"
+AREA_VALUTAZIONE = "🔍 Valutazione funzionale"
 AREA_TEST_LIVE   = "🖥️ Test live"
-AREA_QUESTIONARI = "📋 Questionari"
-AREA_REPORT_AI   = "🤖 Report & AI"
-AREA_AUDIOLOGIA  = "🎧 Stimolazione uditiva MAPS"
-AREA_MARKETING   = "📣 Marketing"
+AREA_TERAPIA     = "🎧 Terapia & relazione"
+AREA_OSTEOPATIA  = "🦴 Osteopatia"
+AREA_EVENTI      = "📅 Eventi"
 AREA_STUDIO      = "⚙️ Studio"
+
+# Vecchia area unica (Osteopatia+Eventi), ora separata. Mantenuta come
+# alias per non rompere gli import legacy nel router.
+AREA_FORMAZIONE  = AREA_OSTEOPATIA
+
+# ── Alias legacy (mantengono validi gli import esistenti in
+#    app_main_router.py e app_main.py) ──────────────────────────────────
+AREA_VALUTAZIONE_VISIVA = AREA_VALUTAZIONE
+AREA_TEST_NEUROEVOL     = AREA_VALUTAZIONE
+AREA_QUESTIONARI        = AREA_INVII
+AREA_REPORT_AI          = AREA_TERAPIA
+AREA_AUDIOLOGIA         = AREA_TERAPIA
+AREA_MARKETING          = AREA_EVENTI
 
 AREE_ORDINE = [
     AREA_PAZIENTI,
+    AREA_INVII,
     AREA_VALUTAZIONE,
-    AREA_VALUTAZIONE_VISIVA,
-    AREA_TEST_NEUROEVOL,
     AREA_TEST_LIVE,
-    AREA_QUESTIONARI,
-    AREA_REPORT_AI,
-    AREA_AUDIOLOGIA,
-    AREA_MARKETING,
+    AREA_TERAPIA,
+    AREA_OSTEOPATIA,
+    AREA_EVENTI,
     AREA_STUDIO,
 ]
 
@@ -50,51 +64,46 @@ SOTTOSEZIONI = {
         "📥 Import pazienti",
         "🔗 Sincronizza pnev.it",
         "🚀 Trasferisci a pnev.it",
+    ],
+    AREA_INVII: [
+        "📋 Questionari remoti",
         "🎧 Screening uditivo",
+        "🎮 Esercizi Wordwall",
     ],
     AREA_VALUTAZIONE: [
         "📋 Anamnesi The Organism",
+        "👁️ Anamnesi visiva",
+        "👁️ Valutazione visuo-percettiva",
+        "🔉 Diagnostica uditiva",
+        "📊 Audiometria funzionale",
+        "🎧 Bilancio uditivo",
+        "🧬 INPP — Valutazione diagnostica",
         "🧠 NPS — Neuropsicologica",
         "📚 DSA — Apprendimento",
     ],
-    AREA_VALUTAZIONE_VISIVA: [
-        "👁️ Anamnesi visiva",
-        "👓 Optometria comportamentale",
-        "👁️ Valutazione visuo-percettiva",
+    AREA_TEST_LIVE: [
         "🔢 DEM interattivo",
         "👁️ K-D interattivo",
         "👁️ Eye tracking",
-        "👁️ Lenti a contatto",
-    ],
-    AREA_TEST_NEUROEVOL: [
-        "🧬 INPP — Valutazione diagnostica",
-    ],
-    AREA_TEST_LIVE: [
         "🖥️ Somministrazione test",
-    ],
-    AREA_QUESTIONARI: [
-        "📋 Questionari remoti",
-        "🎮 Esercizi Wordwall",
-        "🦴 Osteopatia",
         "📸 Photoref AI",
+        "📖 Lettura avanzata",
     ],
-    AREA_REPORT_AI: [
-        "📝 Relazione clinica",
+    AREA_TERAPIA: [
+        "🎧 MAPS",
+        "🗂 Programmi MAPS",
+        "🧭 Percorsi MAPS",
         "🎯 Piano Vision Therapy",
+        "👁️ Lenti a contatto",
+        "📝 Relazione clinica",
         "📄 Report PDF con grafici",
         "📊 Export statistici",
         "🧪 Caso demo",
     ],
-    AREA_AUDIOLOGIA: [
-        "🔉 Diagnostica uditiva",
-        "🎧 MAPS",
-        "🗂 Programmi MAPS",
-        "🧭 Percorsi MAPS",
-        "🎧 Bilancio uditivo",
-        "📊 Audiometria funzionale",
-        "📖 Lettura avanzata",
+    AREA_OSTEOPATIA: [
+        "🦴 Osteopatia",
     ],
-    AREA_MARKETING: [
+    AREA_EVENTI: [
         "📅 Eventi e iscrizioni",
     ],
     AREA_STUDIO: [
