@@ -25,8 +25,13 @@ AREA_INVII       = "📨 Invii al paziente"
 AREA_VALUTAZIONE = "🔍 Valutazione funzionale"
 AREA_TEST_LIVE   = "🖥️ Test live"
 AREA_TERAPIA     = "🎧 Terapia & relazione"
-AREA_FORMAZIONE  = "🎓 Formazione & professionisti"
+AREA_OSTEOPATIA  = "🦴 Osteopatia"
+AREA_EVENTI      = "📅 Eventi"
 AREA_STUDIO      = "⚙️ Studio"
+
+# Vecchia area unica (Osteopatia+Eventi), ora separata. Mantenuta come
+# alias per non rompere gli import legacy nel router.
+AREA_FORMAZIONE  = AREA_OSTEOPATIA
 
 # ── Alias legacy (mantengono validi gli import esistenti in
 #    app_main_router.py e app_main.py) ──────────────────────────────────
@@ -35,7 +40,7 @@ AREA_TEST_NEUROEVOL     = AREA_VALUTAZIONE
 AREA_QUESTIONARI        = AREA_INVII
 AREA_REPORT_AI          = AREA_TERAPIA
 AREA_AUDIOLOGIA         = AREA_TERAPIA
-AREA_MARKETING          = AREA_FORMAZIONE
+AREA_MARKETING          = AREA_EVENTI
 
 AREE_ORDINE = [
     AREA_PAZIENTI,
@@ -43,7 +48,8 @@ AREE_ORDINE = [
     AREA_VALUTAZIONE,
     AREA_TEST_LIVE,
     AREA_TERAPIA,
-    AREA_FORMAZIONE,
+    AREA_OSTEOPATIA,
+    AREA_EVENTI,
     AREA_STUDIO,
 ]
 
@@ -94,8 +100,10 @@ SOTTOSEZIONI = {
         "📊 Export statistici",
         "🧪 Caso demo",
     ],
-    AREA_FORMAZIONE: [
+    AREA_OSTEOPATIA: [
         "🦴 Osteopatia",
+    ],
+    AREA_EVENTI: [
         "📅 Eventi e iscrizioni",
     ],
     AREA_STUDIO: [
