@@ -26,6 +26,13 @@ def ui_osteopatia(paziente_id: int, get_conn, paziente_label: str = ""):
     """
     st.subheader("🦴 Osteopatia")
 
+    # Assicura le colonne incasso sulla tabella sedute (idempotente)
+    try:
+        from modules.incasso import ensure_incasso_columns
+        ensure_incasso_columns(get_conn(), "osteo_seduta")
+    except Exception:
+        pass
+
     # stato UI (edit)
     st.session_state.setdefault('osteo_edit_mode', None)  # 'anamnesi' | 'seduta'
     st.session_state.setdefault('osteo_edit_id', None)
@@ -203,6 +210,14 @@ def ui_osteopatia(paziente_id: int, get_conn, paziente_label: str = ""):
             indicazioni = st.text_area("Indicazioni domiciliari / esercizi", height=110, value=(current_sed.get('indicazioni') or "") if current_sed else "")
             prossimo_step = st.text_area("Piano / prossimo step", height=80)
 
+            # --- Blocco incasso (riutilizzabile) ---
+            try:
+                from modules.incasso import campi_incasso
+                dati_incasso = campi_incasso("osteo_sed", defaults=(current_sed or {}))
+            except Exception as _e_inc:
+                dati_incasso = None
+                st.caption(f"(Incasso non disponibile: {_e_inc})")
+
             submitted = st.form_submit_button("💾 Salva")
             if submitted:
                 conn = get_conn()
@@ -223,6 +238,14 @@ def ui_osteopatia(paziente_id: int, get_conn, paziente_label: str = ""):
                         'indicazioni': indicazioni,
                         'prossimo_step': prossimo_step,
                     }, updated_by=None)
+                    # salva incasso sulla seduta aggiornata
+                    if dati_incasso is not None:
+                        try:
+                            from modules.incasso import salva_incasso, riepilogo_incasso
+                            n, r, s = salva_incasso(conn, "osteo_seduta", int(current_sed['id']), dati_incasso)
+                            st.success("Incasso: " + riepilogo_incasso(n, r, s))
+                        except Exception as _e_si:
+                            st.warning(f"Seduta aggiornata, ma incasso non salvato: {_e_si}")
                     st.session_state['osteo_edit_mode'] = None
                     st.session_state['osteo_edit_id'] = None
                     st.success("Seduta aggiornata.")
@@ -244,6 +267,14 @@ def ui_osteopatia(paziente_id: int, get_conn, paziente_label: str = ""):
                     "prossimo_step": prossimo_step,
                 })
                 st.success(f"Seduta salvata (ID {seduta_id}).")
+                # salva incasso sulla seduta appena creata
+                if dati_incasso is not None:
+                    try:
+                        from modules.incasso import salva_incasso, riepilogo_incasso
+                        n, r, s = salva_incasso(conn, "osteo_seduta", int(seduta_id), dati_incasso)
+                        st.success("Incasso: " + riepilogo_incasso(n, r, s))
+                    except Exception as _e_si:
+                        st.warning(f"Seduta salvata, ma incasso non salvato: {_e_si}")
 
         if st.session_state.get('osteo_edit_mode') == 'seduta':
             if st.button("↩️ Annulla modifica seduta", key="osteo_cancel_sed"):
@@ -283,6 +314,15 @@ def ui_osteopatia(paziente_id: int, get_conn, paziente_label: str = ""):
                         st.caption(f"Operatore: {full.get('operatore','')}")
                         st.write(full.get("descrizione", ""))
                         st.caption(f"Dolore pre/post: {full.get('dolore_pre','')} → {full.get('dolore_post','')}")
+
+                        _bi = None
+                        try:
+                            from modules.incasso import badge_incasso
+                            _bi = badge_incasso(full)
+                        except Exception:
+                            _bi = None
+                        if _bi:
+                            st.caption("💶 " + _bi)
 
                         colb1, colb2, colb3 = st.columns(3)
                         with colb1:
