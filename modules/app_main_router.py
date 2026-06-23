@@ -280,7 +280,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
-        "👁️ K-D interattivo", "👁️ Eye tracking",
+        "👁️ Eye tracking",
         "🧬 INPP — Valutazione diagnostica", "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall",
         "🔉 Diagnostica uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
@@ -438,17 +438,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     # ── TEST LIVE ─────────────────────────────────────────────────────
     if sotto == "🔢 DEM interattivo":
         try:
-            from .gestionale_new_modules import render_nuovi_moduli
-            render_nuovi_moduli(conn, "DEM")
-        except ImportError as e:
-            st.error(f"Modulo DEM non disponibile: {e}")
-        return True
-    if sotto == "👁️ K-D interattivo":
-        try:
-            from .gestionale_new_modules import render_nuovi_moduli
-            render_nuovi_moduli(conn, "KD")
-        except ImportError as e:
-            st.error(f"Modulo K-D non disponibile: {e}")
+            from .dem_test import render_dem
+            render_dem(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo DEM: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
         return True
     if sotto == "🖥️ Somministrazione test":
         try:
