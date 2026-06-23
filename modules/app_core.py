@@ -6053,6 +6053,13 @@ def ui_valutazioni_visive():
     conn = get_connection()
     cur = conn.cursor()
 
+    # Assicura colonne incasso su Valutazioni_Visive (idempotente)
+    try:
+        from modules.incasso import ensure_incasso_columns
+        ensure_incasso_columns(conn, "Valutazioni_Visive")
+    except Exception:
+        pass
+
     # Seleziona paziente (solo ATTIVI, con data nascita per distinguere omonimi)
     cur.execute(
         "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
@@ -6176,6 +6183,23 @@ def ui_valutazioni_visive():
         with col_os3:
             ax_ogg_os = st.number_input("OS AX oggettiva (°)", 0, 180, 0, 1, key="ax_ogg_os")
 
+        st.markdown("**Refrazione abituale (potere che il paziente già porta — SF / CIL / AX)**")
+        col_ab1, col_ab2, col_ab3 = st.columns(3)
+        with col_ab1:
+            sf_abit_od = st.number_input("OD SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_od")
+        with col_ab2:
+            cil_abit_od = st.number_input("OD CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_od")
+        with col_ab3:
+            ax_abit_od = st.number_input("OD AX abituale (°)", 0, 180, 0, 1, key="ax_abit_od")
+        col_ab4, col_ab5, col_ab6 = st.columns(3)
+        with col_ab4:
+            sf_abit_os = st.number_input("OS SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_os")
+        with col_ab5:
+            cil_abit_os = st.number_input("OS CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_os")
+        with col_ab6:
+            ax_abit_os = st.number_input("OS AX abituale (°)", 0, 180, 0, 1, key="ax_abit_os")
+        add_abit = st.number_input("Addizione abituale (D)", 0.0, 4.0, 0.0, 0.25, key="add_abit")
+
         st.markdown("**Refrazione soggettiva (SF / CIL / AX)**")
         col_od4, col_od5, col_od6 = st.columns(3)
         with col_od4:
@@ -6242,11 +6266,15 @@ def ui_valutazioni_visive():
         vitreo = st.text_area("Vitreo", "")
 
 
-        col7, col8 = st.columns(2)
-        with col7:
-            costo = st.number_input("Costo visita", min_value=0.0, step=5.0, value=0.0)
-        with col8:
-            pagato = st.checkbox("Pagato", value=False)
+        # --- Blocco incasso (riutilizzabile) ---
+        try:
+            from modules.incasso import campi_incasso
+            dati_incasso_vis = campi_incasso("val_vis")
+        except Exception as _e_inc:
+            dati_incasso_vis = None
+            st.caption(f"(Incasso non disponibile: {_e_inc})")
+        costo = 0.0   # mantenuto per compatibilità con la INSERT
+        pagato = False
 
         note_libere = st.text_area("Note cliniche libere (aggiuntive)")
 
@@ -6367,6 +6395,21 @@ ESAMI STRUTTURALI / FUNZIONALI
             ),
         )
         conn.commit()
+        # Salva incasso sulla riga appena inserita
+        if dati_incasso_vis is not None:
+            try:
+                from modules.incasso import salva_incasso, riepilogo_incasso
+                _cur2 = conn.cursor()
+                _cur2.execute(
+                    "SELECT id FROM Valutazioni_Visive WHERE paziente_id = ? "
+                    "ORDER BY id DESC LIMIT 1", (paz_id,))
+                _row = _cur2.fetchone()
+                _vid = (_row.get("id") if hasattr(_row, "get") else _row[0]) if _row else None
+                if _vid:
+                    _n, _r, _s = salva_incasso(conn, "Valutazioni_Visive", int(_vid), dati_incasso_vis)
+                    st.success("Incasso: " + riepilogo_incasso(_n, _r, _s))
+            except Exception as _e_si:
+                st.warning(f"Valutazione salvata, incasso non registrato: {_e_si}")
         st.success("Valutazione visiva salvata.")
 
     # ── Valutazione Visiva Funzionale — Batteria Completa ───────────────────
