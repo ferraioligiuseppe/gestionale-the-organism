@@ -231,4 +231,7 @@ document.getElementById('dlv').onclick = ()=>{
 };
 
 detectSource().then(s=>{ document.getElementById('src').textContent='sorgente: '+(s==='tobii'?'Tobii pronto':'webcam'); });
+
+// Mostra subito la sagoma guida (anche prima di Avvia): se la vedi, la pagina è aggiornata.
+try{ ov.width=340; ov.height=255; drawGuide('#8b949e'); }catch(e){}
 </script></body></html>
