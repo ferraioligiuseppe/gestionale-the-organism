@@ -690,9 +690,12 @@ def _sez_d(pid, stored, paziente=None):
     _sesso = (stored.get("intestazione", {}) or {}).get("sesso", "M") or "M"
 
     # ── DEM: rimando al modulo dedicato (interattivo + cartaceo) ──
-    st.info("🔢 **DEM** — il test si compila nel modulo dedicato "
-            "(menu **🖥️ Test live → 🔢 DEM interattivo**), con norme italiane "
-            "per età, calcolo AHT/ratio e tipologia, e scheda cartacea stampabile.")
+    st.info("🔢 **DEM** — il test si compila nel modulo dedicato, con norme "
+            "italiane per età, calcolo AHT/ratio e tipologia, e scheda cartacea.")
+    if st.button("▶️ Apri il test DEM online", key=s("vai_dem")):
+        st.session_state["nav_area"] = "🖥️ Test live"
+        st.session_state["nav_sotto_🖥️ Test live"] = "🔢 DEM interattivo"
+        st.rerun()
 
     st.markdown("#### Pursuits — osservazione qualitativa")
     c1,c2,c3 = st.columns(3)
