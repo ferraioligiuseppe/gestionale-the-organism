@@ -41,7 +41,7 @@ def render_capture(test_id: str, paziente_nome: str = "",
     }
     app = _CAPTURE_APP.replace("__CFG__", json.dumps(cfg))
     app = app.replace("__VIDBTN__", "inline-block" if salva_video else "none")
-    launcher = _LAUNCHER.replace("__APP__", json.dumps(app))
+    launcher = _LAUNCHER.replace("__APP__", json.dumps(app).replace("</", "<\\/"))
     components.html(launcher, height=height)
 
 
