@@ -198,7 +198,7 @@ document.getElementById('start').onclick = async ()=>{
   if(src==='tobii'){ msg('Ponte Tobii rilevato: integrazione dedicata in arrivo. Per ora uso la webcam come fallback.'); }
   try{
     if(!landmarker){ document.getElementById('st').textContent='carico modello…'; await loadLandmarker(); }
-    stream = await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}, audio:false});
+    stream = await navigator.mediaDevices.getUserMedia({video:true, audio:false});
     cam.srcObject = stream;
     await cam.play();
     ov.width=cam.videoWidth||340; ov.height=cam.videoHeight||255;
@@ -216,7 +216,14 @@ document.getElementById('start').onclick = async ()=>{
     loop();
   }catch(e){
     document.getElementById('st').textContent='errore';
-    msg('Impossibile avviare: '+e.message+'. Serve https + consenso telecamera.');
+    let extra='';
+    if(e && (e.name==='NotReadableError'||/Could not start/i.test(e.message)))
+      extra=' — la telecamera è occupata da un\'altra app o scheda (FaceTime, Zoom, Photo Booth, un altro tab): chiudila e riprova.';
+    else if(e && e.name==='NotAllowedError')
+      extra=' — permesso negato: consenti la telecamera al browser (Impostazioni macOS → Privacy → Fotocamera).';
+    else if(e && e.name==='NotFoundError')
+      extra=' — nessuna telecamera trovata.';
+    msg('Impossibile avviare: '+(e?e.message:e)+'.'+extra);
   }
 };
 
