@@ -79,10 +79,27 @@ def render_groffman(conn=None, paz_id=None, paziente=None):
     tab_int, tab_cart = st.tabs(["✍️ Interattivo", "🖨️ Cartaceo (stampa)"])
 
     with tab_int:
+        with st.expander("🎥 PNEV Capture — eye-tracking durante il test", expanded=False):
+            st.caption("Registra i movimenti oculari mentre il paziente segue le linee. "
+                       "Apri a schermo intero sul monitor del paziente.")
+            if st.checkbox("Attiva analisi movimenti", key="grof_cap_on"):
+                try:
+                    from .pnev_capture import render_capture
+                    _nm = ""
+                    if isinstance(paziente, dict):
+                        _nm = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
+                    render_capture("GROFFMAN", paziente_nome=_nm, height=150)
+                except Exception as _e:
+                    st.warning(f"Cattura non disponibile: {_e}")
+
         forma = st.radio("Tavola", ["A", "B"], horizontal=True, key="grof_forma")
         key_img = "form_a" if forma == "A" else "form_b"
         if _FORMS.get(key_img):
-            st.image(_FORMS[key_img], use_container_width=True)
+            try:
+                from .test_viewer import mostra_tavola
+                mostra_tavola(_FORMS[key_img], titolo=f"Groffman — Tavola {forma}")
+            except Exception:
+                st.image(_FORMS[key_img], use_container_width=True)
 
         st.markdown("#### Registrazione (per ogni lettera: numero raggiunto + secondi)")
         tot = 0
