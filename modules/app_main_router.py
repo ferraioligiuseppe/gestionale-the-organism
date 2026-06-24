@@ -280,6 +280,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
+        "👁️ Getman (manipolazione visiva)",
         "👁️ Eye tracking",
         "🧬 INPP — Valutazione diagnostica", "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall",
@@ -443,6 +444,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore modulo DEM: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "👁️ Getman (manipolazione visiva)":
+        try:
+            from .getman import render_getman
+            render_getman(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Getman: {e}")
             with st.expander("Dettagli"):
                 st.code(traceback.format_exc())
         return True
