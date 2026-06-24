@@ -16,12 +16,76 @@
 """
 
 import streamlit as st
+import base64 as _b64
 import streamlit.components.v1 as components
 
 try:
     from .getman_data import IMAGES as _IMG
 except Exception:
     _IMG = {}
+try:
+    from .getman_data import FIGURE as _FIG
+except Exception:
+    _FIG = {}
+
+# Domande Getman (nell'ordine della somministrazione)
+DOMANDE = [
+    "Come ti apparirebbe questa figura se tu fossi seduto al mio posto?",
+    "Come vedresti la figura se fosse capovolta?",
+    "Come la vedresti se la osservassi da dietro lo schermo e fosse capovolta?",
+]
+# Forma -> chiave immagine FIGURE
+_FIG_KEY = {"Triangolo": "fig_triangolo", "Semisfera": "fig_semisfera",
+            "T": "fig_t", "L": "fig_l"}
+
+
+def _presentazione_html():
+    """Sequenza guidata: figura grande + domanda + timer 10s, avanza da sola."""
+    import json as _json
+    slides = []
+    for forma in ["Triangolo", "Semisfera", "T", "L"]:
+        img = _FIG.get(_FIG_KEY[forma])
+        uri = ("data:image/png;base64," + _b64.b64encode(img).decode()) if img else ""
+        for qi, dom in enumerate(DOMANDE, 1):
+            slides.append({"img": uri, "label": f"{forma} — Domanda {qi}", "q": dom})
+    data = _json.dumps(slides)
+    return """<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  body{margin:0;background:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111}
+  .top{display:flex;align-items:center;gap:14px;padding:8px 12px;background:#f4f6f8;flex-wrap:wrap}
+  button{padding:8px 16px;border:none;border-radius:7px;cursor:pointer;font-size:14px;font-weight:bold;color:#fff}
+  #prev{background:#57606a}#next{background:#0969da}#auto{background:#6e40c9}#fs{background:#1f8a5b}
+  #tmr{font-size:26px;font-weight:bold;color:#cf222e;min-width:54px}
+  .lab{font-weight:bold;font-size:15px}
+  .stage{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:440px;padding:16px}
+  .stage img{max-width:60%;max-height:380px}
+  .q{font-size:20px;font-weight:bold;text-align:center;margin-top:18px;max-width:760px}
+  .prog{font-size:12px;color:#8b949e}
+</style></head><body>
+<div class="top">
+  <button id="prev">◀</button>
+  <button id="next">▶ Avanti</button>
+  <button id="auto">⏱ Auto 10s</button>
+  <button id="fs">⛶ Schermo intero</button>
+  <span id="tmr">10</span>
+  <span class="lab" id="lab"></span>
+  <span class="prog" id="prog"></span>
+</div>
+<div class="stage"><img id="fig" src=""><div class="q" id="q"></div></div>
+<script>
+const S=""" + data + """;
+let i=0,auto=false,t=10,iv=null;
+function render(){const s=S[i];document.getElementById('fig').src=s.img;
+ document.getElementById('q').textContent=s.q;document.getElementById('lab').textContent=s.label;
+ document.getElementById('prog').textContent=(i+1)+' / '+S.length;}
+function go(d){i=Math.max(0,Math.min(S.length-1,i+d));t=10;document.getElementById('tmr').textContent=t;render();}
+document.getElementById('next').onclick=()=>go(1);
+document.getElementById('prev').onclick=()=>go(-1);
+document.getElementById('fs').onclick=()=>{const e=document.documentElement;if(e.requestFullscreen)e.requestFullscreen();};
+document.getElementById('auto').onclick=function(){auto=!auto;this.style.opacity=auto?1:.5;
+ if(iv)clearInterval(iv);
+ if(auto){iv=setInterval(()=>{t--;document.getElementById('tmr').textContent=t;if(t<=0){if(i<S.length-1)go(1);else{auto=false;clearInterval(iv);}}},1000);}};
+render();
+</script></body></html>"""
 
 # Chiave risposte: forma -> {pov, upside, both}
 KEY = {
@@ -63,6 +127,12 @@ def render_getman(conn=None, paz_id=None, paziente=None):
     tab_int, tab_cart = st.tabs(["✍️ Interattivo", "🖨️ Cartaceo (stampa)"])
 
     with tab_int:
+        with st.expander("▶️ Presentazione guidata (mostra al paziente)", expanded=True):
+            st.caption("Figura a schermo + domanda + timer 10s. Usa ⏱ Auto per "
+                       "l'avanzamento automatico e ⛶ per lo schermo intero. "
+                       "Da somministrare per vicino (40 cm).")
+            components.html(_presentazione_html(), height=560, scrolling=False)
+
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("**Carte-modello** (mostra al bambino)")
