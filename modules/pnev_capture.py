@@ -45,7 +45,7 @@ def render_capture(test_id: str, paziente_nome: str = "",
         "video": "1" if salva_video else "0",
         "v": str(int(time.time())),
     })
-    url = f"app/static/pnev_capture.html?{q}"
+    url = f"https://www.pnev.it/wp-content/uploads/pnev_capture.html?{q}"
     st.markdown(
         f'<a href="{url}" target="_blank" rel="noopener" '
         'style="display:inline-block;padding:11px 18px;border-radius:8px;'
