@@ -280,7 +280,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
-        "👁️ K-D interattivo", "👁️ Eye tracking",
+        "👁️ Getman (manipolazione visiva)",
+        "👁️ Groffman (visual tracing)",
+        "👁️ Eye tracking",
         "🧬 INPP — Valutazione diagnostica", "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall",
         "🔉 Diagnostica uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
@@ -438,17 +440,33 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     # ── TEST LIVE ─────────────────────────────────────────────────────
     if sotto == "🔢 DEM interattivo":
         try:
-            from .gestionale_new_modules import render_nuovi_moduli
-            render_nuovi_moduli(conn, "DEM")
-        except ImportError as e:
-            st.error(f"Modulo DEM non disponibile: {e}")
+            from .dem_test import render_dem
+            render_dem(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo DEM: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
         return True
-    if sotto == "👁️ K-D interattivo":
+    if sotto == "👁️ Getman (manipolazione visiva)":
         try:
-            from .gestionale_new_modules import render_nuovi_moduli
-            render_nuovi_moduli(conn, "KD")
-        except ImportError as e:
-            st.error(f"Modulo K-D non disponibile: {e}")
+            from .getman import render_getman
+            render_getman(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Getman: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "👁️ Groffman (visual tracing)":
+        try:
+            from .groffman import render_groffman
+            render_groffman(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Groffman: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
         return True
     if sotto == "🖥️ Somministrazione test":
         try:
@@ -982,6 +1000,16 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     """
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
+
+    # Salto "in sospeso" richiesto da un'altra pagina (es. ▶️ Apri DEM).
+    # Va applicato PRIMA di creare i widget, altrimenti Streamlit blocca
+    # la modifica delle chiavi nav_area / nav_sotto_*.
+    _goto_a = st.session_state.pop("goto_area", None)
+    if _goto_a in AREE_ORDINE:
+        st.session_state["nav_area"] = _goto_a
+        _goto_s = st.session_state.pop("goto_sotto", None)
+        if _goto_s:
+            st.session_state[f"nav_sotto_{_goto_a}"] = _goto_s
 
     area = st.sidebar.radio(
         "Area",

@@ -88,7 +88,8 @@ SOTTOSEZIONI = {
     ],
     AREA_TEST_LIVE: [
         "🔢 DEM interattivo",
-        "👁️ K-D interattivo",
+        "👁️ Getman (manipolazione visiva)",
+        "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
         "🖥️ Somministrazione test",
         "📸 Photoref AI",
