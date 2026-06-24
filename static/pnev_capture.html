@@ -79,11 +79,28 @@ const octx = ov.getContext('2d');
 function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
 
 function analyze(res, ts){
-  if(!res || !res.faceLandmarks || !res.faceLandmarks.length) return;
+function drawGuide(acol){
+  // sagoma ovale guida SEMPRE visibile (centratura viso)
+  octx.clearRect(0,0,ov.width,ov.height);
+  octx.save();
+  octx.strokeStyle=acol||'#f0883e'; octx.lineWidth=4; octx.setLineDash([12,9]);
+  octx.beginPath();
+  octx.ellipse(0.5*ov.width, 0.5*ov.height, 0.22*ov.width, 0.32*ov.height, 0, 0, 6.2832);
+  octx.stroke(); octx.restore();
+}
+
+function analyze(res, ts){
+  // disegna SEMPRE la sagoma (anche senza viso), poi aggiorna
+  const noFace = !res || !res.faceLandmarks || !res.faceLandmarks.length;
+  if(noFace){
+    drawGuide('#f0883e');
+    const c=document.getElementById('cal'); if(c){c.textContent='Viso non rilevato'; c.style.color='#f0883e';}
+    return;
+  }
   const L = res.faceLandmarks[0];
-  if(!L || L.length < 468) return;
+  if(!L || L.length < 468){ drawGuide('#f0883e'); return; }
   const irisL = L[468]||L[159], irisR = L[473]||L[386];
-  if(!irisL || !irisR) return;
+  if(!irisL || !irisR){ drawGuide('#f0883e'); return; }
   const gx = ((irisL.x + irisR.x)/2);
   const gy = ((irisL.y + irisR.y)/2);
   // apertura occhi: distanza palpebra sup/inf (33-159 sx, 263-386 dx) normalizzata
@@ -110,27 +127,17 @@ function analyze(res, ts){
   document.getElementById('sy').textContent=sym.toFixed(2);
   document.getElementById('sc').textContent=saccades;
   // ── Maschera di calibrazione: sagoma ovale del viso da centrare ──
-  octx.clearRect(0,0,ov.width,ov.height);
-  // bbox del viso da naso (1), mento (152), fronte (10), guance (234/454)
   const nose=L[1], chin=L[152], fore=L[10], lc=L[234], rc=L[454];
-  let align='', acol='#f0883e';
-  if(nose && chin && fore && lc && rc){
+  let align='Allineato ✓', acol='#2ea44f';
+  if(nose && chin && fore){
     const cx=nose.x, cy=(fore.y+chin.y)/2;
-    const fh=Math.abs(chin.y-fore.y);          // altezza viso normalizzata
-    const fw=Math.abs(rc.x-lc.x);
-    const centered = Math.abs(cx-0.5)<0.12 && Math.abs(cy-0.5)<0.14;
-    const sized = fh>0.45 && fh<0.85;
-    if(!sized && fh<=0.45) align='Avvicinati alla telecamera';
-    else if(!sized && fh>=0.85) align='Allontanati un po\'';
-    else if(!centered) align='Centra il viso nella sagoma';
-    else { align='Allineato ✓'; acol='#2ea44f'; }
-    // disegna ovale guida
-    octx.save();
-    octx.strokeStyle=acol; octx.lineWidth=3; octx.setLineDash([10,8]);
-    octx.beginPath();
-    octx.ellipse(0.5*ov.width, 0.5*ov.height, 0.20*ov.width, 0.30*ov.height, 0, 0, 6.2832);
-    octx.stroke(); octx.restore();
-  } else { align='Viso non rilevato'; }
+    const fh=Math.abs(chin.y-fore.y);
+    const centered = Math.abs(cx-0.5)<0.14 && Math.abs(cy-0.5)<0.16;
+    if(fh<=0.42) { align='Avvicinati alla telecamera'; acol='#f0883e'; }
+    else if(fh>=0.88) { align='Allontanati un po\''; acol='#f0883e'; }
+    else if(!centered) { align='Centra il viso nella sagoma'; acol='#f0883e'; }
+  }
+  drawGuide(acol);
   const calEl=document.getElementById('cal');
   if(calEl){ calEl.textContent=align; calEl.style.color=acol; }
   // puntino sguardo
