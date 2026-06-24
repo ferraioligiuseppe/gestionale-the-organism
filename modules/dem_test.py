@@ -87,24 +87,54 @@ _PLATE_CSS = """<style>
   .crow .d{font-size:34px;font-weight:600}
   .pretest{display:flex;justify-content:center;gap:34px}
   .pretest .d{font-size:40px;font-weight:600}
+  .present-bar{display:flex;gap:10px;justify-content:flex-end;margin-bottom:8px;
+    font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  .present-bar button{padding:7px 13px;border:none;border-radius:6px;cursor:pointer;
+    font-size:13px;font-weight:bold;background:#0969da;color:#fff}
+  .present-bar button.alt{background:#6e40c9}
 </style>"""
+
+_PRESENT_BAR = '''<div class="present-bar">
+  <button onclick="goFs()">⛶ Tutto schermo</button>
+  <button class="alt" onclick="present()">🖥️ Apri su 2° monitor</button>
+</div>'''
+
+_PRESENT_JS = '''<script>
+function goFs(){ var el=document.documentElement;
+  if(el.requestFullscreen){ el.requestFullscreen().catch(function(){ alert("Schermo intero non consentito qui: usa il 2° monitor."); }); }
+}
+async function present(){
+  var html='<!DOCTYPE html>'+document.documentElement.outerHTML;
+  var t=null;
+  if('getScreenDetails' in window){ try{ var sd=await window.getScreenDetails();
+    t=sd.screens.find(function(s){return !s.isPrimary;}); }catch(e){} }
+  var f=t?('left='+t.availLeft+',top='+t.availTop+',width='+t.availWidth+',height='+t.availHeight):'width=1000,height=1100';
+  var w=window.open('','dem_present',f);
+  if(!w){ alert('Consenti le finestre popup per aprire la scheda a tutto schermo.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+  if(t){ try{ w.moveTo(t.availLeft,t.availTop); w.resizeTo(t.availWidth,t.availHeight); }catch(e){} }
+  setTimeout(function(){ try{ w.focus(); var el=w.document.documentElement; if(el.requestFullscreen) el.requestFullscreen(); }catch(e){} }, 400);
+}
+</script>'''
 
 
 def _plate_pretest_html():
     ds = "".join(f'<span class="d">{n}</span>' for n in PRETEST)
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">{_PLATE_CSS}</head><body>
+{_PRESENT_BAR}
 <div class="plate-title">PRETEST</div>
-<div class="pretest">{ds}</div></body></html>"""
+<div class="pretest">{ds}</div>{_PRESENT_JS}</body></html>"""
 
 
 def _plate_vertical_html(widget_id, titolo, col_l, col_r, etichetta):
     cl = "".join(f'<span class="d">{n}</span>' for n in col_l)
     cr = "".join(f'<span class="d">{n}</span>' for n in col_r)
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">{_PLATE_CSS}</head><body>
+{_PRESENT_BAR}
 {_timer_html(widget_id)}
 <div class="plate-title">{etichetta}</div>
 <div class="vcols"><div class="vcol">{cl}</div><div class="vcol">{cr}</div></div>
-</body></html>"""
+{_PRESENT_JS}</body></html>"""
 
 
 def _plate_horizontal_html(widget_id):
@@ -117,9 +147,10 @@ def _plate_horizontal_html(widget_id):
             cells += f'<span class="d">{riga[k]}</span>'
         rows += f'<div class="crow">{cells}</div>'
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">{_PLATE_CSS}</head><body>
+{_PRESENT_BAR}
 {_timer_html(widget_id)}
 <div class="plate-title">TEST C — ORIZZONTALE</div>
-{rows}</body></html>"""
+{rows}{_PRESENT_JS}</body></html>"""
 
 # ── NORME ITALIANE (Facchin, Maffioletti, Carnevali 2011) ─────────────
 # età(anni): (VT_media, VT_sd, AHT_media, AHT_sd, RATIO_media, RATIO_sd,
@@ -303,6 +334,18 @@ def render_dem(conn=None, paz_id=None, paziente=None):
 
     # ── TAB INTERATTIVO ──
     with tab_int:
+        with st.expander("🎥 PNEV Capture — analisi movimenti (webcam/Tobii)", expanded=False):
+            st.caption("Registra in background occhi (sguardo, saccadi) e volto/bocca "
+                       "durante il test. Rileva il Tobii se presente, altrimenti webcam. "
+                       "A fine prova scarichi dati e video per la ricerca.")
+            attiva_cap = st.checkbox("Attiva analisi movimenti", key="dem_cap_on")
+            if attiva_cap:
+                try:
+                    from .pnev_capture import render_capture
+                    render_capture("DEM", paziente_nome=nome_paz, height=150)
+                except Exception as _e:
+                    st.warning(f"Cattura non disponibile: {_e}")
+
         with st.expander("🖥️ Somministra a schermo (tavole + cronometro)", expanded=True):
             st.caption("Le schede si presentano una alla volta. Sequenza: "
                        "**Pretest → Test A → Test B → Test C**. Per ogni scheda avvia "
