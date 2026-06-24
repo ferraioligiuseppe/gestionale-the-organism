@@ -132,8 +132,8 @@ def render_agenda(conn=None, is_admin: bool = False):
                             from .paziente_attivo import set_paziente_attivo
                             from .app_menu import AREA_PAZIENTI
                             set_paziente_attivo(conn, int(paz["id"]))
-                            st.session_state["nav_area"] = AREA_PAZIENTI
-                            st.session_state[f"nav_sotto_{AREA_PAZIENTI}"] = "🏠 Dashboard"
+                            st.session_state["goto_area"] = AREA_PAZIENTI
+                            st.session_state["goto_sotto"] = "🏠 Dashboard"
                             st.rerun()
                         except Exception as _e:
                             st.error(f"Impossibile aprire la visita: {_e}")

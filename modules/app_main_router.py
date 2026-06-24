@@ -979,6 +979,16 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
 
+    # Salto "in sospeso" richiesto da un'altra pagina (es. ▶️ Apri DEM).
+    # Va applicato PRIMA di creare i widget, altrimenti Streamlit blocca
+    # la modifica delle chiavi nav_area / nav_sotto_*.
+    _goto_a = st.session_state.pop("goto_area", None)
+    if _goto_a in AREE_ORDINE:
+        st.session_state["nav_area"] = _goto_a
+        _goto_s = st.session_state.pop("goto_sotto", None)
+        if _goto_s:
+            st.session_state[f"nav_sotto_{_goto_a}"] = _goto_s
+
     area = st.sidebar.radio(
         "Area",
         AREE_ORDINE,

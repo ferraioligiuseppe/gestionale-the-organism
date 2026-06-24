@@ -693,8 +693,8 @@ def _sez_d(pid, stored, paziente=None):
     st.info("🔢 **DEM** — il test si compila nel modulo dedicato, con norme "
             "italiane per età, calcolo AHT/ratio e tipologia, e scheda cartacea.")
     if st.button("▶️ Apri il test DEM online", key=s("vai_dem")):
-        st.session_state["nav_area"] = "🖥️ Test live"
-        st.session_state["nav_sotto_🖥️ Test live"] = "🔢 DEM interattivo"
+        st.session_state["goto_area"] = "🖥️ Test live"
+        st.session_state["goto_sotto"] = "🔢 DEM interattivo"
         st.rerun()
 
     st.markdown("#### Pursuits — osservazione qualitativa")
