@@ -141,10 +141,11 @@ const octx = ov.getContext('2d');
 function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
 
 function analyze(res, ts){
-  if(!res.faceLandmarks || !res.faceLandmarks.length) return;
+  if(!res || !res.faceLandmarks || !res.faceLandmarks.length) return;
   const L = res.faceLandmarks[0];
-  // iride (468-473 left, 473-478 right nel modello a 478 punti)
+  if(!L || L.length < 468) return;
   const irisL = L[468]||L[159], irisR = L[473]||L[386];
+  if(!irisL || !irisR) return;
   const gx = ((irisL.x + irisR.x)/2);
   const gy = ((irisL.y + irisR.y)/2);
   // apertura occhi: distanza palpebra sup/inf (33-159 sx, 263-386 dx) normalizzata
@@ -178,11 +179,13 @@ function analyze(res, ts){
 
 function loop(){
   if(!running) return;
-  if(landmarker && cam.readyState>=2){
-    const ts = performance.now();
-    const res = landmarker.detectForVideo(cam, ts);
-    analyze(res, ts);
-  }
+  try{
+    if(landmarker && cam.readyState>=2){
+      const ts = performance.now();
+      const res = landmarker.detectForVideo(cam, ts);
+      analyze(res, ts);
+    }
+  }catch(e){ /* salta la frame problematica, non fermare la cattura */ }
   raf = requestAnimationFrame(loop);
 }
 
