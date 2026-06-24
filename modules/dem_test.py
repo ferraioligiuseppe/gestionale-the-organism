@@ -342,7 +342,7 @@ def render_dem(conn=None, paz_id=None, paziente=None):
             if attiva_cap:
                 try:
                     from .pnev_capture import render_capture
-                    render_capture("DEM", paziente_nome=nome_paz, height=150)
+                    render_capture("DEM", paziente_nome=nome_paz, height=640)
                 except Exception as _e:
                     st.warning(f"Cattura non disponibile: {_e}")
 

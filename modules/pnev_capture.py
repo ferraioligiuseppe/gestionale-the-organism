@@ -28,11 +28,12 @@ import streamlit.components.v1 as components
 
 
 def render_capture(test_id: str, paziente_nome: str = "",
-                   height: int = 150, salva_video: bool = True):
-    """Inserisce il pulsante che apre l'analisi movimento in una finestra a sé.
+                   height: int = 640, salva_video: bool = True):
+    """Inserisce l'analisi movimento (webcam) direttamente nel test.
 
-    La cattura webcam richiede un contesto top-level (l'iframe di Streamlit
-    non concede la telecamera), quindi l'app si apre in una finestra popup.
+    Resa INLINE (stesso origin dell'iframe del componente): la finestra
+    popup con blob:/about:blank ha origine opaca e Chrome spegne subito la
+    telecamera. L'iframe ha invece un'origine reale e mantiene il permesso.
     """
     cfg = {
         "testId": test_id,
@@ -41,27 +42,7 @@ def render_capture(test_id: str, paziente_nome: str = "",
     }
     app = _CAPTURE_APP.replace("__CFG__", json.dumps(cfg))
     app = app.replace("__VIDBTN__", "inline-block" if salva_video else "none")
-    launcher = _LAUNCHER.replace("__APP__", json.dumps(app).replace("</", "<\\/"))
-    components.html(launcher, height=height)
-
-
-_LAUNCHER = r"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:10px;color:#e6edf3}
-  button{padding:11px 18px;border:none;border-radius:8px;cursor:pointer;font-size:15px;font-weight:bold;background:#6e40c9;color:#fff}
-  p{font-size:12.5px;color:#8b949e;margin:8px 2px 0}
-</style></head><body>
-<button onclick="openCap()">🎥 Apri analisi movimenti (finestra a tutto schermo)</button>
-<p>Si apre in una finestra separata (puoi metterla sul monitor del paziente). Consenti telecamera e popup.</p>
-<script>
-const APP = __APP__;
-let _blobUrl = null;
-function openCap(){
-  if(!_blobUrl){ _blobUrl = URL.createObjectURL(new Blob([APP], {type:'text/html'})); }
-  const w = window.open(_blobUrl, 'pnev_capture', 'width=980,height=760');
-  if(!w){ alert('Consenti le finestre popup per aprire l\'analisi.'); return; }
-  w.focus();
-}
-</script></body></html>"""
+    components.html(app, height=height, scrolling=True)
 
 
 _CAPTURE_APP = r"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>PNEV Capture</title><style>
