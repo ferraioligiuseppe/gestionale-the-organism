@@ -23,26 +23,38 @@
 """
 
 import json
+import time
+import urllib.parse
 import streamlit as st
 import streamlit.components.v1 as components
 
 
 def render_capture(test_id: str, paziente_nome: str = "",
                    height: int = 640, salva_video: bool = True):
-    """Inserisce l'analisi movimento (webcam) direttamente nel test.
+    """Mostra il link che apre l'analisi movimento in una scheda nuova.
 
-    Resa INLINE (stesso origin dell'iframe del componente): la finestra
-    popup con blob:/about:blank ha origine opaca e Chrome spegne subito la
-    telecamera. L'iframe ha invece un'origine reale e mantiene il permesso.
+    La cattura webcam ha bisogno di una pagina TOP-LEVEL con origine reale
+    (l'iframe del componente perde il permesso telecamera e si spegne).
+    La pagina è servita da Streamlit (static serving) all'URL
+    `app/static/pnev_capture.html` e si apre in una scheda nuova: così il
+    permesso telecamera resta e la registrazione non si interrompe.
     """
-    cfg = {
-        "testId": test_id,
-        "paziente": paziente_nome or "paziente",
-        "salvaVideo": bool(salva_video),
-    }
-    app = _CAPTURE_APP.replace("__CFG__", json.dumps(cfg))
-    app = app.replace("__VIDBTN__", "inline-block" if salva_video else "none")
-    components.html(app, height=height, scrolling=True)
+    q = urllib.parse.urlencode({
+        "test": test_id,
+        "paz": paziente_nome or "paziente",
+        "video": "1" if salva_video else "0",
+        "v": str(int(time.time())),
+    })
+    url = f"app/static/pnev_capture.html?{q}"
+    st.markdown(
+        f'<a href="{url}" target="_blank" rel="noopener" '
+        'style="display:inline-block;padding:11px 18px;border-radius:8px;'
+        'background:#6e40c9;color:#fff;font-weight:bold;text-decoration:none;'
+        'font-size:15px">🎥 Apri analisi movimenti (scheda nuova)</a>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Si apre in una scheda separata (mettibile sul monitor del paziente). "
+               "Consenti la telecamera. A fine prova scarichi dati e video.")
 
 
 _CAPTURE_APP = r"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>PNEV Capture</title><style>
