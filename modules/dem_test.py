@@ -23,52 +23,103 @@ import datetime as _dt
 import streamlit as st
 import streamlit.components.v1 as components
 
-# ── Tavole DEM ufficiali (immagini scansionate) ───────────────────────
-_PLATES_DIR = _os.path.join(_os.path.dirname(__file__), "assets", "dem_plates")
-PLATES = {
-    "pretest": _os.path.join(_PLATES_DIR, "pretest.png"),
-    "test_a":  _os.path.join(_PLATES_DIR, "test_a.png"),
-    "test_b":  _os.path.join(_PLATES_DIR, "test_b.png"),
-    "test_c":  _os.path.join(_PLATES_DIR, "test_c.png"),
-}
+# ── Tavole DEM ufficiali (sequenze numeriche reali) ───────────────────
+PRETEST = [3, 7, 1, 9, 2, 6, 5, 4, 8, 2]
+TEST_A_L = [3, 7, 5, 9, 8, 2, 5, 7, 4, 6, 1, 4, 7, 6, 3, 7, 9, 3, 9, 2]
+TEST_A_R = [4, 5, 2, 1, 7, 5, 3, 7, 4, 8, 7, 4, 6, 5, 2, 9, 2, 3, 6, 4]
+TEST_B_L = [6, 3, 2, 9, 1, 7, 4, 6, 5, 2, 5, 3, 7, 4, 8, 4, 5, 2, 1, 7]
+TEST_B_R = [7, 9, 3, 9, 2, 1, 4, 7, 6, 3, 2, 5, 7, 4, 6, 3, 7, 5, 9, 8]
+# Test C: stesse cifre di A (righe 1-8) e B (righe 9-16), in orizzontale,
+# con spaziatura irregolare (saccadi di ampiezza variabile).
+TEST_C = [
+    [3, 7, 5, 9, 8], [2, 5, 7, 4, 6], [1, 4, 7, 6, 3], [7, 9, 3, 9, 2],
+    [4, 5, 2, 1, 7], [5, 3, 7, 4, 8], [7, 4, 6, 5, 2], [9, 2, 3, 6, 4],
+    [6, 3, 2, 9, 1], [7, 4, 6, 5, 2], [5, 3, 7, 4, 8], [4, 5, 2, 1, 7],
+    [7, 9, 3, 9, 2], [1, 4, 7, 6, 3], [2, 5, 7, 4, 6], [3, 7, 5, 9, 8],
+]
+# pesi di spaziatura per le 5 posizioni orizzontali (gap variabili)
+_C_GAPS = [[2, 5, 4, 3], [1, 4, 5, 2], [3, 2, 4, 5], [4, 5, 1, 3],
+           [2, 4, 3, 5], [5, 2, 4, 1], [3, 5, 2, 4], [1, 3, 5, 2],
+           [4, 2, 5, 3], [2, 5, 1, 4], [5, 3, 2, 4], [1, 4, 5, 3],
+           [3, 2, 4, 5], [4, 5, 2, 1], [2, 3, 5, 4], [5, 1, 4, 2]]
 
 
-def _build_timer_html(widget_id, titolo):
-    """Cronometro a schermo con conta-errori (somministrazione dal vivo)."""
-    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-  body {{ font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:#f6f8fa; margin:0; padding:10px; }}
-  .timer-bar {{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }}
-  #timer_{widget_id} {{ font-size:30px; font-weight:bold; color:#0969da; min-width:90px; }}
-  button {{ padding:8px 16px; border:none; border-radius:6px; cursor:pointer; font-size:14px; font-weight:bold; }}
-  #btn_start_{widget_id} {{ background:#2ea44f; color:#fff; }}
-  #btn_stop_{widget_id} {{ background:#cf222e; color:#fff; }}
-  #btn_err_{widget_id} {{ background:#9a6700; color:#fff; }}
-  #btn_reset_{widget_id} {{ background:#57606a; color:#fff; }}
-  #err_count_{widget_id} {{ font-size:22px; font-weight:bold; color:#9a6700; }}
-  .stats {{ margin-top:8px; font-size:13px; color:#444; }}
-</style></head><body>
-<div class="timer-bar">
+def _timer_html(widget_id):
+    return f"""<div class="timer-bar">
   <div id="timer_{widget_id}">0.0s</div>
-  <button id="btn_start_{widget_id}" onclick="startTimer()">▶ Avvia</button>
-  <button id="btn_stop_{widget_id}" onclick="stopTimer()">⏹ Stop</button>
-  <button id="btn_err_{widget_id}" onclick="addErr()">❌ Errore</button>
-  <button id="btn_reset_{widget_id}" onclick="resetTimer()">↺ Azzera</button>
-  <span>Errori: <span id="err_count_{widget_id}">0</span></span>
+  <button id="bs_{widget_id}" onclick="startT()">▶ Avvia</button>
+  <button id="bx_{widget_id}" onclick="stopT()">⏹ Stop</button>
+  <button id="be_{widget_id}" onclick="addE()">❌ Errore</button>
+  <button id="br_{widget_id}" onclick="resetT()">↺ Azzera</button>
+  <span style="font-size:15px">Errori: <b id="ec_{widget_id}">0</b></span>
 </div>
-<div class="stats" id="stats_{widget_id}">{titolo}</div>
+<div class="stats" id="ss_{widget_id}"></div>
 <script>
-let st_{widget_id}=null,iv_{widget_id}=null,el_{widget_id}=0,er_{widget_id}=0,run_{widget_id}=false;
-function startTimer(){{ if(run_{widget_id})return; run_{widget_id}=true; st_{widget_id}=Date.now()-el_{widget_id}*1000;
-  iv_{widget_id}=setInterval(()=>{{el_{widget_id}=(Date.now()-st_{widget_id})/1000;
-  document.getElementById('timer_{widget_id}').textContent=el_{widget_id}.toFixed(1)+'s';}},100); }}
-function stopTimer(){{ if(!run_{widget_id})return; clearInterval(iv_{widget_id}); run_{widget_id}=false;
-  document.getElementById('stats_{widget_id}').innerHTML='<b>Tempo: '+el_{widget_id}.toFixed(2)+'s</b> · Errori: '+er_{widget_id}+' — copia questi valori qui sotto.'; }}
-function addErr(){{ er_{widget_id}++; document.getElementById('err_count_{widget_id}').textContent=er_{widget_id}; }}
-function resetTimer(){{ clearInterval(iv_{widget_id}); run_{widget_id}=false; el_{widget_id}=0; er_{widget_id}=0;
+let s_{widget_id}=null,i_{widget_id}=null,e_{widget_id}=0,er_{widget_id}=0,r_{widget_id}=false;
+function startT(){{ if(r_{widget_id})return; r_{widget_id}=true; s_{widget_id}=Date.now()-e_{widget_id}*1000;
+  i_{widget_id}=setInterval(()=>{{e_{widget_id}=(Date.now()-s_{widget_id})/1000;
+  document.getElementById('timer_{widget_id}').textContent=e_{widget_id}.toFixed(1)+'s';}},100); }}
+function stopT(){{ if(!r_{widget_id})return; clearInterval(i_{widget_id}); r_{widget_id}=false;
+  document.getElementById('ss_{widget_id}').innerHTML='<b>Tempo: '+e_{widget_id}.toFixed(2)+'s</b> · Errori: '+er_{widget_id}+' — copia qui sotto.'; }}
+function addE(){{ er_{widget_id}++; document.getElementById('ec_{widget_id}').textContent=er_{widget_id}; }}
+function resetT(){{ clearInterval(i_{widget_id}); r_{widget_id}=false; e_{widget_id}=0; er_{widget_id}=0;
   document.getElementById('timer_{widget_id}').textContent='0.0s';
-  document.getElementById('err_count_{widget_id}').textContent='0';
-  document.getElementById('stats_{widget_id}').innerHTML='{titolo}'; }}
-</script></body></html>"""
+  document.getElementById('ec_{widget_id}').textContent='0';
+  document.getElementById('ss_{widget_id}').innerHTML=''; }}
+</script>"""
+
+
+_PLATE_CSS = """<style>
+  body { font-family:'Times New Roman',Georgia,serif; background:#fff; margin:0; padding:14px; color:#111; }
+  .timer-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;
+    font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+  .timer-bar #timer_v,.timer-bar #timer_o { } 
+  [id^=timer_] { font-size:30px; font-weight:bold; color:#0969da; min-width:88px; }
+  .timer-bar button { padding:8px 14px; border:none; border-radius:6px; cursor:pointer; font-size:14px; font-weight:bold; color:#fff; }
+  [id^=bs_]{background:#2ea44f}[id^=bx_]{background:#cf222e}[id^=be_]{background:#9a6700}[id^=br_]{background:#57606a}
+  [id^=ec_]{font-size:20px;color:#9a6700}
+  .stats{font-size:13px;color:#444;min-height:18px;margin-bottom:6px;font-family:-apple-system,sans-serif}
+  .plate-title{text-align:center;font-weight:bold;font-size:20px;letter-spacing:3px;margin:6px 0 18px}
+  .vcols{display:flex;justify-content:space-around;gap:40px}
+  .vcol{display:flex;flex-direction:column;align-items:center}
+  .vcol .d{font-size:34px;line-height:1.55;font-weight:600}
+  .crow{display:flex;align-items:center;margin:10px 0}
+  .crow .d{font-size:34px;font-weight:600}
+  .pretest{display:flex;justify-content:center;gap:34px}
+  .pretest .d{font-size:40px;font-weight:600}
+</style>"""
+
+
+def _plate_pretest_html():
+    ds = "".join(f'<span class="d">{n}</span>' for n in PRETEST)
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">{_PLATE_CSS}</head><body>
+<div class="plate-title">PRETEST</div>
+<div class="pretest">{ds}</div></body></html>"""
+
+
+def _plate_vertical_html(widget_id, titolo, col_l, col_r, etichetta):
+    cl = "".join(f'<span class="d">{n}</span>' for n in col_l)
+    cr = "".join(f'<span class="d">{n}</span>' for n in col_r)
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">{_PLATE_CSS}</head><body>
+{_timer_html(widget_id)}
+<div class="plate-title">{etichetta}</div>
+<div class="vcols"><div class="vcol">{cl}</div><div class="vcol">{cr}</div></div>
+</body></html>"""
+
+
+def _plate_horizontal_html(widget_id):
+    rows = ""
+    for r, riga in enumerate(TEST_C):
+        gaps = _C_GAPS[r]
+        cells = f'<span class="d">{riga[0]}</span>'
+        for k in range(1, 5):
+            cells += f'<span style="display:inline-block;width:{gaps[k-1]*22}px"></span>'
+            cells += f'<span class="d">{riga[k]}</span>'
+        rows += f'<div class="crow">{cells}</div>'
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">{_PLATE_CSS}</head><body>
+{_timer_html(widget_id)}
+<div class="plate-title">TEST C — ORIZZONTALE</div>
+{rows}</body></html>"""
 
 # ── NORME ITALIANE (Facchin, Maffioletti, Carnevali 2011) ─────────────
 # età(anni): (VT_media, VT_sd, AHT_media, AHT_sd, RATIO_media, RATIO_sd,
@@ -242,9 +293,9 @@ def render_dem(conn=None, paz_id=None, paziente=None):
         eta = st.number_input("Età (anni)", min_value=ETA_MIN, max_value=ETA_MAX,
                               value=int(eta_auto) if eta_auto and ETA_MIN <= eta_auto <= ETA_MAX else 8,
                               step=1, key="dem_eta",
-                              help="Presa dall'anagrafica; correggibile. Norme valide 6–14 anni.")
+                              help="Presa dall'anagrafica; correggibile. Norme valide 6–13 anni.")
     if eta_auto and not (ETA_MIN <= eta_auto <= ETA_MAX):
-        st.warning(f"Età anagrafica {eta_auto} anni fuori dal range normativo (6–14): "
+        st.warning(f"Età anagrafica {eta_auto} anni fuori dal range normativo (6–13): "
                    "uso il valore selezionato qui sopra.")
 
     tab_int, tab_cart, tab_norme = st.tabs(
@@ -252,35 +303,38 @@ def render_dem(conn=None, paz_id=None, paziente=None):
 
     # ── TAB INTERATTIVO ──
     with tab_int:
-        with st.expander("🖥️ Somministra a schermo (tavole + cronometro)", expanded=False):
-            st.caption("Mostra la tavola al paziente, avvia il cronometro mentre legge "
-                       "ad alta voce, premi **❌ Errore** ad ogni errore, poi copia "
-                       "Tempo ed Errori nei campi qui sotto. Pretest e Test A/B per il "
-                       "tempo verticale, Test C per il tempo orizzontale.")
-            sub_p, sub_v, sub_o = st.tabs(["▶️ Pretest", "⬇️ Verticale (A+B)", "➡️ Orizzontale (C)"])
+        with st.expander("🖥️ Somministra a schermo (tavole + cronometro)", expanded=True):
+            st.caption("Le schede si presentano una alla volta. Sequenza: "
+                       "**Pretest → Test A → Test B → Test C**. Per ogni scheda avvia "
+                       "il cronometro mentre il paziente legge ad alta voce, premi "
+                       "**❌ Errore** ad ogni errore, poi copia i tempi qui sotto.")
+            sub_p, sub_a, sub_b, sub_c = st.tabs(
+                ["① Pretest", "② Test A", "③ Test B", "④ Test C"])
             with sub_p:
-                st.image(PLATES["pretest"], use_container_width=True)
-            with sub_v:
-                components.html(_build_timer_html("demv", "Tempo VERTICALE — Test A + Test B"), height=120)
-                ca, cb = st.columns(2)
-                with ca:
-                    st.markdown("**Test A**")
-                    st.image(PLATES["test_a"], use_container_width=True)
-                with cb:
-                    st.markdown("**Test B**")
-                    st.image(PLATES["test_b"], use_container_width=True)
-            with sub_o:
-                components.html(_build_timer_html("demo", "Tempo ORIZZONTALE — Test C"), height=120)
-                st.image(PLATES["test_c"], use_container_width=True)
+                components.html(_plate_pretest_html(), height=180)
+                st.caption("Prova di riscaldamento: non si cronometra.")
+            with sub_a:
+                components.html(_plate_vertical_html("a", "A", TEST_A_L, TEST_A_R,
+                                "TEST A — VERTICALE"), height=900, scrolling=True)
+            with sub_b:
+                components.html(_plate_vertical_html("b", "B", TEST_B_L, TEST_B_R,
+                                "TEST B — VERTICALE"), height=900, scrolling=True)
+            with sub_c:
+                components.html(_plate_horizontal_html("c"), height=900, scrolling=True)
 
         st.markdown("#### Tempi")
-        c1, c2 = st.columns(2)
-        with c1:
-            vt = st.number_input("Tempo VERTICALE — Test A+B (sec)", min_value=0.0,
-                                 step=0.5, value=0.0, key="dem_vt")
-        with c2:
+        ct1, ct2, ct3 = st.columns(3)
+        with ct1:
+            t_a = st.number_input("Tempo Test A (sec)", min_value=0.0, step=0.5,
+                                  value=0.0, key="dem_ta")
+        with ct2:
+            t_b = st.number_input("Tempo Test B (sec)", min_value=0.0, step=0.5,
+                                  value=0.0, key="dem_tb")
+        with ct3:
             ht = st.number_input("Tempo ORIZZONTALE — Test C (sec)", min_value=0.0,
                                  step=0.5, value=0.0, key="dem_ht")
+        vt = t_a + t_b
+        st.caption(f"Tempo VERTICALE (A+B) = **{vt:.1f}s**")
 
         st.markdown("#### Errori (Test C orizzontale)")
         c3, c4, c5, c6 = st.columns(4)
