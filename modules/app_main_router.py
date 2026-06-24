@@ -281,6 +281,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
+        "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
         "🧬 INPP — Valutazione diagnostica", "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall",
@@ -454,6 +455,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore modulo Getman: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "👁️ Groffman (visual tracing)":
+        try:
+            from .groffman import render_groffman
+            render_groffman(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Groffman: {e}")
             with st.expander("Dettagli"):
                 st.code(traceback.format_exc())
         return True
