@@ -54,10 +54,11 @@ _LAUNCHER = r"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 <p>Si apre in una finestra separata (puoi metterla sul monitor del paziente). Consenti telecamera e popup.</p>
 <script>
 const APP = __APP__;
+let _blobUrl = null;
 function openCap(){
-  const w = window.open('', 'pnev_capture', 'width=980,height=760');
+  if(!_blobUrl){ _blobUrl = URL.createObjectURL(new Blob([APP], {type:'text/html'})); }
+  const w = window.open(_blobUrl, 'pnev_capture', 'width=980,height=760');
   if(!w){ alert('Consenti le finestre popup per aprire l\'analisi.'); return; }
-  w.document.open(); w.document.write(APP); w.document.close();
   w.focus();
 }
 </script></body></html>"""
@@ -204,11 +205,18 @@ document.getElementById('start').onclick = async ()=>{
     ov.width=cam.videoWidth||340; ov.height=cam.videoHeight||255;
     // video opzionale
     if(CFG.salvaVideo && window.MediaRecorder){
-      chunks=[]; rec=new MediaRecorder(stream,{mimeType:'video/webm'});
-      rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
-      rec.onstop=()=>{ videoBlob=new Blob(chunks,{type:'video/webm'}); document.getElementById('dlv').disabled=false; };
-      rec.start();
-      document.getElementById('recpill').style.display='inline-flex';
+      let mime='';
+      ['video/webm;codecs=vp9','video/webm','video/mp4'].forEach(m=>{ if(!mime && MediaRecorder.isTypeSupported(m)) mime=m; });
+      chunks=[];
+      try{ rec = mime ? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream); }
+      catch(_e){ rec=null; }
+      if(rec){
+        window._recMime = rec.mimeType || mime || 'video/webm';
+        rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+        rec.onstop=()=>{ videoBlob=new Blob(chunks,{type:window._recMime}); document.getElementById('dlv').disabled=false; };
+        rec.start();
+        document.getElementById('recpill').style.display='inline-flex';
+      }
     }
     series=[]; nframes=0; saccades=0; lastGaze=null; t0=performance.now();
     running=true; document.getElementById('st').textContent='registrazione attiva';
@@ -251,8 +259,9 @@ document.getElementById('dl').onclick = ()=>{
 };
 document.getElementById('dlv').onclick = ()=>{
   if(!videoBlob) return;
+  const ext = (window._recMime||'').indexOf('mp4')>=0 ? 'mp4' : 'webm';
   const a=document.createElement('a'); a.href=URL.createObjectURL(videoBlob);
-  a.download='pnev_'+CFG.testId+'_'+CFG.paziente.replace(/\s+/g,'_')+'.webm'; a.click();
+  a.download='pnev_'+CFG.testId+'_'+CFG.paziente.replace(/\s+/g,'_')+'.'+ext; a.click();
 };
 
 detectSource().then(s=>{ document.getElementById('src').textContent='sorgente: '+(s==='tobii'?'Tobii pronto':'webcam'); });
