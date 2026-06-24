@@ -679,12 +679,22 @@ def _sez_c(pid, stored):
 #  SEZIONE D — OCULOMOTRICITA
 # ══════════════════════════════════════════════════════════════════════
 
-def _sez_d(pid, stored):
+def _sez_d(pid, stored, paziente=None):
     st.markdown("### D — Oculomotricita")
     s = lambda c: _sk("d", c, pid)
     d = stored.get("sez_d", {})
 
-    st.markdown("#### Pursuits (DEM / NSUCO)")
+    # Età (da anagrafica) e sesso (dall'intestazione) per le norme NSUCO
+    _dn = paziente.get("Data_Nascita", "") if isinstance(paziente, dict) else ""
+    _eta_paz = _eta(_dn) or 8
+    _sesso = (stored.get("intestazione", {}) or {}).get("sesso", "M") or "M"
+
+    # ── DEM: rimando al modulo dedicato (interattivo + cartaceo) ──
+    st.info("🔢 **DEM** — il test si compila nel modulo dedicato "
+            "(menu **🖥️ Test live → 🔢 DEM interattivo**), con norme italiane "
+            "per età, calcolo AHT/ratio e tipologia, e scheda cartacea stampabile.")
+
+    st.markdown("#### Pursuits — osservazione qualitativa")
     c1,c2,c3 = st.columns(3)
     with c1:
         pur_h  = _txt("Horizz.", s("pur_h"), d.get("pur_h",""))
@@ -700,26 +710,13 @@ def _sez_d(pid, stored):
                                 value=d.get("pur_comp",False), key=s("pur_comp"))
         pur_note = _txt("Note pursuits", s("pur_note"), d.get("pur_note",""))
 
-    st.markdown("#### NSUCO Saccadi")
-    st.caption("Punteggio NSUCO: 1 (gravemente deficitario) → 5 (eccellente)")
-    nsuco_opts = [1,2,3,4,5]
-    c4,c5 = st.columns(2)
-    with c4:
-        st.markdown("**Saccadi orizzontali**")
-        ns_or_ab   = st.select_slider("Abilita H", nsuco_opts,
-                                       value=int(d.get("ns_or_ab",3)),
-                                       key=s("ns_or_ab"))
-        ns_or_ac   = st.select_slider("Accuratezza H", nsuco_opts,
-                                       value=int(d.get("ns_or_ac",3)),
-                                       key=s("ns_or_ac"))
-    with c5:
-        st.markdown("**Saccadi verticali**")
-        ns_ver_ab  = st.select_slider("Abilita V", nsuco_opts,
-                                       value=int(d.get("ns_ver_ab",3)),
-                                       key=s("ns_ver_ab"))
-        ns_ver_ac  = st.select_slider("Accuratezza V", nsuco_opts,
-                                       value=int(d.get("ns_ver_ac",3)),
-                                       key=s("ns_ver_ac"))
+    st.markdown("#### NSUCO — Oculomotor Test (Maples)")
+    try:
+        from .nsuco import render_nsuco
+        _ns = render_nsuco(s, _eta_paz, _sesso, d)
+    except Exception as _e:
+        _ns = {}
+        st.warning(f"Modulo NSUCO non disponibile: {_e}")
 
     st.markdown("#### Visual Tracking Test")
     c6,c7,c8 = st.columns(3)
@@ -745,15 +742,15 @@ def _sez_d(pid, stored):
 
     note = _txt("Note sezione D", s("note"), d.get("note",""), h=68)
 
-    return {"sez_d": {
+    out = {"sez_d": {
         "pur_h":pur_h,"pur_v":pur_v,"pur_ob":pur_ob,"pur_ci":pur_ci,
         "rrd":rrd,"ird":ird,"har":har,"pur_comp":pur_comp,"pur_note":pur_note,
-        "ns_or_ab":ns_or_ab,"ns_or_ac":ns_or_ac,
-        "ns_ver_ab":ns_ver_ab,"ns_ver_ac":ns_ver_ac,
         "vtt_t":vtt_tempo,"vtt_e":vtt_errori,"vtt_s":vtt_score,
         "lin_t":lin_tempo,"lin_e":lin_errori,
         "fiss_od":fiss_od,"fiss_os":fiss_os,"note":note,
     }}
+    out["sez_d"].update(_ns or {})
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1331,7 +1328,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
             _salva(conn, paz_id, dati)
 
     with tabs[5]:
-        dati.update(_sez_d(paz_id, stored))
+        dati.update(_sez_d(paz_id, stored, paziente))
         if st.button("Salva sezione D", key=f"sv_d_{paz_id}"):
             _salva(conn, paz_id, dati)
 
