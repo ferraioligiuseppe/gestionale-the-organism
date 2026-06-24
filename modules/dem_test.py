@@ -19,8 +19,84 @@
 """
 
 import datetime as _dt
+import random as _random
 import streamlit as st
 import streamlit.components.v1 as components
+
+# ── Tavole DEM (numeri) ───────────────────────────────────────────────
+_random.seed(42)
+_DEM_GRIGLIA_A = [[str(_random.randint(1, 9)) for _ in range(5)] for _ in range(16)]
+_DEM_GRIGLIA_C = [
+    ["3", "8", "6", "1", "5", "4", "2", "9", "7", "6"],
+    ["1", "5", "9", "2", "8", "3", "7", "4", "6", "5"],
+    ["6", "3", "8", "5", "2", "9", "4", "7", "3", "7"],
+    ["5", "7", "2", "6", "4", "1", "8", "3", "2", "1"],
+    ["8", "4", "1", "3", "9", "7", "2", "5", "8", "9"],
+    ["2", "9", "5", "7", "6", "4", "1", "6", "4", "2"],
+    ["3", "6", "4", "1", "5", "2", "9", "1", "7", "6"],
+    ["1", "8", "7", "2", "3", "6", "5", "4", "8", "3"],
+    ["9", "2", "3", "8", "4", "7", "3", "6", "1", "5"],
+    ["7", "5", "6", "4", "1", "3", "8", "2", "9", "4"],
+    ["4", "1", "9", "6", "7", "5", "2", "7", "3", "8"],
+    ["6", "3", "2", "5", "8", "4", "1", "9", "5", "2"],
+    ["5", "7", "8", "3", "2", "1", "6", "5", "4", "7"],
+]
+
+
+def _build_dem_html(widget_id, griglia, titolo, layout="horizontal"):
+    """Tavola DEM a schermo con cronometro e click-per-errore."""
+    righe_html = ""
+    for r, riga in enumerate(griglia):
+        celle = "".join(
+            f'<span class="dem-cell" onclick="markCell(this)">{num}</span>'
+            for num in riga)
+        righe_html += f'<div class="dem-row">{celle}</div>\n'
+    gap_row = "20px" if layout == "horizontal" else "4px"
+    vert_grid = ".dem-grid{display:flex;flex-direction:row;gap:20px}" if layout == "vertical" else ""
+    vert_row = ".dem-row{flex-direction:column;gap:2px}" if layout == "vertical" else ""
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  body {{ font-family:'Courier New',monospace; background:#f6f8fa; margin:0; padding:12px; }}
+  h3 {{ font-size:14px; color:#0d1117; margin-bottom:8px; }}
+  .timer-bar {{ display:flex; align-items:center; gap:12px; margin-bottom:10px; }}
+  #timer_{widget_id} {{ font-size:28px; font-weight:bold; color:#0969da; min-width:80px; }}
+  button {{ padding:6px 14px; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:bold; }}
+  #btn_start_{widget_id} {{ background:#2ea44f; color:#fff; }}
+  #btn_stop_{widget_id} {{ background:#cf222e; color:#fff; }}
+  #btn_reset_{widget_id} {{ background:#57606a; color:#fff; }}
+  #err_count_{widget_id} {{ font-size:20px; font-weight:bold; color:#9a6700; }}
+  .dem-row {{ display:flex; gap:{gap_row}; margin-bottom:{"4px" if layout=="horizontal" else "0"}; }}
+  {vert_grid} {vert_row}
+  .dem-cell {{ font-size:22px; cursor:pointer; padding:2px 6px; border-radius:4px; user-select:none; min-width:24px; text-align:center; color:#0d1117; }}
+  .dem-cell:hover {{ background:#ddf4ff; }}
+  .dem-cell.marked {{ background:#ffebe9; color:#cf222e; text-decoration:line-through; font-weight:bold; }}
+  .stats {{ margin-top:10px; font-size:13px; color:#444; }}
+</style></head><body>
+<h3>🔢 {titolo}</h3>
+<div class="timer-bar">
+  <div id="timer_{widget_id}">0.0s</div>
+  <button id="btn_start_{widget_id}" onclick="startTimer()">▶ Avvia</button>
+  <button id="btn_stop_{widget_id}" onclick="stopTimer()">⏹ Stop</button>
+  <button id="btn_reset_{widget_id}" onclick="resetTimer()">↺ Azzera</button>
+  <span>Errori: <span id="err_count_{widget_id}">0</span></span>
+</div>
+<div class="dem-grid">{righe_html}</div>
+<div class="stats" id="stats_{widget_id}"></div>
+<script>
+let st_{widget_id}=null,iv_{widget_id}=null,el_{widget_id}=0,er_{widget_id}=0,run_{widget_id}=false;
+function startTimer(){{ if(run_{widget_id})return; run_{widget_id}=true; st_{widget_id}=Date.now()-el_{widget_id}*1000;
+  iv_{widget_id}=setInterval(()=>{{el_{widget_id}=(Date.now()-st_{widget_id})/1000;
+  document.getElementById('timer_{widget_id}').textContent=el_{widget_id}.toFixed(1)+'s';}},100); }}
+function stopTimer(){{ if(!run_{widget_id})return; clearInterval(iv_{widget_id}); run_{widget_id}=false;
+  document.getElementById('stats_{widget_id}').innerHTML='<b>Tempo: '+el_{widget_id}.toFixed(2)+'s</b> · Errori: '+er_{widget_id}+' — copia questi valori qui sotto.'; }}
+function resetTimer(){{ clearInterval(iv_{widget_id}); run_{widget_id}=false; el_{widget_id}=0; er_{widget_id}=0;
+  document.getElementById('timer_{widget_id}').textContent='0.0s';
+  document.getElementById('err_count_{widget_id}').textContent='0';
+  document.getElementById('stats_{widget_id}').innerHTML='';
+  document.querySelectorAll('.dem-cell.marked').forEach(c=>c.classList.remove('marked')); }}
+function markCell(el){{ el.classList.toggle('marked');
+  er_{widget_id}+= el.classList.contains('marked')?1:-1; if(er_{widget_id}<0)er_{widget_id}=0;
+  document.getElementById('err_count_{widget_id}').textContent=er_{widget_id}; }}
+</script></body></html>"""
 
 # ── NORME ITALIANE (Facchin, Maffioletti, Carnevali 2011) ─────────────
 # età(anni): (VT_media, VT_sd, AHT_media, AHT_sd, RATIO_media, RATIO_sd,
@@ -205,6 +281,20 @@ def render_dem(conn=None, paz_id=None, paziente=None):
 
     # ── TAB INTERATTIVO ──
     with tab_int:
+        with st.expander("🖥️ Somministra a schermo (tavole + cronometro)", expanded=False):
+            st.caption("Mostra la tavola al paziente, avvia il cronometro mentre legge, "
+                       "clicca i numeri sbagliati per contare gli errori, poi copia "
+                       "Tempo ed Errori nei campi qui sotto.")
+            sub_v, sub_o = st.tabs(["⬇️ Verticale (A+B)", "➡️ Orizzontale (C)"])
+            with sub_v:
+                components.html(_build_dem_html("demv", _DEM_GRIGLIA_A,
+                                "Tavola verticale (Test A + B)", "vertical"),
+                                height=560, scrolling=True)
+            with sub_o:
+                components.html(_build_dem_html("demo", _DEM_GRIGLIA_C,
+                                "Tavola orizzontale (Test C)", "horizontal"),
+                                height=560, scrolling=True)
+
         st.markdown("#### Tempi")
         c1, c2 = st.columns(2)
         with c1:
