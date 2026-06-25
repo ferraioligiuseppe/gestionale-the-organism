@@ -62,6 +62,7 @@ SOTTOSEZIONI = {
         "👤 Anagrafica pazienti",
         "📎 Documenti clinici",
         "🧩 Quadro storico",
+        "📝 Diagnosi assistita",
         "🎟️ Coupon OF / SDS",
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",

@@ -127,6 +127,33 @@ def estrai_da_documento(dati: bytes, mime: str, nome: str = "") -> str:
         return f"⚠️ Errore durante l'analisi AI: {e}"
 
 
+def genera_testo(prompt: str, sistema: str = "") -> str:
+    """Generazione di testo libero (per la diagnosi assistita). Ritorna il testo
+    o un messaggio d'errore leggibile (prefissato con '⚠️')."""
+    if not ai_disponibile():
+        return ("⚠️ AI non configurata. Aggiungi una chiave nei Secrets sotto [ai] "
+                "(OPENAI_API_KEY oppure GEMINI_API_KEY).")
+    prov = _provider()
+    try:
+        if prov == "openai":
+            from openai import OpenAI
+            a = st.secrets.get("ai", {})
+            client = OpenAI(api_key=a.get("OPENAI_API_KEY", ""))
+            modello = str(a.get("OPENAI_MODEL", "gpt-4o-mini"))
+            msgs = []
+            if sistema:
+                msgs.append({"role": "system", "content": sistema})
+            msgs.append({"role": "user", "content": prompt})
+            resp = client.chat.completions.create(model=modello, messages=msgs,
+                                                  max_tokens=1200)
+            return (resp.choices[0].message.content or "").strip()
+        genai = _configura()
+        parti = ([sistema, prompt] if sistema else [prompt])
+        return _genera(genai, parti)
+    except Exception as e:
+        return f"⚠️ Errore durante la generazione AI: {e}"
+
+
 def _estrai_gemini(dati: bytes, mime: str, nome: str) -> str:
     mime = (mime or "").lower()
     genai = _configura()
