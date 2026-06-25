@@ -89,6 +89,7 @@ SOTTOSEZIONI = {
         "📊 Audiometria funzionale",
         "🎧 Bilancio uditivo",
         "🧬 INPP — Valutazione diagnostica",
+        "🗣️ Logopedia / SMOF",
         "🧠 NPS — Neuropsicologica",
         "📚 DSA — Apprendimento",
     ],

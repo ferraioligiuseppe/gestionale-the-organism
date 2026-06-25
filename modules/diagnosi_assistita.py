@@ -146,6 +146,15 @@ def _riassunto_storico(conn, paz_id) -> str:
                 riga += f" ({r['note']})"
             parti.append(riga)
 
+    lo = _query(conn, "SELECT * FROM logopedia_valutazioni WHERE paziente_id=%s", (paz_id,))
+    if lo:
+        parti.append("\nLOGOPEDIA / SMOF:")
+        for r in sorted(lo, key=lambda x: str(_data_di(x)), reverse=True):
+            riga = f"- {_fmt(_data_di(r))}"
+            if r.get("sintesi"):
+                riga += f": {r['sintesi']}"
+            parti.append(riga)
+
     return "\n".join(parti).strip()
 
 

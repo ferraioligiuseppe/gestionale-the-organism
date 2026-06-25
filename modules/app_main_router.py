@@ -300,7 +300,8 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "👁️ Getman (manipolazione visiva)",
         "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
-        "🧬 INPP — Valutazione diagnostica", "🖥️ Somministrazione test",
+        "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
+        "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall",
         "🔉 Diagnostica uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
@@ -513,6 +514,17 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             render_inpp(conn, paz_id, nome)
         except Exception as e:
             st.error(f"Errore modulo INPP: {e}")
+        return True
+    if sotto == "🗣️ Logopedia / SMOF":
+        try:
+            from .logopedia import render_logopedia
+            render_logopedia(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Logopedia: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
         return True
 
     # ── TEST LIVE ─────────────────────────────────────────────────────

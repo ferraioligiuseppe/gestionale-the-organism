@@ -186,6 +186,19 @@ def render_quadro(conn=None, paz_id=None, paziente=None):
             st.markdown(riga)
         st.markdown("---")
 
+    # ── Logopedia / SMOF ──────────────────────────────────────────────
+    lo = _query(conn, "SELECT * FROM logopedia_valutazioni WHERE paziente_id=%s", (paz_id,))
+    if lo:
+        trovato = True
+        lo.sort(key=lambda d: str(_data_di(d)), reverse=True)
+        st.markdown(f"#### 🗣️ Logopedia / SMOF ({len(lo)})")
+        for r in lo:
+            riga = f"- _{_fmt(_data_di(r))}_"
+            if r.get("sintesi"):
+                riga += f": {r['sintesi']}"
+            st.markdown(riga)
+        st.markdown("---")
+
     # ── Esiti / Follow-up ─────────────────────────────────────────────
     es = _query(conn, "SELECT * FROM esiti_pnev WHERE paziente_id=%s", (paz_id,))
     if es:
