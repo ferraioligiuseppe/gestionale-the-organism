@@ -15,7 +15,7 @@
 import streamlit as st
 
 try:
-    from .quadro_storico import _query, _data_di, _fmt
+    from .quadro_storico import _query, _data_di, _fmt, carica_paziente
 except Exception:
     def _query(conn, sql, params=()):
         try:
@@ -40,21 +40,59 @@ except Exception:
             return str(dt) if dt else ""
 
 _SISTEMA = (
-    "Sei un assistente clinico per uno studio di optometria comportamentale e "
-    "psicologia che applica il metodo PNEV (psico-neuro-evolutivo-visivo). "
-    "Scrivi in italiano, con linguaggio clinico chiaro. NON inventare dati: "
-    "usa SOLO le informazioni fornite. Dove mancano elementi, scrivi "
-    "«da approfondire». La tua è una BOZZA che il professionista revisionerà."
+    "Sei l'assistente clinico dello Studio The Organism e redigi relazioni "
+    "secondo il Metodo PNEV (Psico-Neuro-Evolutivo Integrato) del Dott. Giuseppe "
+    "Ferraioli (Neuropsicologo - Optometrista). Scrivi in italiano, registro "
+    "clinico-professionale, in terza persona, con la cura e lo stile delle "
+    "relazioni PNEV. NON inventare dati clinici: usa SOLO le informazioni "
+    "fornite nello storico e nei dati identificativi. Dove un elemento manca, "
+    "scrivi «da approfondire» o «in attesa di valutazione». La tua è una BOZZA "
+    "che il professionista revisionerà e firmerà."
+)
+
+# Carta intestata (apertura fissa di ogni relazione PNEV)
+INTESTAZIONE = (
+    "Lo Studio The Organism adotta un modello di lavoro multidisciplinare e "
+    "integrato (PNEV), avvalendosi della collaborazione di professionisti di "
+    "diverse aree specialistiche (neuropsicologia, logopedia, terapia "
+    "miofunzionale, psicomotricità, osteopatia, dietistica, oftalmologia, "
+    "optometria, posturologia, fisioterapia, odontoiatria). Tale approccio "
+    "consente una lettura complessa e unitaria del funzionamento sensorimotorio, "
+    "neuropsicomotorio e neuroevolutivo della persona, bambino o adulto, al fine "
+    "di individuare eventuali fragilità, disarmonie o rallentamenti nei processi "
+    "di sviluppo e di integrazione funzionale.\n\n"
+    "PNEV by The Organism è un Metodo Psico-Neuro-Evolutivo Integrato, "
+    "multidisciplinare e multisensoriale, finalizzato alla valutazione e al "
+    "trattamento delle fragilità del funzionamento neuroevolutivo, sensorimotorio "
+    "e neuropsicomotorio nel bambino e nell'adulto ©."
+)
+
+# Firma clinica (chiusura fissa)
+FIRMA = (
+    "Cordiali saluti,\n\n"
+    "Metodo PNEV – Processi NeuroEvolutivi\n"
+    "Studio The Organism\n"
+    "Dott. Giuseppe Ferraioli\n"
+    "Neuropsicologo – Optometrista\n\n"
+    "Luogo e data: __________________________     Firma e timbro"
 )
 
 _SCHEMA = (
-    "Sulla base dello storico del paziente qui sotto, proponi una bozza di "
-    "relazione diagnostica PNEV strutturata in queste sezioni:\n"
-    "1. SINTESI DEL CASO\n"
-    "2. QUADRO FUNZIONALE (visivo, uditivo, motorio/riflessi, secondo i dati)\n"
-    "3. IPOTESI DIAGNOSTICA\n"
-    "4. PROPOSTA DI INTERVENTO / TERAPIA\n"
-    "5. INDICAZIONI PER LA PROSSIMA VISITA\n\n"
+    "Redigi una bozza di RELAZIONE CLINICA PNEV per il paziente indicato, "
+    "articolata ESATTAMENTE nelle seguenti sezioni, ciascuna con il suo titolo:\n"
+    "1. Dati identificativi (usa i dati forniti: nome, data di nascita, età)\n"
+    "2. Motivo dell'osservazione\n"
+    "3. Premessa clinica\n"
+    "4. Inquadramento anamnestico\n"
+    "5. Documentazione specialistica disponibile\n"
+    "6. Interpretazione clinico-funzionale integrata\n"
+    "7. Percorso terapeutico svolto in ottica PNEV\n"
+    "8. Evoluzione clinica osservata\n"
+    "9. Considerazioni cliniche conclusive\n"
+    "10. Indicazioni operative\n\n"
+    "NON scrivere intestazione né firma: vengono aggiunte a parte. "
+    "Attieniti ai dati; dove mancano, indica «da approfondire».\n\n"
+    "=== DATI IDENTIFICATIVI ===\n{IDENT}\n\n"
     "=== STORICO DEL PAZIENTE ===\n"
 )
 
@@ -111,6 +149,14 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
         st.info("Seleziona prima un paziente.")
         return
 
+    if not isinstance(paziente, dict) or not (paziente.get("Cognome") or paziente.get("Nome")):
+        try:
+            p = carica_paziente(conn, paz_id)
+            if p:
+                paziente = p
+        except Exception:
+            pass
+
     _assicura_tabella(conn)
 
     nome = ""
@@ -146,7 +192,13 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
         if st.button("🤖 Genera con AI", type="primary", disabled=disabled,
                      use_container_width=True):
             with st.spinner("L'AI sta scrivendo la bozza…"):
-                testo = genera_testo(_SCHEMA + storico, sistema=_SISTEMA)
+                ident = _identificativi(paziente)
+                corpo = genera_testo(_SCHEMA.replace("{IDENT}", ident) + storico,
+                                     sistema=_SISTEMA)
+                if corpo.startswith("⚠️"):
+                    testo = corpo
+                else:
+                    testo = INTESTAZIONE + "\n\n" + corpo.strip() + "\n\n" + FIRMA
             st.session_state[key_bozza] = testo
     if not ai_disponibile():
         st.caption("AI non configurata: la diagnosi si scrive a mano. "
@@ -174,6 +226,36 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
     st.markdown("---")
     st.markdown("#### Diagnosi precedenti")
     _elenco_precedenti(conn, paz_id)
+
+
+def _identificativi(paziente) -> str:
+    if not isinstance(paziente, dict):
+        return "Non disponibili."
+    nome = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
+    dn = paziente.get("Data_Nascita") or paziente.get("data_nascita") or ""
+    eta = ""
+    try:
+        import datetime as _dt
+        d = dn
+        if isinstance(d, str) and d:
+            for f in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+                try:
+                    d = _dt.datetime.strptime(d[:10], f).date(); break
+                except Exception:
+                    continue
+        if hasattr(d, "year"):
+            o = _dt.date.today()
+            anni = o.year - d.year - ((o.month, o.day) < (d.month, d.day))
+            eta = f"{anni} anni"
+            dn = d.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+    righe = [f"Paziente: {nome or 'non indicato'}"]
+    if dn:
+        righe.append(f"Data di nascita: {dn}")
+    if eta:
+        righe.append(f"Età: {eta}")
+    return "  ".join(righe)
 
 
 def _assicura_tabella(conn):

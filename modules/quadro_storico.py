@@ -46,6 +46,47 @@ def _fmt(dt):
         return str(dt) if dt else ""
 
 
+def carica_paziente(conn, paz_id):
+    """Carica il record del paziente e lo normalizza con le chiavi
+    Cognome / Nome / Data_Nascita (robusto a maiuscole/minuscole di colonna).
+    Usa prima il paziente attivo in sessione, poi il database."""
+    base = None
+    try:
+        rec = st.session_state.get("paziente_attivo_record")
+        if isinstance(rec, dict) and str(rec.get("id")) == str(paz_id):
+            base = rec
+    except Exception:
+        base = None
+    if base is None:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM pazienti WHERE id=%s", (paz_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            cols = [d[0] for d in cur.description]
+            base = dict(zip(cols, row))
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return None
+
+    def g(*nomi):
+        for n in nomi:
+            for k, v in base.items():
+                if str(k).lower() == n:
+                    return v
+        return ""
+
+    return {
+        "Cognome": g("cognome", "surname"),
+        "Nome": g("nome", "name"),
+        "Data_Nascita": g("data_nascita", "datanascita", "nascita", "data di nascita"),
+    }
+
+
 def render_quadro(conn=None, paz_id=None, paziente=None):
     st.header("🧩 Quadro storico del paziente")
     st.caption("Tutto lo storico in un colpo d'occhio: documenti, test, valutazioni. "
@@ -54,6 +95,11 @@ def render_quadro(conn=None, paz_id=None, paziente=None):
     if conn is None or not paz_id:
         st.info("Seleziona prima un paziente.")
         return
+
+    if not isinstance(paziente, dict) or not (paziente.get("Cognome") or paziente.get("Nome")):
+        p = carica_paziente(conn, paz_id)
+        if p:
+            paziente = p
 
     nome = ""
     if isinstance(paziente, dict):

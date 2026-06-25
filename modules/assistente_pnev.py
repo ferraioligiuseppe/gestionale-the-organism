@@ -22,11 +22,14 @@ import streamlit as st
 
 try:
     from .diagnosi_assistita import _riassunto_storico, _identificativi
+    from .quadro_storico import carica_paziente
 except Exception:
     def _riassunto_storico(conn, paz_id):
         return ""
     def _identificativi(p):
         return ""
+    def carica_paziente(conn, paz_id):
+        return None
 
 _SISTEMA = (
     "Sei il co-pilota clinico dello Studio The Organism e ragioni secondo il "
@@ -67,6 +70,14 @@ def render_assistente(conn=None, paz_id=None, paziente=None, contesto: str = "",
     if conn is None or not paz_id:
         st.info("Seleziona prima un paziente.")
         return
+
+    if not isinstance(paziente, dict) or not (paziente.get("Cognome") or paziente.get("Nome")):
+        try:
+            p = carica_paziente(conn, paz_id)
+            if p:
+                paziente = p
+        except Exception:
+            pass
 
     try:
         from .ai_estrazione import genera_testo, ai_disponibile
