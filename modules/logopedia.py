@@ -65,11 +65,16 @@ def render_logopedia(conn=None, paz_id=None, paziente=None):
 
     _assicura_tabella(conn)
     _assicura_tabella_sedute(conn)
+    _assicura_tabella_obiettivi(conn)
 
-    modo = st.radio("Sezione", ["📋 Valutazione + SMOF", "📅 Diario sedute"],
+    modo = st.radio("Sezione", ["📋 Valutazione + SMOF", "📅 Diario sedute",
+                                "🎯 Obiettivi & monitoraggio"],
                     horizontal=True, key="logo_modo")
     if modo == "📅 Diario sedute":
         _render_diario(conn, paz_id)
+        return
+    if modo == "🎯 Obiettivi & monitoraggio":
+        _render_obiettivi(conn, paz_id)
         return
 
     st.caption("Valutazione logopedica con sezione SMOF (oro-mio-funzionale, "
@@ -472,3 +477,161 @@ def _elenco_sedute(conn, paz_id):
                     pass
         st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
                     unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  L3 — OBIETTIVI & MONITORAGGIO
+# ══════════════════════════════════════════════════════════════════════
+
+STATO_OB = ["🟦 In corso", "🟢 Raggiunto", "🟡 Parziale", "⏸️ Sospeso"]
+
+
+def _assicura_tabella_obiettivi(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS logopedia_obiettivi(
+            id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+            area TEXT, descrizione TEXT,
+            baseline INT, attuale INT, target INT,
+            stato TEXT, data_inizio DATE, data_rivalut DATE,
+            note TEXT, creato TIMESTAMP DEFAULT NOW());""")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def _render_obiettivi(conn, paz_id):
+    st.caption("Definisci gli obiettivi terapeutici e aggiornane il livello nel "
+               "tempo (scala 0–10). Alla chiusura, l'esito confluisce "
+               "nell'apprendimento PNEV.")
+
+    with st.expander("➕ Nuovo obiettivo", expanded=True):
+        with st.form("logo_ob_new", clear_on_submit=True):
+            area = st.selectbox("Area", AREE_LAVORO, key="logo_ob_area")
+            descr = st.text_input("Obiettivo (in positivo, osservabile)",
+                                  placeholder="es. Deglutizione con postura linguale corretta",
+                                  key="logo_ob_descr")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                baseline = st.slider("Livello iniziale", 0, 10, 2, key="logo_ob_base")
+            with c2:
+                target = st.slider("Target", 0, 10, 8, key="logo_ob_targ")
+            with c3:
+                data_riv = st.date_input("Rivalutazione prevista",
+                                         value=datetime.date.today() + datetime.timedelta(weeks=10),
+                                         key="logo_ob_riv")
+            if st.form_submit_button("💾 Crea obiettivo", type="primary"):
+                if descr.strip():
+                    if _salva_obiettivo(conn, paz_id, area, descr, baseline, target, data_riv):
+                        st.success("Obiettivo creato.")
+                        st.rerun()
+                    else:
+                        st.error("Salvataggio non riuscito.")
+                else:
+                    st.warning("Scrivi l'obiettivo.")
+
+    st.markdown("#### Obiettivi del paziente")
+    _elenco_obiettivi(conn, paz_id)
+
+
+def _salva_obiettivo(conn, paz_id, area, descr, baseline, target, data_riv) -> bool:
+    try:
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO logopedia_obiettivi(paziente_id, area, descrizione,
+            baseline, attuale, target, stato, data_inizio, data_rivalut)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (paz_id, area, descr, int(baseline), int(baseline), int(target),
+             "🟦 In corso", datetime.date.today(), data_riv))
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _elenco_obiettivi(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT id, area, descrizione, baseline, attuale, target,
+            stato, data_inizio, data_rivalut FROM logopedia_obiettivi
+            WHERE paziente_id=%s ORDER BY creato DESC""", (paz_id,))
+        righe = cur.fetchall()
+    except Exception:
+        righe = []
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    if not righe:
+        st.caption("Nessun obiettivo definito per ora.")
+        return
+    for rid, area, descr, base, attuale, target, stato, dini, driv in righe:
+        st.markdown(f"**{descr}**  ·  _{area}_")
+        # barra di avanzamento baseline → attuale → target
+        rng = max(1, (target or 10) - (base or 0))
+        prog = min(1.0, max(0.0, ((attuale or 0) - (base or 0)) / rng))
+        st.progress(prog, text=f"{stato}  ·  {attuale}/{target} (partenza {base})")
+        c1, c2, c3 = st.columns([2, 2, 1])
+        with c1:
+            nuovo = st.slider("Livello attuale", 0, 10, int(attuale or 0),
+                              key=f"logo_ob_upd_{rid}")
+        with c2:
+            nuovo_stato = st.selectbox("Stato", STATO_OB,
+                                       index=STATO_OB.index(stato) if stato in STATO_OB else 0,
+                                       key=f"logo_ob_st_{rid}")
+        with c3:
+            st.write("")
+            st.write("")
+            if st.button("💾", key=f"logo_ob_save_{rid}", help="Aggiorna"):
+                _aggiorna_obiettivo(conn, rid, nuovo, nuovo_stato, paz_id, descr, area)
+                st.rerun()
+        if driv:
+            st.caption(f"Rivalutazione prevista: {driv.strftime('%d/%m/%Y') if hasattr(driv,'strftime') else driv}")
+        if st.button("🗑 Elimina", key=f"logo_ob_del_{rid}"):
+            try:
+                cur = conn.cursor()
+                cur.execute("DELETE FROM logopedia_obiettivi WHERE id=%s", (rid,))
+                conn.commit()
+                st.rerun()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
+                    unsafe_allow_html=True)
+
+
+def _aggiorna_obiettivo(conn, rid, attuale, stato, paz_id, descr, area):
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE logopedia_obiettivi SET attuale=%s, stato=%s WHERE id=%s",
+                    (int(attuale), stato, rid))
+        conn.commit()
+        # se chiuso, registra un esito (aggancio a Esiti / Apprendimento)
+        if stato in ("🟢 Raggiunto", "🟡 Parziale", "⏸️ Sospeso"):
+            esito = {"🟢 Raggiunto": "🟢 Migliorato", "🟡 Parziale": "🟡 Stabile / fermo",
+                     "⏸️ Sospeso": "⚪ Non valutabile"}.get(stato, "⚪ Non valutabile")
+            try:
+                cur.execute("""CREATE TABLE IF NOT EXISTS esiti_pnev(
+                    id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+                    data TIMESTAMP DEFAULT NOW(),
+                    intervento TEXT, esito TEXT, note TEXT);""")
+                cur.execute("INSERT INTO esiti_pnev(paziente_id, intervento, esito, note) "
+                            "VALUES(%s,%s,%s,%s)",
+                            (paz_id, f"Logopedia — {area}: {descr}", esito,
+                             "Da obiettivo logopedico"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass

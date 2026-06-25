@@ -166,6 +166,14 @@ def _riassunto_storico(conn, paz_id) -> str:
                 riga += f" (risposta {r['risposta']})"
             parti.append(riga)
 
+    ob = _query(conn, "SELECT * FROM logopedia_obiettivi WHERE paziente_id=%s", (paz_id,))
+    if ob:
+        parti.append("\nOBIETTIVI LOGOPEDICI (con avanzamento):")
+        for r in ob:
+            parti.append(f"- {r.get('descrizione','')} [{r.get('area','')}]: "
+                         f"{r.get('stato','')} {r.get('attuale','?')}/{r.get('target','?')} "
+                         f"(partenza {r.get('baseline','?')})")
+
     return "\n".join(parti).strip()
 
 
