@@ -114,7 +114,7 @@ def _render_diario(conn, paz_id, terapia):
                 incassato = st.number_input("Incassato €", min_value=0.0, step=5.0, key="ter_sd_inc")
             with e4:
                 metodo = st.selectbox("Metodo", METODI, key="ter_sd_met")
-            note = st.text_area("Note", height=60, key="ter_sd_note")
+            note = st.text_area("Note", height=70, key="ter_sd_note")
 
             if st.form_submit_button("💾 Salva seduta", type="primary"):
                 ok = _salva_seduta(conn, paz_id, terapia, data_s, numero, prof,
