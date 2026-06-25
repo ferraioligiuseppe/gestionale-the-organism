@@ -137,6 +137,15 @@ def _riassunto_storico(conn, paz_id) -> str:
             txt = (r.get("pnev_summary") or r.get("Motivo") or "").strip()
             parti.append(f"- {_fmt(_data_di(r))}: {txt}" if txt else f"- {_fmt(_data_di(r))}")
 
+    es = _query(conn, "SELECT * FROM esiti_pnev WHERE paziente_id=%s", (paz_id,))
+    if es:
+        parti.append("\nESITI / FOLLOW-UP (cosa ha funzionato o no — IMPORTANTE):")
+        for r in sorted(es, key=lambda x: str(_data_di(x)), reverse=True):
+            riga = f"- {_fmt(_data_di(r))}: {r.get('intervento','')} → {r.get('esito','')}"
+            if r.get("note"):
+                riga += f" ({r['note']})"
+            parti.append(riga)
+
     return "\n".join(parti).strip()
 
 

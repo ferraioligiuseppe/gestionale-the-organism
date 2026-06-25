@@ -63,6 +63,7 @@ SOTTOSEZIONI = {
         "📎 Documenti clinici",
         "🧩 Quadro storico",
         "💡 Assistente PNEV",
+        "📈 Esiti / Follow-up",
         "📝 Diagnosi assistita",
         "🎟️ Coupon OF / SDS",
         "📅 Sedute / Terapie",

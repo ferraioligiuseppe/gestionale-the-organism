@@ -277,7 +277,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     VOCI_CON_PAZIENTE = {
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
         "📎 Documenti clinici", "🧩 Quadro storico", "💡 Assistente PNEV",
-        "📝 Diagnosi assistita",
+        "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🔬 PNEV", "📋 Anamnesi The Organism", "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
@@ -359,6 +359,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore assistente PNEV: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "📈 Esiti / Follow-up":
+        try:
+            from .esiti import render_esiti
+            render_esiti(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore esiti: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True

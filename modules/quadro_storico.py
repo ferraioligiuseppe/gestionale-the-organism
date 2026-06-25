@@ -186,6 +186,19 @@ def render_quadro(conn=None, paz_id=None, paziente=None):
             st.markdown(riga)
         st.markdown("---")
 
+    # ── Esiti / Follow-up ─────────────────────────────────────────────
+    es = _query(conn, "SELECT * FROM esiti_pnev WHERE paziente_id=%s", (paz_id,))
+    if es:
+        trovato = True
+        es.sort(key=lambda d: str(_data_di(d)), reverse=True)
+        st.markdown(f"#### 📈 Esiti / Follow-up ({len(es)})")
+        for r in es:
+            riga = f"- **{r.get('esito','')}** — {r.get('intervento','')}  ·  _{_fmt(_data_di(r))}_"
+            st.markdown(riga)
+            if r.get("note"):
+                st.caption(r["note"])
+        st.markdown("---")
+
     if not trovato:
         st.info("Nessuno storico ancora presente per questo paziente "
                 "(documenti, test o valutazioni).")
