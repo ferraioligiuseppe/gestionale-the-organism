@@ -47,7 +47,39 @@ def ai_disponibile() -> bool:
 
 
 def _modello() -> str:
-    return str(st.secrets.get("ai", {}).get("MODEL", "gemini-1.5-flash"))
+    return str(st.secrets.get("ai", {}).get("MODEL", "gemini-2.0-flash"))
+
+
+# Nomi modello provati in ordine (il primo è quello dei Secrets, se presente).
+# Robusto ai cambi di nome lato Google: prova i candidati finché uno risponde.
+_CANDIDATI = [
+    "gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest",
+    "gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-2.0-flash-001",
+]
+
+
+def _genera(genai, parts):
+    """Chiama generate_content provando più nomi di modello (gestisce i 404)."""
+    nomi = []
+    scelto = _modello()
+    if scelto:
+        nomi.append(scelto)
+    for n in _CANDIDATI:
+        if n not in nomi:
+            nomi.append(n)
+    ultimo_err = None
+    for nome in nomi:
+        try:
+            model = genai.GenerativeModel(nome)
+            resp = model.generate_content(parts)
+            return (resp.text or "").strip()
+        except Exception as e:
+            ultimo_err = e
+            if "404" in str(e) or "not found" in str(e).lower() \
+                    or "not supported" in str(e).lower():
+                continue
+            raise
+    raise ultimo_err or RuntimeError("Nessun modello Gemini disponibile.")
 
 
 def _configura():
@@ -78,7 +110,6 @@ def estrai_da_documento(dati: bytes, mime: str, nome: str = "") -> str:
     mime = (mime or "").lower()
     try:
         genai = _configura()
-        model = genai.GenerativeModel(_modello())
 
         # Immagini e PDF: Gemini li legge direttamente (anche le scansioni)
         if mime.startswith("image/") or "pdf" in mime or nome.lower().endswith(".pdf"):
@@ -90,11 +121,8 @@ def estrai_da_documento(dati: bytes, mime: str, nome: str = "") -> str:
                 if len(testo) < 40:
                     return ("⚠️ PDF troppo grande da analizzare direttamente e senza "
                             "testo leggibile. Ricaricalo come foto della pagina.")
-                resp = model.generate_content([_PROMPT, testo[:12000]])
-                return (resp.text or "").strip()
-            resp = model.generate_content(
-                [_PROMPT, {"mime_type": tipo_mime, "data": dati}])
-            return (resp.text or "").strip()
+                return _genera(genai, [_PROMPT, testo[:12000]])
+            return _genera(genai, [_PROMPT, {"mime_type": tipo_mime, "data": dati}])
 
         return "⚠️ Formato non supportato per l'analisi AI (usa PDF o foto)."
     except Exception as e:
