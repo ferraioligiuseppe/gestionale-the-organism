@@ -60,6 +60,7 @@ SOTTOSEZIONI = {
     AREA_PAZIENTI: [
         "🏠 Dashboard",
         "👤 Anagrafica pazienti",
+        "📎 Documenti clinici",
         "🎟️ Coupon OF / SDS",
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",
