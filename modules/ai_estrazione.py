@@ -41,9 +41,21 @@ _PROMPT = (
 def ai_disponibile() -> bool:
     try:
         a = st.secrets.get("ai", {})
-        return bool(a.get("ENABLED", False)) and bool(a.get("GEMINI_API_KEY"))
+        if not a.get("ENABLED", False):
+            return False
+        return bool(a.get("GEMINI_API_KEY")) or bool(a.get("OPENAI_API_KEY"))
     except Exception:
         return False
+
+
+def _provider() -> str:
+    """Sceglie il motore: Gemini se c'è la sua chiave, altrimenti OpenAI."""
+    a = st.secrets.get("ai", {})
+    if a.get("GEMINI_API_KEY"):
+        return "gemini"
+    if a.get("OPENAI_API_KEY"):
+        return "openai"
+    return ""
 
 
 def _modello() -> str:
@@ -103,27 +115,62 @@ def estrai_da_documento(dati: bytes, mime: str, nome: str = "") -> str:
     """Ritorna il testo estratto/strutturato dal documento, o un messaggio
     d'errore leggibile (prefissato con '⚠️')."""
     if not ai_disponibile():
-        return ("⚠️ AI non configurata. Crea una chiave gratuita su "
-                "aistudio.google.com e aggiungila nei Secrets dell'app:\n"
-                "[ai]\nENABLED = true\nGEMINI_API_KEY = \"...\"")
-
-    mime = (mime or "").lower()
+        return ("⚠️ AI non configurata. Aggiungi nei Secrets dell'app, sotto [ai], "
+                "una chiave: GEMINI_API_KEY (gratuita, aistudio.google.com) "
+                "oppure OPENAI_API_KEY (platform.openai.com).")
+    prov = _provider()
     try:
-        genai = _configura()
+        if prov == "openai":
+            return _estrai_openai(dati, mime, nome)
+        return _estrai_gemini(dati, mime, nome)
+    except Exception as e:
+        return f"⚠️ Errore durante l'analisi AI: {e}"
 
-        # Immagini e PDF: Gemini li legge direttamente (anche le scansioni)
-        if mime.startswith("image/") or "pdf" in mime or nome.lower().endswith(".pdf"):
-            tipo_mime = mime if mime else ("application/pdf"
-                                           if nome.lower().endswith(".pdf") else "image/jpeg")
-            # PDF molto grandi: ripiego sul testo estratto
-            if "pdf" in tipo_mime and len(dati) > 15 * 1024 * 1024:
-                testo = _testo_da_pdf(dati)
-                if len(testo) < 40:
-                    return ("⚠️ PDF troppo grande da analizzare direttamente e senza "
-                            "testo leggibile. Ricaricalo come foto della pagina.")
-                return _genera(genai, [_PROMPT, testo[:12000]])
-            return _genera(genai, [_PROMPT, {"mime_type": tipo_mime, "data": dati}])
 
-        return "⚠️ Formato non supportato per l'analisi AI (usa PDF o foto)."
+def _estrai_gemini(dati: bytes, mime: str, nome: str) -> str:
+    mime = (mime or "").lower()
+    genai = _configura()
+    if mime.startswith("image/") or "pdf" in mime or nome.lower().endswith(".pdf"):
+        tipo_mime = mime if mime else ("application/pdf"
+                                       if nome.lower().endswith(".pdf") else "image/jpeg")
+        if "pdf" in tipo_mime and len(dati) > 15 * 1024 * 1024:
+            testo = _testo_da_pdf(dati)
+            if len(testo) < 40:
+                return ("⚠️ PDF troppo grande e senza testo leggibile. "
+                        "Ricaricalo come foto della pagina.")
+            return _genera(genai, [_PROMPT, testo[:12000]])
+        return _genera(genai, [_PROMPT, {"mime_type": tipo_mime, "data": dati}])
+    return "⚠️ Formato non supportato per l'analisi AI (usa PDF o foto)."
+
+
+def _estrai_openai(dati: bytes, mime: str, nome: str) -> str:
+    import base64
+    from openai import OpenAI
+    a = st.secrets.get("ai", {})
+    client = OpenAI(api_key=a.get("OPENAI_API_KEY", ""))
+    modello = str(a.get("OPENAI_MODEL", "gpt-4o-mini"))
+    mime = (mime or "").lower()
+    if mime.startswith("image/"):
+        b64 = base64.b64encode(dati).decode()
+        resp = client.chat.completions.create(
+            model=modello,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": _PROMPT},
+                {"type": "image_url",
+                 "image_url": {"url": f"data:{mime};base64,{b64}"}}]}],
+            max_tokens=900)
+        return (resp.choices[0].message.content or "").strip()
+    if "pdf" in mime or nome.lower().endswith(".pdf"):
+        testo = _testo_da_pdf(dati)
+        if len(testo) < 40:
+            return ("⚠️ Questo PDF sembra una scansione (nessun testo leggibile). "
+                    "Ricaricalo come foto/immagine della pagina.")
+        resp = client.chat.completions.create(
+            model=modello,
+            messages=[{"role": "system", "content": _PROMPT},
+                      {"role": "user", "content": testo[:12000]}],
+            max_tokens=900)
+        return (resp.choices[0].message.content or "").strip()
+    return "⚠️ Formato non supportato per l'analisi AI (usa PDF o foto)."
     except Exception as e:
         return f"⚠️ Errore durante l'analisi AI: {e}"
