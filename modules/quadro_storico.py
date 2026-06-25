@@ -186,6 +186,46 @@ def render_quadro(conn=None, paz_id=None, paziente=None):
             st.markdown(riga)
         st.markdown("---")
 
+    # ── Logopedia / SMOF ──────────────────────────────────────────────
+    lo = _query(conn, "SELECT * FROM logopedia_valutazioni WHERE paziente_id=%s", (paz_id,))
+    if lo:
+        trovato = True
+        lo.sort(key=lambda d: str(_data_di(d)), reverse=True)
+        st.markdown(f"#### 🗣️ Logopedia / SMOF ({len(lo)})")
+        for r in lo:
+            riga = f"- _{_fmt(_data_di(r))}_"
+            if r.get("sintesi"):
+                riga += f": {r['sintesi']}"
+            st.markdown(riga)
+        st.markdown("---")
+
+    # ── Sedute logopediche ────────────────────────────────────────────
+    ls = _query(conn, "SELECT * FROM logopedia_sedute WHERE paziente_id=%s", (paz_id,))
+    if ls:
+        trovato = True
+        ls.sort(key=lambda d: str(d.get("data_seduta")), reverse=True)
+        st.markdown(f"#### 📅 Sedute logopediche ({len(ls)})")
+        for r in ls[:8]:
+            d = r.get("data_seduta")
+            ds = d.strftime("%d/%m/%Y") if hasattr(d, "strftime") else str(d or "")
+            riga = f"- Seduta n° {r.get('numero','?')} — _{ds}_"
+            if r.get("obiettivo"):
+                riga += f": {r['obiettivo']}"
+            st.markdown(riga)
+        if len(ls) > 8:
+            st.caption(f"…e altre {len(ls) - 8} sedute.")
+        st.markdown("---")
+
+    # ── Obiettivi logopedici ──────────────────────────────────────────
+    ob = _query(conn, "SELECT * FROM logopedia_obiettivi WHERE paziente_id=%s", (paz_id,))
+    if ob:
+        trovato = True
+        st.markdown(f"#### 🎯 Obiettivi logopedici ({len(ob)})")
+        for r in ob:
+            st.markdown(f"- **{r.get('descrizione','')}** _{r.get('area','')}_ — "
+                        f"{r.get('stato','')} ({r.get('attuale','?')}/{r.get('target','?')})")
+        st.markdown("---")
+
     # ── Esiti / Follow-up ─────────────────────────────────────────────
     es = _query(conn, "SELECT * FROM esiti_pnev WHERE paziente_id=%s", (paz_id,))
     if es:
