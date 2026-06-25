@@ -60,6 +60,11 @@ SOTTOSEZIONI = {
     AREA_PAZIENTI: [
         "🏠 Dashboard",
         "👤 Anagrafica pazienti",
+        "📎 Documenti clinici",
+        "🧩 Quadro storico",
+        "💡 Assistente PNEV",
+        "📈 Esiti / Follow-up",
+        "📝 Diagnosi assistita",
         "🎟️ Coupon OF / SDS",
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",
