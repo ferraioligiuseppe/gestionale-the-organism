@@ -263,9 +263,431 @@ def _render_dashboard(conn) -> None:
 #  RENDER AREA — dispatch per sottosezione
 # ══════════════════════════════════════════════════════════════════════
 
-def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
-    """Dispatch per area + sottosezione."""
+def _assistente_coda(conn, paz_id):
+    """Riquadro Assistente PNEV in coda a una schermata di test: lettura del
+    caso sul paziente in lavorazione, appena hai inserito/salvato un dato."""
+    if not paz_id:
+        return
+    try:
+        import streamlit as st
+        from .assistente_pnev import render_assistente
+        st.markdown("---")
+        with st.expander("💡 Assistente PNEV — leggi il caso con l'AI", expanded=False):
+            render_assistente(conn, paz_id, compatto=True)
+    except Exception:
+        pass
 
+
+def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
+    """Dispatch PIATTO: aggancia ogni voce SOLO al suo nome (sotto).
+
+    Da v4 il routing non dipende più dall'area che contiene la voce:
+    così le aree nel menu (app_menu.py) si possono riorganizzare senza
+    toccare questo file. Ritorna True se la voce è stata gestita.
+    Le voci cliniche che richiedono un paziente selezionato mostrano
+    prima l'header paziente.
+    """
+    from .paziente_attivo import header_paziente_attivo
+
+    VOCI_CON_PAZIENTE = {
+        "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
+        "📎 Documenti clinici", "🧩 Quadro storico", "💡 Assistente PNEV",
+        "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
+        "🔬 PNEV", "📋 Anamnesi The Organism", "👁️ Anamnesi visiva",
+        "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
+        "🔬 Test psicologici", "⚡ Funzioni esecutive",
+        "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
+        "👁️ Getman (manipolazione visiva)",
+        "👁️ Groffman (visual tracing)",
+        "👁️ Eye tracking",
+        "🧬 INPP — Valutazione diagnostica", "🖥️ Somministrazione test",
+        "📋 Questionari remoti", "🎮 Esercizi Wordwall",
+        "🔉 Diagnostica uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
+        "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
+        "🤖 Relazioni cliniche (AI)", "📝 Relazione clinica",
+        "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
+    }
+
+    paz_id = None
+    if sotto in VOCI_CON_PAZIENTE:
+        paz_id = header_paziente_attivo(conn)
+        if not paz_id:
+            return True  # header mostrato, in attesa di selezione paziente
+
+    # ── PAZIENTI ──────────────────────────────────────────────────────
+    if sotto == "🏠 Dashboard":
+        _render_dashboard(conn); return True
+    if sotto == "📅 Agenda appuntamenti":
+        try:
+            from .agenda import render_agenda
+            render_agenda(conn, is_admin)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore agenda: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "👤 Anagrafica pazienti":
+        try:
+            from .ui_anagrafica import render_anagrafica
+            render_anagrafica(conn)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore anagrafica: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "📎 Documenti clinici":
+        try:
+            from .documenti_clinici import render_documenti
+            render_documenti(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore documenti clinici: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "🧩 Quadro storico":
+        try:
+            from .quadro_storico import render_quadro
+            render_quadro(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore quadro storico: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "📝 Diagnosi assistita":
+        try:
+            from .diagnosi_assistita import render_diagnosi
+            render_diagnosi(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore diagnosi assistita: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "💡 Assistente PNEV":
+        try:
+            from .assistente_pnev import render_assistente
+            render_assistente(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore assistente PNEV: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "📈 Esiti / Follow-up":
+        try:
+            from .esiti import render_esiti
+            render_esiti(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore esiti: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "🧪 Apprendimento PNEV":
+        try:
+            from .apprendimento import render_apprendimento
+            render_apprendimento(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore apprendimento PNEV: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "🎟️ Coupon OF / SDS":
+        try:
+            from modules import app_core
+            app_core.ui_coupons()
+        except Exception as e:
+            st.error(f"Errore coupon: {e}")
+        return True
+    if sotto == "📅 Sedute / Terapie":
+        from .sections.ui_cliniche import render_sedute_section
+        render_sedute_section(); return True
+    if sotto == "🔒 Privacy & Consensi":
+        from .privacy.ui_privacy_section import render_privacy_section
+        render_privacy_section(); return True
+    if sotto == "📥 Import pazienti":
+        from .sections.ui_cliniche import render_import_section
+        render_import_section(); return True
+    if sotto == "🔗 Sincronizza pnev.it":
+        from .ui_sync_pnev import render_sync_pnev
+        render_sync_pnev(conn); return True
+    if sotto == "🚀 Trasferisci a pnev.it":
+        from .ui_trasferimento_pnev import render_trasferimento_pnev
+        render_trasferimento_pnev(conn); return True
+    if sotto == "🎧 Screening uditivo":
+        from .ui_screening_link import render_screening_link
+        render_screening_link(conn); return True
+
+    # ── INVII AL PAZIENTE ─────────────────────────────────────────────
+    if sotto == "📋 Questionari remoti":
+        try:
+            from .ui_questionari import render_questionari_section
+            render_questionari_section(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo questionari non disponibile: {e}")
+        return True
+    if sotto == "🎮 Esercizi Wordwall":
+        try:
+            from .ui_wordwall import render_wordwall
+            render_wordwall(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo Wordwall non disponibile: {e}")
+        return True
+
+    # ── VALUTAZIONE FUNZIONALE ────────────────────────────────────────
+    if sotto == "🔬 PNEV":
+        from .pnev.ui_pnev import render_pnev_section
+        render_pnev_section(); return True
+    if sotto == "📋 Anamnesi The Organism":
+        try:
+            from .ui_anamnesi_the_organism import render_anamnesi_the_organism
+            render_anamnesi_the_organism(conn, paz_id)
+        except Exception as e:
+            st.error(f"Modulo anamnesi non disponibile: {e}")
+        return True
+    if sotto == "👁️ Anamnesi visiva":
+        try:
+            from .ui_anamnesi_visiva import render_anamnesi_visiva
+            render_anamnesi_visiva(conn, paz_id)
+        except Exception as e:
+            st.error(f"Modulo anamnesi visiva non disponibile: {e}")
+        return True
+    if sotto == "👁️ Valutazione visuo-percettiva":
+        try:
+            from .ui_valutazione_visuo_percettiva import render_valutazione_visuo_percettiva
+            cur2 = conn.cursor()
+            cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
+            paz_rec = cur2.fetchone()
+            if paz_rec and not isinstance(paz_rec, dict):
+                cols = [d[0] for d in cur2.description]
+                paz_rec = dict(zip(cols, paz_rec))
+            render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
+        except Exception as e:
+            st.error(f"Errore valutazione visuo-percettiva: {e}")
+        _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "👓 Optometria comportamentale":
+        st.info("Sezione in costruzione — usa la Valutazione visuo-percettiva per ora.")
+        return True
+    if sotto == "🧠 NPS — Neuropsicologica":
+        try:
+            from .ui_nps_completo import render_nps_completo
+            render_nps_completo(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo NPS non disponibile: {e}")
+        return True
+    if sotto == "📚 DSA — Apprendimento":
+        try:
+            from .ui_dsa import render_dsa
+            render_dsa(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo DSA non disponibile: {e}")
+        return True
+    if sotto == "🔬 Test psicologici":
+        try:
+            from .ui_nps_completo import render_test_psy
+            render_test_psy(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo PSY non disponibile: {e}")
+        return True
+    if sotto == "⚡ Funzioni esecutive":
+        try:
+            from .ui_nps_completo import render_funzioni_esecutive
+            render_funzioni_esecutive(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo FE non disponibile: {e}")
+        return True
+    if sotto == "🧬 INPP — Valutazione diagnostica":
+        try:
+            from .inpp import render_inpp
+            cur2 = conn.cursor()
+            cur2.execute("SELECT cognome, nome FROM Pazienti WHERE id=%s", (paz_id,))
+            row = cur2.fetchone()
+            cur2.close()
+            nome = f"{row[0]} {row[1]}".strip() if row else "Paziente"
+            render_inpp(conn, paz_id, nome)
+        except Exception as e:
+            st.error(f"Errore modulo INPP: {e}")
+        return True
+
+    # ── TEST LIVE ─────────────────────────────────────────────────────
+    if sotto == "🔢 DEM interattivo":
+        try:
+            from .dem_test import render_dem
+            render_dem(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo DEM: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "👁️ Getman (manipolazione visiva)":
+        try:
+            from .getman import render_getman
+            render_getman(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Getman: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "👁️ Groffman (visual tracing)":
+        try:
+            from .groffman import render_groffman
+            render_groffman(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Groffman: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "🖥️ Somministrazione test":
+        try:
+            from .ui_test_somministrazione import render_somministrazione
+            render_somministrazione(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo somministrazione non disponibile: {e}")
+        return True
+    if sotto == "👁️ Eye tracking":
+        from .sections.ui_cliniche import render_gaze_section
+        render_gaze_section(); return True
+    if sotto == "📸 Photoref AI":
+        try:
+            from .photoref_ai.ui_photoref import ui_photoref
+            ui_photoref()
+        except ImportError as e:
+            st.error(f"Modulo Photoref non disponibile: {e}")
+        return True
+    if sotto == "📖 Lettura avanzata":
+        try:
+            from .reading.ui_reading_dom import ui_reading_dom
+            ui_reading_dom()
+        except ImportError as e:
+            st.error(f"Modulo Lettura non disponibile: {e}")
+        return True
+
+    # ── TERAPIA & RELAZIONE ───────────────────────────────────────────
+    if sotto in ("🤖 Relazioni cliniche (AI)", "📝 Relazione clinica"):
+        try:
+            from .ui_relazione_clinica import render_relazione_clinica
+            render_relazione_clinica(conn)
+        except Exception as e:
+            st.error(f"Errore relazione clinica: {e}")
+        return True
+    if sotto in ("🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
+                 "📊 Export statistici", "🧪 Caso demo"):
+        mappa = {
+            "🎯 Piano Vision Therapy":    "PianoVT",
+            "📄 Report PDF con grafici":  "ReportPDF",
+            "📊 Export statistici":       "ExportStatistici",
+            "🧪 Caso demo":               "SeedDemo",
+        }
+        try:
+            from .gestionale_new_modules import render_nuovi_moduli
+            render_nuovi_moduli(conn, mappa[sotto], paziente_id=paz_id)
+        except ImportError as e:
+            st.error(f"Modulo non disponibile: {e}")
+        return True
+    if sotto == "👁️ Lenti a contatto":
+        from .ui_lenti_contatto import ui_lenti_contatto
+        ui_lenti_contatto(); return True
+
+    # ── AUDIO (MAPS & diagnostica uditiva) ────────────────────────────
+    _audio_map = {
+        "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
+        "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
+        "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
+        "🧭 Percorsi MAPS":          ("ui_percorsi",              "ui_percorsi"),
+        "🎧 Bilancio uditivo":       ("ui_bilancio_uditivo",      "ui_bilancio_uditivo"),
+        "📊 Audiometria funzionale": ("ui_audiometria_funzionale","ui_audiometria_funzionale"),
+    }
+    if sotto in _audio_map:
+        mod_name, fn_name = _audio_map[sotto]
+        try:
+            import importlib
+            m  = importlib.import_module(f"modules.{mod_name}")
+            fn = getattr(m, fn_name)
+            try:
+                fn(conn=conn)
+            except TypeError:
+                fn()
+        except Exception as e_audio:
+            st.error(f"Errore {sotto}: {e_audio}")
+        return True
+
+    # ── FORMAZIONE & PROFESSIONISTI ───────────────────────────────────
+    if sotto == "🦴 Osteopatia":
+        from .sections.ui_cliniche import render_osteopatia_section
+        render_osteopatia_section(); return True
+    if sotto == "📅 Eventi e iscrizioni":
+        try:
+            from .eventi.ui_eventi import render_eventi_section
+            render_eventi_section()
+        except ImportError as e:
+            st.error(f"Modulo Eventi non disponibile: {e}")
+        return True
+
+    # ── STUDIO ────────────────────────────────────────────────────────
+    if sotto == "📊 Dashboard incassi":
+        from .sections.ui_cliniche import render_dashboard_section
+        render_dashboard_section(); return True
+    if sotto == "👤 Il mio profilo":
+        try:
+            from .ui_profilo_professionista import render_profilo_professionista
+            render_profilo_professionista(conn)
+        except Exception as e:
+            st.error(f"Errore profilo: {e}")
+        return True
+    if sotto == "🏥 Il mio studio":
+        try:
+            from .saas_tenant import render_gestione_studio
+            render_gestione_studio(conn,
+                                   st.session_state.get("studio_id", 1),
+                                   st.session_state.get("piano", "professional"))
+        except ImportError as e:
+            st.error(f"Modulo Studio non disponibile: {e}")
+        return True
+    if sotto == "👥 Utenti / Ruoli":
+        try:
+            from .ui_gestione_utenti import render_gestione_utenti
+            render_gestione_utenti(conn, is_admin)
+        except Exception as e:
+            st.error(f"Modulo gestione utenti non disponibile: {e}")
+        return True
+    if sotto == "⚙️ Platform Admin":
+        try:
+            from .saas_tenant import render_admin_saas
+            render_admin_saas(conn)
+        except ImportError as e:
+            st.error(f"Modulo Admin non disponibile: {e}")
+        return True
+    if sotto == "🐛 Debug DB":
+        from .sections.ui_cliniche import render_debug_section
+        render_debug_section(); return True
+
+    return False
+
+
+def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
+    """Dispatch per sottosezione (indipendente dall'area).
+
+    Da v4 ogni voce è agganciata SOLO al suo nome tramite _dispatch_sotto,
+    così riorganizzare le aree nel menu (app_menu.py) non richiede più di
+    toccare questo file. Il vecchio dispatch per-area resta sotto come
+    fallback (normalmente non raggiunto).
+    """
+    if _dispatch_sotto(sotto, conn, is_admin):
+        return
+
+    # ── (fallback legacy per-area — normalmente non raggiunto) ────────
     # ── AREA PAZIENTI ─────────────────────────────────────────────────
     if area == AREA_PAZIENTI:
         if sotto == "🏠 Dashboard":
@@ -659,6 +1081,16 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     """
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
+
+    # Salto "in sospeso" richiesto da un'altra pagina (es. ▶️ Apri DEM).
+    # Va applicato PRIMA di creare i widget, altrimenti Streamlit blocca
+    # la modifica delle chiavi nav_area / nav_sotto_*.
+    _goto_a = st.session_state.pop("goto_area", None)
+    if _goto_a in AREE_ORDINE:
+        st.session_state["nav_area"] = _goto_a
+        _goto_s = st.session_state.pop("goto_sotto", None)
+        if _goto_s:
+            st.session_state[f"nav_sotto_{_goto_a}"] = _goto_s
 
     area = st.sidebar.radio(
         "Area",

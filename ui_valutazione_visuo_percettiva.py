@@ -91,6 +91,21 @@ def _salva(conn, pid, dati):
                 "VALUES (%s,%s,%s,%s::jsonb,%s)",
                 (pid, datetime.date.today().isoformat(), _prof(), dump, 0))
         conn.commit()
+        # Salva incasso sulla riga appena inserita/aggiornata
+        try:
+            from modules.incasso import salva_incasso, riepilogo_incasso, ensure_incasso_columns
+            ensure_incasso_columns(conn, "valutazioni_visive")
+            _cur2 = conn.cursor()
+            _cur2.execute(
+                "SELECT id FROM valutazioni_visive WHERE paziente_id = %s "
+                "ORDER BY id DESC LIMIT 1", (pid,))
+            _row2 = _cur2.fetchone()
+            _vid2 = (_row2.get("id") if hasattr(_row2, "get") else _row2[0]) if _row2 else None
+            if _vid2 and 'dati_incasso_vv' in st.session_state:
+                _n, _r, _s = salva_incasso(conn, "valutazioni_visive", int(_vid2), st.session_state['dati_incasso_vv'])
+                st.success("💶 Incasso: " + riepilogo_incasso(_n, _r, _s))
+        except Exception as _e_inc:
+            pass
         st.success("Salvato.")
     except Exception as e:
         try: conn.rollback()
@@ -288,6 +303,11 @@ def _sez_a(pid, stored):
     ar_od = _rx_row("OD", "ar_od", d.get("ar_od",{}))
     ar_os = _rx_row("OS", "ar_os", d.get("ar_os",{}))
 
+    # Refrazione abituale (potere che il paziente già porta)
+    st.markdown("#### Refrazione abituale (lenti che porta già)")
+    ra_od = _rx_row("OD", "ra_od", d.get("ra_od",{}))
+    ra_os = _rx_row("OS", "ra_os", d.get("ra_os",{}))
+
     # Refrazione soggettiva
     st.markdown("#### Refrazione soggettiva")
     rs_od = _rx_row("OD", "rs_od", d.get("rs_od",{}))
@@ -303,7 +323,8 @@ def _sez_a(pid, stored):
 
     # Scala di notazione
     SCALE_AV = {
-        "Decimale": ["","10/10","9/10","8/10","7/10","6/10","5/10",
+        "Decimale": ["","16/10","15/10","14/10","13/10","12/10","11/10",
+                     "10/10","9/10","8/10","7/10","6/10","5/10",
                      "4/10","3/10","2/10","1/10","0.5/10","< 0.5/10"],
         "Snellen 6m": ["","6/6","6/7.5","6/9","6/12","6/18","6/24",
                        "6/36","6/48","6/60","PL","NPL"],
@@ -659,12 +680,25 @@ def _sez_c(pid, stored):
 #  SEZIONE D — OCULOMOTRICITA
 # ══════════════════════════════════════════════════════════════════════
 
-def _sez_d(pid, stored):
+def _sez_d(pid, stored, paziente=None):
     st.markdown("### D — Oculomotricita")
     s = lambda c: _sk("d", c, pid)
     d = stored.get("sez_d", {})
 
-    st.markdown("#### Pursuits (DEM / NSUCO)")
+    # Età (da anagrafica) e sesso (dall'intestazione) per le norme NSUCO
+    _dn = paziente.get("Data_Nascita", "") if isinstance(paziente, dict) else ""
+    _eta_paz = _eta(_dn) or 8
+    _sesso = (stored.get("intestazione", {}) or {}).get("sesso", "M") or "M"
+
+    # ── DEM: rimando al modulo dedicato (interattivo + cartaceo) ──
+    st.info("🔢 **DEM** — il test si compila nel modulo dedicato, con norme "
+            "italiane per età, calcolo AHT/ratio e tipologia, e scheda cartacea.")
+    if st.button("▶️ Apri il test DEM online", key=s("vai_dem")):
+        st.session_state["goto_area"] = "🖥️ Test live"
+        st.session_state["goto_sotto"] = "🔢 DEM interattivo"
+        st.rerun()
+
+    st.markdown("#### Pursuits — osservazione qualitativa")
     c1,c2,c3 = st.columns(3)
     with c1:
         pur_h  = _txt("Horizz.", s("pur_h"), d.get("pur_h",""))
@@ -680,26 +714,13 @@ def _sez_d(pid, stored):
                                 value=d.get("pur_comp",False), key=s("pur_comp"))
         pur_note = _txt("Note pursuits", s("pur_note"), d.get("pur_note",""))
 
-    st.markdown("#### NSUCO Saccadi")
-    st.caption("Punteggio NSUCO: 1 (gravemente deficitario) → 5 (eccellente)")
-    nsuco_opts = [1,2,3,4,5]
-    c4,c5 = st.columns(2)
-    with c4:
-        st.markdown("**Saccadi orizzontali**")
-        ns_or_ab   = st.select_slider("Abilita H", nsuco_opts,
-                                       value=int(d.get("ns_or_ab",3)),
-                                       key=s("ns_or_ab"))
-        ns_or_ac   = st.select_slider("Accuratezza H", nsuco_opts,
-                                       value=int(d.get("ns_or_ac",3)),
-                                       key=s("ns_or_ac"))
-    with c5:
-        st.markdown("**Saccadi verticali**")
-        ns_ver_ab  = st.select_slider("Abilita V", nsuco_opts,
-                                       value=int(d.get("ns_ver_ab",3)),
-                                       key=s("ns_ver_ab"))
-        ns_ver_ac  = st.select_slider("Accuratezza V", nsuco_opts,
-                                       value=int(d.get("ns_ver_ac",3)),
-                                       key=s("ns_ver_ac"))
+    st.markdown("#### NSUCO — Oculomotor Test (Maples)")
+    try:
+        from .nsuco import render_nsuco
+        _ns = render_nsuco(s, _eta_paz, _sesso, d)
+    except Exception as _e:
+        _ns = {}
+        st.warning(f"Modulo NSUCO non disponibile: {_e}")
 
     st.markdown("#### Visual Tracking Test")
     c6,c7,c8 = st.columns(3)
@@ -725,15 +746,15 @@ def _sez_d(pid, stored):
 
     note = _txt("Note sezione D", s("note"), d.get("note",""), h=68)
 
-    return {"sez_d": {
+    out = {"sez_d": {
         "pur_h":pur_h,"pur_v":pur_v,"pur_ob":pur_ob,"pur_ci":pur_ci,
         "rrd":rrd,"ird":ird,"har":har,"pur_comp":pur_comp,"pur_note":pur_note,
-        "ns_or_ab":ns_or_ab,"ns_or_ac":ns_or_ac,
-        "ns_ver_ab":ns_ver_ab,"ns_ver_ac":ns_ver_ac,
         "vtt_t":vtt_tempo,"vtt_e":vtt_errori,"vtt_s":vtt_score,
         "lin_t":lin_tempo,"lin_e":lin_errori,
         "fiss_od":fiss_od,"fiss_os":fiss_os,"note":note,
     }}
+    out["sez_d"].update(_ns or {})
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1006,39 +1027,6 @@ MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
     return {"sez_g": {"diag": diagnosi, "piano": piano}}
 
 
-def _pdf_ricetta(pid, cog, nom, dn, rx_visita, prof):
-    try:
-        from modules.pdf_templates import genera_ricetta
-        rs_od = rx_visita.get("rs_od",{}); rs_os = rx_visita.get("rs_os",{})
-        add_v = float(rx_visita.get("add_v") or 0)
-        add_i = float(rx_visita.get("add_i") or 0)
-
-        def _sf_add(base_rx, add):
-            sf = float(base_rx.get("sf") or 0)
-            return {"sf": round(sf+add,2),
-                    "cil": base_rx.get("cil",0),
-                    "ax":  base_rx.get("ax",0)}
-
-        rx = {
-            "paziente": f"{cog} {nom}".strip(),
-            "data":     datetime.date.today().strftime("%d/%m/%Y"),
-            "lontano":    {"od": rs_od, "os": rs_os},
-            "intermedio": {"od": _sf_add(rs_od, add_i) if add_i else {},
-                           "os": _sf_add(rs_os, add_i) if add_i else {}},
-            "vicino":     {"od": _sf_add(rs_od, add_v) if add_v else {},
-                           "os": _sf_add(rs_os, add_v) if add_v else {}},
-            "dp":   str(rx_visita.get("dp","63")),
-            "lenti": rx_visita.get("lenti_consigliate",[]),
-            "note":  rx_visita.get("note_rx",""),
-        }
-        titolo = rx_visita.get("titolo_prof","Optometrista Comportamentale")
-        pdf_bytes = genera_ricetta(prof, titolo, rx)
-        st.download_button("Scarica Ricetta PDF", data=pdf_bytes,
-            file_name=f"ricetta_{cog}_{nom}_{datetime.date.today()}.pdf",
-            mime="application/pdf", key=f"dl_rx_{pid}")
-    except Exception as e:
-        st.error(f"Errore ricetta: {e}")
-
 def _pdf_lettera(pid, cog, nom, dn, ob, prof):
     try:
         from reportlab.lib.pagesizes import A4
@@ -1280,6 +1268,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         "F. Profilo funzionale",
         "G. Prescrizione",
         "H. Sports Vision",
+        "💶 Incasso",
     ])
 
     with tabs[0]:
@@ -1310,7 +1299,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
             _salva(conn, paz_id, dati)
 
     with tabs[5]:
-        dati.update(_sez_d(paz_id, stored))
+        dati.update(_sez_d(paz_id, stored, paziente))
         if st.button("Salva sezione D", key=f"sv_d_{paz_id}"):
             _salva(conn, paz_id, dati)
 
@@ -1332,3 +1321,34 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         dati.update(_sez_h(paz_id, stored))
         if st.button("Salva note Sports Vision", key=f"sv_h_{paz_id}"):
             _salva(conn, paz_id, dati)
+
+    with tabs[10]:
+        st.markdown("#### 💶 Incasso visita")
+        try:
+            from modules.incasso import campi_incasso, salva_incasso, riepilogo_incasso, ensure_incasso_columns
+            ensure_incasso_columns(conn, "valutazioni_visive")
+            # Carica eventuali dati incasso già salvati
+            _cur_inc = conn.cursor()
+            _cur_inc.execute(
+                "SELECT id, inc_listino, inc_sconto_tipo, inc_sconto_val, "
+                "inc_incassato, inc_metodo, inc_nota, inc_netto, inc_residuo, inc_stato "
+                "FROM valutazioni_visive WHERE paziente_id = %s "
+                "ORDER BY id DESC LIMIT 1", (paz_id,))
+            _ric = _cur_inc.fetchone()
+            _vid_inc = None
+            _def_inc = {}
+            if _ric:
+                _vid_inc = int(_ric.get("id") if hasattr(_ric,"get") else _ric[0])
+                keys = ["id","inc_listino","inc_sconto_tipo","inc_sconto_val",
+                        "inc_incassato","inc_metodo","inc_nota","inc_netto","inc_residuo","inc_stato"]
+                _def_inc = dict(zip(keys, _ric)) if not hasattr(_ric,"get") else dict(_ric)
+            dati_inc = campi_incasso("vv_inc", defaults=_def_inc)
+            st.session_state['dati_incasso_vv'] = dati_inc
+            if st.button("💾 Salva incasso", key=f"sv_inc_{paz_id}", type="primary"):
+                if _vid_inc:
+                    _n, _r, _s = salva_incasso(conn, "valutazioni_visive", _vid_inc, dati_inc)
+                    st.success("💶 " + riepilogo_incasso(_n, _r, _s))
+                else:
+                    st.warning("Salva prima almeno una sezione della valutazione, poi registra l'incasso.")
+        except Exception as _e_tab_inc:
+            st.error(f"Blocco incasso non disponibile: {_e_tab_inc}")
