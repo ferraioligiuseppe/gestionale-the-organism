@@ -68,13 +68,16 @@ def render_logopedia(conn=None, paz_id=None, paziente=None):
     _assicura_tabella_obiettivi(conn)
 
     modo = st.radio("Sezione", ["📋 Valutazione + SMOF", "📅 Diario sedute",
-                                "🎯 Obiettivi & monitoraggio"],
+                                "🎯 Obiettivi & monitoraggio", "📄 Relazione PDF"],
                     horizontal=True, key="logo_modo")
     if modo == "📅 Diario sedute":
         _render_diario(conn, paz_id)
         return
     if modo == "🎯 Obiettivi & monitoraggio":
         _render_obiettivi(conn, paz_id)
+        return
+    if modo == "📄 Relazione PDF":
+        _render_relazione(conn, paz_id, paziente)
         return
 
     st.caption("Valutazione logopedica con sezione SMOF (oro-mio-funzionale, "
@@ -635,3 +638,126 @@ def _aggiorna_obiettivo(conn, rid, attuale, stato, paz_id, descr, area):
             conn.rollback()
         except Exception:
             pass
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  L4 — RELAZIONE LOGOPEDICA (bozza AI + carta intestata)
+# ══════════════════════════════════════════════════════════════════════
+
+_SCHEMA_LOGO = (
+    "Redigi una bozza di RELAZIONE LOGOPEDICA secondo il Metodo PNEV, sui dati "
+    "logopedici qui sotto. Articola ESATTAMENTE in queste sezioni:\n"
+    "1. Dati identificativi\n"
+    "2. Motivo dell'invio\n"
+    "3. Anamnesi essenziale\n"
+    "4. Profilo oro-mio-funzionale (SMOF)\n"
+    "5. Profilo linguistico (comprensione, produzione, fonologia)\n"
+    "6. Fluenza\n"
+    "7. Sintesi del profilo funzionale\n"
+    "8. Obiettivi e percorso\n"
+    "9. Indicazioni e conclusioni\n\n"
+    "NON scrivere intestazione né firma (aggiunte a parte). Attieniti ai dati; "
+    "dove mancano, scrivi «da approfondire».\n\n"
+    "=== DATI IDENTIFICATIVI ===\n{IDENT}\n\n=== DATI LOGOPEDICI ===\n"
+)
+
+
+def _dati_logopedici(conn, paz_id) -> str:
+    parti = []
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT dati, sintesi, data FROM logopedia_valutazioni "
+                    "WHERE paziente_id=%s ORDER BY data DESC LIMIT 1", (paz_id,))
+        r = cur.fetchone()
+        if r and r[0]:
+            d = r[0] if isinstance(r[0], dict) else json.loads(r[0])
+            parti.append("VALUTAZIONE + SMOF:")
+            parti.append(json.dumps(d, ensure_ascii=False, indent=1))
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT numero, data_seduta, obiettivo, risposta FROM logopedia_sedute "
+                    "WHERE paziente_id=%s ORDER BY data_seduta DESC LIMIT 15", (paz_id,))
+        sd = cur.fetchall()
+        if sd:
+            parti.append("\nSEDUTE:")
+            for num, ds, ob, risp in sd:
+                parti.append(f"- n°{num} {ds}: {ob or ''} ({risp or ''})")
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT descrizione, area, baseline, attuale, target, stato "
+                    "FROM logopedia_obiettivi WHERE paziente_id=%s", (paz_id,))
+        ob = cur.fetchall()
+        if ob:
+            parti.append("\nOBIETTIVI:")
+            for descr, area, base, att, targ, stato in ob:
+                parti.append(f"- {descr} [{area}]: {stato} {att}/{targ} (da {base})")
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    return "\n".join(parti).strip()
+
+
+def _render_relazione(conn, paz_id, paziente):
+    st.caption("Bozza di relazione logopedica PNEV con carta intestata e firma. "
+               "L'AI scrive, tu correggi e stampi.")
+
+    try:
+        from .ai_estrazione import genera_testo, ai_disponibile
+        from .diagnosi_assistita import INTESTAZIONE, FIRMA, _identificativi
+    except Exception as e:
+        st.error(f"Moduli AI/diagnosi non disponibili: {e}")
+        return
+
+    if not isinstance(paziente, dict) or not (paziente.get("Cognome") or paziente.get("Nome")):
+        try:
+            from .quadro_storico import carica_paziente
+            p = carica_paziente(conn, paz_id)
+            if p:
+                paziente = p
+        except Exception:
+            pass
+
+    dati = _dati_logopedici(conn, paz_id)
+    nome = ""
+    if isinstance(paziente, dict):
+        nome = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
+
+    if not dati:
+        st.info("Nessun dato logopedico ancora salvato: compila prima Valutazione, "
+                "Diario o Obiettivi.")
+
+    key = f"logo_rel_{paz_id}"
+    disabled = not (ai_disponibile() and dati)
+    if st.button("🤖 Genera bozza relazione", type="primary", disabled=disabled):
+        ident = _identificativi(paziente)
+        sistema = ("Sei un logopedista dello Studio The Organism che redige relazioni "
+                   "secondo il Metodo PNEV. Italiano, registro clinico, terza persona. "
+                   "NON inventare dati: usa solo quelli forniti.")
+        with st.spinner("L'AI sta scrivendo la relazione…"):
+            corpo = genera_testo(_SCHEMA_LOGO.replace("{IDENT}", ident) + dati,
+                                 sistema=sistema)
+        if corpo.startswith("⚠️"):
+            st.session_state[key] = corpo
+        else:
+            st.session_state[key] = INTESTAZIONE + "\n\n" + corpo.strip() + "\n\n" + FIRMA
+    if not ai_disponibile():
+        st.caption("AI non configurata: la relazione automatica richiede la chiave nei Secrets.")
+
+    testo = st.text_area("Relazione (modificabile)",
+                         value=st.session_state.get(key, ""), height=460,
+                         key=f"logo_rel_txt_{paz_id}")
+    st.download_button("⬇️ Scarica (.txt)", data=testo or "",
+                       file_name=f"relazione_logopedica_{nome or paz_id}.txt",
+                       mime="text/plain", key=f"logo_rel_dl_{paz_id}")
