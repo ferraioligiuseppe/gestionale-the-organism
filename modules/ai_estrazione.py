@@ -172,5 +172,3 @@ def _estrai_openai(dati: bytes, mime: str, nome: str) -> str:
             max_tokens=900)
         return (resp.choices[0].message.content or "").strip()
     return "⚠️ Formato non supportato per l'analisi AI (usa PDF o foto)."
-    except Exception as e:
-        return f"⚠️ Errore durante l'analisi AI: {e}"
