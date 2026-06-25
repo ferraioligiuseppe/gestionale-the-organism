@@ -36,9 +36,11 @@ def _assicura_tabella(conn):
             mime TEXT,
             dati BYTEA,
             note TEXT,
+            estratto TEXT,
             data TIMESTAMP DEFAULT NOW()
         );
     """)
+    cur.execute("ALTER TABLE documenti_clinici ADD COLUMN IF NOT EXISTS estratto TEXT;")
     conn.commit()
 
 
@@ -163,6 +165,8 @@ def _elenco(conn, paz_id):
                         st.image(bytes(cur.fetchone()[0]), use_container_width=True)
                     except Exception:
                         st.caption("Anteprima non disponibile.")
+            # analisi AI
+            _blocco_ai(conn, doc_id, mime, nome)
         st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
                     unsafe_allow_html=True)
 
@@ -189,3 +193,60 @@ def _elimina(conn, doc_id):
             conn.rollback()
         except Exception:
             pass
+
+
+def _leggi_estratto(conn, doc_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT estratto FROM documenti_clinici WHERE id=%s", (doc_id,))
+        r = cur.fetchone()
+        return r[0] if r else None
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _blocco_ai(conn, doc_id, mime, nome):
+    """Analisi AI del documento: estrae i dati clinici e li salva accanto al file."""
+    try:
+        from .ai_estrazione import estrai_da_documento, ai_disponibile
+    except Exception:
+        return
+
+    estratto = _leggi_estratto(conn, doc_id)
+    with st.expander("🤖 Analisi AI" + (" ✅" if estratto else "")):
+        if not ai_disponibile():
+            st.caption("AI non ancora configurata (chiave nei Secrets). "
+                       "Una volta attiva, qui potrai estrarre i dati dal documento.")
+            return
+        if estratto:
+            st.markdown(estratto)
+            if st.button("🔄 Rianalizza", key=f"ai_re_{doc_id}"):
+                estratto = None
+        if not estratto:
+            if st.button("🤖 Estrai dati con AI", key=f"ai_go_{doc_id}", type="primary"):
+                with st.spinner("Lettura del documento in corso…"):
+                    try:
+                        cur = conn.cursor()
+                        cur.execute("SELECT dati, mime, nome_file FROM documenti_clinici "
+                                    "WHERE id=%s", (doc_id,))
+                        d, m, n = cur.fetchone()
+                        risultato = estrai_da_documento(bytes(d), m or mime, n or nome)
+                    except Exception as e:
+                        risultato = f"⚠️ Errore lettura file: {e}"
+                st.markdown(risultato)
+                if not risultato.startswith("⚠️"):
+                    try:
+                        cur = conn.cursor()
+                        cur.execute("UPDATE documenti_clinici SET estratto=%s WHERE id=%s",
+                                    (risultato, doc_id))
+                        conn.commit()
+                        st.success("Analisi salvata in cartella.")
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
