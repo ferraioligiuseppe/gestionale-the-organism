@@ -37,6 +37,7 @@ Pillow>=10.3.0
 
 # AI
 openai>=1.30.0
+google-generativeai>=0.7.0
 
 # Calcolo scientifico
 scipy>=1.11.0
