@@ -372,6 +372,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
+    if sotto == "🧪 Apprendimento PNEV":
+        try:
+            from .apprendimento import render_apprendimento
+            render_apprendimento(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore apprendimento PNEV: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
     if sotto == "🎟️ Coupon OF / SDS":
         try:
             from modules import app_core
