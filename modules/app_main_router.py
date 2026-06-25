@@ -263,6 +263,21 @@ def _render_dashboard(conn) -> None:
 #  RENDER AREA — dispatch per sottosezione
 # ══════════════════════════════════════════════════════════════════════
 
+def _assistente_coda(conn, paz_id):
+    """Riquadro Assistente PNEV in coda a una schermata di test: lettura del
+    caso sul paziente in lavorazione, appena hai inserito/salvato un dato."""
+    if not paz_id:
+        return
+    try:
+        import streamlit as st
+        from .assistente_pnev import render_assistente
+        st.markdown("---")
+        with st.expander("💡 Assistente PNEV — leggi il caso con l'AI", expanded=False):
+            render_assistente(conn, paz_id, compatto=True)
+    except Exception:
+        pass
+
+
 def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     """Dispatch PIATTO: aggancia ogni voce SOLO al suo nome (sotto).
 
@@ -454,6 +469,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
         except Exception as e:
             st.error(f"Errore valutazione visuo-percettiva: {e}")
+        _assistente_coda(conn, paz_id)
         return True
     if sotto == "👓 Optometria comportamentale":
         st.info("Sezione in costruzione — usa la Valutazione visuo-percettiva per ora.")
@@ -509,6 +525,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Errore modulo DEM: {e}")
             with st.expander("Dettagli"):
                 st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
         return True
     if sotto == "👁️ Getman (manipolazione visiva)":
         try:
@@ -519,6 +536,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Errore modulo Getman: {e}")
             with st.expander("Dettagli"):
                 st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
         return True
     if sotto == "👁️ Groffman (visual tracing)":
         try:
@@ -529,6 +547,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Errore modulo Groffman: {e}")
             with st.expander("Dettagli"):
                 st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
         return True
     if sotto == "🖥️ Somministrazione test":
         try:
