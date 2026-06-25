@@ -64,6 +64,7 @@ SOTTOSEZIONI = {
         "🧩 Quadro storico",
         "💡 Assistente PNEV",
         "📈 Esiti / Follow-up",
+        "🧪 Apprendimento PNEV",
         "📝 Diagnosi assistita",
         "🎟️ Coupon OF / SDS",
         "📅 Sedute / Terapie",
