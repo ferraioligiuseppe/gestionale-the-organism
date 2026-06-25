@@ -58,16 +58,24 @@ def _ultima(conn, paz_id):
 
 
 def render_logopedia(conn=None, paz_id=None, paziente=None):
-    st.header("🗣️ Logopedia — Valutazione PNEV")
-    st.caption("Valutazione logopedica con sezione SMOF (oro-mio-funzionale, "
-               "linguaggio, fluenza). Si salva in cartella e confluisce nel "
-               "Quadro storico e nell'Assistente PNEV.")
-
+    st.header("🗣️ Logopedia PNEV")
     if conn is None or not paz_id:
         st.info("Seleziona prima un paziente.")
         return
 
     _assicura_tabella(conn)
+    _assicura_tabella_sedute(conn)
+
+    modo = st.radio("Sezione", ["📋 Valutazione + SMOF", "📅 Diario sedute"],
+                    horizontal=True, key="logo_modo")
+    if modo == "📅 Diario sedute":
+        _render_diario(conn, paz_id)
+        return
+
+    st.caption("Valutazione logopedica con sezione SMOF (oro-mio-funzionale, "
+               "linguaggio, fluenza). Si salva in cartella e confluisce nel "
+               "Quadro storico e nell'Assistente PNEV.")
+
     pre = _ultima(conn, paz_id)
     if pre:
         st.success("Caricata l'ultima valutazione: i campi sono precompilati, "
@@ -324,3 +332,143 @@ def _salva(conn, paz_id, dati, sintesi) -> bool:
         except Exception:
             pass
         return False
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  L2 — DIARIO SEDUTE LOGOPEDICHE
+# ══════════════════════════════════════════════════════════════════════
+
+AREE_LAVORO = ["Oro-mio-funzionale", "Articolazione/Fonologia", "Linguaggio",
+               "Fluenza/Balbuzie", "Deglutizione", "Respirazione",
+               "Metafonologia", "Comunicazione/Pragmatica", "Altro"]
+RISPOSTA = ["—", "🟢 Buona", "🟡 Parziale", "🔴 Scarsa"]
+
+
+def _assicura_tabella_sedute(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS logopedia_sedute(
+            id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+            data_seduta DATE, numero INT,
+            aree TEXT, obiettivo TEXT, attivita TEXT,
+            risposta TEXT, compiti TEXT, note TEXT,
+            creato TIMESTAMP DEFAULT NOW());""")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def _render_diario(conn, paz_id):
+    st.caption("Quaderno di lavoro: registra ogni seduta logopedica. Le sedute "
+               "entrano nel Quadro storico del paziente.")
+
+    # conteggio per numerazione automatica
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM logopedia_sedute WHERE paziente_id=%s", (paz_id,))
+        n_fatte = cur.fetchone()[0] or 0
+    except Exception:
+        n_fatte = 0
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+    with st.expander("➕ Nuova seduta", expanded=True):
+        with st.form("logo_seduta", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                data_s = st.date_input("Data seduta", value=datetime.date.today(),
+                                       key="logo_sd_data")
+            with c2:
+                numero = st.number_input("N° seduta", min_value=1, step=1,
+                                         value=int(n_fatte) + 1, key="logo_sd_num")
+            aree = st.multiselect("Aree di lavoro", AREE_LAVORO, key="logo_sd_aree")
+            obiettivo = st.text_input("Obiettivo della seduta", key="logo_sd_ob")
+            attivita = st.text_area("Attività svolte", height=90, key="logo_sd_att")
+            c3, c4 = st.columns(2)
+            with c3:
+                risposta = st.selectbox("Risposta del bambino", RISPOSTA, key="logo_sd_risp")
+            with c4:
+                compiti = st.text_input("Compiti a casa", key="logo_sd_comp")
+            note = st.text_area("Note", height=70, key="logo_sd_note")
+            if st.form_submit_button("💾 Salva seduta", type="primary"):
+                if _salva_seduta(conn, paz_id, data_s, numero, aree, obiettivo,
+                                 attivita, risposta, compiti, note):
+                    st.success(f"Seduta n° {numero} salvata.")
+                    st.rerun()
+                else:
+                    st.error("Salvataggio non riuscito.")
+
+    st.markdown(f"#### Sedute registrate ({n_fatte})")
+    _elenco_sedute(conn, paz_id)
+
+
+def _salva_seduta(conn, paz_id, data_s, numero, aree, ob, att, risp, comp, note) -> bool:
+    try:
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO logopedia_sedute(paziente_id, data_seduta, numero,
+            aree, obiettivo, attivita, risposta, compiti, note)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (paz_id, data_s, int(numero), ", ".join(aree), ob, att, risp, comp, note))
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _elenco_sedute(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT id, data_seduta, numero, aree, obiettivo, attivita,
+            risposta, compiti, note FROM logopedia_sedute
+            WHERE paziente_id=%s ORDER BY data_seduta DESC, numero DESC""", (paz_id,))
+        righe = cur.fetchall()
+    except Exception:
+        righe = []
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    if not righe:
+        st.caption("Nessuna seduta registrata per ora.")
+        return
+    for rid, ds, num, aree, ob, att, risp, comp, note in righe:
+        ds_str = ds.strftime("%d/%m/%Y") if ds else ""
+        titolo = f"**Seduta n° {num}** — {ds_str}"
+        if risp and risp != "—":
+            titolo += f"  ·  {risp}"
+        st.markdown(titolo)
+        if aree:
+            st.caption("Aree: " + aree)
+        if ob:
+            st.markdown(f"🎯 {ob}")
+        if att:
+            st.markdown(att)
+        det = []
+        if comp:
+            det.append(f"📝 Compiti: {comp}")
+        if note:
+            det.append(note)
+        if det:
+            st.caption(" · ".join(det))
+        if st.button("🗑 Elimina", key=f"logo_sd_del_{rid}"):
+            try:
+                cur = conn.cursor()
+                cur.execute("DELETE FROM logopedia_sedute WHERE id=%s", (rid,))
+                conn.commit()
+                st.rerun()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
+                    unsafe_allow_html=True)

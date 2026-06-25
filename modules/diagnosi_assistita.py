@@ -155,6 +155,17 @@ def _riassunto_storico(conn, paz_id) -> str:
                 riga += f": {r['sintesi']}"
             parti.append(riga)
 
+    ls = _query(conn, "SELECT * FROM logopedia_sedute WHERE paziente_id=%s", (paz_id,))
+    if ls:
+        parti.append("\nSEDUTE LOGOPEDICHE (diario):")
+        for r in sorted(ls, key=lambda x: str(x.get("data_seduta")), reverse=True)[:12]:
+            d = r.get("data_seduta")
+            ds = d.strftime("%d/%m/%Y") if hasattr(d, "strftime") else str(d or "")
+            riga = f"- n°{r.get('numero','?')} {ds}: {r.get('obiettivo','')}"
+            if r.get("risposta"):
+                riga += f" (risposta {r['risposta']})"
+            parti.append(riga)
+
     return "\n".join(parti).strip()
 
 
