@@ -276,7 +276,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
 
     VOCI_CON_PAZIENTE = {
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
-        "📎 Documenti clinici",
+        "📎 Documenti clinici", "🧩 Quadro storico",
         "🔬 PNEV", "📋 Anamnesi The Organism", "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
@@ -328,6 +328,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore documenti clinici: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "🧩 Quadro storico":
+        try:
+            from .quadro_storico import render_quadro
+            render_quadro(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore quadro storico: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True

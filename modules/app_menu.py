@@ -61,6 +61,7 @@ SOTTOSEZIONI = {
         "🏠 Dashboard",
         "👤 Anagrafica pazienti",
         "📎 Documenti clinici",
+        "🧩 Quadro storico",
         "🎟️ Coupon OF / SDS",
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",
