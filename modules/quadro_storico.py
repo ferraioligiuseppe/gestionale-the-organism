@@ -226,6 +226,30 @@ def render_quadro(conn=None, paz_id=None, paziente=None):
                         f"{r.get('stato','')} ({r.get('attuale','?')}/{r.get('target','?')})")
         st.markdown("---")
 
+    # ── Percorsi terapeutici ──────────────────────────────────────────
+    ts = _query(conn, "SELECT * FROM terapia_sedute WHERE paziente_id=%s", (paz_id,))
+    if ts:
+        trovato = True
+        per_ter = {}
+        for r in ts:
+            per_ter.setdefault(r.get("terapia", "—"), []).append(r)
+        st.markdown(f"#### 🧘 Percorsi terapeutici ({len(ts)} sedute)")
+        for ter, righe in per_ter.items():
+            righe.sort(key=lambda d: str(d.get("data_seduta")), reverse=True)
+            ultima = righe[0].get("data_seduta")
+            us = ultima.strftime("%d/%m/%Y") if hasattr(ultima, "strftime") else str(ultima or "")
+            st.markdown(f"- **{ter}**: {len(righe)} sedute (ultima {us})")
+        st.markdown("---")
+
+    tob = _query(conn, "SELECT * FROM terapia_obiettivi WHERE paziente_id=%s", (paz_id,))
+    if tob:
+        trovato = True
+        st.markdown(f"#### 🎯 Obiettivi terapeutici ({len(tob)})")
+        for r in tob:
+            st.markdown(f"- **{r.get('descrizione','')}** _{r.get('terapia','')}_ — "
+                        f"{r.get('stato','')} ({r.get('attuale','?')}/{r.get('target','?')})")
+        st.markdown("---")
+
     # ── Esiti / Follow-up ─────────────────────────────────────────────
     es = _query(conn, "SELECT * FROM esiti_pnev WHERE paziente_id=%s", (paz_id,))
     if es:

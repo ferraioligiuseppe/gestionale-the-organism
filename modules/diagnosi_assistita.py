@@ -174,6 +174,26 @@ def _riassunto_storico(conn, paz_id) -> str:
                          f"{r.get('stato','')} {r.get('attuale','?')}/{r.get('target','?')} "
                          f"(partenza {r.get('baseline','?')})")
 
+    ts = _query(conn, "SELECT * FROM terapia_sedute WHERE paziente_id=%s", (paz_id,))
+    if ts:
+        per_ter = {}
+        for r in ts:
+            per_ter.setdefault(r.get("terapia", "—"), []).append(r)
+        parti.append("\nPERCORSI TERAPEUTICI:")
+        for ter, righe in per_ter.items():
+            parti.append(f"- {ter}: {len(righe)} sedute")
+            for r in sorted(righe, key=lambda d: str(d.get("data_seduta")), reverse=True)[:6]:
+                d = r.get("data_seduta")
+                ds = d.strftime("%d/%m/%Y") if hasattr(d, "strftime") else str(d or "")
+                parti.append(f"   · {ds}: {r.get('obiettivo','')} ({r.get('risposta','')})")
+
+    tob = _query(conn, "SELECT * FROM terapia_obiettivi WHERE paziente_id=%s", (paz_id,))
+    if tob:
+        parti.append("\nOBIETTIVI TERAPEUTICI (con avanzamento):")
+        for r in tob:
+            parti.append(f"- {r.get('descrizione','')} [{r.get('terapia','')}]: "
+                         f"{r.get('stato','')} {r.get('attuale','?')}/{r.get('target','?')}")
+
     return "\n".join(parti).strip()
 
 

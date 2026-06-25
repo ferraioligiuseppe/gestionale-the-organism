@@ -103,6 +103,7 @@ SOTTOSEZIONI = {
         "📖 Lettura avanzata",
     ],
     AREA_TERAPIA: [
+        "🧘 Percorsi terapeutici",
         "🎧 MAPS",
         "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS",
