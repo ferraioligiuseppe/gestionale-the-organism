@@ -98,8 +98,9 @@ def _assicura_tabelle(conn):
         cur = conn.cursor()
         cur.execute("""CREATE TABLE IF NOT EXISTS terapia_libreria(
             id BIGSERIAL PRIMARY KEY, approccio TEXT, step TEXT,
-            nome TEXT, obiettivo TEXT, istruzioni TEXT,
+            nome TEXT, obiettivo TEXT, istruzioni TEXT, video_url TEXT,
             attiva BOOLEAN DEFAULT TRUE, creato TIMESTAMP DEFAULT NOW());""")
+        cur.execute("ALTER TABLE terapia_libreria ADD COLUMN IF NOT EXISTS video_url TEXT;")
         cur.execute("""CREATE TABLE IF NOT EXISTS terapia_programma(
             id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
             procedura_id BIGINT, approccio TEXT, step TEXT, nome TEXT,
@@ -361,11 +362,31 @@ def _render_libreria(conn):
                 if r.get("istruzioni"):
                     with st.expander("📖 Istruzioni"):
                         st.markdown(r["istruzioni"])
+                vu = st.text_input("🎬 Link video (YouTube non in elenco)",
+                                   value=r.get("video_url") or "", key=f"libr_vid_{rid}",
+                                   placeholder="https://youtu.be/...")
+                if vu != (r.get("video_url") or ""):
+                    if st.button("💾 Salva link video", key=f"libr_vidsave_{rid}"):
+                        _salva_video(conn, rid, vu)
+                        st.success("Link video salvato.")
+                        st.rerun()
             with cc2:
                 lbl = "Disattiva" if r["attiva"] else "Riattiva"
                 if st.button(lbl, key=f"libr_tog_{rid}"):
                     _toggle_procedura(conn, rid, not r["attiva"])
                     st.rerun()
+
+
+def _salva_video(conn, rid, url):
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE terapia_libreria SET video_url=%s WHERE id=%s", (url, rid))
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def _salva_procedura(conn, appr, step, nome, ob, istr) -> bool:
@@ -387,14 +408,15 @@ def _tutte_procedure(conn, approccio):
     try:
         cur = conn.cursor()
         if approccio:
-            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva, istruzioni "
+            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva, istruzioni, video_url "
                         "FROM terapia_libreria WHERE approccio=%s ORDER BY step, nome",
                         (approccio,))
         else:
-            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva, istruzioni "
+            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva, istruzioni, video_url "
                         "FROM terapia_libreria ORDER BY approccio, step, nome")
         return [{"id": r[0], "approccio": r[1], "step": r[2], "nome": r[3],
-                 "obiettivo": r[4], "attiva": r[5], "istruzioni": r[6]} for r in cur.fetchall()]
+                 "obiettivo": r[4], "attiva": r[5], "istruzioni": r[6],
+                 "video_url": r[7]} for r in cur.fetchall()]
     except Exception:
         try:
             conn.rollback()
