@@ -207,10 +207,18 @@ def _detect_patient_table_and_cols(conn):
         except Exception:
             discovered = []
 
+    # Tabelle "paziente-simili" scoperte dinamicamente: vengono aggiunte
+    # SOLO in coda (append), così le tabelle canoniche ('pazienti'/'Pazienti')
+    # mantengono la priorità e non vengono scavalcate da tabelle secondarie
+    # come 'pazienti_visivi' (screening visivo), 'pazienti_pnev', ecc.
+    _escludi = ('visiv', 'screening', 'pnev', 'temp', 'tmp', 'backup',
+                'old', 'storico', 'log', 'archiv', 'staging')
     for t in discovered:
         tl = str(t).lower()
         if ('paz' in tl or 'patient' in tl) and t not in table_candidates:
-            table_candidates.insert(0, t)
+            if any(x in tl for x in _escludi):
+                continue
+            table_candidates.append(t)
 
     def pick(cols, candidates):
         cols_set = set(cols)
@@ -1417,13 +1425,8 @@ def _breakglass_check(username: str, password: str) -> bool:
 
 
 def ensure_auth_schema(conn):
-    """Create auth tables if missing (safe to call multiple times, tollerante).
-
-    Tutte le operazioni sono difensive: se una fallisce o la tabella è bloccata,
-    si prosegue senza far crashare il login (lo schema di norma esiste già).
-    """
+    """Create auth tables if missing (safe to call multiple times)."""
     cur = conn.cursor()
-    # 1) Tabelle (la colonna studio_id è già nella definizione per le nuove)
     try:
         cur.execute("""
         CREATE TABLE IF NOT EXISTS auth_users (
@@ -1438,6 +1441,7 @@ def ensure_auth_schema(conn):
           last_login_at TIMESTAMPTZ
         );
         """)
+        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1;")
         cur.execute("""
         CREATE TABLE IF NOT EXISTS auth_roles (
           id BIGSERIAL PRIMARY KEY,
@@ -1467,35 +1471,23 @@ def ensure_auth_schema(conn):
         ('admin'),('vision'),('osteo'),('segreteria'),('clinico')
         ON CONFLICT (name) DO NOTHING;
         """)
+        # Le tabelle di SISTEMA/globali non devono mai essere filtrate per studio.
+        # Se un setup precedente vi ha lasciato attivo il filtro (RLS), il login di
+        # utenti di altri studi fallirebbe e la lista utenti risulterebbe parziale.
+        # Qui lo disattiviamo in modo sicuro (idempotente).
+        for _t in ("auth_users", "auth_roles", "auth_user_roles", "auth_audit_log",
+                   "studi", "utenti_meta", "abbonamenti"):
+            try:
+                cur.execute(f"ALTER TABLE {_t} NO FORCE ROW LEVEL SECURITY;")
+                cur.execute(f"ALTER TABLE {_t} DISABLE ROW LEVEL SECURITY;")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         conn.commit()
-    except Exception:
-        try: conn.rollback()
+    finally:
+        try: cur.close()
         except Exception: pass
-
-    # 2) Migrazione studio_id: la colonna di norma esiste già. Attesa breve sul
-    #    lock (3s) e tollerante: se la tabella è occupata, salta senza bloccare.
-    try:
-        cur.execute("SET LOCAL lock_timeout = '3s';")
-        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1;")
-        conn.commit()
-    except Exception:
-        try: conn.rollback()
-        except Exception: pass
-
-    # 3) Le tabelle di SISTEMA/globali non devono mai essere filtrate per studio.
-    #    Disattiva eventuale RLS lasciato attivo (tollerante, attesa breve).
-    for _t in ("auth_users", "auth_roles", "auth_user_roles", "auth_audit_log",
-               "studi", "utenti_meta", "abbonamenti"):
-        try:
-            cur.execute("SET LOCAL lock_timeout = '3s';")
-            cur.execute(f"ALTER TABLE {_t} NO FORCE ROW LEVEL SECURITY;")
-            cur.execute(f"ALTER TABLE {_t} DISABLE ROW LEVEL SECURITY;")
-            conn.commit()
-        except Exception:
-            try: conn.rollback()
-            except Exception: pass
-    try: cur.close()
-    except Exception: pass
 
 def _audit(conn, user_id: int | None, action: str, entity: str | None = None, entity_id: str | None = None, meta: dict | None = None):
     """Write an audit log entry.
@@ -1695,6 +1687,11 @@ def login(get_conn) -> bool:
         if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
             st.session_state["studio_id"] = 1
+            try:
+                from modules.ui_intestazione_studio import get_intestazione_studio
+                st.session_state["intestazione_studio"] = get_intestazione_studio(conn, 1)
+            except Exception:
+                pass
             st.session_state["user"] = {
                 "id": None,
                 "username": u_in,
@@ -1769,6 +1766,11 @@ def login(get_conn) -> bool:
             st.session_state["studio_id"] = int(_studio_id or 1)
         except Exception:
             st.session_state["studio_id"] = 1
+        try:
+            from modules.ui_intestazione_studio import get_intestazione_studio
+            st.session_state["intestazione_studio"] = get_intestazione_studio(conn, st.session_state["studio_id"])
+        except Exception:
+            pass
         st.session_state["user"] = {
             "id": int(user_id),
             "username": str(uname),
@@ -4260,73 +4262,6 @@ def _draw_prescrizione_occhiali_a5_on_canvas(
         c.drawString(left, bottom + 15, "Firma digitale (Google Form): " + firma_url[:110])
 
 
-
-
-
-
-def genera_prescrizione_occhiali_a4_pdf(
-    paziente,
-    data_prescrizione_iso: Optional[str],
-    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
-    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
-    sf_int_od: float, cil_int_od: float, ax_int_od: int,
-    sf_int_os: float, cil_int_os: float, ax_int_os: int,
-    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
-    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
-    lenti_scelte: list,
-    altri_trattamenti: str,
-    note: str,
-    con_cirillo: bool = True,
-) -> bytes:
-    """A4: sfondo intestazione (immagine) + prescrizione pulita + TABO con freccia asse cilindro."""
-    dati = {
-        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
-        "data": _safe_str(data_prescrizione_iso),
-        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
-        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
-        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
-        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
-        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
-        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
-        "lenti": lenti_scelte,
-        "altri_trattamenti": altri_trattamenti,
-        "note": note,
-    }
-    return _prescrizione_pdf_imagebg(A4, "a4", con_cirillo, dati)
-
-def genera_prescrizione_occhiali_a4_pdf(
-    paziente,
-    data_prescrizione_iso: Optional[str],
-    sf_lon_od: float, cil_lon_od: float, ax_lon_od: int,
-    sf_lon_os: float, cil_lon_os: float, ax_lon_os: int,
-    sf_int_od: float, cil_int_od: float, ax_int_od: int,
-    sf_int_os: float, cil_int_os: float, ax_int_os: int,
-    sf_vic_od: float, cil_vic_od: float, ax_vic_od: int,
-    sf_vic_os: float, cil_vic_os: float, ax_vic_os: int,
-    lenti_scelte: list,
-    altri_trattamenti: str,
-    note: str,
-    con_cirillo: bool = True,
-) -> bytes:
-    """
-    A5: SFONDO = immagine letterhead (The Organism) + overlay SOLO valori (tabella pulita).
-    Niente riquadri: zero accavallamenti.
-    """
-    dati = {
-        "paziente": f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip() if isinstance(paziente, dict) else _safe_str(paziente),
-        "data": _safe_str(data_prescrizione_iso),
-        "od_lon_sf": sf_lon_od, "od_lon_cil": cil_lon_od, "od_lon_ax": ax_lon_od,
-        "os_lon_sf": sf_lon_os, "os_lon_cil": cil_lon_os, "os_lon_ax": ax_lon_os,
-        "od_int_sf": sf_int_od, "od_int_cil": cil_int_od, "od_int_ax": ax_int_od,
-        "os_int_sf": sf_int_os, "os_int_cil": cil_int_os, "os_int_ax": ax_int_os,
-        "od_vic_sf": sf_vic_od, "od_vic_cil": cil_vic_od, "od_vic_ax": ax_vic_od,
-        "os_vic_sf": sf_vic_os, "os_vic_cil": cil_vic_os, "os_vic_ax": ax_vic_os,
-        "lenti": lenti_scelte,
-        "altri_trattamenti": altri_trattamenti,
-        "note": note,
-    }
-    return _prescrizione_pdf_imagebg(A5, "a5", con_cirillo, dati)
-
 def _draw_crop_marks_for_rect(c, x0, y0, w, h, mark_len_mm: float = 4, inset_mm: float = 2):
     """Crop marks (segni di taglio) ai 4 angoli di un rettangolo."""
     L = mark_len_mm * mm
@@ -5095,9 +5030,110 @@ def ui_pazienti():
         conn.close()
         return
 
-    # Etichette ricche: id + Cognome Nome + data nascita + CF
-    options = []
+    # ══ INDICATORE "GIÀ VISITATO / MAI VISITATO" ════════════════════════
+    # Un paziente è "visitato" se ha almeno una Seduta, una anamnesi
+    # o una valutazione visiva registrata. La data più recente fa da
+    # "ultima visita". Ogni query è protetta: se una tabella manca,
+    # viene semplicemente saltata.
+    visited_last = {}
+
+    def _raccogli_visite(sql):
+        try:
+            c2 = conn.cursor()
+            c2.execute(sql)
+            for rr in (c2.fetchall() or []):
+                pid = rr.get("pid") if isinstance(rr, dict) else rr[0]
+                d = (rr.get("d") if isinstance(rr, dict)
+                     else (rr[1] if len(rr) > 1 else None))
+                if pid is None:
+                    continue
+                pid = int(pid)
+                ds = str(d)[:10] if d else ""
+                old = visited_last.get(pid, "")
+                if pid not in visited_last or (ds and ds > old):
+                    visited_last[pid] = ds or old
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    _raccogli_visite("SELECT paziente_id AS pid, MAX(Data_Ora) AS d FROM Sedute GROUP BY paziente_id")
+    _raccogli_visite("SELECT paziente_id AS pid, MAX(data_anamnesi) AS d FROM anamnesi GROUP BY paziente_id")
+    _raccogli_visite("SELECT paziente_id AS pid, NULL AS d FROM Valutazioni_Visive GROUP BY paziente_id")
+
+    def _data_it(ds):
+        try:
+            d = datetime.strptime(ds[:10], "%Y-%m-%d")
+            mesi = ["", "gen", "feb", "mar", "apr", "mag", "giu",
+                    "lug", "ago", "set", "ott", "nov", "dic"]
+            return f"{d.day} {mesi[d.month]} {d.year}"
+        except Exception:
+            return ds or ""
+
+    def _is_visited(rid):
+        return rid in visited_last
+
+    # ── Filtro per stato visita ──────────────────────────────────────────
+    filtro_visita = st.radio(
+        "Mostra",
+        ["Tutti", "Già visitati", "Mai visitati"],
+        horizontal=True,
+        key="elenco_filtro_visita",
+    )
+
+    rows_f = []
     for r in rows:
+        v = _is_visited(r["id"])
+        if filtro_visita == "Già visitati" and not v:
+            continue
+        if filtro_visita == "Mai visitati" and v:
+            continue
+        rows_f.append(r)
+
+    if not rows_f:
+        st.info("Nessun paziente per questo filtro.")
+        conn.close()
+        return
+
+    # ── Lista a colpo d'occhio (pallina verde = già visitato) ────────────
+    n_vis = sum(1 for r in rows_f if _is_visited(r["id"]))
+    n_mai = len(rows_f) - n_vis
+    st.caption(f"🟢 {n_vis} già visitati · ⚪ {n_mai} mai visitati")
+
+    righe_html = []
+    for r in rows_f:
+        rid = r["id"]
+        nascita_it = ""
+        if r["Data_Nascita"]:
+            try:
+                nascita_it = datetime.strptime(r["Data_Nascita"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                nascita_it = r["Data_Nascita"]
+        if _is_visited(rid):
+            dot = "background:#22a06b;"
+            ds = visited_last.get(rid, "")
+            stato = f"Ultima visita · {_data_it(ds)}" if ds else "Già visitato"
+            stato_col = "#7a8699;"
+        else:
+            dot = "background:transparent;border:1.5px solid #b6c0d0;"
+            stato = "Mai visitato"
+            stato_col = "#ee5a52;font-weight:600;"
+        nasc_txt = f"nato il {nascita_it}" if nascita_it else ""
+        righe_html.append(
+            "<div style='display:flex;align-items:center;gap:12px;background:#fff;"
+            "border:1px solid #dde3ed;border-radius:9px;padding:9px 14px;margin-bottom:6px'>"
+            f"<span style='width:10px;height:10px;border-radius:50%;flex:none;{dot}'></span>"
+            "<div style='flex:1;min-width:0'>"
+            f"<div style='font-size:14px;font-weight:600;color:#29354a'>{r['Cognome']} {r['Nome']}</div>"
+            f"<div style='font-size:11.5px;color:#8995a8'>{nasc_txt}</div></div>"
+            f"<div style='font-size:12px;color:{stato_col}'>{stato}</div></div>"
+        )
+    st.markdown("".join(righe_html), unsafe_allow_html=True)
+
+    # ── Selettore per modificare / archiviare (pallina nell'etichetta) ───
+    options = []
+    for r in rows_f:
         nascita_it = ""
         if r["Data_Nascita"]:
             try:
@@ -5105,7 +5141,8 @@ def ui_pazienti():
             except Exception:
                 nascita_it = r["Data_Nascita"]
         cf = (r["Codice_Fiscale"] or "").upper()
-        label = f"{r['id']} - {r['Cognome']} {r['Nome']}"
+        pallina = "🟢" if _is_visited(r["id"]) else "⚪"
+        label = f"{pallina} {r['id']} - {r['Cognome']} {r['Nome']}"
         extra = []
         if nascita_it:
             extra.append(f"nato il {nascita_it}")
@@ -5116,8 +5153,8 @@ def ui_pazienti():
         options.append(label)
 
     selected = st.selectbox("Seleziona un paziente per modificare / archiviare", options, key="pz_sel_mod")
-    sel_id = int(selected.split(" - ", 1)[0])
-    rec = next(r for r in rows if r["id"] == sel_id)
+    sel_id = int("".join(ch for ch in selected.split(" - ", 1)[0] if ch.isdigit()))
+    rec = next(r for r in rows_f if r["id"] == sel_id)
 
     st.write(f"Stato attuale: **{rec['Stato_Paziente']}**")
 
@@ -5949,6 +5986,13 @@ def ui_valutazioni_visive():
     conn = get_connection()
     cur = conn.cursor()
 
+    # Assicura colonne incasso su Valutazioni_Visive (idempotente)
+    try:
+        from modules.incasso import ensure_incasso_columns
+        ensure_incasso_columns(conn, "Valutazioni_Visive")
+    except Exception:
+        pass
+
     # Seleziona paziente (solo ATTIVI, con data nascita per distinguere omonimi)
     cur.execute(
         "SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti "
@@ -6072,6 +6116,39 @@ def ui_valutazioni_visive():
         with col_os3:
             ax_ogg_os = st.number_input("OS AX oggettiva (°)", 0, 180, 0, 1, key="ax_ogg_os")
 
+        st.markdown("**Refrazione abituale (potere che il paziente già porta — SF / CIL / AX)**")
+        col_ab1, col_ab2, col_ab3 = st.columns(3)
+        with col_ab1:
+            sf_abit_od = st.number_input("OD SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_od")
+        with col_ab2:
+            cil_abit_od = st.number_input("OD CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_od")
+        with col_ab3:
+            ax_abit_od = st.number_input("OD AX abituale (°)", 0, 180, 0, 1, key="ax_abit_od")
+        col_ab4, col_ab5, col_ab6 = st.columns(3)
+        with col_ab4:
+            sf_abit_os = st.number_input("OS SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_os")
+        with col_ab5:
+            cil_abit_os = st.number_input("OS CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_os")
+        with col_ab6:
+            ax_abit_os = st.number_input("OS AX abituale (°)", 0, 180, 0, 1, key="ax_abit_os")
+        add_abit = st.number_input("Addizione abituale (D)", 0.0, 4.0, 0.0, 0.25, key="add_abit")
+
+        st.markdown("**Refrazione abituale (potere che il paziente già porta — SF / CIL / AX)**")
+        col_ab1, col_ab2, col_ab3 = st.columns(3)
+        with col_ab1:
+            sf_abit_od = st.number_input("OD SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_od")
+        with col_ab2:
+            cil_abit_od = st.number_input("OD CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_od")
+        with col_ab3:
+            ax_abit_od = st.number_input("OD AX abituale (°)", 0, 180, 0, 1, key="ax_abit_od")
+        col_ab4, col_ab5, col_ab6 = st.columns(3)
+        with col_ab4:
+            sf_abit_os = st.number_input("OS SF abituale (D)", -30.0, 30.0, 0.0, 0.25, key="sf_abit_os")
+        with col_ab5:
+            cil_abit_os = st.number_input("OS CIL abituale (D)", -10.0, 10.0, 0.0, 0.25, key="cil_abit_os")
+        with col_ab6:
+            ax_abit_os = st.number_input("OS AX abituale (°)", 0, 180, 0, 1, key="ax_abit_os")
+        add_abit = st.number_input("Addizione abituale (D)", 0.0, 4.0, 0.0, 0.25, key="add_abit")
         st.markdown("**Refrazione soggettiva (SF / CIL / AX)**")
         col_od4, col_od5, col_od6 = st.columns(3)
         with col_od4:
@@ -6138,11 +6215,15 @@ def ui_valutazioni_visive():
         vitreo = st.text_area("Vitreo", "")
 
 
-        col7, col8 = st.columns(2)
-        with col7:
-            costo = st.number_input("Costo visita", min_value=0.0, step=5.0, value=0.0)
-        with col8:
-            pagato = st.checkbox("Pagato", value=False)
+        # --- Blocco incasso (riutilizzabile) ---
+        try:
+            from modules.incasso import campi_incasso
+            dati_incasso_vis = campi_incasso("val_vis")
+        except Exception as _e_inc:
+            dati_incasso_vis = None
+            st.caption(f"(Incasso non disponibile: {_e_inc})")
+        costo = 0.0   # mantenuto per compatibilità con la INSERT
+        pagato = False
 
         note_libere = st.text_area("Note cliniche libere (aggiuntive)")
 
@@ -6263,6 +6344,21 @@ ESAMI STRUTTURALI / FUNZIONALI
             ),
         )
         conn.commit()
+        # Salva incasso sulla riga appena inserita
+        if dati_incasso_vis is not None:
+            try:
+                from modules.incasso import salva_incasso, riepilogo_incasso
+                _cur2 = conn.cursor()
+                _cur2.execute(
+                    "SELECT id FROM Valutazioni_Visive WHERE paziente_id = ? "
+                    "ORDER BY id DESC LIMIT 1", (paz_id,))
+                _row = _cur2.fetchone()
+                _vid = (_row.get("id") if hasattr(_row, "get") else _row[0]) if _row else None
+                if _vid:
+                    _n, _r, _s = salva_incasso(conn, "Valutazioni_Visive", int(_vid), dati_incasso_vis)
+                    st.success("Incasso: " + riepilogo_incasso(_n, _r, _s))
+            except Exception as _e_si:
+                st.warning(f"Valutazione salvata, incasso non registrato: {_e_si}")
         st.success("Valutazione visiva salvata.")
 
     # ── Valutazione Visiva Funzionale — Batteria Completa ───────────────────
@@ -7196,6 +7292,96 @@ def ui_coupons():
         return f"{p['id']} - {p['Cognome']} {p['Nome']}{dn}"
 
     opt_paz = [_paz_label_coup(p) for p in pazienti]
+
+    # ════════════════════════════════════════════════════════════════
+    # 🔎 ELENCO E RICERCA — TUTTI I COUPON (sempre visibile)
+    # ════════════════════════════════════════════════════════════════
+    st.markdown("### 🔎 Tutti i coupon")
+    try:
+        cur.execute(
+            """
+            SELECT c.id, c.Tipo_Coupon, c.Codice_Coupon, c.Data_Assegnazione,
+                   c.Note, c.Utilizzato,
+                   p.Cognome, p.Nome
+            FROM Coupons c
+            LEFT JOIN Pazienti p ON p.id = c.paziente_id
+            ORDER BY c.Data_Assegnazione DESC, c.id DESC
+            """
+        )
+        tutti = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        tutti = []
+
+    # PostgreSQL restituisce i nomi colonna in minuscolo: leggo le chiavi
+    # in modo insensibile alle maiuscole/minuscole.
+    def _g(d, *names):
+        low = {str(k).lower(): v for k, v in d.items()}
+        for n in names:
+            v = low.get(n.lower())
+            if v not in (None, ""):
+                return v
+        return None
+
+    fc1, fc2, fc3 = st.columns([3, 1, 1])
+    with fc1:
+        q_txt = st.text_input("Cerca (paziente o codice coupon)", "", key="coup_search")
+    with fc2:
+        f_tipo = st.selectbox("Tipo", ["Tutti", "OF", "SDS"], key="coup_f_tipo")
+    with fc3:
+        f_stato = st.selectbox("Stato", ["Tutti", "Non usato", "Usato"], key="coup_f_stato")
+
+    qt = q_txt.strip().lower()
+    righe = []
+    n_tot = n_usati = 0
+    for c in tutti:
+        nome_paz = f"{(_g(c,'Cognome') or '').strip()} {(_g(c,'Nome') or '').strip()}".strip() or "—"
+        codice = _g(c, "Codice_Coupon") or ""
+        tipo = _g(c, "Tipo_Coupon") or ""
+        usato = bool(_g(c, "Utilizzato"))
+        # filtri
+        if f_tipo != "Tutti" and tipo != f_tipo:
+            continue
+        if f_stato == "Usato" and not usato:
+            continue
+        if f_stato == "Non usato" and usato:
+            continue
+        if qt and qt not in nome_paz.lower() and qt not in str(codice).lower():
+            continue
+        data_it = ""
+        _data_raw = _g(c, "Data_Assegnazione")
+        if _data_raw:
+            try:
+                data_it = datetime.strptime(str(_data_raw), "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                data_it = str(_data_raw)
+        n_tot += 1
+        if usato:
+            n_usati += 1
+        righe.append({
+            "Paziente": nome_paz,
+            "Tipo": tipo or "—",
+            "Codice": codice or "—",
+            "Data": data_it or "—",
+            "Stato": "✅ Usato" if usato else "🟡 Non usato",
+            "Note": _g(c, "Note") or "",
+        })
+
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Coupon trovati", n_tot)
+    k2.metric("✅ Usati", n_usati)
+    k3.metric("🟡 Da usare", n_tot - n_usati)
+
+    if righe:
+        st.dataframe(righe, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Nessun coupon corrisponde ai filtri.")
+
+    st.markdown("---")
+
     # === FIX paziente attivo globale ===
     from modules.paziente_attivo import get_paziente_attivo
     paz_id = get_paziente_attivo(conn)
@@ -7379,7 +7565,7 @@ def ui_dashboard():
     with col1:
         data_da_str = st.text_input(
             "Dal (gg/mm/aaaa)",
-            oggi.strftime("%d/%m/%Y")
+            oggi.replace(day=1).strftime("%d/%m/%Y")
         )
 
     with col2:
@@ -7411,50 +7597,82 @@ def ui_dashboard():
     data_a_iso = data_a.isoformat()
 
     # =========================
-    # VALUTAZIONI VISIVE
+    # RACCOLTA DATI (con incasso reale + fallback campi vecchi)
     # =========================
+    prof_f = professionista_f.strip().lower()
 
-    query_v = """
-        SELECT Data_Valutazione AS Data, Professionista, Costo, Pagato
-        FROM Valutazioni_Visive
-        WHERE Data_Valutazione BETWEEN ? AND ?
-    """
+    def _eff_incassato(d):
+        """Incassato reale: usa inc_incassato se l'incasso nuovo è stato
+        compilato (inc_netto valorizzato), altrimenti ripiega sul vecchio
+        Costo quando Pagato è vero."""
+        netto = d.get("inc_netto")
+        if netto not in (None, ""):
+            try:
+                return float(d.get("inc_incassato") or 0.0)
+            except Exception:
+                return 0.0
+        # fallback vecchio schema
+        try:
+            if d.get("Pagato"):
+                return float(d.get("Costo") or 0.0)
+        except Exception:
+            pass
+        return 0.0
 
-    params_v = [data_da_iso, data_a_iso]
+    def _residuo(d):
+        r = d.get("inc_residuo")
+        try:
+            r = float(r) if r not in (None, "") else 0.0
+        except Exception:
+            r = 0.0
+        return r if r > 0.01 else 0.0
 
-    if professionista_f.strip():
-        query_v += " AND Professionista LIKE ?"
-        params_v.append(f"%{professionista_f.strip()}%")
+    def _raccogli(query, params, prof_key):
+        """Esegue la query in sicurezza; ritorna lista di dict normalizzati."""
+        try:
+            cur.execute(query, params)
+            rows = [dict(r) for r in cur.fetchall()]
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return []
+        out = []
+        for d in rows:
+            if prof_f:
+                pv = str(d.get(prof_key) or "").lower()
+                if prof_f not in pv:
+                    continue
+            out.append(d)
+        return out
 
-    cur.execute(query_v, params_v)
-    vis = cur.fetchall()
-
-    incasso_vis = sum((r["Costo"] or 0.0) for r in vis if r["Pagato"])
+    # --- Valutazioni visive (ora con inc_*) ---
+    vis = _raccogli(
+        "SELECT * FROM Valutazioni_Visive WHERE Data_Valutazione BETWEEN ? AND ?",
+        [data_da_iso, data_a_iso], "Professionista")
+    incasso_vis = sum(_eff_incassato(d) for d in vis)
+    residuo_vis = sum(_residuo(d) for d in vis)
     n_visite = len(vis)
 
-    # =========================
-    # SEDUTE
-    # =========================
-
-    query_s = """
-        SELECT Data_Seduta AS Data, Professionista, Terapia, Costo, Pagato
-        FROM Sedute
-        WHERE Data_Seduta BETWEEN ? AND ?
-    """
-
-    params_s = [data_da_iso, data_a_iso]
-
-    if professionista_f.strip():
-        query_s += " AND Professionista LIKE ?"
-        params_s.append(f"%{professionista_f.strip()}%")
-
-    cur.execute(query_s, params_s)
-    sed = cur.fetchall()
-
-    incasso_sed = sum((r["Costo"] or 0.0) for r in sed if r["Pagato"])
+    # --- Sedute / terapie (vecchio schema Costo/Pagato) ---
+    sed = _raccogli(
+        "SELECT * FROM Sedute WHERE Data_Seduta BETWEEN ? AND ?",
+        [data_da_iso, data_a_iso], "Professionista")
+    incasso_sed = sum(_eff_incassato(d) for d in sed)
+    residuo_sed = sum(_residuo(d) for d in sed)
     n_sedute = len(sed)
 
-    totale_generale = incasso_vis + incasso_sed
+    # --- Osteopatia (osteo_seduta, ora con inc_*) ---
+    ost = _raccogli(
+        "SELECT * FROM osteo_seduta WHERE data_seduta BETWEEN ? AND ?",
+        [data_da_iso, data_a_iso], "operatore")
+    incasso_ost = sum(_eff_incassato(d) for d in ost)
+    residuo_ost = sum(_residuo(d) for d in ost)
+    n_osteo = len(ost)
+
+    totale_generale = incasso_vis + incasso_sed + incasso_ost
+    residuo_totale = residuo_vis + residuo_sed + residuo_ost
 
     # =========================
     # KPI CARD
@@ -7462,21 +7680,14 @@ def ui_dashboard():
 
     st.markdown("### 📊 Panoramica")
 
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric(
-        label="Totale incassato",
-        value=f"€ {totale_generale:.2f}"
-    )
-
-    c2.metric(
-        label="Valutazioni visive",
-        value=n_visite
-    )
-
-    c3.metric(
-        label="Sedute / terapie",
-        value=n_sedute
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(label="💰 Totale incassato", value=f"€ {totale_generale:.2f}")
+    c2.metric(label="👁️ Valutazioni visive", value=n_visite)
+    c3.metric(label="🦴 Sedute osteopatia", value=n_osteo)
+    c4.metric(
+        label="🔴 Da incassare",
+        value=f"€ {residuo_totale:.2f}",
+        help="Somma dei residui ancora aperti (acconti/da saldare) nel periodo",
     )
 
     st.markdown("---")
@@ -7520,27 +7731,54 @@ def ui_dashboard():
     # DETTAGLIO INCASSI
     # =========================
 
-    col_vis, col_sed = st.columns(2)
+    col_vis, col_ost, col_sed = st.columns(3)
 
     with col_vis:
-
         st.markdown("#### 👁️ Valutazioni visive")
-
-        st.success(
-            f"Incasso nel periodo: € {incasso_vis:.2f}"
-        )
-
+        st.success(f"Incassato: € {incasso_vis:.2f}")
+        if residuo_vis > 0.01:
+            st.caption(f"🔴 Da incassare: € {residuo_vis:.2f}")
         st.caption(f"Numero visite: {n_visite}")
 
+    with col_ost:
+        st.markdown("#### 🦴 Osteopatia")
+        st.success(f"Incassato: € {incasso_ost:.2f}")
+        if residuo_ost > 0.01:
+            st.caption(f"🔴 Da incassare: € {residuo_ost:.2f}")
+        st.caption(f"Numero sedute: {n_osteo}")
+
     with col_sed:
-
         st.markdown("#### 🧠 Sedute / terapie")
-
-        st.success(
-            f"Incasso nel periodo: € {incasso_sed:.2f}"
-        )
-
+        st.success(f"Incassato: € {incasso_sed:.2f}")
+        if residuo_sed > 0.01:
+            st.caption(f"🔴 Da incassare: € {residuo_sed:.2f}")
         st.caption(f"Numero sedute: {n_sedute}")
+
+    st.markdown("---")
+
+    # =========================
+    # RIEPILOGO PER PROFESSIONISTA
+    # =========================
+    st.markdown("### 👥 Incassato per professionista")
+    per_prof = {}
+    for d in vis:
+        k = str(d.get("Professionista") or "—").strip() or "—"
+        per_prof[k] = per_prof.get(k, 0.0) + _eff_incassato(d)
+    for d in ost:
+        k = str(d.get("operatore") or "—").strip() or "—"
+        per_prof[k] = per_prof.get(k, 0.0) + _eff_incassato(d)
+    for d in sed:
+        k = str(d.get("Professionista") or "—").strip() or "—"
+        per_prof[k] = per_prof.get(k, 0.0) + _eff_incassato(d)
+
+    righe_prof = [
+        {"Professionista": k, "Incassato €": round(v, 2)}
+        for k, v in sorted(per_prof.items(), key=lambda x: -x[1]) if v > 0
+    ]
+    if righe_prof:
+        st.dataframe(righe_prof, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Nessun incasso nel periodo selezionato.")
 
     st.markdown("---")
 
@@ -7549,10 +7787,14 @@ def ui_dashboard():
     # =========================
 
     st.markdown("### 💰 Totale studio")
-
-    st.success(
-        f"Totale generale incassato nel periodo: € {totale_generale:.2f}"
-    )
+    cT1, cT2 = st.columns(2)
+    with cT1:
+        st.success(f"Totale incassato nel periodo: € {totale_generale:.2f}")
+    with cT2:
+        if residuo_totale > 0.01:
+            st.warning(f"🔴 Totale ancora da incassare: € {residuo_totale:.2f}")
+        else:
+            st.info("✅ Nessun residuo aperto nel periodo")
 
     conn.close()
 
@@ -11294,7 +11536,22 @@ def main():
     _sidebar_db_indicator()
 
     # inizializza il database (se le tabelle non ci sono le crea)
-    init_db()
+    # BLINDATO: un eventuale errore di migrazione/transazione NON deve far
+    # crashare l'avvio (altrimenti l'app entra in loop di riavvio). Se init_db
+    # fallisce, puliamo la transazione e proseguiamo: le tabelle base esistono
+    # già in produzione, le migrazioni si ritentano al prossimo avvio.
+    try:
+        init_db()
+    except Exception as _e_init:
+        try:
+            get_connection().rollback()
+        except Exception:
+            pass
+        try:
+            st.warning("⚠️ Inizializzazione database saltata (verrà ritentata). "
+                       "L'app prosegue normalmente.")
+        except Exception:
+            pass
 
     # login obbligatorio
     if not login(get_connection):
