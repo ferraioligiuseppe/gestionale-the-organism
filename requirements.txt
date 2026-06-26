@@ -45,8 +45,9 @@ scipy>=1.11.0
 # Audio
 soundfile==0.12.1
 pydub==0.25.1
-streamlit-webrtc>=0.47.0,<0.65.0
-aiortc>=1.9.0
+# NB: streamlit-webrtc + aiortc RIMOSSI (non usati nel codice, trascinavano
+# PyAV/av e appesantivano l'avvio causando il loop "Connecting"). L'eye-tracking
+# gira su pnev.it nel browser, non serve webrtc lato app.
 
 streamlit-javascript
 qrcode[pil]
