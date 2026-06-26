@@ -26,30 +26,10 @@ STEP_VISIVA = ["🔵 Monoculare", "🟢 Bioculare", "🟣 Binoculare"]
 STATI = ["⚪ Da iniziare", "🟦 In corso", "🟢 Acquisita", "⏸️ Sospesa"]
 
 # ── Libreria iniziale (esempi da correggere: 2A) ──────────────────────
+# Le procedure di Terapia visiva (mono/bio/bino) sono caricate dal protocollo
+# reale (modules/vt_procedure_data.py). Qui restano solo gli approcci ancora
+# da popolare, come esempi-base da correggere.
 _SEED = [
-    # Terapia visiva — Monoculare
-    ("Terapia visiva", "🔵 Monoculare", "Anti-soppressione monoculare",
-     "Attivare la consapevolezza del singolo occhio"),
-    ("Terapia visiva", "🔵 Monoculare", "Flipper accomodativo monoculare",
-     "Flessibilità accomodativa per occhio"),
-    ("Terapia visiva", "🔵 Monoculare", "Motilità oculare monoculare",
-     "Inseguimenti e saccadi per occhio"),
-    ("Terapia visiva", "🔵 Monoculare", "Localizzazione / puntamento",
-     "Coordinazione occhio-mano monoculare"),
-    # Terapia visiva — Bioculare
-    ("Terapia visiva", "🟢 Bioculare", "Anti-soppressione bioculare",
-     "Mantenere entrambi gli occhi attivi insieme"),
-    ("Terapia visiva", "🟢 Bioculare", "Flipper bioculare",
-     "Flessibilità accomodativa con i due occhi"),
-    ("Terapia visiva", "🟢 Bioculare", "Vergenze bioculari",
-     "Avvio del controllo di convergenza/divergenza"),
-    # Terapia visiva — Binoculare
-    ("Terapia visiva", "🟣 Binoculare", "Vergenze fusionali",
-     "Ampiezza e flessibilità di vergenza"),
-    ("Terapia visiva", "🟣 Binoculare", "Stereopsi",
-     "Sviluppo della visione tridimensionale"),
-    ("Terapia visiva", "🟣 Binoculare", "Integrazione visuo-motoria binoculare",
-     "Coordinazione visione-movimento in binoculare"),
     # INPP
     ("INPP / Riflessi primitivi", "—", "Inibizione TLR",
      "Integrazione del riflesso tonico labirintico"),
@@ -84,6 +64,35 @@ _SEED = [
 ]
 
 
+def _seed_visive(cur):
+    """Carica le procedure di Terapia visiva dal protocollo reale (PDF estratti)."""
+    try:
+        from .vt_procedure_data import PROCEDURE
+    except Exception:
+        return
+    for p in PROCEDURE:
+        cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, istruzioni) "
+                    "VALUES(%s,%s,%s,%s)",
+                    ("Terapia visiva", p.get("parte", "—"), p.get("nome", ""),
+                     p.get("istruzioni", "")))
+
+
+def ricarica_visive(conn):
+    """Cancella e ricarica SOLO le procedure di Terapia visiva dal protocollo."""
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM terapia_libreria WHERE approccio=%s", ("Terapia visiva",))
+        _seed_visive(cur)
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
 def _assicura_tabelle(conn):
     try:
         cur = conn.cursor()
@@ -103,6 +112,7 @@ def _assicura_tabelle(conn):
             for appr, step, nome, ob in _SEED:
                 cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, obiettivo) "
                             "VALUES(%s,%s,%s,%s)", (appr, step, nome, ob))
+            _seed_visive(cur)
             conn.commit()
     except Exception:
         try:
@@ -294,8 +304,19 @@ def _togli_dal_programma(conn, rid):
 # ══════════════════════════════════════════════════════════════════════
 
 def _render_libreria(conn):
-    st.caption("Il magazzino delle procedure. Pre-riempito con esempi: correggi, "
-               "aggiungi le tue, disattiva quelle che non usi.")
+    st.caption("Il magazzino delle procedure. La Terapia visiva è caricata dal tuo "
+               "protocollo reale (mono/bio/bino, con istruzioni). Gli altri approcci "
+               "sono esempi-base da correggere.")
+
+    c1, c2 = st.columns([3, 2])
+    with c2:
+        if st.button("🔄 Ricarica Terapia visiva dal protocollo", key="libr_reload",
+                     help="Cancella e ricarica le procedure visive dai PDF del protocollo"):
+            if ricarica_visive(conn):
+                st.success("Procedure visive ricaricate dal protocollo.")
+                st.rerun()
+            else:
+                st.warning("Ricarica non riuscita.")
 
     with st.expander("➕ Nuova procedura", expanded=False):
         with st.form("libr_new", clear_on_submit=True):
@@ -337,6 +358,9 @@ def _render_libreria(conn):
             cc1, cc2 = st.columns([6, 1])
             with cc1:
                 st.markdown(riga)
+                if r.get("istruzioni"):
+                    with st.expander("📖 Istruzioni"):
+                        st.markdown(r["istruzioni"])
             with cc2:
                 lbl = "Disattiva" if r["attiva"] else "Riattiva"
                 if st.button(lbl, key=f"libr_tog_{rid}"):
@@ -363,14 +387,14 @@ def _tutte_procedure(conn, approccio):
     try:
         cur = conn.cursor()
         if approccio:
-            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva "
+            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva, istruzioni "
                         "FROM terapia_libreria WHERE approccio=%s ORDER BY step, nome",
                         (approccio,))
         else:
-            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva "
+            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva, istruzioni "
                         "FROM terapia_libreria ORDER BY approccio, step, nome")
         return [{"id": r[0], "approccio": r[1], "step": r[2], "nome": r[3],
-                 "obiettivo": r[4], "attiva": r[5]} for r in cur.fetchall()]
+                 "obiettivo": r[4], "attiva": r[5], "istruzioni": r[6]} for r in cur.fetchall()]
     except Exception:
         try:
             conn.rollback()
