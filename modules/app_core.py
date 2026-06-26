@@ -11536,7 +11536,22 @@ def main():
     _sidebar_db_indicator()
 
     # inizializza il database (se le tabelle non ci sono le crea)
-    init_db()
+    # BLINDATO: un eventuale errore di migrazione/transazione NON deve far
+    # crashare l'avvio (altrimenti l'app entra in loop di riavvio). Se init_db
+    # fallisce, puliamo la transazione e proseguiamo: le tabelle base esistono
+    # già in produzione, le migrazioni si ritentano al prossimo avvio.
+    try:
+        init_db()
+    except Exception as _e_init:
+        try:
+            get_connection().rollback()
+        except Exception:
+            pass
+        try:
+            st.warning("⚠️ Inizializzazione database saltata (verrà ritentata). "
+                       "L'app prosegue normalmente.")
+        except Exception:
+            pass
 
     # login obbligatorio
     if not login(get_connection):

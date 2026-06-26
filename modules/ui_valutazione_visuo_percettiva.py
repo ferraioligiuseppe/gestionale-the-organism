@@ -323,7 +323,8 @@ def _sez_a(pid, stored):
 
     # Scala di notazione
     SCALE_AV = {
-        "Decimale": ["","10/10","9/10","8/10","7/10","6/10","5/10",
+        "Decimale": ["","16/10","15/10","14/10","13/10","12/10","11/10",
+                     "10/10","9/10","8/10","7/10","6/10","5/10",
                      "4/10","3/10","2/10","1/10","0.5/10","< 0.5/10"],
         "Snellen 6m": ["","6/6","6/7.5","6/9","6/12","6/18","6/24",
                        "6/36","6/48","6/60","PL","NPL"],
@@ -1025,39 +1026,6 @@ MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
 
     return {"sez_g": {"diag": diagnosi, "piano": piano}}
 
-
-def _pdf_ricetta(pid, cog, nom, dn, rx_visita, prof):
-    try:
-        from modules.pdf_templates import genera_ricetta
-        rs_od = rx_visita.get("rs_od",{}); rs_os = rx_visita.get("rs_os",{})
-        add_v = float(rx_visita.get("add_v") or 0)
-        add_i = float(rx_visita.get("add_i") or 0)
-
-        def _sf_add(base_rx, add):
-            sf = float(base_rx.get("sf") or 0)
-            return {"sf": round(sf+add,2),
-                    "cil": base_rx.get("cil",0),
-                    "ax":  base_rx.get("ax",0)}
-
-        rx = {
-            "paziente": f"{cog} {nom}".strip(),
-            "data":     datetime.date.today().strftime("%d/%m/%Y"),
-            "lontano":    {"od": rs_od, "os": rs_os},
-            "intermedio": {"od": _sf_add(rs_od, add_i) if add_i else {},
-                           "os": _sf_add(rs_os, add_i) if add_i else {}},
-            "vicino":     {"od": _sf_add(rs_od, add_v) if add_v else {},
-                           "os": _sf_add(rs_os, add_v) if add_v else {}},
-            "dp":   str(rx_visita.get("dp","63")),
-            "lenti": rx_visita.get("lenti_consigliate",[]),
-            "note":  rx_visita.get("note_rx",""),
-        }
-        titolo = rx_visita.get("titolo_prof","Optometrista Comportamentale")
-        pdf_bytes = genera_ricetta(prof, titolo, rx)
-        st.download_button("Scarica Ricetta PDF", data=pdf_bytes,
-            file_name=f"ricetta_{cog}_{nom}_{datetime.date.today()}.pdf",
-            mime="application/pdf", key=f"dl_rx_{pid}")
-    except Exception as e:
-        st.error(f"Errore ricetta: {e}")
 
 def _pdf_lettera(pid, cog, nom, dn, ob, prof):
     try:
