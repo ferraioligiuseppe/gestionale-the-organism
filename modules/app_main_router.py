@@ -293,7 +293,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
         "📎 Documenti clinici", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
-        "🧘 Percorsi terapeutici",
+        "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "🔬 PNEV", "📋 Anamnesi The Organism", "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
@@ -595,6 +595,17 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore percorsi terapeutici: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "🧩 Programma PNEV":
+        try:
+            from .terapia_procedure import render_programma
+            render_programma(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore programma PNEV: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         _assistente_coda(conn, paz_id)

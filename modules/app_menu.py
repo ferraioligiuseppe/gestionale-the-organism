@@ -104,6 +104,7 @@ SOTTOSEZIONI = {
     ],
     AREA_TERAPIA: [
         "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
         "🎧 MAPS",
         "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS",

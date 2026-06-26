@@ -250,6 +250,21 @@ def render_quadro(conn=None, paz_id=None, paziente=None):
                         f"{r.get('stato','')} ({r.get('attuale','?')}/{r.get('target','?')})")
         st.markdown("---")
 
+    # ── Programma PNEV (procedure) ────────────────────────────────────
+    prg = _query(conn, "SELECT * FROM terapia_programma WHERE paziente_id=%s", (paz_id,))
+    if prg:
+        trovato = True
+        per_appr = {}
+        for r in prg:
+            per_appr.setdefault(r.get("approccio", "—"), []).append(r)
+        st.markdown(f"#### 🧩 Programma PNEV ({len(prg)} procedure)")
+        for appr, lista in per_appr.items():
+            st.markdown(f"**{appr}**")
+            for r in lista:
+                step = f"{r.get('step')} · " if r.get("step") and r["step"] != "—" else ""
+                st.markdown(f"- {step}{r.get('nome','')} — {r.get('stato','')}")
+        st.markdown("---")
+
     # ── Esiti / Follow-up ─────────────────────────────────────────────
     es = _query(conn, "SELECT * FROM esiti_pnev WHERE paziente_id=%s", (paz_id,))
     if es:

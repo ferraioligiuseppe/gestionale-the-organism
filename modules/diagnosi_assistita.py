@@ -194,6 +194,18 @@ def _riassunto_storico(conn, paz_id) -> str:
             parti.append(f"- {r.get('descrizione','')} [{r.get('terapia','')}]: "
                          f"{r.get('stato','')} {r.get('attuale','?')}/{r.get('target','?')}")
 
+    prg = _query(conn, "SELECT * FROM terapia_programma WHERE paziente_id=%s", (paz_id,))
+    if prg:
+        per_appr = {}
+        for r in prg:
+            per_appr.setdefault(r.get("approccio", "—"), []).append(r)
+        parti.append("\nPROGRAMMA PNEV (procedure in corso):")
+        for appr, lista in per_appr.items():
+            parti.append(f"- {appr}:")
+            for r in lista:
+                step = f"{r.get('step')} " if r.get("step") and r["step"] != "—" else ""
+                parti.append(f"   · {step}{r.get('nome','')} — {r.get('stato','')}")
+
     return "\n".join(parti).strip()
 
 
