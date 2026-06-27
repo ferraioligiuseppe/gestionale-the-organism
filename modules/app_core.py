@@ -1991,8 +1991,22 @@ class _PgCursor:
         # naive but effective for this app: replace all '?' placeholders
         return sql.replace("?", "%s")
 
+    def _clear_if_aborted(self):
+        # ANTI-CASCATA: se un errore precedente ha lasciato la transazione
+        # "abortita" (status 3 = INERROR), Postgres rifiuta OGNI statement
+        # successivo con "current transaction is aborted". La ripuliamo qui,
+        # PRIMA di eseguire, con un rollback LOCALE (istantaneo, nessuna
+        # riconnessione di rete). status 2 (INTRANS) = transazione sana in
+        # corso → NON la tocchiamo, così l'atomicità resta intatta.
+        try:
+            if self._cur.connection.get_transaction_status() == 3:
+                self._cur.connection.rollback()
+        except Exception:
+            pass
+
     def execute(self, sql, params=None):
         sql2 = self._adapt_sql(str(sql))
+        self._clear_if_aborted()
         try:
             if params is None:
                 return self._cur.execute(sql2)
@@ -2008,6 +2022,7 @@ class _PgCursor:
 
     def executemany(self, sql, seq_of_params):
         sql2 = self._adapt_sql(str(sql))
+        self._clear_if_aborted()
         try:
             return self._cur.executemany(sql2, seq_of_params)
         except Exception:
@@ -2061,31 +2076,76 @@ class _PgConn:
         self._conn = conn
         self._db_url = _DB_URL  # salvato per reconnect
         self._options = options  # include app.current_studio: va riusato a ogni riconnessione
+        self._last_ping = 0.0    # throttle del ping di rete (vedi _ensure_alive)
+
+    def _reconnect(self):
+        import time
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+        self._conn = psycopg2.connect(
+            self._db_url,
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5,
+            connect_timeout=10,
+            options=self._options,
+        )
+        self._last_ping = time.time()
 
     def _ensure_alive(self):
-        """Verifica che la connessione sia viva; riconnette se necessario."""
+        """Mantiene viva la connessione SENZA rallentare ogni query.
+
+        Strategia (dal più economico al più costoso):
+          1. connessione chiusa            → riconnetti
+          2. transazione abortita (INERROR)→ rollback LOCALE (istantaneo)
+          3. stato UNKNOWN (socket rotto)  → riconnetti
+          4. ping di rete `SELECT 1`       → solo 1 volta ogni 60s, per
+             scovare socket morti senza pagare un round-trip a ogni cursore.
+        Solo il caso 4 fa rete; gli altri sono operazioni locali → niente
+        più attese lunghe né tempeste di riconnessione a ogni query.
+        """
+        import time
+        # 1) chiusa?
         try:
             if self._conn.closed:
-                raise Exception("connection closed")
-            # lightweight ping — se in stato di errore solleva InterfaceError
-            self._conn.cursor().execute("SELECT 1")
+                self._reconnect()
+                return
         except Exception:
+            self._reconnect()
+            return
+        # 2-3) stato della transazione (locale, niente rete)
+        try:
+            status = self._conn.get_transaction_status()
+            if status == 4:          # UNKNOWN → connessione rotta
+                self._reconnect()
+                return
+            if status == 3:          # INERROR → transazione abortita: ripulisci
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    self._reconnect()
+                    return
+        except Exception:
+            self._reconnect()
+            return
+        # 4) ping di rete throttlato (max 1/min)
+        now = time.time()
+        if now - self._last_ping > 60:
             try:
-                self._conn.close()
+                c = self._conn.cursor()
+                c.execute("SELECT 1")
+                c.fetchone()
+                c.close()
+                try:
+                    self._conn.rollback()  # chiude la mini-transazione del ping
+                except Exception:
+                    pass
+                self._last_ping = now
             except Exception:
-                pass
-            try:
-                self._conn = psycopg2.connect(
-                    self._db_url,
-                    keepalives=1,
-                    keepalives_idle=30,
-                    keepalives_interval=10,
-                    keepalives_count=5,
-                    connect_timeout=10,
-                    options=self._options,
-                )
-            except Exception as e:
-                raise RuntimeError(f"Impossibile riconnettersi al DB: {e}") from e
+                self._reconnect()
 
     def cursor(self):
         self._ensure_alive()
