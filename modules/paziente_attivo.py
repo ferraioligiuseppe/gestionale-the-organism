@@ -238,10 +238,10 @@ def _dialog_seleziona(conn):
 
     st.caption(f"{len(pazienti)} paziente/i")
 
-    # Nuovo paziente al volo — SEMPRE in evidenza, così le collaboratrici
-    # non devono uscire dalla schermata per creare un'anagrafica.
+    # Nuovo paziente al volo — SEMPRE APERTO e in evidenza, così le
+    # collaboratrici vedono subito come creare un'anagrafica senza uscire.
     with st.expander("➕ Crea NUOVA anagrafica (senza uscire da qui)",
-                     expanded=bool(cerca.strip()) and len(pazienti) == 0):
+                     expanded=True):
         st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
                    "il paziente viene creato e selezionato subito.")
         _form_nuovo_paziente(conn)
