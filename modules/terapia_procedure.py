@@ -152,14 +152,22 @@ def _render_programma_paziente(conn, paz_id):
 
     # ── Aggiungi procedure dalla libreria ─────────────────────────────
     with st.expander("➕ Aggiungi procedure al programma", expanded=True):
-        appr = st.selectbox("Approccio", APPROCCI, key="prog_add_appr")
-        proc = _procedure_libreria(conn, appr)
+        st.caption("Puoi combinare approcci diversi nello stesso programma: scegli "
+                   "«🔀 Tutti gli approcci» per pescare insieme procedure visive, "
+                   "miofunzionali, INPP, ritmiche… e aggiungerle in un colpo solo.")
+        appr = st.selectbox("Approccio", ["🔀 Tutti gli approcci"] + APPROCCI,
+                            key="prog_add_appr")
+        proc = _procedure_libreria(conn, None if appr.startswith("🔀") else appr)
         if not proc:
             st.caption("Nessuna procedura in libreria per questo approccio "
                        "(aggiungile nel tab Libreria).")
         else:
-            etichette = {f"{p['step']+' · ' if p['step'] and p['step']!='—' else ''}{p['nome']}": p
-                         for p in proc}
+            mostra_appr = appr.startswith("🔀")
+            def _et(p):
+                pre = f"{p['approccio']} · " if mostra_appr else ""
+                stp = f"{p['step']} · " if p.get('step') and p['step'] != '—' else ""
+                return f"{pre}{stp}{p['nome']}"
+            etichette = {_et(p): p for p in proc}
             scelte = st.multiselect("Procedure da aggiungere", list(etichette.keys()),
                                     key="prog_add_sel")
             if st.button("➕ Aggiungi al programma", type="primary", key="prog_add_btn"):
@@ -216,8 +224,12 @@ def _render_programma_paziente(conn, paz_id):
 def _procedure_libreria(conn, approccio):
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id, approccio, step, nome, obiettivo FROM terapia_libreria "
-                    "WHERE approccio=%s AND attiva=TRUE ORDER BY step, nome", (approccio,))
+        if approccio:
+            cur.execute("SELECT id, approccio, step, nome, obiettivo FROM terapia_libreria "
+                        "WHERE approccio=%s AND attiva=TRUE ORDER BY step, nome", (approccio,))
+        else:
+            cur.execute("SELECT id, approccio, step, nome, obiettivo FROM terapia_libreria "
+                        "WHERE attiva=TRUE ORDER BY approccio, step, nome")
         return [{"id": r[0], "approccio": r[1], "step": r[2], "nome": r[3],
                  "obiettivo": r[4]} for r in cur.fetchall()]
     except Exception:
