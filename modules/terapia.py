@@ -179,37 +179,86 @@ def _elenco_sedute(conn, paz_id, terapia):
         return
     for (rid, ds, num, prof, ob, att, risp, costo, sconto, inc, met, note) in righe:
         ds_str = ds.strftime("%d/%m/%Y") if ds else ""
-        titolo = f"**Seduta n° {num}** — {ds_str}"
+        cap = f"Seduta n° {num} — {ds_str}"
         if risp and risp != "—":
-            titolo += f"  ·  {risp}"
-        st.markdown(titolo)
-        meta = []
-        if prof:
-            meta.append(f"👤 {prof}")
+            cap += f"  ·  {risp}"
         if inc:
-            meta.append(f"💶 {inc:.0f}€" + (f" (list. {costo:.0f}, sc. {sconto:.0f})"
-                        if (costo or sconto) else "") + (f" · {met}" if met and met != "—" else ""))
-        if meta:
-            st.caption(" · ".join(meta))
-        if ob:
-            st.markdown(f"🎯 {ob}")
-        if att:
-            st.markdown(att)
-        if note:
-            st.caption(note)
-        if st.button("🗑 Elimina", key=f"ter_sd_del_{rid}"):
-            try:
-                cur = conn.cursor()
-                cur.execute("DELETE FROM terapia_sedute WHERE id=%s", (rid,))
-                conn.commit()
-                st.rerun()
-            except Exception:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-        st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
-                    unsafe_allow_html=True)
+            cap += f"  ·  💶 {inc:.0f}€"
+        with st.expander(cap):
+            e1, e2, e3 = st.columns(3)
+            with e1:
+                n_data = st.date_input("Data", value=ds or datetime.date.today(),
+                                       key=f"ter_ed_data_{rid}")
+            with e2:
+                n_num = st.number_input("N° seduta", min_value=1, step=1,
+                                        value=int(num or 1), key=f"ter_ed_num_{rid}")
+            with e3:
+                n_prof = st.text_input("Professionista", value=prof or "",
+                                       key=f"ter_ed_prof_{rid}")
+            n_ob = st.text_input("Obiettivo", value=ob or "", key=f"ter_ed_ob_{rid}")
+            n_att = st.text_area("Attività svolte", value=att or "", height=80,
+                                 key=f"ter_ed_att_{rid}")
+            r1, r2 = st.columns(2)
+            with r1:
+                n_risp = st.selectbox("Risposta", RISPOSTA,
+                                      index=RISPOSTA.index(risp) if risp in RISPOSTA else 0,
+                                      key=f"ter_ed_risp_{rid}")
+            with r2:
+                n_met = st.selectbox("Metodo pagamento", METODI,
+                                     index=METODI.index(met) if met in METODI else 0,
+                                     key=f"ter_ed_met_{rid}")
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                n_costo = st.number_input("Listino €", min_value=0.0, step=5.0,
+                                          value=float(costo or 0), key=f"ter_ed_costo_{rid}")
+            with m2:
+                n_sconto = st.number_input("Sconto €", min_value=0.0, step=5.0,
+                                           value=float(sconto or 0), key=f"ter_ed_sc_{rid}")
+            with m3:
+                n_inc = st.number_input("Incassato €", min_value=0.0, step=5.0,
+                                        value=float(inc or 0), key=f"ter_ed_inc_{rid}")
+            n_note = st.text_area("Note", value=note or "", height=70,
+                                  key=f"ter_ed_note_{rid}")
+            b1, b2 = st.columns([1, 1])
+            with b1:
+                if st.button("💾 Salva modifiche", key=f"ter_ed_save_{rid}", type="primary"):
+                    if _aggiorna_seduta(conn, rid, n_data, n_num, n_prof, n_ob, n_att,
+                                        n_risp, n_costo, n_sconto, n_inc, n_met, n_note):
+                        st.success("Seduta aggiornata.")
+                        st.rerun()
+                    else:
+                        st.error("Aggiornamento non riuscito.")
+            with b2:
+                if st.button("🗑 Elimina", key=f"ter_sd_del_{rid}"):
+                    try:
+                        cur = conn.cursor()
+                        cur.execute("DELETE FROM terapia_sedute WHERE id=%s", (rid,))
+                        conn.commit()
+                        st.rerun()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+
+
+def _aggiorna_seduta(conn, rid, data_s, num, prof, ob, att, risp,
+                     costo, sconto, inc, met, note) -> bool:
+    try:
+        cur = conn.cursor()
+        cur.execute("""UPDATE terapia_sedute SET data_seduta=%s, numero=%s,
+            professionista=%s, obiettivo=%s, attivita=%s, risposta=%s,
+            costo=%s, sconto=%s, incassato=%s, metodo=%s, note=%s WHERE id=%s""",
+            (data_s, int(num), prof, ob, att, risp, float(costo or 0),
+             float(sconto or 0), float(inc or 0), met, note, rid))
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
 
 
 # ── Obiettivi & monitoraggio ──────────────────────────────────────────
