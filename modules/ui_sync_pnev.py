@@ -43,6 +43,15 @@ import streamlit as st
 
 VERDE = "#1D6B44"
 
+
+def _log(msg):
+    """Stampa su stdout: visibile nei log del cron (dove st.session_state non
+    funziona) E nei log dell'app. Diagnostica del sync pnev.it."""
+    try:
+        print(f"[sync_pnev] {msg}", flush=True)
+    except Exception:
+        pass
+
 # Domini "usa e getta" e parole tipiche degli account di prova/sistema
 JUNK_DOMAINS = {"gufum.com", "jazipo.com", "fanwn.com", "okcdeals.com"}
 
@@ -173,10 +182,12 @@ def _http_get_json(url: str):
                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                    "AppleWebKit/537.36 (KHTML, like Gecko) "
                    "Chrome/124.0 Safari/537.36")
+    _log(f"GET {url}")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             status = getattr(resp, "status", None) or resp.getcode()
+            _log(f"risposta HTTP {status} · {len(raw)} caratteri · inizio: {raw[:200]!r}")
             try:
                 st.session_state["maps_debug"] = {
                     "status": status,
@@ -235,15 +246,24 @@ def _fetch_studenti_maps(base_url: str, key: str, course_ids):
     """Legge gli iscritti MAPS. Se la risposta torna VUOTA (tipico blocco
     momentaneo lato pnev.it), riprova fino a 3 volte prima di arrendersi."""
     corsi = _norm_course_ids(course_ids)
+    _log(f"course_ids richiesti: {corsi!r}")
     ultimo = []
     for tentativo in range(3):
         try:
             data = _http_get_json(_url_maps(base_url, key, course=corsi))
-            studenti = (data.get("students") or []) if isinstance(data, dict) else []
+            if isinstance(data, dict):
+                studenti = data.get("students") or []
+                # se l'endpoint segnala un errore applicativo, mostralo
+                if not studenti and (data.get("error") or data.get("message")):
+                    _log(f"endpoint ha risposto senza studenti: {str(data)[:200]}")
+            else:
+                studenti = []
+            _log(f"tentativo {tentativo+1}/3: {len(studenti)} studenti")
             if studenti:
                 return studenti      # ok: risposta piena
             ultimo = studenti        # vuota: riprovo tra poco
-        except RuntimeError:
+        except RuntimeError as e:
+            _log(f"tentativo {tentativo+1}/3 fallito: {e}")
             if tentativo == 2:
                 raise                # ultimo tentativo fallito: segnalo l'errore
         if tentativo < 2:
