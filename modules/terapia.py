@@ -144,6 +144,7 @@ def _blocco_programma_settimana(conn, paz_id):
             protocollo TEXT, settimana INT, procedure JSONB,
             data_assegnazione DATE DEFAULT CURRENT_DATE,
             inviato BOOLEAN DEFAULT FALSE, creato TIMESTAMP DEFAULT NOW());""")
+        cur.execute("ALTER TABLE programma_casa ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'casa';")
         conn.commit()
         cur.execute("""SELECT nome, settimana_corrente, struttura FROM protocolli_assegnati
             WHERE paziente_id=%s AND stato='In corso' ORDER BY creato DESC""", (paz_id,))
@@ -160,7 +161,8 @@ def _blocco_programma_settimana(conn, paz_id):
                 "PNEV → 📋 Protocolli** per assegnarne uno (es. Apprendimento 10 settimane).")
         return
 
-    with st.expander("📋 Programma di questa settimana (da assegnare a casa)", expanded=True):
+    with st.expander("📋 Programma di questa settimana — cosa fa IN STUDIO e A CASA",
+                     expanded=True):
         for _i, (nome, sett_cur, strut) in enumerate(protos):
             settimane = strut if isinstance(strut, list) else (_json.loads(strut) if strut else [])
             cur_s = next((s for s in settimane if s.get("sett") == (sett_cur or 1)), None)
@@ -170,16 +172,47 @@ def _blocco_programma_settimana(conn, paz_id):
             if not proc_sett:
                 st.caption("Nessuna procedura per questa settimana.")
                 continue
-            scelte = st.multiselect(
-                "Procedure da assegnare a casa questa settimana",
-                proc_sett, default=proc_sett, key=f"casa_sel_{_i}_{nome}_{sett_cur}")
-            if st.button(f"📲 Assegna a casa (pronto per pnev.it) — {nome}",
-                         key=f"casa_btn_{_i}_{nome}_{sett_cur}", type="primary"):
-                if _salva_programma_casa(conn, paz_id, nome, sett_cur or 1, scelte):
-                    st.success("Programma della settimana assegnato. Sarà disponibile "
-                               "su pnev.it quando attiviamo la pagina di casa.")
+            cstudio, ccasa = st.columns(2)
+            with cstudio:
+                st.markdown("🏥 **In studio (oggi)**")
+                sel_studio = st.multiselect(
+                    "Procedure svolte in seduta", proc_sett, default=[],
+                    key=f"studio_sel_{_i}_{nome}_{sett_cur}", label_visibility="collapsed")
+            with ccasa:
+                st.markdown("🏠 **A casa (fino alla prossima)**")
+                sel_casa = st.multiselect(
+                    "Procedure da fare a casa", proc_sett, default=proc_sett,
+                    key=f"casa_sel_{_i}_{nome}_{sett_cur}", label_visibility="collapsed")
+            if st.button(f"💾 Salva programma settimana — {nome}",
+                         key=f"prog_save_btn_{_i}_{nome}_{sett_cur}", type="primary"):
+                ok = True
+                if sel_studio:
+                    ok = _salva_programma(conn, paz_id, nome, sett_cur or 1, sel_studio, "studio") and ok
+                if sel_casa:
+                    ok = _salva_programma(conn, paz_id, nome, sett_cur or 1, sel_casa, "casa") and ok
+                if ok:
+                    st.success("Salvato. «A casa» sarà disponibile su pnev.it quando "
+                               "attiviamo la pagina di casa.")
                 else:
                     st.error("Salvataggio non riuscito.")
+
+
+def _salva_programma(conn, paz_id, protocollo, settimana, procedure, tipo) -> bool:
+    import json as _json
+    try:
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO programma_casa(paziente_id, protocollo, settimana,
+            procedure, tipo) VALUES(%s,%s,%s,%s,%s)""",
+            (paz_id, protocollo, int(settimana),
+             _json.dumps(procedure, ensure_ascii=False), tipo))
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _salva_programma_casa(conn, paz_id, protocollo, settimana, procedure) -> bool:
