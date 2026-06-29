@@ -191,6 +191,30 @@ def _render_programma_paziente(conn, paz_id):
                     st.success(f"{n} procedure aggiunte al programma.")
                     st.rerun()
 
+        # ── Non c'è? Creala al volo, senza uscire ─────────────────────
+        st.markdown("---")
+        st.markdown("**Non trovi una procedura? Creala qui** 👇")
+        with st.form("prog_new_proc", clear_on_submit=True):
+            f1, f2 = st.columns(2)
+            with f1:
+                n_appr = st.selectbox("Approccio", APPROCCI, key="prog_new_appr")
+            with f2:
+                n_step = st.selectbox("Step (solo Terapia visiva)",
+                                      ["—"] + STEP_VISIVA, key="prog_new_step")
+            n_nome = st.text_input("Nome della procedura", key="prog_new_nome",
+                                   placeholder="es. Saccadi con metronomo")
+            n_ob = st.text_input("A cosa serve (facoltativo)", key="prog_new_ob")
+            if st.form_submit_button("➕ Crea e aggiungi subito al programma",
+                                     type="primary"):
+                if not n_nome.strip():
+                    st.warning("Scrivi il nome della procedura.")
+                else:
+                    if _crea_e_aggiungi(conn, paz_id, n_appr, n_step, n_nome, n_ob):
+                        st.success(f"«{n_nome}» creata e aggiunta al programma.")
+                        st.rerun()
+                    else:
+                        st.error("Non è stato possibile crearla. Riprova.")
+
     # ── Programma attuale, raggruppato per approccio ──────────────────
     righe = _programma_paziente(conn, paz_id)
     if not righe:
@@ -251,6 +275,28 @@ def _procedure_libreria(_conn, approccio):
         except Exception:
             pass
         return []
+
+
+def _crea_e_aggiungi(conn, paz_id, appr, step, nome, ob) -> bool:
+    """Crea una nuova procedura in libreria e la aggiunge subito al programma."""
+    try:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, obiettivo) "
+                    "VALUES(%s,%s,%s,%s) RETURNING id", (appr, step, nome, ob))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        try:
+            _procedure_libreria.clear(); _tutte_procedure.clear()
+        except Exception:
+            pass
+        return _aggiungi_al_programma(conn, paz_id, {
+            "id": new_id, "approccio": appr, "step": step, "nome": nome})
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _aggiungi_al_programma(conn, paz_id, p) -> bool:
