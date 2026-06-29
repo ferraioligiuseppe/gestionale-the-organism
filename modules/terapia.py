@@ -137,6 +137,14 @@ def _blocco_programma_settimana(conn, paz_id):
     permette di SCEGLIERE le procedure di questa settimana da assegnare a casa
     (pronte da inviare su pnev.it)."""
     import json as _json
+    _nome_paz = ""
+    try:
+        from .quadro_storico import carica_paziente
+        _p = carica_paziente(conn, paz_id)
+        if _p:
+            _nome_paz = f"{_p.get('Cognome','')} {_p.get('Nome','')}".strip()
+    except Exception:
+        pass
     try:
         cur = conn.cursor()
         cur.execute("""CREATE TABLE IF NOT EXISTS programma_casa(
@@ -205,8 +213,40 @@ def _blocco_programma_settimana(conn, paz_id):
                 if sel_casa:
                     ok = _salva_programma(conn, paz_id, nome, sett_cur or 1, sel_casa, "casa") and ok
                 st.success("Salvato.") if ok else st.error("Salvataggio non riuscito.")
+            if sel_studio or sel_casa:
+                st.download_button(
+                    "🖨️ Stampa foglio procedure (da dare a mano)",
+                    data=_foglio_html(_nome_paz, nome, sett_cur or 1, sel_studio, sel_casa),
+                    file_name=f"procedure_{nome}.html".replace(" ", "_"),
+                    mime="text/html", key=f"stampa_{_i}")
             st.markdown("<hr style='margin:4px 0;border:none;border-top:1px solid #eee'>",
                         unsafe_allow_html=True)
+
+
+def _foglio_html(nome_paz, protocollo, settimana, studio, casa):
+    import datetime as _dt
+    def _lista(items):
+        if not items:
+            return "<p style='color:#888'>—</p>"
+        return "<ul>" + "".join(f"<li>{p}</li>" for p in items) + "</ul>"
+    oggi = _dt.date.today().strftime("%d/%m/%Y")
+    return f"""<!doctype html><html lang="it"><head><meta charset="utf-8">
+<title>Procedure — {protocollo}</title><style>
+@page{{size:A4;margin:18mm}} body{{font-family:Georgia,serif;color:#1a1a1a;line-height:1.6}}
+h1{{font-size:20px;margin:0 0 2px}} .sub{{color:#555;font-size:12px;margin-bottom:14px}}
+h2{{font-size:15px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:3px}}
+ul{{margin:6px 0}} li{{margin:3px 0}}
+.foot{{margin-top:24px;font-size:11px;color:#666}}
+</style></head><body>
+<h1>Programma di lavoro — Metodo PNEV</h1>
+<div class="sub">Studio The Organism · Dott. Giuseppe Ferraioli · {oggi}</div>
+<p><b>Paziente:</b> {nome_paz or '________________'}<br>
+<b>Percorso:</b> {protocollo} — settimana {settimana}</p>
+<h2>🏥 In studio</h2>{_lista(studio)}
+<h2>🏠 A casa (fino alla prossima seduta)</h2>{_lista(casa)}
+<p class="foot">Il lavoro a casa è parte essenziale del percorso: la costanza
+quotidiana determina i risultati. Per dubbi, contattare lo Studio.</p>
+</body></html>"""
 
 
 def _salva_programma(conn, paz_id, protocollo, settimana, procedure, tipo) -> bool:
