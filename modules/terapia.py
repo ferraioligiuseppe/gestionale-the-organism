@@ -78,7 +78,7 @@ def render_terapia(conn=None, paz_id=None, paziente=None):
 def _render_diario(conn, paz_id, terapia):
     st.caption(f"Sedute di **{terapia}**. La parte economica confluisce negli incassi.")
 
-    _blocco_programma_settimana(conn, paz_id)
+    sel_studio_all, sel_casa_all = _blocco_programma_settimana(conn, paz_id)
 
     try:
         cur = conn.cursor()
@@ -121,9 +121,10 @@ def _render_diario(conn, paz_id, terapia):
             if st.form_submit_button("💾 Salva seduta", type="primary"):
                 ok = _salva_seduta(conn, paz_id, terapia, data_s, numero, prof,
                                    obiettivo, attivita, risposta, costo, sconto,
-                                   incassato, metodo, note)
+                                   incassato, metodo, note, sel_studio_all, sel_casa_all)
                 if ok:
-                    st.success(f"Seduta n° {numero} di {terapia} salvata.")
+                    st.success(f"Seduta n° {numero} di {terapia} salvata "
+                               f"({len(sel_studio_all)} in studio, {len(sel_casa_all)} a casa).")
                     st.rerun()
                 else:
                     st.error("Salvataggio non riuscito.")
@@ -165,62 +166,49 @@ def _blocco_programma_settimana(conn, paz_id):
         protos = []
 
     if not protos:
-        st.info("Nessun protocollo assegnato a questo paziente. Vai in **🧩 Programma "
-                "PNEV → 📋 Protocolli** per assegnarne uno (es. Apprendimento 10 settimane).")
-        return
+        st.caption("Nessun protocollo PNEV assegnato. Vai in **🧩 Programma PNEV → "
+                   "📋 Protocolli** per assegnare il programma (poi qui scegli le procedure).")
+        return [], []
 
-    with st.expander("📋 Procedure di questa seduta — scegli IN STUDIO e A CASA",
-                     expanded=True):
-        st.caption("Hai davanti tutte le procedure dei protocolli PNEV assegnati. "
-                   "La settimana indicata è solo una guida: scegli liberamente cosa "
-                   "fare oggi in studio e cosa a casa, per questo paziente.")
-        for _i, (nome, sett_cur, strut) in enumerate(protos):
-            settimane = strut if isinstance(strut, list) else (_json.loads(strut) if strut else [])
-            # TUTTE le procedure del protocollo, etichettate per tappa/fase (guida)
-            tutte = []
-            for s in settimane:
-                fase = s.get("fase", "")
-                for pr in s.get("procedure", []):
-                    tutte.append(f"S{s.get('sett','?')} · {pr}" + (f"  ({fase})" if fase else ""))
-            if not tutte:
-                continue
-            guida = next((s.get("fase", "") for s in settimane
-                          if s.get("sett") == (sett_cur or 1)), "")
-            st.markdown(f"### {nome}")
-            st.caption(f"📍 Guida: saresti alla settimana {sett_cur or 1}"
-                       + (f" — {guida}" if guida else ""))
-            cstudio, ccasa = st.columns(2)
-            studio_key = f"studio_sel_{_i}"
-            casa_key = f"casa_sel_{_i}"
-            with cstudio:
-                st.markdown("🏥 **In studio (oggi)**")
-                sel_studio = st.multiselect(
-                    "Procedure in seduta", tutte, default=[],
-                    key=studio_key, label_visibility="collapsed")
-            with ccasa:
-                st.markdown("🏠 **A casa (fino alla prossima)**")
-                if st.button("📋 Copia da «In studio»", key=f"copia_{_i}"):
-                    st.session_state[casa_key] = list(st.session_state.get(studio_key, []))
-                    st.rerun()
-                sel_casa = st.multiselect(
-                    "Procedure a casa", tutte,
-                    key=casa_key, label_visibility="collapsed")
-            if st.button(f"💾 Salva — {nome}", key=f"prog_save_btn_{_i}",
-                         type="primary"):
-                ok = True
-                if sel_studio:
-                    ok = _salva_programma(conn, paz_id, nome, sett_cur or 1, sel_studio, "studio") and ok
-                if sel_casa:
-                    ok = _salva_programma(conn, paz_id, nome, sett_cur or 1, sel_casa, "casa") and ok
-                st.success("Salvato.") if ok else st.error("Salvataggio non riuscito.")
-            if sel_casa:
-                st.download_button(
-                    "🖨️ Stampa elenco procedure A CASA (da dare a mano)",
-                    data=_foglio_html(_nome_paz, nome, sett_cur or 1, sel_casa),
-                    file_name=f"procedure_casa_{nome}.html".replace(" ", "_"),
-                    mime="text/html", key=f"stampa_{_i}")
-            st.markdown("<hr style='margin:4px 0;border:none;border-top:1px solid #eee'>",
-                        unsafe_allow_html=True)
+    st.markdown("**📋 Procedure di questa seduta** — scegli cosa fai in studio e cosa a casa:")
+    st.caption("Tutte le procedure dei protocolli assegnati. La settimana è solo una "
+               "guida: scegli liberamente per questo paziente. Verranno salvate con la seduta.")
+    studio_all, casa_all = [], []
+    for _i, (nome, sett_cur, strut) in enumerate(protos):
+        settimane = strut if isinstance(strut, list) else (_json.loads(strut) if strut else [])
+        tutte = []
+        for s in settimane:
+            fase = s.get("fase", "")
+            for pr in s.get("procedure", []):
+                tutte.append(f"S{s.get('sett','?')} · {pr}" + (f"  ({fase})" if fase else ""))
+        if not tutte:
+            continue
+        guida = next((s.get("fase", "") for s in settimane
+                      if s.get("sett") == (sett_cur or 1)), "")
+        st.markdown(f"**{nome}**")
+        st.caption(f"📍 Guida: settimana {sett_cur or 1}" + (f" — {guida}" if guida else ""))
+        cstudio, ccasa = st.columns(2)
+        studio_key = f"studio_sel_{_i}"
+        casa_key = f"casa_sel_{_i}"
+        with cstudio:
+            st.markdown("🏥 **In studio (oggi)**")
+            sel_studio = st.multiselect(
+                "Procedure in seduta", tutte, default=[],
+                key=studio_key, label_visibility="collapsed")
+        with ccasa:
+            st.markdown("🏠 **A casa (fino alla prossima)**")
+            if st.button("📋 Copia da «In studio»", key=f"copia_{_i}"):
+                st.session_state[casa_key] = list(st.session_state.get(studio_key, []))
+                st.rerun()
+            sel_casa = st.multiselect(
+                "Procedure a casa", tutte,
+                key=casa_key, label_visibility="collapsed")
+        # accumulo (con prefisso protocollo) per salvarle dentro la seduta
+        studio_all += [f"[{nome}] {x}" for x in sel_studio]
+        casa_all += [f"[{nome}] {x}" for x in sel_casa]
+        st.markdown("<hr style='margin:4px 0;border:none;border-top:1px solid #eee'>",
+                    unsafe_allow_html=True)
+    return studio_all, casa_all
 
 
 def _foglio_html(nome_paz, protocollo, settimana, casa):
@@ -290,15 +278,21 @@ def _salva_programma_casa(conn, paz_id, protocollo, settimana, procedure) -> boo
 
 
 def _salva_seduta(conn, paz_id, terapia, data_s, numero, prof, ob, att, risp,
-                  costo, sconto, incassato, metodo, note) -> bool:
+                  costo, sconto, incassato, metodo, note,
+                  proc_studio=None, proc_casa=None) -> bool:
+    import json as _json
     try:
         cur = conn.cursor()
+        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS procedure_studio TEXT;")
+        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS procedure_casa TEXT;")
         cur.execute("""INSERT INTO terapia_sedute(paziente_id, terapia, data_seduta,
             numero, professionista, obiettivo, attivita, risposta,
-            costo, sconto, incassato, metodo, note)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            costo, sconto, incassato, metodo, note, procedure_studio, procedure_casa)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (paz_id, terapia, data_s, int(numero), prof, ob, att, risp,
-             float(costo or 0), float(sconto or 0), float(incassato or 0), metodo, note))
+             float(costo or 0), float(sconto or 0), float(incassato or 0), metodo, note,
+             _json.dumps(proc_studio or [], ensure_ascii=False),
+             _json.dumps(proc_casa or [], ensure_ascii=False)))
         conn.commit()
         # confluenza negli incassi: riga nella tabella Sedute (canonica)
         try:
@@ -323,7 +317,8 @@ def _elenco_sedute(conn, paz_id, terapia):
     try:
         cur = conn.cursor()
         cur.execute("""SELECT id, data_seduta, numero, professionista, obiettivo,
-            attivita, risposta, costo, sconto, incassato, metodo, note
+            attivita, risposta, costo, sconto, incassato, metodo, note,
+            procedure_studio, procedure_casa
             FROM terapia_sedute WHERE paziente_id=%s AND terapia=%s
             ORDER BY data_seduta DESC, numero DESC""", (paz_id, terapia))
         righe = cur.fetchall()
@@ -336,7 +331,17 @@ def _elenco_sedute(conn, paz_id, terapia):
     if not righe:
         st.caption("Nessuna seduta registrata per questo percorso.")
         return
-    for (rid, ds, num, prof, ob, att, risp, costo, sconto, inc, met, note) in righe:
+    for (rid, ds, num, prof, ob, att, risp, costo, sconto, inc, met, note,
+         p_studio, p_casa) in righe:
+        import json as _json
+        try:
+            l_studio = _json.loads(p_studio) if p_studio else []
+        except Exception:
+            l_studio = []
+        try:
+            l_casa = _json.loads(p_casa) if p_casa else []
+        except Exception:
+            l_casa = []
         ds_str = ds.strftime("%d/%m/%Y") if ds else ""
         cap = f"Seduta n° {num} — {ds_str}"
         if risp and risp != "—":
@@ -378,6 +383,15 @@ def _elenco_sedute(conn, paz_id, terapia):
                                         value=float(inc or 0), key=f"ter_ed_inc_{rid}")
             n_note = st.text_area("Note", value=note or "", height=70,
                                   key=f"ter_ed_note_{rid}")
+            if l_studio or l_casa:
+                st.markdown("**🏥 In studio:** " + (", ".join(l_studio) or "—"))
+                st.markdown("**🏠 A casa:** " + (", ".join(l_casa) or "—"))
+                if l_casa:
+                    st.download_button(
+                        "🖨️ Stampa elenco A CASA",
+                        data=_foglio_html("", terapia, num or 1, l_casa),
+                        file_name=f"procedure_casa_seduta_{num}.html",
+                        mime="text/html", key=f"ter_ed_stampa_{rid}")
             b1, b2 = st.columns([1, 1])
             with b1:
                 if st.button("💾 Salva modifiche", key=f"ter_ed_save_{rid}", type="primary"):
