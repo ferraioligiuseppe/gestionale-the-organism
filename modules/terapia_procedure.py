@@ -84,6 +84,10 @@ def ricarica_visive(conn):
         cur.execute("DELETE FROM terapia_libreria WHERE approccio=%s", ("Terapia visiva",))
         _seed_visive(cur)
         conn.commit()
+        try:
+            _procedure_libreria.clear(); _tutte_procedure.clear()
+        except Exception:
+            pass
         return True
     except Exception:
         try:
@@ -134,7 +138,14 @@ def render_programma(conn=None, paz_id=None, paziente=None):
 
     _assicura_tabelle(conn)
 
-    t_prog, t_libr = st.tabs(["🧩 Programma del paziente", "📚 Libreria procedure"])
+    t_prot, t_prog, t_libr = st.tabs(["📋 Protocolli", "🧩 Programma del paziente",
+                                      "📚 Libreria procedure"])
+    with t_prot:
+        try:
+            from .terapia_protocolli import render_protocolli
+            render_protocolli(conn, paz_id, paziente)
+        except Exception as e:
+            st.error(f"Errore protocolli: {e}")
     with t_prog:
         _render_programma_paziente(conn, paz_id)
     with t_libr:
@@ -221,7 +232,9 @@ def _render_programma_paziente(conn, paz_id):
                         unsafe_allow_html=True)
 
 
-def _procedure_libreria(conn, approccio):
+@st.cache_data(ttl=120, show_spinner=False)
+def _procedure_libreria(_conn, approccio):
+    conn = _conn
     try:
         cur = conn.cursor()
         if approccio:
@@ -407,6 +420,10 @@ def _salva_procedura(conn, appr, step, nome, ob, istr) -> bool:
         cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, obiettivo, istruzioni) "
                     "VALUES(%s,%s,%s,%s,%s)", (appr, step, nome, ob, istr))
         conn.commit()
+        try:
+            _procedure_libreria.clear(); _tutte_procedure.clear()
+        except Exception:
+            pass
         return True
     except Exception:
         try:
@@ -416,7 +433,9 @@ def _salva_procedura(conn, appr, step, nome, ob, istr) -> bool:
         return False
 
 
-def _tutte_procedure(conn, approccio):
+@st.cache_data(ttl=120, show_spinner=False)
+def _tutte_procedure(_conn, approccio):
+    conn = _conn
     try:
         cur = conn.cursor()
         if approccio:
@@ -442,6 +461,10 @@ def _toggle_procedura(conn, rid, attiva):
         cur = conn.cursor()
         cur.execute("UPDATE terapia_libreria SET attiva=%s WHERE id=%s", (attiva, rid))
         conn.commit()
+        try:
+            _procedure_libreria.clear(); _tutte_procedure.clear()
+        except Exception:
+            pass
     except Exception:
         try:
             conn.rollback()
