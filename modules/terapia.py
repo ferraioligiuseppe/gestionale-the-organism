@@ -173,16 +173,22 @@ def _blocco_programma_settimana(conn, paz_id):
                 st.caption("Nessuna procedura per questa settimana.")
                 continue
             cstudio, ccasa = st.columns(2)
+            studio_key = f"studio_sel_{_i}_{nome}_{sett_cur}"
+            casa_key = f"casa_sel_{_i}_{nome}_{sett_cur}"
             with cstudio:
                 st.markdown("🏥 **In studio (oggi)**")
                 sel_studio = st.multiselect(
                     "Procedure svolte in seduta", proc_sett, default=[],
-                    key=f"studio_sel_{_i}_{nome}_{sett_cur}", label_visibility="collapsed")
+                    key=studio_key, label_visibility="collapsed")
             with ccasa:
                 st.markdown("🏠 **A casa (fino alla prossima)**")
+                if st.button("📋 Copia da «In studio»",
+                             key=f"copia_{_i}_{nome}_{sett_cur}"):
+                    st.session_state[casa_key] = list(st.session_state.get(studio_key, []))
+                    st.rerun()
                 sel_casa = st.multiselect(
-                    "Procedure da fare a casa", proc_sett, default=proc_sett,
-                    key=f"casa_sel_{_i}_{nome}_{sett_cur}", label_visibility="collapsed")
+                    "Procedure da fare a casa", proc_sett, default=[],
+                    key=casa_key, label_visibility="collapsed")
             if st.button(f"💾 Salva programma settimana — {nome}",
                          key=f"prog_save_btn_{_i}_{nome}_{sett_cur}", type="primary"):
                 ok = True
