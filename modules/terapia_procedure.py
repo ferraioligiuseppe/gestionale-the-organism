@@ -84,6 +84,10 @@ def ricarica_visive(conn):
         cur.execute("DELETE FROM terapia_libreria WHERE approccio=%s", ("Terapia visiva",))
         _seed_visive(cur)
         conn.commit()
+        try:
+            _procedure_libreria.clear(); _tutte_procedure.clear()
+        except Exception:
+            pass
         return True
     except Exception:
         try:
@@ -228,7 +232,9 @@ def _render_programma_paziente(conn, paz_id):
                         unsafe_allow_html=True)
 
 
-def _procedure_libreria(conn, approccio):
+@st.cache_data(ttl=120, show_spinner=False)
+def _procedure_libreria(_conn, approccio):
+    conn = _conn
     try:
         cur = conn.cursor()
         if approccio:
@@ -414,6 +420,10 @@ def _salva_procedura(conn, appr, step, nome, ob, istr) -> bool:
         cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, obiettivo, istruzioni) "
                     "VALUES(%s,%s,%s,%s,%s)", (appr, step, nome, ob, istr))
         conn.commit()
+        try:
+            _procedure_libreria.clear(); _tutte_procedure.clear()
+        except Exception:
+            pass
         return True
     except Exception:
         try:
@@ -423,7 +433,9 @@ def _salva_procedura(conn, appr, step, nome, ob, istr) -> bool:
         return False
 
 
-def _tutte_procedure(conn, approccio):
+@st.cache_data(ttl=120, show_spinner=False)
+def _tutte_procedure(_conn, approccio):
+    conn = _conn
     try:
         cur = conn.cursor()
         if approccio:
@@ -449,6 +461,10 @@ def _toggle_procedura(conn, rid, attiva):
         cur = conn.cursor()
         cur.execute("UPDATE terapia_libreria SET attiva=%s WHERE id=%s", (attiva, rid))
         conn.commit()
+        try:
+            _procedure_libreria.clear(); _tutte_procedure.clear()
+        except Exception:
+            pass
     except Exception:
         try:
             conn.rollback()
