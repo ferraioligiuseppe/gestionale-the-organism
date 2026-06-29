@@ -78,6 +78,8 @@ def render_terapia(conn=None, paz_id=None, paziente=None):
 def _render_diario(conn, paz_id, terapia):
     st.caption(f"Sedute di **{terapia}**. La parte economica confluisce negli incassi.")
 
+    _blocco_programma_settimana(conn, paz_id)
+
     try:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM terapia_sedute WHERE paziente_id=%s AND terapia=%s",
@@ -128,6 +130,74 @@ def _render_diario(conn, paz_id, terapia):
 
     st.markdown(f"#### Sedute di {terapia} ({n_fatte})")
     _elenco_sedute(conn, paz_id, terapia)
+
+
+def _blocco_programma_settimana(conn, paz_id):
+    """Mostra i protocolli assegnati al paziente e la settimana in corso, e
+    permette di SCEGLIERE le procedure di questa settimana da assegnare a casa
+    (pronte da inviare su pnev.it)."""
+    import json as _json
+    try:
+        cur = conn.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS programma_casa(
+            id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+            protocollo TEXT, settimana INT, procedure JSONB,
+            data_assegnazione DATE DEFAULT CURRENT_DATE,
+            inviato BOOLEAN DEFAULT FALSE, creato TIMESTAMP DEFAULT NOW());""")
+        conn.commit()
+        cur.execute("""SELECT nome, settimana_corrente, struttura FROM protocolli_assegnati
+            WHERE paziente_id=%s AND stato='In corso' ORDER BY creato DESC""", (paz_id,))
+        protos = cur.fetchall()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        protos = []
+
+    if not protos:
+        st.info("Nessun protocollo assegnato a questo paziente. Vai in **🧩 Programma "
+                "PNEV → 📋 Protocolli** per assegnarne uno (es. Apprendimento 10 settimane).")
+        return
+
+    with st.expander("📋 Programma di questa settimana (da assegnare a casa)", expanded=True):
+        for nome, sett_cur, strut in protos:
+            settimane = strut if isinstance(strut, list) else (_json.loads(strut) if strut else [])
+            cur_s = next((s for s in settimane if s.get("sett") == (sett_cur or 1)), None)
+            st.markdown(f"**{nome}** — Settimana {sett_cur or 1}"
+                        + (f" · {cur_s.get('fase','')}" if cur_s else ""))
+            proc_sett = cur_s.get("procedure", []) if cur_s else []
+            if not proc_sett:
+                st.caption("Nessuna procedura per questa settimana.")
+                continue
+            scelte = st.multiselect(
+                "Procedure da assegnare a casa questa settimana",
+                proc_sett, default=proc_sett, key=f"casa_sel_{nome}_{sett_cur}")
+            if st.button(f"📲 Assegna a casa (pronto per pnev.it) — {nome}",
+                         key=f"casa_btn_{nome}_{sett_cur}", type="primary"):
+                if _salva_programma_casa(conn, paz_id, nome, sett_cur or 1, scelte):
+                    st.success("Programma della settimana assegnato. Sarà disponibile "
+                               "su pnev.it quando attiviamo la pagina di casa.")
+                else:
+                    st.error("Salvataggio non riuscito.")
+
+
+def _salva_programma_casa(conn, paz_id, protocollo, settimana, procedure) -> bool:
+    import json as _json
+    try:
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO programma_casa(paziente_id, protocollo, settimana, procedure)
+            VALUES(%s,%s,%s,%s)""",
+            (paz_id, protocollo, int(settimana),
+             _json.dumps(procedure, ensure_ascii=False)))
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _salva_seduta(conn, paz_id, terapia, data_s, numero, prof, ob, att, risp,
