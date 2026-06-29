@@ -79,8 +79,30 @@ def render_protocolli(conn, paz_id, paziente=None):
         return
 
     nome_paz = ""
+    if not isinstance(paziente, dict) or not (paziente.get("Cognome") or paziente.get("Nome")):
+        try:
+            from .quadro_storico import carica_paziente
+            p = carica_paziente(conn, paz_id)
+            if p:
+                paziente = p
+        except Exception:
+            pass
     if isinstance(paziente, dict):
         nome_paz = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
+
+    # Rilevamento automatico adulto/minore dalla data di nascita (correggibile)
+    eta = _eta_paziente(paziente)
+    if eta is not None:
+        default_idx = 0 if eta >= 18 else 1
+        st.caption(f"Età rilevata: **{eta} anni** → "
+                   + ("adulto" if eta >= 18 else "minore"))
+    else:
+        default_idx = 1
+        st.caption("Età non disponibile dall'anagrafica: scegli sotto il tipo di consenso.")
+    tipo = st.radio("Tipo di consenso", ["🧑 Adulto (firma in proprio)",
+                                        "👦 Minore (firma genitore/tutore)"],
+                    index=default_idx, horizontal=True, key="prot_tipo")
+    is_adult = tipo.startswith("🧑")
 
     cc1, cc2 = st.columns(2)
     with cc1:
@@ -89,17 +111,21 @@ def render_protocolli(conn, paz_id, paziente=None):
         data_inizio = st.date_input("Data inizio", value=datetime.date.today(),
                                     key="prot_inizio")
     with cc2:
-        firmatario = st.text_input("Chi sottoscrive (genitore/tutore)",
-                                   key="prot_firma",
-                                   placeholder="Nome e cognome del genitore")
+        firmatario = st.text_input(
+            "Chi sottoscrive" + (" (il paziente)" if is_adult else " (genitore/tutore)"),
+            key="prot_firma",
+            placeholder=("Nome e cognome del paziente" if is_adult
+                         else "Nome e cognome del genitore"))
 
-    testo = _testo_consenso(prot, nome_paz, costo, firmatario)
+    testo = _testo_consenso(prot, nome_paz, costo, firmatario, is_adult)
     st.text_area("Testo del consenso (modificabile)", value=testo, height=300,
                  key="prot_testo")
 
     accetta = st.checkbox(
-        "La famiglia ha letto, compreso e **sottoscrive** il presente consenso, "
-        "impegnandosi al lavoro a casa secondo il protocollo.", key="prot_acc")
+        ("Il paziente ha letto, compreso e **sottoscrive** il presente consenso, "
+         "impegnandosi al lavoro a casa secondo il protocollo.") if is_adult else
+        ("La famiglia ha letto, compreso e **sottoscrive** il presente consenso, "
+         "impegnandosi al lavoro a casa secondo il protocollo."), key="prot_acc")
 
     if st.button("✅ Firma consenso e assegna protocollo", type="primary",
                  disabled=not (accetta and firmatario.strip())):
@@ -117,9 +143,36 @@ def render_protocolli(conn, paz_id, paziente=None):
     _elenco_assegnati(conn, paz_id)
 
 
-def _testo_consenso(prot, nome_paz, costo, firmatario):
+def _eta_paziente(paziente):
+    """Età in anni dalla data di nascita del paziente (o None)."""
+    if not isinstance(paziente, dict):
+        return None
+    dn = (paziente.get("Data_Nascita") or paziente.get("data_nascita")
+          or paziente.get("Data nascita") or "")
+    if not dn:
+        return None
+    d = dn
+    if isinstance(d, str):
+        for f in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+            try:
+                d = datetime.datetime.strptime(d[:10], f).date()
+                break
+            except Exception:
+                continue
+        if isinstance(d, str):
+            return None
+    if isinstance(d, datetime.datetime):
+        d = d.date()
+    try:
+        o = datetime.date.today()
+        return o.year - d.year - ((o.month, o.day) < (d.month, d.day))
+    except Exception:
+        return None
+
+
+def _testo_consenso(prot, nome_paz, costo, firmatario, is_adult=False):
     proc_tot = sum(len(s.get("procedure", [])) for s in prot.get("settimane", []))
-    return (
+    intro = (
         "CONSENSO INFORMATO E IMPEGNO TERAPEUTICO — Metodo PNEV\n"
         "Studio The Organism · Dott. Giuseppe Ferraioli\n"
         "────────────────────────────────────────────\n\n"
@@ -135,20 +188,36 @@ def _testo_consenso(prot, nome_paz, costo, firmatario):
         "Il metodo PNEV richiede un allenamento quotidiano a casa. I risultati dipendono in "
         "modo determinante dalla costanza con cui le procedure assegnate vengono svolte "
         "tra una seduta e l'altra. Senza il lavoro a casa il percorso NON può dare i "
-        "risultati attesi.\n\n"
-        "3. IMPEGNO DELLA FAMIGLIA\n"
-        "La famiglia si impegna a: garantire lo svolgimento quotidiano degli esercizi, "
-        "rispettare la frequenza delle sedute, comunicare difficoltà o variazioni, e "
-        "accompagnare il minore con continuità per l'intera durata del percorso.\n\n"
+        "risultati attesi.\n\n")
+    if is_adult:
+        impegno = (
+            "3. IMPEGNO DEL PAZIENTE\n"
+            "Il paziente si impegna a: svolgere quotidianamente gli esercizi assegnati, "
+            "rispettare la frequenza delle sedute, comunicare difficoltà o variazioni e "
+            "portare avanti il percorso con continuità per l'intera durata prevista.\n\n")
+        sottoscr = (
+            "5. ACCETTAZIONE E SOTTOSCRIZIONE\n"
+            f"Il/la sottoscritto/a {firmatario or nome_paz or '________________'}, in qualità "
+            "di paziente, dichiara di aver letto e compreso quanto sopra e di accettarlo in "
+            "ogni sua parte, impegnandosi a rispettarlo come un contratto.\n\n"
+            "Data e luogo: ____________________     Firma del paziente: ____________________")
+    else:
+        impegno = (
+            "3. IMPEGNO DELLA FAMIGLIA\n"
+            "La famiglia si impegna a: garantire lo svolgimento quotidiano degli esercizi, "
+            "rispettare la frequenza delle sedute, comunicare difficoltà o variazioni, e "
+            "accompagnare il minore con continuità per l'intera durata del percorso.\n\n")
+        sottoscr = (
+            "5. ACCETTAZIONE E SOTTOSCRIZIONE\n"
+            f"Il/la sottoscritto/a {firmatario or '________________'}, in qualità di "
+            "genitore/tutore del minore, dichiara di aver letto e compreso quanto sopra e di "
+            "accettarlo in ogni sua parte, impegnandosi a rispettarlo come un contratto.\n\n"
+            "Data e luogo: ____________________     Firma del genitore/tutore: ____________________")
+    natura = (
         "4. NATURA DELL'INTERVENTO\n"
         "L'intervento è di tipo funzionale/riabilitativo e non sostituisce diagnosi o "
-        "terapie mediche. I tempi e gli esiti sono individuali e non garantibili a priori.\n\n"
-        "5. ACCETTAZIONE E SOTTOSCRIZIONE\n"
-        f"Il/la sottoscritto/a {firmatario or '________________'}, in qualità di "
-        "genitore/tutore, dichiara di aver letto e compreso quanto sopra e di accettarlo "
-        "in ogni sua parte, impegnandosi a rispettarlo come un contratto.\n\n"
-        "Data e luogo: ____________________     Firma: ____________________"
-    )
+        "terapie mediche. I tempi e gli esiti sono individuali e non garantibili a priori.\n\n")
+    return intro + impegno + natura + sottoscr
 
 
 def _salva_consenso(conn, paz_id, prot, costo, testo, firmatario) -> bool:
