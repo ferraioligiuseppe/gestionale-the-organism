@@ -161,46 +161,52 @@ def _blocco_programma_settimana(conn, paz_id):
                 "PNEV → 📋 Protocolli** per assegnarne uno (es. Apprendimento 10 settimane).")
         return
 
-    with st.expander("📋 Programma di questa settimana — cosa fa IN STUDIO e A CASA",
+    with st.expander("📋 Procedure di questa seduta — scegli IN STUDIO e A CASA",
                      expanded=True):
+        st.caption("Hai davanti tutte le procedure dei protocolli PNEV assegnati. "
+                   "La settimana indicata è solo una guida: scegli liberamente cosa "
+                   "fare oggi in studio e cosa a casa, per questo paziente.")
         for _i, (nome, sett_cur, strut) in enumerate(protos):
             settimane = strut if isinstance(strut, list) else (_json.loads(strut) if strut else [])
-            cur_s = next((s for s in settimane if s.get("sett") == (sett_cur or 1)), None)
-            st.markdown(f"**{nome}** — Settimana {sett_cur or 1}"
-                        + (f" · {cur_s.get('fase','')}" if cur_s else ""))
-            proc_sett = cur_s.get("procedure", []) if cur_s else []
-            if not proc_sett:
-                st.caption("Nessuna procedura per questa settimana.")
+            # TUTTE le procedure del protocollo, etichettate per tappa/fase (guida)
+            tutte = []
+            for s in settimane:
+                fase = s.get("fase", "")
+                for pr in s.get("procedure", []):
+                    tutte.append(f"S{s.get('sett','?')} · {pr}" + (f"  ({fase})" if fase else ""))
+            if not tutte:
                 continue
+            guida = next((s.get("fase", "") for s in settimane
+                          if s.get("sett") == (sett_cur or 1)), "")
+            st.markdown(f"### {nome}")
+            st.caption(f"📍 Guida: saresti alla settimana {sett_cur or 1}"
+                       + (f" — {guida}" if guida else ""))
             cstudio, ccasa = st.columns(2)
-            studio_key = f"studio_sel_{_i}_{nome}_{sett_cur}"
-            casa_key = f"casa_sel_{_i}_{nome}_{sett_cur}"
+            studio_key = f"studio_sel_{_i}"
+            casa_key = f"casa_sel_{_i}"
             with cstudio:
                 st.markdown("🏥 **In studio (oggi)**")
                 sel_studio = st.multiselect(
-                    "Procedure svolte in seduta", proc_sett, default=[],
+                    "Procedure in seduta", tutte, default=[],
                     key=studio_key, label_visibility="collapsed")
             with ccasa:
                 st.markdown("🏠 **A casa (fino alla prossima)**")
-                if st.button("📋 Copia da «In studio»",
-                             key=f"copia_{_i}_{nome}_{sett_cur}"):
+                if st.button("📋 Copia da «In studio»", key=f"copia_{_i}"):
                     st.session_state[casa_key] = list(st.session_state.get(studio_key, []))
                     st.rerun()
                 sel_casa = st.multiselect(
-                    "Procedure da fare a casa", proc_sett, default=[],
+                    "Procedure a casa", tutte, default=[],
                     key=casa_key, label_visibility="collapsed")
-            if st.button(f"💾 Salva programma settimana — {nome}",
-                         key=f"prog_save_btn_{_i}_{nome}_{sett_cur}", type="primary"):
+            if st.button(f"💾 Salva — {nome}", key=f"prog_save_btn_{_i}",
+                         type="primary"):
                 ok = True
                 if sel_studio:
                     ok = _salva_programma(conn, paz_id, nome, sett_cur or 1, sel_studio, "studio") and ok
                 if sel_casa:
                     ok = _salva_programma(conn, paz_id, nome, sett_cur or 1, sel_casa, "casa") and ok
-                if ok:
-                    st.success("Salvato. «A casa» sarà disponibile su pnev.it quando "
-                               "attiviamo la pagina di casa.")
-                else:
-                    st.error("Salvataggio non riuscito.")
+                st.success("Salvato.") if ok else st.error("Salvataggio non riuscito.")
+            st.markdown("<hr style='margin:4px 0;border:none;border-top:1px solid #eee'>",
+                        unsafe_allow_html=True)
 
 
 def _salva_programma(conn, paz_id, protocollo, settimana, procedure, tipo) -> bool:
