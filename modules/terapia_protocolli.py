@@ -56,21 +56,29 @@ def render_protocolli(conn, paz_id, paziente=None):
         return
 
     nomi = [p["nome"] for p in _SEED_PROT]
-    scelto = st.selectbox("Protocollo", nomi, key="prot_sel")
-    prot = next((p for p in _SEED_PROT if p["nome"] == scelto), None)
-    if not prot:
+    st.caption("Puoi comporre il **programma PNEV completo** selezionando più protocolli "
+               "insieme (visivo, uditivo, riflessi, miofunzionale…). Nelle sedute potrai "
+               "poi aggiustare il tiro con le procedure previste e assegnate.")
+    scelti = st.multiselect("Protocolli da includere nel programma PNEV", nomi,
+                            key="prot_sel")
+    prot_list = [p for p in _SEED_PROT if p["nome"] in scelti]
+    if not prot_list:
+        st.info("Seleziona uno o più protocolli per comporre il programma.")
         return
 
+    domini = " · ".join(sorted({p.get("dominio", "—") for p in prot_list}))
+    tappe_tot = sum(len(p.get("settimane", [])) for p in prot_list)
     c1, c2 = st.columns(2)
-    c1.metric("Dominio", prot.get("dominio", "—"))
-    c2.metric("Durata", prot.get("durata", "—"))
+    c1.metric("Domini inclusi", domini)
+    c2.metric("Tappe totali", tappe_tot)
 
-    # anteprima settimane
-    with st.expander("📅 Vedi il protocollo settimana per settimana", expanded=False):
-        for s in prot.get("settimane", []):
-            st.markdown(f"**Settimana {s['sett']} — {s.get('fase','')}**")
-            for pr in s.get("procedure", []):
-                st.markdown(f"- {pr}")
+    # anteprima di ciascun protocollo
+    for prot in prot_list:
+        with st.expander(f"📅 {prot['nome']} — {prot.get('durata','')}", expanded=False):
+            for s in prot.get("settimane", []):
+                st.markdown(f"**Tappa {s['sett']} — {s.get('fase','')}**")
+                for pr in s.get("procedure", []):
+                    st.markdown(f"- {pr}")
 
     st.markdown("---")
     st.markdown("### 📝 Consenso informato / Contratto terapeutico")
@@ -117,23 +125,27 @@ def render_protocolli(conn, paz_id, paziente=None):
             placeholder=("Nome e cognome del paziente" if is_adult
                          else "Nome e cognome del genitore"))
 
-    testo = _testo_consenso(prot, nome_paz, costo, firmatario, is_adult)
-    st.text_area("Testo del consenso (modificabile)", value=testo, height=300,
+    testo = _testo_consenso_multi(prot_list, nome_paz, costo, firmatario, is_adult)
+    st.text_area("Testo del consenso (modificabile)", value=testo, height=320,
                  key="prot_testo")
 
     accetta = st.checkbox(
         ("Il paziente ha letto, compreso e **sottoscrive** il presente consenso, "
-         "impegnandosi al lavoro a casa secondo il protocollo.") if is_adult else
+         "impegnandosi al lavoro a casa secondo il programma.") if is_adult else
         ("La famiglia ha letto, compreso e **sottoscrive** il presente consenso, "
-         "impegnandosi al lavoro a casa secondo il protocollo."), key="prot_acc")
+         "impegnandosi al lavoro a casa secondo il programma."), key="prot_acc")
 
-    if st.button("✅ Firma consenso e assegna protocollo", type="primary",
+    if st.button("✅ Firma consenso e assegna programma", type="primary",
                  disabled=not (accetta and firmatario.strip())):
-        ok1 = _salva_consenso(conn, paz_id, prot, costo,
+        nomi_sel = ", ".join(p["nome"] for p in prot_list)
+        prot_consenso = {"nome": nomi_sel, "durata": "programma combinato",
+                         "dominio": ", ".join(sorted({p.get("dominio","—") for p in prot_list})),
+                         "settimane": [s for p in prot_list for s in p.get("settimane", [])]}
+        ok1 = _salva_consenso(conn, paz_id, prot_consenso, costo,
                               st.session_state.get("prot_testo", testo), firmatario)
-        ok2 = _assegna_protocollo(conn, paz_id, prot, data_inizio)
+        ok2 = all(_assegna_protocollo(conn, paz_id, p, data_inizio) for p in prot_list)
         if ok1 and ok2:
-            st.success("Consenso firmato e protocollo assegnato. "
+            st.success(f"Programma PNEV assegnato ({len(prot_list)} protocolli). "
                        "Lo trovi nel programma del paziente e nel Quadro storico.")
         else:
             st.warning("Qualcosa non è andato a buon fine nel salvataggio.")
@@ -168,6 +180,23 @@ def _eta_paziente(paziente):
         return o.year - d.year - ((o.month, o.day) < (d.month, d.day))
     except Exception:
         return None
+
+
+def _testo_consenso_multi(prot_list, nome_paz, costo, firmatario, is_adult=False):
+    """Consenso per un PROGRAMMA composto da più protocolli (mix PNEV)."""
+    elenco = "\n".join(
+        f"   • {p.get('nome','')} ({p.get('dominio','—')}, {p.get('durata','—')})"
+        for p in prot_list)
+    combinato = {
+        "nome": "Programma PNEV integrato",
+        "dominio": ", ".join(sorted({p.get("dominio", "—") for p in prot_list})),
+        "durata": "programma combinato (vedi singoli protocolli)",
+        "settimane": [s for p in prot_list for s in p.get("settimane", [])],
+    }
+    base = _testo_consenso(combinato, nome_paz, costo, firmatario, is_adult)
+    ins = ("Il programma proposto integra più approcci PNEV:\n" + elenco + "\n\n")
+    return base.replace("1. COMPOSIZIONE DEL PERCORSO\n",
+                        ins + "1. COMPOSIZIONE DEL PERCORSO\n")
 
 
 def _testo_consenso(prot, nome_paz, costo, firmatario, is_adult=False):
