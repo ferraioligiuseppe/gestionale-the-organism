@@ -203,7 +203,7 @@ def _blocco_programma_settimana(conn, paz_id):
                     st.session_state[casa_key] = list(st.session_state.get(studio_key, []))
                     st.rerun()
                 sel_casa = st.multiselect(
-                    "Procedure a casa", tutte, default=[],
+                    "Procedure a casa", tutte,
                     key=casa_key, label_visibility="collapsed")
             if st.button(f"💾 Salva — {nome}", key=f"prog_save_btn_{_i}",
                          type="primary"):
@@ -213,39 +213,43 @@ def _blocco_programma_settimana(conn, paz_id):
                 if sel_casa:
                     ok = _salva_programma(conn, paz_id, nome, sett_cur or 1, sel_casa, "casa") and ok
                 st.success("Salvato.") if ok else st.error("Salvataggio non riuscito.")
-            if sel_studio or sel_casa:
+            if sel_casa:
                 st.download_button(
-                    "🖨️ Stampa foglio procedure (da dare a mano)",
-                    data=_foglio_html(_nome_paz, nome, sett_cur or 1, sel_studio, sel_casa),
-                    file_name=f"procedure_{nome}.html".replace(" ", "_"),
+                    "🖨️ Stampa elenco procedure A CASA (da dare a mano)",
+                    data=_foglio_html(_nome_paz, nome, sett_cur or 1, sel_casa),
+                    file_name=f"procedure_casa_{nome}.html".replace(" ", "_"),
                     mime="text/html", key=f"stampa_{_i}")
             st.markdown("<hr style='margin:4px 0;border:none;border-top:1px solid #eee'>",
                         unsafe_allow_html=True)
 
 
-def _foglio_html(nome_paz, protocollo, settimana, studio, casa):
+def _foglio_html(nome_paz, protocollo, settimana, casa):
     import datetime as _dt
+    import re as _re
+    def _pulisci(p):
+        # toglie il prefisso "S1 · " e il suffisso "(fase)" per un elenco pulito
+        p = _re.sub(r'^S\d+\s*·\s*', '', p)
+        p = _re.sub(r'\s*\([^)]*\)\s*$', '', p)
+        return p.strip()
     def _lista(items):
         if not items:
             return "<p style='color:#888'>—</p>"
-        return "<ul>" + "".join(f"<li>{p}</li>" for p in items) + "</ul>"
+        return "<ol>" + "".join(f"<li>{_pulisci(p)}</li>" for p in items) + "</ol>"
     oggi = _dt.date.today().strftime("%d/%m/%Y")
     return f"""<!doctype html><html lang="it"><head><meta charset="utf-8">
-<title>Procedure — {protocollo}</title><style>
-@page{{size:A4;margin:18mm}} body{{font-family:Georgia,serif;color:#1a1a1a;line-height:1.6}}
+<title>Procedure a casa</title><style>
+@page{{size:A4;margin:18mm}} body{{font-family:Georgia,serif;color:#1a1a1a;line-height:1.8}}
 h1{{font-size:20px;margin:0 0 2px}} .sub{{color:#555;font-size:12px;margin-bottom:14px}}
-h2{{font-size:15px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:3px}}
-ul{{margin:6px 0}} li{{margin:3px 0}}
-.foot{{margin-top:24px;font-size:11px;color:#666}}
+ol{{margin:10px 0;font-size:15px}} li{{margin:8px 0}}
+.foot{{margin-top:26px;font-size:11px;color:#666}}
 </style></head><body>
-<h1>Programma di lavoro — Metodo PNEV</h1>
+<h1>Esercizi da fare a casa — Metodo PNEV</h1>
 <div class="sub">Studio The Organism · Dott. Giuseppe Ferraioli · {oggi}</div>
 <p><b>Paziente:</b> {nome_paz or '________________'}<br>
 <b>Percorso:</b> {protocollo} — settimana {settimana}</p>
-<h2>🏥 In studio</h2>{_lista(studio)}
-<h2>🏠 A casa (fino alla prossima seduta)</h2>{_lista(casa)}
-<p class="foot">Il lavoro a casa è parte essenziale del percorso: la costanza
-quotidiana determina i risultati. Per dubbi, contattare lo Studio.</p>
+{_lista(casa)}
+<p class="foot">La spiegazione dettagliata di ogni esercizio è disponibile sul sito
+pnev.it. Il lavoro quotidiano a casa è essenziale per i risultati.</p>
 </body></html>"""
 
 
