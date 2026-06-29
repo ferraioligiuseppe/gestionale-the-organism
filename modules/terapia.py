@@ -161,7 +161,7 @@ def _blocco_programma_settimana(conn, paz_id):
         return
 
     with st.expander("📋 Programma di questa settimana (da assegnare a casa)", expanded=True):
-        for nome, sett_cur, strut in protos:
+        for _i, (nome, sett_cur, strut) in enumerate(protos):
             settimane = strut if isinstance(strut, list) else (_json.loads(strut) if strut else [])
             cur_s = next((s for s in settimane if s.get("sett") == (sett_cur or 1)), None)
             st.markdown(f"**{nome}** — Settimana {sett_cur or 1}"
@@ -172,9 +172,9 @@ def _blocco_programma_settimana(conn, paz_id):
                 continue
             scelte = st.multiselect(
                 "Procedure da assegnare a casa questa settimana",
-                proc_sett, default=proc_sett, key=f"casa_sel_{nome}_{sett_cur}")
+                proc_sett, default=proc_sett, key=f"casa_sel_{_i}_{nome}_{sett_cur}")
             if st.button(f"📲 Assegna a casa (pronto per pnev.it) — {nome}",
-                         key=f"casa_btn_{nome}_{sett_cur}", type="primary"):
+                         key=f"casa_btn_{_i}_{nome}_{sett_cur}", type="primary"):
                 if _salva_programma_casa(conn, paz_id, nome, sett_cur or 1, scelte):
                     st.success("Programma della settimana assegnato. Sarà disponibile "
                                "su pnev.it quando attiviamo la pagina di casa.")
