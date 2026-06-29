@@ -78,7 +78,20 @@ def render_terapia(conn=None, paz_id=None, paziente=None):
 def _render_diario(conn, paz_id, terapia):
     st.caption(f"Sedute di **{terapia}**. La parte economica confluisce negli incassi.")
 
-    sel_studio_all, sel_casa_all = _blocco_programma_settimana(conn, paz_id)
+    _nome_paz = ""
+    try:
+        from .quadro_storico import carica_paziente
+        _pp = carica_paziente(conn, paz_id)
+        if _pp:
+            _nome_paz = f"{_pp.get('Cognome','')} {_pp.get('Nome','')}".strip()
+    except Exception:
+        pass
+
+    st.download_button(
+        "🖨️ Scheda terapia VUOTA (da compilare a mano)",
+        data=_scheda_vuota_html(terapia),
+        file_name=f"scheda_terapia_vuota_{terapia}.html".replace(" ", "_"),
+        mime="text/html", key="ter_sd_vuota")
 
     try:
         cur = conn.cursor()
@@ -93,44 +106,137 @@ def _render_diario(conn, paz_id, terapia):
             pass
 
     with st.expander("➕ Nuova seduta", expanded=True):
-        with st.form("ter_seduta", clear_on_submit=True):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                data_s = st.date_input("Data", value=datetime.date.today(), key="ter_sd_data")
-            with c2:
-                numero = st.number_input("N° seduta", min_value=1, step=1,
-                                         value=int(n_fatte) + 1, key="ter_sd_num")
-            with c3:
-                prof = st.text_input("Professionista", key="ter_sd_prof")
-            obiettivo = st.text_input("Obiettivo della seduta", key="ter_sd_ob")
-            attivita = st.text_area("Attività svolte", height=80, key="ter_sd_att")
-            risposta = st.selectbox("Risposta del paziente", RISPOSTA, key="ter_sd_risp")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            data_s = st.date_input("Data", value=datetime.date.today(), key="ter_sd_data")
+        with c2:
+            numero = st.number_input("N° seduta", min_value=1, step=1,
+                                     value=int(n_fatte) + 1, key="ter_sd_num")
+        with c3:
+            prof = st.text_input("Professionista", key="ter_sd_prof")
+        obiettivo = st.text_input("Obiettivo della seduta", key="ter_sd_ob")
+        attivita = st.text_area("Attività svolte", height=80, key="ter_sd_att")
+        risposta = st.selectbox("Risposta del paziente", RISPOSTA, key="ter_sd_risp")
 
-            st.markdown("**💶 Incasso**")
-            e1, e2, e3, e4 = st.columns(4)
-            with e1:
-                costo = st.number_input("Listino €", min_value=0.0, step=5.0, key="ter_sd_costo")
-            with e2:
-                sconto = st.number_input("Sconto €", min_value=0.0, step=5.0, key="ter_sd_sconto")
-            with e3:
-                incassato = st.number_input("Incassato €", min_value=0.0, step=5.0, key="ter_sd_inc")
-            with e4:
-                metodo = st.selectbox("Metodo", METODI, key="ter_sd_met")
-            note = st.text_area("Note", height=70, key="ter_sd_note")
+        st.markdown("**💶 Incasso**")
+        e1, e2, e3, e4 = st.columns(4)
+        with e1:
+            costo = st.number_input("Listino €", min_value=0.0, step=5.0, key="ter_sd_costo")
+        with e2:
+            sconto = st.number_input("Sconto €", min_value=0.0, step=5.0, key="ter_sd_sconto")
+        with e3:
+            incassato = st.number_input("Incassato €", min_value=0.0, step=5.0, key="ter_sd_inc")
+        with e4:
+            metodo = st.selectbox("Metodo", METODI, key="ter_sd_met")
+        note = st.text_area("Note", height=70, key="ter_sd_note")
 
-            if st.form_submit_button("💾 Salva seduta", type="primary"):
+        # ── Procedure assegnate in questa seduta (studio / casa) ──────
+        st.markdown("---")
+        sel_studio_all, sel_casa_all = _blocco_programma_settimana(conn, paz_id)
+
+        # ── Azioni: stampa · invia su pnev.it · salva ─────────────────
+        st.markdown("---")
+        a1, a2, a3 = st.columns(3)
+        with a1:
+            if sel_casa_all:
+                st.download_button(
+                    "🖨️ Stampa elenco A CASA",
+                    data=_foglio_html(_nome_paz, terapia, numero, sel_casa_all),
+                    file_name=f"procedure_casa_{terapia}.html".replace(" ", "_"),
+                    mime="text/html", key="ter_sd_stampa", use_container_width=True)
+        with a2:
+            if st.button("📲 Invia su pnev.it", key="ter_sd_invia",
+                         disabled=not sel_casa_all, use_container_width=True):
+                if _invia_pnev(conn, paz_id, terapia, numero, sel_casa_all):
+                    st.success("Procedure di casa inviate alla piattaforma pnev.it.")
+                else:
+                    st.error("Invio non riuscito.")
+        with a3:
+            if st.button("💾 Salva seduta", type="primary", key="ter_sd_salva",
+                         use_container_width=True):
                 ok = _salva_seduta(conn, paz_id, terapia, data_s, numero, prof,
                                    obiettivo, attivita, risposta, costo, sconto,
                                    incassato, metodo, note, sel_studio_all, sel_casa_all)
                 if ok:
-                    st.success(f"Seduta n° {numero} di {terapia} salvata "
-                               f"({len(sel_studio_all)} in studio, {len(sel_casa_all)} a casa).")
+                    st.success(f"Seduta n° {numero} salvata "
+                               f"({len(sel_studio_all)} studio, {len(sel_casa_all)} casa).")
                     st.rerun()
                 else:
                     st.error("Salvataggio non riuscito.")
 
     st.markdown(f"#### Sedute di {terapia} ({n_fatte})")
     _elenco_sedute(conn, paz_id, terapia)
+
+
+def _scheda_vuota_html(terapia):
+    """Scheda terapia VUOTA da stampare e compilare a mano (senza computer)."""
+    import datetime as _dt
+    riga = "<div style='border-bottom:1px solid #aaa;height:26px'></div>"
+    righe_proc = "".join(
+        f"<tr><td style='width:30px;text-align:center'>{i}</td>"
+        f"<td style='border-bottom:1px solid #aaa'></td>"
+        f"<td style='width:60px;border-bottom:1px solid #aaa'></td></tr>"
+        for i in range(1, 9))
+    return f"""<!doctype html><html lang="it"><head><meta charset="utf-8">
+<title>Scheda terapia — {terapia}</title><style>
+@page{{size:A4;margin:16mm}} body{{font-family:Georgia,serif;color:#1a1a1a;line-height:1.5}}
+h1{{font-size:19px;margin:0 0 2px}} .sub{{color:#555;font-size:12px;margin-bottom:14px}}
+table{{border-collapse:collapse;width:100%;margin:6px 0}}
+.f{{margin:10px 0}} .f b{{font-size:13px}}
+.box{{border:1px solid #aaa;min-height:60px;margin-top:4px}}
+.row{{display:flex;gap:16px}} .row>div{{flex:1}}
+th{{font-size:12px;text-align:left;border-bottom:2px solid #333;padding:4px}}
+td{{padding:6px 4px}} h2{{font-size:14px;margin:14px 0 4px}}
+</style></head><body>
+<h1>Scheda di terapia — {terapia} · Metodo PNEV</h1>
+<div class="sub">Studio The Organism · Dott. Giuseppe Ferraioli</div>
+<div class="row">
+  <div class="f"><b>Paziente:</b> {riga}</div>
+  <div class="f"><b>Data:</b> {riga}</div>
+</div>
+<div class="row">
+  <div class="f"><b>N° seduta:</b> {riga}</div>
+  <div class="f"><b>Professionista:</b> {riga}</div>
+</div>
+<div class="f"><b>Obiettivo della seduta:</b><div class="box"></div></div>
+<div class="f"><b>Attività svolte:</b><div class="box"></div></div>
+<div class="f"><b>Risposta del paziente:</b> {riga}</div>
+<h2>🏥 Procedure svolte IN STUDIO</h2>
+<table>{righe_proc}</table>
+<h2>🏠 Procedure da fare A CASA</h2>
+<table>{righe_proc}</table>
+<div class="row">
+  <div class="f"><b>Listino €:</b> {riga}</div>
+  <div class="f"><b>Sconto €:</b> {riga}</div>
+  <div class="f"><b>Incassato €:</b> {riga}</div>
+</div>
+<div class="f"><b>Note:</b><div class="box"></div></div>
+</body></html>"""
+
+
+def _invia_pnev(conn, paz_id, terapia, numero, casa) -> bool:
+    """Salva le procedure di casa come 'inviate' su pnev.it (la pagina di casa
+    le leggerà quando la attiviamo)."""
+    import json as _json
+    try:
+        cur = conn.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS programma_casa(
+            id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+            protocollo TEXT, settimana INT, procedure JSONB,
+            data_assegnazione DATE DEFAULT CURRENT_DATE,
+            inviato BOOLEAN DEFAULT FALSE, creato TIMESTAMP DEFAULT NOW());""")
+        cur.execute("ALTER TABLE programma_casa ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'casa';")
+        cur.execute("""INSERT INTO programma_casa(paziente_id, protocollo, settimana,
+            procedure, tipo, inviato) VALUES(%s,%s,%s,%s,'casa',TRUE)""",
+            (paz_id, terapia, int(numero), _json.dumps(casa, ensure_ascii=False)))
+        conn.commit()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _blocco_programma_settimana(conn, paz_id):
