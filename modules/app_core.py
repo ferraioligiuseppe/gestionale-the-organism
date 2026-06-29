@@ -7442,6 +7442,12 @@ def ui_coupons():
 
     st.markdown("---")
 
+    # Creazione rapida anagrafica direttamente dalla schermata coupon,
+    # così non serve uscire se il paziente non esiste ancora.
+    with st.expander("➕ Crea nuova anagrafica (se il paziente non c'è)"):
+        from modules.paziente_attivo import _form_nuovo_paziente
+        _form_nuovo_paziente(conn)
+
     # === FIX paziente attivo globale ===
     from modules.paziente_attivo import get_paziente_attivo
     paz_id = get_paziente_attivo(conn)
