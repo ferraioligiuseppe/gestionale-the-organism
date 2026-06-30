@@ -1081,6 +1081,99 @@ def _form_privacy(key: str, c: dict | None = None) -> dict:
 #  DIALOGS
 # ════════════════════════════════════════════════════════════════════
 
+def _sezione_coupon_paziente(conn, paz_id):
+    """Inserimento e gestione coupon direttamente dall'anagrafica del paziente."""
+    import datetime as _dt
+    cur = conn.cursor()
+    try:
+        cur.execute("ALTER TABLE Coupons ADD COLUMN IF NOT EXISTS Luogo_Utilizzo TEXT")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur.execute(
+            "SELECT id, Tipo_Coupon, Codice_Coupon, Data_Assegnazione, Note, "
+            "Utilizzato, Luogo_Utilizzo FROM Coupons WHERE paziente_id = %s "
+            "ORDER BY Data_Assegnazione DESC, id DESC", (paz_id,))
+        rows = cur.fetchall()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        rows = []
+
+    def _g(r, *names):
+        low = {str(k).lower(): v for k, v in dict(r).items()}
+        for n in names:
+            v = low.get(n.lower())
+            if v not in (None, ""):
+                return v
+        return None
+
+    if rows:
+        for r in rows:
+            cid = _g(r, "id")
+            usato = bool(_g(r, "Utilizzato"))
+            cod = _g(r, "Codice_Coupon") or "—"
+            tip = _g(r, "Tipo_Coupon") or ""
+            luogo = _g(r, "Luogo_Utilizzo") or ""
+            c1, c2, c3 = st.columns([3, 2, 2])
+            with c1:
+                st.markdown(f"{'✅' if usato else '🟡'} **{cod}** · {tip}"
+                            + (f" · {luogo}" if luogo else ""))
+            with c2:
+                nl = st.text_input("Dove", value=luogo, key=f"anac_luogo_{cid}",
+                                   label_visibility="collapsed",
+                                   placeholder="ottica / convenzione")
+            with c3:
+                lbl = "Segna NON usato" if usato else "Segna USATO"
+                if st.button(lbl, key=f"anac_tog_{cid}", use_container_width=True):
+                    try:
+                        cur.execute("UPDATE Coupons SET Utilizzato=%s, Luogo_Utilizzo=%s "
+                                    "WHERE id=%s",
+                                    (0 if usato else 1, nl.strip() or None, cid))
+                        conn.commit()
+                        st.rerun()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+    else:
+        st.caption("Nessun coupon per questo paziente.")
+
+    st.markdown("**➕ Nuovo coupon**")
+    with st.form(f"anac_new_{paz_id}", clear_on_submit=True):
+        f1, f2 = st.columns(2)
+        with f1:
+            tipo = st.selectbox("Tipo", ["OF", "SDS"], key=f"anac_tipo_{paz_id}")
+        with f2:
+            codice = st.text_input("Codice coupon", key=f"anac_cod_{paz_id}")
+        note = st.text_input("Note (es. operatore)", key=f"anac_note_{paz_id}")
+        usato_new = st.checkbox("Già utilizzato", key=f"anac_us_{paz_id}")
+        if st.form_submit_button("➕ Aggiungi coupon", type="primary"):
+            try:
+                cur.execute(
+                    "INSERT INTO Coupons (paziente_id, Tipo_Coupon, Codice_Coupon, "
+                    "Data_Assegnazione, Note, Utilizzato) VALUES (%s,%s,%s,%s,%s,%s)",
+                    (paz_id, tipo, codice.strip() or None,
+                     _dt.date.today().strftime("%Y-%m-%d"),
+                     note.strip() or None, 1 if usato_new else 0))
+                conn.commit()
+                st.success("Coupon aggiunto.")
+                st.rerun()
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                st.error(f"Inserimento non riuscito: {e}")
+
+
 @st.dialog("Modifica paziente", width="large")
 def _dialog_modifica(conn, paz_id: int):
     rec = _carica_paziente(conn, paz_id)
@@ -1117,6 +1210,9 @@ def _dialog_modifica(conn, paz_id: int):
                 import time
                 time.sleep(0.3)
                 st.rerun()
+
+    with st.expander("🎟️ Coupon OF / SDS"):
+        _sezione_coupon_paziente(conn, paz_id)
 
     st.markdown("---")
 
