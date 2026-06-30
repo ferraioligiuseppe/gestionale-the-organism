@@ -291,11 +291,12 @@ def _dialog_seleziona(conn):
     df = pd.DataFrame(rows_df)
 
     # Età come intero nullable: evita il mix int/"" (colonna object) che rompe
-    # la serializzazione pyarrow di AgGrid (ArrowInvalid su colonna Età).
-    try:
-        df["Età"] = pd.to_numeric(df["Età"], errors="coerce").astype("Int64")
-    except Exception:
-        df["Età"] = df["Età"].astype(str)
+    # la serializzazione pyarrow di AgGrid. Solo se la colonna esiste (lista non vuota).
+    if "Età" in df.columns:
+        try:
+            df["Età"] = pd.to_numeric(df["Età"], errors="coerce").astype("Int64")
+        except Exception:
+            df["Età"] = df["Età"].astype(str)
 
     gob = GridOptionsBuilder.from_dataframe(df)
     gob.configure_default_column(filter=True, sortable=True, resizable=True)
