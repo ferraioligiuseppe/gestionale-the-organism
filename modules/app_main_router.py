@@ -369,6 +369,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
+    if sotto == "📄 Modulistica / Schede da stampare":
+        try:
+            from .modulistica import render_modulistica
+            render_modulistica(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulistica: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
     if sotto == "💡 Assistente PNEV":
         try:
             from .assistente_pnev import render_assistente

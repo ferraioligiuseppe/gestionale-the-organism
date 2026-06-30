@@ -66,6 +66,7 @@ SOTTOSEZIONI = {
         "📈 Esiti / Follow-up",
         "🧪 Apprendimento PNEV",
         "📝 Diagnosi assistita",
+        "📄 Modulistica / Schede da stampare",
         "🎟️ Coupon OF / SDS",
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",
