@@ -113,8 +113,21 @@ def render_terapia(conn=None, paz_id=None, paziente=None):
     st.caption("Vision Therapy, MAPS, Stanza del sale, Osteopatia, Miofunzionale, "
                "Sports Vision. Diario, obiettivi e relazione — tutto in cartella.")
 
-    if conn is None or not paz_id:
-        st.info("Seleziona prima un paziente.")
+    if conn is None:
+        st.info("Connessione non disponibile.")
+        return
+
+    # Header con paziente attivo + bottone per cercare/selezionare dall'elenco
+    try:
+        from .paziente_attivo import header_paziente_attivo
+        sel = header_paziente_attivo(conn)
+        if sel:
+            paz_id = sel
+    except Exception:
+        pass
+
+    if not paz_id:
+        st.info("Seleziona un paziente qui sopra per gestire i suoi percorsi.")
         return
 
     _assicura_tabelle(conn)
