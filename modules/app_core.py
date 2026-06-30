@@ -7358,10 +7358,18 @@ def ui_coupons():
     # ════════════════════════════════════════════════════════════════
     st.markdown("### 🔎 Tutti i coupon")
     try:
+        cur.execute("ALTER TABLE Coupons ADD COLUMN IF NOT EXISTS Luogo_Utilizzo TEXT")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
         cur.execute(
             """
             SELECT c.id, c.Tipo_Coupon, c.Codice_Coupon, c.Data_Assegnazione,
-                   c.Note, c.Utilizzato,
+                   c.Note, c.Utilizzato, c.Luogo_Utilizzo,
                    p.Cognome, p.Nome
             FROM Coupons c
             LEFT JOIN Pazienti p ON p.id = c.paziente_id
@@ -7427,6 +7435,7 @@ def ui_coupons():
             "Codice": codice or "—",
             "Data": data_it or "—",
             "Stato": "✅ Usato" if usato else "🟡 Non usato",
+            "Dove": _g(c, "Luogo_Utilizzo") or "",
             "Note": _g(c, "Note") or "",
         })
 
@@ -7439,6 +7448,46 @@ def ui_coupons():
         st.dataframe(righe, use_container_width=True, hide_index=True)
     else:
         st.caption("Nessun coupon corrisponde ai filtri.")
+
+    # ── Modifica stato/luogo di un coupon (anche senza paziente attivo) ──
+    with st.expander("✏️ Segna un coupon come usato e dove (ottica / convenzione)"):
+        if not tutti:
+            st.caption("Nessun coupon registrato.")
+        else:
+            def _coup_lbl(c):
+                nm = f"{(_g(c,'Cognome') or '').strip()} {(_g(c,'Nome') or '').strip()}".strip() or "—"
+                cod = _g(c, "Codice_Coupon") or "(senza codice)"
+                stt = "✅" if bool(_g(c, "Utilizzato")) else "🟡"
+                return f"{stt} {cod} · {_g(c,'Tipo_Coupon') or ''} · {nm}"
+            mapppa = {_coup_lbl(c): c for c in tutti}
+            scelto = st.selectbox("Coupon", list(mapppa.keys()), key="coup_edit_sel")
+            c_sel = mapppa.get(scelto)
+            if c_sel:
+                cid = _g(c_sel, "id")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    nuovo_usato = st.checkbox("✅ Utilizzato",
+                                              value=bool(_g(c_sel, "Utilizzato")),
+                                              key=f"coup_ed_usato_{cid}")
+                with col_b:
+                    luogo = st.text_input("Dove è stato usato (ottica / convenzione)",
+                                          value=_g(c_sel, "Luogo_Utilizzo") or "",
+                                          key=f"coup_ed_luogo_{cid}",
+                                          placeholder="es. Ottica Rossi · Convenzione X")
+                if st.button("💾 Salva stato coupon", type="primary", key=f"coup_ed_save_{cid}"):
+                    try:
+                        cur.execute(
+                            "UPDATE Coupons SET Utilizzato = %s, Luogo_Utilizzo = %s WHERE id = %s",
+                            (1 if nuovo_usato else 0, luogo.strip() or None, cid))
+                        conn.commit()
+                        st.success("Coupon aggiornato.")
+                        st.rerun()
+                    except Exception as e:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+                        st.error(f"Aggiornamento non riuscito: {e}")
 
     st.markdown("---")
 
