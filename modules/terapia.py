@@ -299,9 +299,62 @@ def _invia_pnev(conn, paz_id, terapia, numero, casa) -> bool:
 
 
 def _blocco_programma_settimana(conn, paz_id):
-    """Mostra i protocolli assegnati al paziente e la settimana in corso, e
-    permette di SCEGLIERE le procedure di questa settimana da assegnare a casa
-    (pronte da inviare su pnev.it)."""
+    """Mostra TUTTE le procedure della libreria (per approccio, con ricerca) e
+    lascia scegliere liberamente cosa fare IN STUDIO e A CASA in questa seduta.
+    I protocolli assegnati restano come scorciatoia (riempimento rapido)."""
+    import json as _json
+    # carica tutte le procedure attive dalla libreria
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT approccio, step, nome FROM terapia_libreria "
+                    "WHERE attiva=TRUE ORDER BY approccio, step, nome")
+        rows = cur.fetchall()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        rows = []
+
+    if not rows:
+        st.caption("La libreria procedure è vuota. Vai in **🧩 Programma PNEV → "
+                   "📚 Libreria procedure** per caricarle.")
+        return [], []
+
+    # etichetta: [Approccio] (step) Nome
+    voci = []
+    for appr, step, nome in rows:
+        st_lbl = f"{step} · " if step and step != "—" else ""
+        voci.append(f"[{appr}] {st_lbl}{nome}")
+
+    st.markdown("**📋 Procedure di questa seduta** — scegli quelle adeguate al paziente:")
+    cerca = st.text_input("🔎 Cerca procedura", key="ter_cerca_proc",
+                          placeholder="es. saccadi, deglutizione, Marsden…")
+    if cerca.strip():
+        q = cerca.lower()
+        voci_f = [v for v in voci if q in v.lower()]
+    else:
+        voci_f = voci
+    st.caption(f"{len(voci_f)} procedure disponibili"
+               + (f" (filtro: «{cerca}»)" if cerca.strip() else ""))
+
+    cstudio, ccasa = st.columns(2)
+    with cstudio:
+        st.markdown("🏥 **In studio (oggi)**")
+        sel_studio = st.multiselect("Procedure in seduta", voci_f, default=[],
+                                    key="ter_studio_sel", label_visibility="collapsed")
+    with ccasa:
+        st.markdown("🏠 **A casa (fino alla prossima)**")
+        if st.button("📋 Copia da «In studio»", key="ter_copia_casa"):
+            st.session_state["ter_casa_sel"] = list(st.session_state.get("ter_studio_sel", []))
+            st.rerun()
+        sel_casa = st.multiselect("Procedure a casa", voci_f,
+                                  key="ter_casa_sel", label_visibility="collapsed")
+    return list(sel_studio), list(sel_casa)
+
+
+def _blocco_programma_settimana_OLD(conn, paz_id):
+    """(disattivata) versione basata sui protocolli assegnati."""
     import json as _json
     _nome_paz = ""
     try:
