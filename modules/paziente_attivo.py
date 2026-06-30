@@ -179,16 +179,23 @@ def _crea_paziente_rapido(conn, cognome, nome, dn_str, sesso, telefono):
         return None, f"Errore nella creazione: {e}"
 
 
-def _form_nuovo_paziente(conn):
-    """Form compatto per creare al volo un paziente e renderlo attivo."""
-    with st.form("form_nuovo_paziente_rapido", clear_on_submit=False):
+def _form_nuovo_paziente(conn, key_suffix=None):
+    """Form compatto per creare al volo un paziente e renderlo attivo.
+    key_suffix rende univoche le chiavi quando il form compare in più punti
+    nello stesso run (es. schermata coupon + dialog selezione)."""
+    if key_suffix is None:
+        n = st.session_state.get("_nfp_counter", 0) + 1
+        st.session_state["_nfp_counter"] = n
+        key_suffix = str(n)
+    ks = key_suffix
+    with st.form(f"form_nuovo_paziente_rapido_{ks}", clear_on_submit=False):
         c1, c2 = st.columns(2)
-        cognome = c1.text_input("Cognome *", key="np_cognome")
-        nome = c2.text_input("Nome *", key="np_nome")
+        cognome = c1.text_input("Cognome *", key=f"np_cognome_{ks}")
+        nome = c2.text_input("Nome *", key=f"np_nome_{ks}")
         c3, c4 = st.columns(2)
-        dn = c3.text_input("Data nascita (GG/MM/AAAA)", key="np_dn")
-        sesso = c4.selectbox("Sesso", ["", "M", "F"], key="np_sesso")
-        tel = st.text_input("Telefono", key="np_tel")
+        dn = c3.text_input("Data nascita (GG/MM/AAAA)", key=f"np_dn_{ks}")
+        sesso = c4.selectbox("Sesso", ["", "M", "F"], key=f"np_sesso_{ks}")
+        tel = st.text_input("Telefono", key=f"np_tel_{ks}")
         ok = st.form_submit_button("➕ Crea e seleziona", type="primary",
                                    use_container_width=True)
     if ok:
