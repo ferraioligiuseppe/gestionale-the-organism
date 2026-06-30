@@ -16,7 +16,66 @@
 
 import json
 import datetime
+import io
 import streamlit as st
+
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _docx_scheda_vuota(terapia):
+    """Scheda terapia VUOTA in Word (.docx), da stampare e compilare a mano."""
+    from docx import Document
+    from docx.shared import Pt
+    doc = Document()
+    h = doc.add_heading(f"Scheda di terapia — {terapia} · Metodo PNEV", level=1)
+    doc.add_paragraph("Studio The Organism · Dott. Giuseppe Ferraioli").italic = True
+    doc.add_paragraph("")
+    for campo in ["Paziente:", "Data:", "N° seduta:", "Professionista:"]:
+        doc.add_paragraph(f"{campo} ______________________________")
+    doc.add_paragraph("Obiettivo della seduta:")
+    doc.add_paragraph("______________________________________________________")
+    doc.add_paragraph("Attività svolte:")
+    doc.add_paragraph("______________________________________________________")
+    doc.add_paragraph("Risposta del paziente: ______________________________")
+    for titolo in ["🏥 Procedure svolte IN STUDIO", "🏠 Procedure da fare A CASA"]:
+        doc.add_heading(titolo, level=2)
+        for i in range(1, 9):
+            doc.add_paragraph(f"{i}. ______________________________________________")
+    doc.add_paragraph("")
+    doc.add_paragraph("Listino €: __________   Sconto €: __________   Incassato €: __________")
+    doc.add_paragraph("Note:")
+    doc.add_paragraph("______________________________________________________")
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _docx_procedure_casa(nome_paz, protocollo, settimana, casa):
+    """Elenco procedure A CASA in Word (.docx)."""
+    import re as _re
+    from docx import Document
+    def _pulisci(p):
+        p = _re.sub(r'^S\d+\s*·\s*', '', p)
+        p = _re.sub(r'\s*\([^)]*\)\s*$', '', p)
+        return p.strip()
+    doc = Document()
+    doc.add_heading("Esercizi da fare a casa — Metodo PNEV", level=1)
+    oggi = datetime.date.today().strftime("%d/%m/%Y")
+    doc.add_paragraph(f"Studio The Organism · Dott. Giuseppe Ferraioli · {oggi}").italic = True
+    doc.add_paragraph(f"Paziente: {nome_paz or '________________'}")
+    doc.add_paragraph(f"Percorso: {protocollo} — settimana {settimana}")
+    doc.add_paragraph("")
+    for p in casa:
+        doc.add_paragraph(_pulisci(p), style="List Number")
+    doc.add_paragraph("")
+    nota = doc.add_paragraph(
+        "La spiegazione dettagliata di ogni esercizio è disponibile sul sito pnev.it. "
+        "Il lavoro quotidiano a casa è essenziale per i risultati.")
+    nota.italic = True
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
 
 TERAPIE = ["Vision Therapy", "MAPS", "Stanza del sale", "Osteopatia",
            "Terapia miofunzionale", "Sports Vision"]
@@ -88,10 +147,10 @@ def _render_diario(conn, paz_id, terapia):
         pass
 
     st.download_button(
-        "🖨️ Scheda terapia VUOTA (da compilare a mano)",
-        data=_scheda_vuota_html(terapia),
-        file_name=f"scheda_terapia_vuota_{terapia}.html".replace(" ", "_"),
-        mime="text/html", key="ter_sd_vuota")
+        "🖨️ Scheda terapia VUOTA (Word, da compilare a mano)",
+        data=_docx_scheda_vuota(terapia),
+        file_name=f"scheda_terapia_vuota_{terapia}.docx".replace(" ", "_"),
+        mime=_DOCX_MIME, key="ter_sd_vuota")
 
     try:
         cur = conn.cursor()
@@ -140,10 +199,10 @@ def _render_diario(conn, paz_id, terapia):
         with a1:
             if sel_casa_all:
                 st.download_button(
-                    "🖨️ Stampa elenco A CASA",
-                    data=_foglio_html(_nome_paz, terapia, numero, sel_casa_all),
-                    file_name=f"procedure_casa_{terapia}.html".replace(" ", "_"),
-                    mime="text/html", key="ter_sd_stampa", use_container_width=True)
+                    "🖨️ Stampa elenco A CASA (Word)",
+                    data=_docx_procedure_casa(_nome_paz, terapia, numero, sel_casa_all),
+                    file_name=f"procedure_casa_{terapia}.docx".replace(" ", "_"),
+                    mime=_DOCX_MIME, key="ter_sd_stampa", use_container_width=True)
         with a2:
             if st.button("📲 Invia su pnev.it", key="ter_sd_invia",
                          disabled=not sel_casa_all, use_container_width=True):
@@ -494,10 +553,10 @@ def _elenco_sedute(conn, paz_id, terapia):
                 st.markdown("**🏠 A casa:** " + (", ".join(l_casa) or "—"))
                 if l_casa:
                     st.download_button(
-                        "🖨️ Stampa elenco A CASA",
-                        data=_foglio_html("", terapia, num or 1, l_casa),
-                        file_name=f"procedure_casa_seduta_{num}.html",
-                        mime="text/html", key=f"ter_ed_stampa_{rid}")
+                        "🖨️ Stampa elenco A CASA (Word)",
+                        data=_docx_procedure_casa("", terapia, num or 1, l_casa),
+                        file_name=f"procedure_casa_seduta_{num}.docx",
+                        mime=_DOCX_MIME, key=f"ter_ed_stampa_{rid}")
             b1, b2 = st.columns([1, 1])
             with b1:
                 if st.button("💾 Salva modifiche", key=f"ter_ed_save_{rid}", type="primary"):
