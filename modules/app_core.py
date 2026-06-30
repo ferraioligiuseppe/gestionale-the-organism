@@ -7948,6 +7948,11 @@ def ui_osteopatia_section():
 
     sel = None  # Disabilitato: paziente attivo da session_state
 
+    # Crea nuova anagrafica senza uscire (se il paziente non esiste ancora)
+    with st.expander("➕ Crea nuova anagrafica (se il paziente non c'è)"):
+        from modules.paziente_attivo import _form_nuovo_paziente
+        _form_nuovo_paziente(conn)
+
     # === FIX paziente attivo globale ===
     from modules.paziente_attivo import get_paziente_attivo, paziente_attivo_record
     paziente_id = get_paziente_attivo(conn)
