@@ -124,12 +124,32 @@ def _seleziona_paziente_card(conn) -> tuple:
 def _render_dashboard(conn) -> None:
     """Dashboard home — riepilogo paziente corrente."""
 
-    # ── Intestazione ─────────────────────────────────────────────────
-    st.markdown(
-        "<h2 style='margin-bottom:4px'>🏠 The Organism</h2>"
-        "<p style='color:#8b949e;margin-top:0'>Seleziona un paziente</p>",
-        unsafe_allow_html=True
-    )
+    # ── Intestazione grafica con loghi PNEV + The Organism ────────────
+    try:
+        import base64 as _b64
+        from .loghi_data import LOGO_PNEV_B64, LOGO_ORGANISM_B64
+        st.markdown(f"""
+<div style="display:flex;align-items:center;gap:22px;justify-content:space-between;
+     background:linear-gradient(120deg,#f3f0ff 0%,#eef7f4 100%);
+     border:1px solid var(--color-border-tertiary);
+     border-radius:16px;padding:18px 26px;margin:4px 0 18px 0">
+  <div style="display:flex;align-items:center;gap:16px">
+    <img src="data:image/png;base64,{LOGO_PNEV_B64}" style="height:46px">
+    <div style="width:1px;height:38px;background:#d8d4e8"></div>
+    <img src="data:image/png;base64,{LOGO_ORGANISM_B64}" style="height:34px">
+  </div>
+  <div style="text-align:right;color:#6b6478;font-size:.82rem;font-style:italic">
+    Metodo PNEV · Studio The Organism
+  </div>
+</div>
+<p style='color:#8b949e;margin:0 0 14px'>Seleziona un paziente</p>
+""", unsafe_allow_html=True)
+    except Exception:
+        st.markdown(
+            "<h2 style='margin-bottom:4px'>🏠 The Organism</h2>"
+            "<p style='color:#8b949e;margin-top:0'>Seleziona un paziente</p>",
+            unsafe_allow_html=True
+        )
 
     paz_id, paz_label, paz_info = _seleziona_paziente_card(conn)
     if not paz_id:
@@ -232,6 +252,73 @@ def _render_dashboard(conn) -> None:
                 st.caption("Nessun test registrato")
         except Exception:
             st.caption("—")
+
+    # ── Sintesi economica: incassi + coupon ───────────────────────────
+    st.markdown("---")
+    st.markdown("**💶 Sintesi economica**")
+    ce1, ce2, ce3, ce4 = st.columns(4)
+    tot_sedute = tot_terapia = 0.0
+    n_coupon = n_coupon_usati = 0
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(SUM(Pagato),0) FROM Sedute WHERE paziente_id=%s", (paz_id,))
+        r = cur.fetchone()
+        tot_sedute = float(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0.0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(SUM(Incassato),0) FROM terapia_sedute WHERE paziente_id=%s",
+                    (paz_id,))
+        r = cur.fetchone()
+        tot_terapia = float(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0.0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*), COALESCE(SUM(CASE WHEN Utilizzato=1 OR Utilizzato=TRUE "
+                    "THEN 1 ELSE 0 END),0) FROM Coupons WHERE paziente_id=%s", (paz_id,))
+        r = cur.fetchone()
+        if r:
+            n_coupon = int(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0
+            n_coupon_usati = int(r[1] if not isinstance(r, dict) else list(r.values())[1]) or 0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    ce1.metric("Incassato sedute", f"{tot_sedute:,.0f} €".replace(",", "."))
+    ce2.metric("Incassato terapie", f"{tot_terapia:,.0f} €".replace(",", "."))
+    ce3.metric("Totale complessivo", f"{tot_sedute + tot_terapia:,.0f} €".replace(",", "."))
+    ce4.metric("Coupon", f"{n_coupon_usati}/{n_coupon} usati" if n_coupon else "—")
+
+    # ── Accesso rapido alle pagine del paziente ───────────────────────
+    st.markdown("**🔗 Vai a**")
+    _link_dest = [
+        ("🧩 Quadro storico", "👥 Pazienti", "🧩 Quadro storico"),
+        ("📎 Documenti clinici", "👥 Pazienti", "📎 Documenti clinici"),
+        ("📝 Diagnosi assistita", "👥 Pazienti", "📝 Diagnosi assistita"),
+        ("📈 Esiti / Follow-up", "👥 Pazienti", "📈 Esiti / Follow-up"),
+        ("🧘 Percorsi terapeutici", "🎧 Terapia & relazione", "🧘 Percorsi terapeutici"),
+        ("🧩 Programma PNEV", "🎧 Terapia & relazione", "🧩 Programma PNEV"),
+        ("👁️ Valutazione visuo-percettiva", "🔍 Valutazione funzionale",
+         "👁️ Valutazione visuo-percettiva"),
+        ("🎟️ Coupon OF / SDS", "👥 Pazienti", "🎟️ Coupon OF / SDS"),
+    ]
+    lcols = st.columns(4)
+    for i, (etichetta, area_dest, sotto_dest) in enumerate(_link_dest):
+        with lcols[i % 4]:
+            if st.button(etichetta, key=f"dash_link_{i}", use_container_width=True):
+                st.session_state["goto_area"] = area_dest
+                st.session_state["goto_sotto"] = sotto_dest
+                st.session_state["paziente_attivo_id"] = paz_id
+                st.rerun()
 
     # ── Anamnesi ─────────────────────────────────────────────────────
     st.markdown("---")
@@ -1124,8 +1211,37 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     Costruisce il menu a 7 aree nella sidebar.
     Ritorna (area_corrente, sottosezione_corrente).
     """
+    # Nasconde la lista automatica delle pagine tecniche (cron, migrazioni,
+    # debug — file in pages/) che Streamlit mostra di default in sidebar.
+    # Restano raggiungibili dall'admin tramite il pannello qui sotto.
+    st.markdown(
+        "<style>[data-testid='stSidebarNav']{display:none}</style>",
+        unsafe_allow_html=True)
+
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
+
+    if is_admin:
+        with st.sidebar.expander("🛠️ Strumenti tecnici (admin)"):
+            st.caption("Script di servizio: cron, migrazioni, debug.")
+            _tool_pages = [
+                ("cron_promemoria", "Cron promemoria"),
+                ("cron_sync_pnev", "Cron sync pnev"),
+                ("debug_timezone", "Debug timezone"),
+                ("diagnostica_eventi", "Diagnostica eventi"),
+                ("firma_pubblica", "Firma pubblica"),
+                ("fix_timezone_eventi", "Fix timezone eventi"),
+                ("iscrizione_evento", "Iscrizione evento"),
+                ("migra_promemoria", "Migra promemoria"),
+                ("pnev_pubblico", "Pnev pubblico"),
+                ("seed_consensi_costellazioni", "Seed consensi costellazioni"),
+            ]
+            for slug, etichetta in _tool_pages:
+                try:
+                    st.page_link(f"pages/{slug}.py", label=etichetta)
+                except Exception:
+                    st.caption(f"• {etichetta} (pages/{slug}.py)")
+        st.sidebar.markdown("---")
 
     # Salto "in sospeso" richiesto da un'altra pagina (es. ▶️ Apri DEM).
     # Va applicato PRIMA di creare i widget, altrimenti Streamlit blocca
