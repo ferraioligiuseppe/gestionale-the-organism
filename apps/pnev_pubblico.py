@@ -156,7 +156,15 @@ def azione_registra(conn):
     )
     st.code(link_dashboard(token), language=None)
     st.caption("Presto lo riceverai anche via email. Il link vale per tutta la durata del percorso.")
-    st.link_button("▶ Vai ai miei progressi", link_dashboard(token))
+
+    # Ritorno al file del percorso su pnev.it: gli passiamo il token
+    # così il salvataggio si attiva da solo (?t=TOKEN letto al caricamento)
+    ritorno = qp("ritorno")
+    if ritorno and ritorno.startswith("https://"):
+        sep = "&" if "?" in ritorno else "?"
+        st.link_button("↩ Torna al percorso e collega il salvataggio",
+                       f"{ritorno}{sep}t={token}", type="primary")
+    st.link_button("📊 Vai ai miei progressi", link_dashboard(token))
     st.stop()
 
 
