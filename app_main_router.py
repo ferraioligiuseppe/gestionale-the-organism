@@ -233,6 +233,73 @@ def _render_dashboard(conn) -> None:
         except Exception:
             st.caption("—")
 
+    # ── Sintesi economica: incassi + coupon ───────────────────────────
+    st.markdown("---")
+    st.markdown("**💶 Sintesi economica**")
+    ce1, ce2, ce3, ce4 = st.columns(4)
+    tot_sedute = tot_terapia = 0.0
+    n_coupon = n_coupon_usati = 0
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(SUM(Pagato),0) FROM Sedute WHERE paziente_id=%s", (paz_id,))
+        r = cur.fetchone()
+        tot_sedute = float(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0.0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(SUM(Incassato),0) FROM terapia_sedute WHERE paziente_id=%s",
+                    (paz_id,))
+        r = cur.fetchone()
+        tot_terapia = float(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0.0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*), COALESCE(SUM(CASE WHEN Utilizzato=1 OR Utilizzato=TRUE "
+                    "THEN 1 ELSE 0 END),0) FROM Coupons WHERE paziente_id=%s", (paz_id,))
+        r = cur.fetchone()
+        if r:
+            n_coupon = int(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0
+            n_coupon_usati = int(r[1] if not isinstance(r, dict) else list(r.values())[1]) or 0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    ce1.metric("Incassato sedute", f"{tot_sedute:,.0f} €".replace(",", "."))
+    ce2.metric("Incassato terapie", f"{tot_terapia:,.0f} €".replace(",", "."))
+    ce3.metric("Totale complessivo", f"{tot_sedute + tot_terapia:,.0f} €".replace(",", "."))
+    ce4.metric("Coupon", f"{n_coupon_usati}/{n_coupon} usati" if n_coupon else "—")
+
+    # ── Accesso rapido alle pagine del paziente ───────────────────────
+    st.markdown("**🔗 Vai a**")
+    _link_dest = [
+        ("🧩 Quadro storico", "👥 Pazienti", "🧩 Quadro storico"),
+        ("📎 Documenti clinici", "👥 Pazienti", "📎 Documenti clinici"),
+        ("📝 Diagnosi assistita", "👥 Pazienti", "📝 Diagnosi assistita"),
+        ("📈 Esiti / Follow-up", "👥 Pazienti", "📈 Esiti / Follow-up"),
+        ("🧘 Percorsi terapeutici", "🎧 Terapia & relazione", "🧘 Percorsi terapeutici"),
+        ("🧩 Programma PNEV", "🎧 Terapia & relazione", "🧩 Programma PNEV"),
+        ("👁️ Valutazione visuo-percettiva", "🔍 Valutazione funzionale",
+         "👁️ Valutazione visuo-percettiva"),
+        ("🎟️ Coupon OF / SDS", "👥 Pazienti", "🎟️ Coupon OF / SDS"),
+    ]
+    lcols = st.columns(4)
+    for i, (etichetta, area_dest, sotto_dest) in enumerate(_link_dest):
+        with lcols[i % 4]:
+            if st.button(etichetta, key=f"dash_link_{i}", use_container_width=True):
+                st.session_state["goto_area"] = area_dest
+                st.session_state["goto_sotto"] = sotto_dest
+                st.session_state["paziente_attivo_id"] = paz_id
+                st.rerun()
+
     # ── Anamnesi ─────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("**📊 Riepilogo valutazioni**")
@@ -293,6 +360,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
         "📎 Documenti clinici", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
+        "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "🔬 PNEV", "📋 Anamnesi The Organism", "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
@@ -300,7 +368,8 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "👁️ Getman (manipolazione visiva)",
         "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
-        "🧬 INPP — Valutazione diagnostica", "🖥️ Somministrazione test",
+        "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
+        "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall",
         "🔉 Diagnostica uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
@@ -364,6 +433,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore diagnosi assistita: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "📄 Modulistica / Schede da stampare":
+        try:
+            from .modulistica import render_modulistica
+            render_modulistica(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulistica: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
@@ -514,6 +593,17 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             st.error(f"Errore modulo INPP: {e}")
         return True
+    if sotto == "🗣️ Logopedia / SMOF":
+        try:
+            from .logopedia import render_logopedia
+            render_logopedia(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Logopedia: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
 
     # ── TEST LIVE ─────────────────────────────────────────────────────
     if sotto == "🔢 DEM interattivo":
@@ -575,6 +665,28 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         return True
 
     # ── TERAPIA & RELAZIONE ───────────────────────────────────────────
+    if sotto == "🧘 Percorsi terapeutici":
+        try:
+            from .terapia import render_terapia
+            render_terapia(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore percorsi terapeutici: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "🧩 Programma PNEV":
+        try:
+            from .terapia_procedure import render_programma
+            render_programma(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore programma PNEV: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
     if sotto in ("🤖 Relazioni cliniche (AI)", "📝 Relazione clinica"):
         try:
             from .ui_relazione_clinica import render_relazione_clinica
