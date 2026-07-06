@@ -38,8 +38,32 @@ if _RADICE not in sys.path:
     sys.path.insert(0, _RADICE)
 
 from modules.pnev_pubblico import db_pnev_pubblico as db
+from modules.pnev_pubblico import email_pnev_pubblico as mail
 
 VERDE = "#1D6B44"
+
+# URL pubblico di QUESTA app (per costruire il magic link assoluto nelle email).
+# Sovrascrivibile dai secrets con APP_URL.
+APP_URL_DEFAULT = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck7n.streamlit.app"
+
+
+def app_url():
+    return st.secrets.get("APP_URL", APP_URL_DEFAULT).rstrip("/")
+
+
+def link_assoluto(token):
+    return f"{app_url()}/?t={token}"
+
+
+def invia_email_sicura(funzione, *args):
+    """Invia senza mai bloccare il flusso: se Brevo non è configurato o fallisce,
+    l'app continua (il link resta visibile a schermo). Ritorna (ok, dettaglio)."""
+    api_key = st.secrets.get("BREVO_API_KEY")
+    mitt_email = st.secrets.get("MITTENTE_EMAIL")
+    mitt_nome = st.secrets.get("MITTENTE_NOME", "Studio The Organism")
+    if not api_key or not mitt_email:
+        return False, "email non configurata (BREVO_API_KEY/MITTENTE_EMAIL mancanti)"
+    return funzione(api_key, mitt_email, mitt_nome, *args)
 
 st.set_page_config(
     page_title="MAPS-CLEAR · I miei progressi",
@@ -148,14 +172,19 @@ def azione_registra(conn):
 
     token = db.crea_magic_link(conn, utente_id)
 
+    ok_mail, dett = invia_email_sicura(mail.invia_magic_link, email, nome, link_assoluto(token))
+
     st.success(f"Benvenuto/a, {nome}! I tuoi progressi ora vengono salvati. 🎉")
+    if ok_mail:
+        st.info(f"📧 Ti abbiamo inviato il tuo link personale via email a **{email}**. "
+                "Controlla anche la posta indesiderata!")
     st.markdown("### 🔑 Il tuo link personale")
     st.markdown(
         "Salvalo nei **preferiti** o copialo in un posto sicuro: "
         "ti fa rientrare nei tuoi progressi da **qualsiasi dispositivo**, senza password."
     )
     st.code(link_dashboard(token), language=None)
-    st.caption("Presto lo riceverai anche via email. Il link vale per tutta la durata del percorso.")
+    st.caption("Il link vale per tutta la durata del percorso (9 giorni).")
 
     # Ritorno al file del percorso su pnev.it: gli passiamo il token
     # così il salvataggio si attiva da solo (?t=TOKEN letto al caricamento)
@@ -182,7 +211,7 @@ def azione_sessione(conn, utente_id):
     if not giorno:
         st.error("Sessione senza numero di giorno: non posso salvarla.")
         return
-    db.salva_sessione(
+    _, stato = db.salva_sessione(
         conn, utente_id,
         giorno=giorno,
         modalita=qp("modalita"),
@@ -195,6 +224,11 @@ def azione_sessione(conn, utente_id):
         note=qp("note"),
     )
     st.toast(f"Sessione del giorno {giorno} salvata ✅")
+    if stato == "completato":
+        u = db.get_utente_by_id(conn, utente_id)
+        token = qp("t")
+        if u and token:
+            invia_email_sicura(mail.invia_completamento, u[2], u[1], link_assoluto(token))
 
 
 def azione_post(conn, utente_id):
