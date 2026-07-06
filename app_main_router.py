@@ -124,12 +124,32 @@ def _seleziona_paziente_card(conn) -> tuple:
 def _render_dashboard(conn) -> None:
     """Dashboard home — riepilogo paziente corrente."""
 
-    # ── Intestazione ─────────────────────────────────────────────────
-    st.markdown(
-        "<h2 style='margin-bottom:4px'>🏠 The Organism</h2>"
-        "<p style='color:#8b949e;margin-top:0'>Seleziona un paziente</p>",
-        unsafe_allow_html=True
-    )
+    # ── Intestazione grafica con loghi PNEV + The Organism ────────────
+    try:
+        import base64 as _b64
+        from .loghi_data import LOGO_PNEV_B64, LOGO_ORGANISM_B64
+        st.markdown(f"""
+<div style="display:flex;align-items:center;gap:22px;justify-content:space-between;
+     background:linear-gradient(120deg,#f3f0ff 0%,#eef7f4 100%);
+     border:1px solid var(--color-border-tertiary);
+     border-radius:16px;padding:18px 26px;margin:4px 0 18px 0">
+  <div style="display:flex;align-items:center;gap:16px">
+    <img src="data:image/png;base64,{LOGO_PNEV_B64}" style="height:46px">
+    <div style="width:1px;height:38px;background:#d8d4e8"></div>
+    <img src="data:image/png;base64,{LOGO_ORGANISM_B64}" style="height:34px">
+  </div>
+  <div style="text-align:right;color:#6b6478;font-size:.82rem;font-style:italic">
+    Metodo PNEV · Studio The Organism
+  </div>
+</div>
+<p style='color:#8b949e;margin:0 0 14px'>Seleziona un paziente</p>
+""", unsafe_allow_html=True)
+    except Exception:
+        st.markdown(
+            "<h2 style='margin-bottom:4px'>🏠 The Organism</h2>"
+            "<p style='color:#8b949e;margin-top:0'>Seleziona un paziente</p>",
+            unsafe_allow_html=True
+        )
 
     paz_id, paz_label, paz_info = _seleziona_paziente_card(conn)
     if not paz_id:
@@ -1191,8 +1211,37 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     Costruisce il menu a 7 aree nella sidebar.
     Ritorna (area_corrente, sottosezione_corrente).
     """
+    # Nasconde la lista automatica delle pagine tecniche (cron, migrazioni,
+    # debug — file in pages/) che Streamlit mostra di default in sidebar.
+    # Restano raggiungibili dall'admin tramite il pannello qui sotto.
+    st.markdown(
+        "<style>[data-testid='stSidebarNav']{display:none}</style>",
+        unsafe_allow_html=True)
+
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
+
+    if is_admin:
+        with st.sidebar.expander("🛠️ Strumenti tecnici (admin)"):
+            st.caption("Script di servizio: cron, migrazioni, debug.")
+            _tool_pages = [
+                ("cron_promemoria", "Cron promemoria"),
+                ("cron_sync_pnev", "Cron sync pnev"),
+                ("debug_timezone", "Debug timezone"),
+                ("diagnostica_eventi", "Diagnostica eventi"),
+                ("firma_pubblica", "Firma pubblica"),
+                ("fix_timezone_eventi", "Fix timezone eventi"),
+                ("iscrizione_evento", "Iscrizione evento"),
+                ("migra_promemoria", "Migra promemoria"),
+                ("pnev_pubblico", "Pnev pubblico"),
+                ("seed_consensi_costellazioni", "Seed consensi costellazioni"),
+            ]
+            for slug, etichetta in _tool_pages:
+                try:
+                    st.page_link(f"pages/{slug}.py", label=etichetta)
+                except Exception:
+                    st.caption(f"• {etichetta} (pages/{slug}.py)")
+        st.sidebar.markdown("---")
 
     # Salto "in sospeso" richiesto da un'altra pagina (es. ▶️ Apri DEM).
     # Va applicato PRIMA di creare i widget, altrimenti Streamlit blocca
