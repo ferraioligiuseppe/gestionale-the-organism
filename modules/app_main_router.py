@@ -233,6 +233,73 @@ def _render_dashboard(conn) -> None:
         except Exception:
             st.caption("—")
 
+    # ── Sintesi economica: incassi + coupon ───────────────────────────
+    st.markdown("---")
+    st.markdown("**💶 Sintesi economica**")
+    ce1, ce2, ce3, ce4 = st.columns(4)
+    tot_sedute = tot_terapia = 0.0
+    n_coupon = n_coupon_usati = 0
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(SUM(Pagato),0) FROM Sedute WHERE paziente_id=%s", (paz_id,))
+        r = cur.fetchone()
+        tot_sedute = float(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0.0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COALESCE(SUM(Incassato),0) FROM terapia_sedute WHERE paziente_id=%s",
+                    (paz_id,))
+        r = cur.fetchone()
+        tot_terapia = float(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0.0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*), COALESCE(SUM(CASE WHEN Utilizzato=1 OR Utilizzato=TRUE "
+                    "THEN 1 ELSE 0 END),0) FROM Coupons WHERE paziente_id=%s", (paz_id,))
+        r = cur.fetchone()
+        if r:
+            n_coupon = int(r[0] if not isinstance(r, dict) else list(r.values())[0]) or 0
+            n_coupon_usati = int(r[1] if not isinstance(r, dict) else list(r.values())[1]) or 0
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    ce1.metric("Incassato sedute", f"{tot_sedute:,.0f} €".replace(",", "."))
+    ce2.metric("Incassato terapie", f"{tot_terapia:,.0f} €".replace(",", "."))
+    ce3.metric("Totale complessivo", f"{tot_sedute + tot_terapia:,.0f} €".replace(",", "."))
+    ce4.metric("Coupon", f"{n_coupon_usati}/{n_coupon} usati" if n_coupon else "—")
+
+    # ── Accesso rapido alle pagine del paziente ───────────────────────
+    st.markdown("**🔗 Vai a**")
+    _link_dest = [
+        ("🧩 Quadro storico", "👥 Pazienti", "🧩 Quadro storico"),
+        ("📎 Documenti clinici", "👥 Pazienti", "📎 Documenti clinici"),
+        ("📝 Diagnosi assistita", "👥 Pazienti", "📝 Diagnosi assistita"),
+        ("📈 Esiti / Follow-up", "👥 Pazienti", "📈 Esiti / Follow-up"),
+        ("🧘 Percorsi terapeutici", "🎧 Terapia & relazione", "🧘 Percorsi terapeutici"),
+        ("🧩 Programma PNEV", "🎧 Terapia & relazione", "🧩 Programma PNEV"),
+        ("👁️ Valutazione visuo-percettiva", "🔍 Valutazione funzionale",
+         "👁️ Valutazione visuo-percettiva"),
+        ("🎟️ Coupon OF / SDS", "👥 Pazienti", "🎟️ Coupon OF / SDS"),
+    ]
+    lcols = st.columns(4)
+    for i, (etichetta, area_dest, sotto_dest) in enumerate(_link_dest):
+        with lcols[i % 4]:
+            if st.button(etichetta, key=f"dash_link_{i}", use_container_width=True):
+                st.session_state["goto_area"] = area_dest
+                st.session_state["goto_sotto"] = sotto_dest
+                st.session_state["paziente_attivo_id"] = paz_id
+                st.rerun()
+
     # ── Anamnesi ─────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("**📊 Riepilogo valutazioni**")
