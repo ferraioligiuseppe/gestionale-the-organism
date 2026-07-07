@@ -365,6 +365,38 @@ def _assistente_coda(conn, paz_id):
         pass
 
 
+# ── Sequenza guidata di visita: INPP → Visiva → Uditiva → Diagnosi ────
+# (area_destinazione, sotto_destinazione, etichetta bottone)
+_PROSSIMO_PASSO = {
+    "🧬 INPP — Valutazione diagnostica": (
+        "🔍 Valutazione funzionale", "👁️ Valutazione visuo-percettiva",
+        "▶ Passo successivo: Valutazione visiva"),
+    "👁️ Valutazione visuo-percettiva": (
+        "🔍 Valutazione funzionale", "🔉 Diagnostica uditiva",
+        "▶ Passo successivo: Valutazione uditiva"),
+    "🔉 Diagnostica uditiva": (
+        "👥 Pazienti", "📝 Diagnosi assistita",
+        "▶ Passo successivo: Diagnosi"),
+}
+
+
+def _bottone_prossimo_passo(conn, paz_id, sotto_corrente):
+    """Bottone in fondo alla schermata che porta al passo successivo della
+    sequenza di visita (INPP → Visiva → Uditiva → Diagnosi), senza dover
+    tornare al menu e ricercare l'area giusta."""
+    dest = _PROSSIMO_PASSO.get(sotto_corrente)
+    if not dest or not paz_id:
+        return
+    area_dest, sotto_dest, etichetta = dest
+    st.markdown("---")
+    if st.button(etichetta, key=f"prossimo_{sotto_corrente}", type="primary",
+                use_container_width=True):
+        st.session_state["goto_area"] = area_dest
+        st.session_state["goto_sotto"] = sotto_dest
+        st.session_state["paziente_attivo_id"] = paz_id
+        st.rerun()
+
+
 def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     """Dispatch PIATTO: aggancia ogni voce SOLO al suo nome (sotto).
 
@@ -576,6 +608,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             st.error(f"Errore valutazione visuo-percettiva: {e}")
         _assistente_coda(conn, paz_id)
+        _bottone_prossimo_passo(conn, paz_id, sotto)
         return True
     if sotto == "👓 Optometria comportamentale":
         st.info("Sezione in costruzione — usa la Valutazione visuo-percettiva per ora.")
@@ -619,6 +652,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             render_inpp(conn, paz_id, nome)
         except Exception as e:
             st.error(f"Errore modulo INPP: {e}")
+        _bottone_prossimo_passo(conn, paz_id, sotto)
         return True
     if sotto == "🗣️ Logopedia / SMOF":
         try:
@@ -760,6 +794,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
                 fn()
         except Exception as e_audio:
             st.error(f"Errore {sotto}: {e_audio}")
+        _bottone_prossimo_passo(conn, paz_id, sotto)
         return True
 
     # ── FORMAZIONE & PROFESSIONISTI ───────────────────────────────────
