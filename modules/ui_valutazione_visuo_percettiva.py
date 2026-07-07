@@ -105,7 +105,13 @@ def _salva(conn, pid, dati):
                 _n, _r, _s = salva_incasso(conn, "valutazioni_visive", int(_vid2), st.session_state['dati_incasso_vv'])
                 st.success("💶 Incasso: " + riepilogo_incasso(_n, _r, _s))
         except Exception as _e_inc:
-            pass
+            # importante: se il blocco incasso fallisce, ripuliamo la
+            # transazione, altrimenti resta "abortita" e blocca le query
+            # successive della pagina ("current transaction is aborted").
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         st.success("Salvato.")
     except Exception as e:
         try: conn.rollback()

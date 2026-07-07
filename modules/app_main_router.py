@@ -521,6 +521,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🎧 Screening uditivo":
         from .ui_screening_link import render_screening_link
         render_screening_link(conn); return True
+    if sotto == "🎧 MAPS-CLEAR pubblico":
+        try:
+            from modules.pnev_pubblico.ui_pnev_pubblico_admin import render_pnev_pubblico_admin
+            render_pnev_pubblico_admin(conn)
+        except Exception as e:
+            st.error(f"Modulo MAPS-CLEAR pubblico non disponibile: {e}")
+        return True
 
     # ── INVII AL PAZIENTE ─────────────────────────────────────────────
     if sotto == "📋 Questionari remoti":
@@ -872,6 +879,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🎧 Screening uditivo":
             from .ui_screening_link import render_screening_link
             render_screening_link(conn); return
+        if sotto == "🎧 MAPS-CLEAR pubblico":
+            try:
+                from modules.pnev_pubblico.ui_pnev_pubblico_admin import render_pnev_pubblico_admin
+                render_pnev_pubblico_admin(conn)
+            except Exception as e:
+                st.error(f"Modulo MAPS-CLEAR pubblico non disponibile: {e}")
+            return
 
     # ── AREA VALUTAZIONE ──────────────────────────────────────────────
     elif area == AREA_VALUTAZIONE:
