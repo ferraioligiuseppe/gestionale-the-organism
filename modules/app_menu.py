@@ -91,7 +91,6 @@ SOTTOSEZIONI = {
         "📊 Audiometria funzionale",
         "🎧 Bilancio uditivo",
         "🧬 INPP — Valutazione diagnostica",
-        "🗣️ Logopedia / SMOF",
         "🧠 NPS — Neuropsicologica",
         "📚 DSA — Apprendimento",
     ],
@@ -119,6 +118,7 @@ SOTTOSEZIONI = {
     ],
     AREA_OSTEOPATIA: [
         "🦴 Osteopatia",
+        "🗣️ Logopedia / SMOF",
     ],
     AREA_EVENTI: [
         "📅 Eventi e iscrizioni",
