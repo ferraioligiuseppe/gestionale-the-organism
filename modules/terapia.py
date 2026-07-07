@@ -366,10 +366,87 @@ def _blocco_programma_settimana(conn, paz_id):
     return list(sel_studio), list(sel_casa)
 
 
+def _blocco_programma_settimana_OLD(conn, paz_id):
+    """(disattivata) versione basata sui protocolli assegnati."""
+    import json as _json
+    _nome_paz = ""
+    try:
+        from .quadro_storico import carica_paziente
+        _p = carica_paziente(conn, paz_id)
+        if _p:
+            _nome_paz = f"{_p.get('Cognome','')} {_p.get('Nome','')}".strip()
+    except Exception:
+        pass
+    try:
+        cur = conn.cursor()
+        cur.execute("""CREATE TABLE IF NOT EXISTS programma_casa(
+            id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+            protocollo TEXT, settimana INT, procedure JSONB,
+            data_assegnazione DATE DEFAULT CURRENT_DATE,
+            inviato BOOLEAN DEFAULT FALSE, creato TIMESTAMP DEFAULT NOW());""")
+        cur.execute("ALTER TABLE programma_casa ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'casa';")
+        conn.commit()
+        cur.execute("""SELECT nome, settimana_corrente, struttura FROM protocolli_assegnati
+            WHERE paziente_id=%s AND stato='In corso' ORDER BY creato DESC""", (paz_id,))
+        protos = cur.fetchall()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        protos = []
+
+    if not protos:
+        st.caption("Nessun protocollo PNEV assegnato. Vai in **🧩 Programma PNEV → "
+                   "📋 Protocolli** per assegnare il programma (poi qui scegli le procedure).")
+        return [], []
+
+    st.markdown("**📋 Procedure di questa seduta** — scegli cosa fai in studio e cosa a casa:")
+    st.caption("Tutte le procedure dei protocolli assegnati. La settimana è solo una "
+               "guida: scegli liberamente per questo paziente. Verranno salvate con la seduta.")
+    studio_all, casa_all = [], []
+    for _i, (nome, sett_cur, strut) in enumerate(protos):
+        settimane = strut if isinstance(strut, list) else (_json.loads(strut) if strut else [])
+        tutte = []
+        for s in settimane:
+            fase = s.get("fase", "")
+            for pr in s.get("procedure", []):
+                tutte.append(f"S{s.get('sett','?')} · {pr}" + (f"  ({fase})" if fase else ""))
+        if not tutte:
+            continue
+        guida = next((s.get("fase", "") for s in settimane
+                      if s.get("sett") == (sett_cur or 1)), "")
+        st.markdown(f"**{nome}**")
+        st.caption(f"📍 Guida: settimana {sett_cur or 1}" + (f" — {guida}" if guida else ""))
+        cstudio, ccasa = st.columns(2)
+        studio_key = f"studio_sel_{_i}"
+        casa_key = f"casa_sel_{_i}"
+        with cstudio:
+            st.markdown("🏥 **In studio (oggi)**")
+            sel_studio = st.multiselect(
+                "Procedure in seduta", tutte, default=[],
+                key=studio_key, label_visibility="collapsed")
+        with ccasa:
+            st.markdown("🏠 **A casa (fino alla prossima)**")
+            if st.button("📋 Copia da «In studio»", key=f"copia_{_i}"):
+                st.session_state[casa_key] = list(st.session_state.get(studio_key, []))
+                st.rerun()
+            sel_casa = st.multiselect(
+                "Procedure a casa", tutte,
+                key=casa_key, label_visibility="collapsed")
+        # accumulo (con prefisso protocollo) per salvarle dentro la seduta
+        studio_all += [f"[{nome}] {x}" for x in sel_studio]
+        casa_all += [f"[{nome}] {x}" for x in sel_casa]
+        st.markdown("<hr style='margin:4px 0;border:none;border-top:1px solid #eee'>",
+                    unsafe_allow_html=True)
+    return studio_all, casa_all
+
+
 def _foglio_html(nome_paz, protocollo, settimana, casa):
     import datetime as _dt
     import re as _re
     def _pulisci(p):
+        # toglie il prefisso "S1 · " e il suffisso "(fase)" per un elenco pulito
         p = _re.sub(r'^S\d+\s*·\s*', '', p)
         p = _re.sub(r'\s*\([^)]*\)\s*$', '', p)
         return p.strip()
