@@ -81,6 +81,7 @@ SOTTOSEZIONI = {
         "📋 Questionari remoti",
         "🎧 Screening uditivo",
         "🎮 Esercizi Wordwall",
+        "🎧 MAPS-CLEAR pubblico",
     ],
     AREA_VALUTAZIONE: [
         "📋 Anamnesi The Organism",
