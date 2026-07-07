@@ -117,8 +117,8 @@ SOTTOSEZIONI = {
         "🧪 Caso demo",
     ],
     AREA_OSTEOPATIA: [
-        "🦴 Osteopatia",
         "🗣️ Logopedia / SMOF",
+        "🦴 Osteopatia",
     ],
     AREA_EVENTI: [
         "📅 Eventi e iscrizioni",
