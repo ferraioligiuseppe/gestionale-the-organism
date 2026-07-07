@@ -98,14 +98,20 @@ def get_connection():
     return conn
 
 
-@st.cache_resource
+_schema_pronto = False
+
+
 def _init_schema():
+    """Crea lo schema una sola volta per processo (senza cache Streamlit)."""
+    global _schema_pronto
+    if _schema_pronto:
+        return
     conn = get_connection()
     try:
         db.init_pnev_pubblico_db(conn)
     finally:
         conn.close()
-    return True
+    _schema_pronto = True
 
 
 _init_schema()
