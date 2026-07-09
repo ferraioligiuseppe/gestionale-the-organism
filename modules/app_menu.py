@@ -1,36 +1,36 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║  APP MENU — Struttura razionalizzata PNEV (v5)                       ║
+║  APP MENU — Struttura razionalizzata PNEV (v6, con rami annidati)    ║
 ║                                                                      ║
 ║  AREE (in ordine):                                                   ║
 ║  1. 📅 Agenda                                                        ║
 ║  2. 👥 Pazienti                                                      ║
 ║  3. 📋 Questionari                                                   ║
-║  4. 👶 PNEV Child                                                    ║
-║  5. 👁️ PNEV Visiva                                                   ║
-║  6. 🧬 PNEV Integrazione sensoriale                                  ║
-║  7. 🎧 PNEV Uditiva                                                  ║
-║  8. 👁️ Oculistica · LAC                                              ║
-║  9. 🩺 Ortottica                                                     ║
-║  10. 🗣️ Logopedia / TNPEE                                           ║
-║  11. 🦴 Osteopatia                                                   ║
-║  12. 🏃 Fisioterapia                                                 ║
-║  13. 🧠 NPS / Psicologia                                             ║
-║  14. 🖥️ Test live (generico)                                        ║
-║  15. 📄 Relazioni & studio clinico                                   ║
-║  16. 📅 Eventi                                                       ║
-║  17. ⚙️ Studio                                                       ║
+║  4. 🧠 Valutazione e Trattamento PNEV                                ║
+║       ↳ 4 rami annidati (si sceglie il ramo, poi la voce):           ║
+║         👶 PNEV Child · 👁️ PNEV Visiva ·                             ║
+║         🧬 Integrazione sensoriale · 🎧 Uditiva                       ║
+║  5. 👁️ Oculistica · LAC                                              ║
+║  6. 🩺 Ortottica                                                     ║
+║  7. 🗣️ Logopedia / TNPEE                                            ║
+║  8. 🦴 Osteopatia                                                    ║
+║  9. 🏃 Fisioterapia                                                  ║
+║  10. 🧠 NPS / Psicologia                                             ║
+║  11. 🖥️ Test live (generico)                                        ║
+║  12. 📄 Relazioni & studio clinico                                   ║
+║  13. 📅 Eventi                                                       ║
+║  14. ⚙️ Studio                                                       ║
 ║                                                                      ║
-║  Le voci contrassegnate "🚧 …(in arrivo)" sono placeholder:           ║
-║  compaiono nel menu (per rispecchiare la sitemap concordata) ma      ║
-║  mostrano un avviso "in costruzione" invece di dare errore — non     ║
-║  esiste ancora un modulo dietro.                                     ║
+║  Le voci "🚧 …(in arrivo)" sono placeholder: compaiono nel menu ma    ║
+║  mostrano solo un avviso "in costruzione" — non esiste ancora un     ║
+║  modulo dietro (vedi PLACEHOLDER_VOCI, gestito in                    ║
+║  app_main_router._dispatch_sotto).                                   ║
 ║                                                                      ║
 ║  NOTA: il routing (app_main_router._dispatch_sotto) aggancia ogni    ║
-║  voce SOLO al suo nome, non all'area. Quindi qui si possono          ║
-║  riorganizzare le aree liberamente senza toccare il router, purché   ║
-║  le etichette delle voci restino identiche a quelle del router.      ║
+║  voce SOLO al suo nome, non all'area/ramo. Quindi qui si possono     ║
+║  riorganizzare aree e rami liberamente senza toccare il router,      ║
+║  purché le etichette restino identiche a quelle del router.          ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
@@ -38,10 +38,7 @@
 AREA_AGENDA        = "📅 Agenda"
 AREA_PAZIENTI      = "👥 Pazienti"
 AREA_INVII         = "📋 Questionari"
-AREA_PNEV_CHILD    = "👶 PNEV Child"
-AREA_PNEV_VISIVA   = "👁️ PNEV Visiva"
-AREA_PNEV_SENSORIALE = "🧬 PNEV Integrazione sensoriale"
-AREA_PNEV_UDITIVA  = "🎧 PNEV Uditiva"
+AREA_PNEV          = "🧠 Valutazione e Trattamento PNEV"
 AREA_OCULISTICA    = "👁️ Oculistica · LAC"
 AREA_ORTOTTICA     = "🩺 Ortottica"
 AREA_TNPEE         = "🗣️ Logopedia / TNPEE"
@@ -56,12 +53,12 @@ AREA_STUDIO        = "⚙️ Studio"
 # ── Alias legacy (mantengono validi gli import esistenti in
 #    app_main_router.py e app_main.py) — puntano all'area più coerente
 #    nella nuova struttura, il nome del modulo non cambia. ─────────────
-AREA_VALUTAZIONE        = AREA_PNEV_VISIVA
-AREA_VALUTAZIONE_VISIVA = AREA_PNEV_VISIVA
-AREA_TEST_NEUROEVOL     = AREA_PNEV_VISIVA
+AREA_VALUTAZIONE        = AREA_PNEV
+AREA_VALUTAZIONE_VISIVA = AREA_PNEV
+AREA_TEST_NEUROEVOL     = AREA_PNEV
 AREA_QUESTIONARI        = AREA_INVII
 AREA_REPORT_AI          = AREA_TERAPIA
-AREA_AUDIOLOGIA         = AREA_PNEV_UDITIVA
+AREA_AUDIOLOGIA         = AREA_PNEV
 AREA_MARKETING          = AREA_EVENTI
 AREA_FORMAZIONE         = AREA_TNPEE
 
@@ -69,10 +66,7 @@ AREE_ORDINE = [
     AREA_AGENDA,
     AREA_PAZIENTI,
     AREA_INVII,
-    AREA_PNEV_CHILD,
-    AREA_PNEV_VISIVA,
-    AREA_PNEV_SENSORIALE,
-    AREA_PNEV_UDITIVA,
+    AREA_PNEV,
     AREA_OCULISTICA,
     AREA_ORTOTTICA,
     AREA_TNPEE,
@@ -84,6 +78,46 @@ AREE_ORDINE = [
     AREA_EVENTI,
     AREA_STUDIO,
 ]
+
+# ── Rami dell'area PNEV (annidati: si sceglie prima il ramo, poi la voce) ──
+PNEV_RAMI = {
+    "👶 PNEV Child": [
+        "📋 Anamnesi PNEV",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+        "🚧 Castagnini (in arrivo)",
+        "🚧 Vojta (in arrivo)",
+    ],
+    "👁️ PNEV Visiva": [
+        "👁️ Anamnesi visiva",
+        "👁️ Valutazione visuo-percettiva",
+        "🔢 DEM interattivo",
+        "👁️ Getman (manipolazione visiva)",
+        "👁️ Groffman (visual tracing)",
+        "👁️ Eye tracking",
+        "🎯 Piano Vision Therapy",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+    ],
+    "🧬 Integrazione sensoriale": [
+        "🧬 INPP — Valutazione diagnostica",
+        "🚧 Masgutova / MNRI (in arrivo)",
+        "🚧 TMR — Movimenti ritmici (in arrivo)",
+        "🚧 Melillo / NCHW (in arrivo)",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+    ],
+    "🎧 Uditiva": [
+        "🔉 Diagnostica uditiva",
+        "📊 Audiometria funzionale",
+        "🎧 Bilancio uditivo",
+        "🎧 MAPS",
+        "🗂 Programmi MAPS",
+        "🧭 Percorsi MAPS",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+    ],
+}
 
 # Etichette delle voci "in arrivo" — vedi PLACEHOLDER_VOCI in
 # app_main_router.py per il messaggio mostrato al click.
@@ -99,7 +133,7 @@ PLACEHOLDER_VOCI = [
     "🚧 Psicologia (in arrivo)",
 ]
 
-# ── Sottosezioni per area ─────────────────────────────────────────────
+# ── Sottosezioni per area (tutte tranne AREA_PNEV, che usa PNEV_RAMI) ──
 SOTTOSEZIONI = {
     AREA_AGENDA: [
         "📅 Agenda appuntamenti",
@@ -126,42 +160,6 @@ SOTTOSEZIONI = {
         "🎧 Screening uditivo",
         "🎮 Esercizi Wordwall",
         "🎧 MAPS-CLEAR pubblico",
-    ],
-    AREA_PNEV_CHILD: [
-        "📋 Anamnesi PNEV",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
-        "🚧 Castagnini (in arrivo)",
-        "🚧 Vojta (in arrivo)",
-    ],
-    AREA_PNEV_VISIVA: [
-        "👁️ Anamnesi visiva",
-        "👁️ Valutazione visuo-percettiva",
-        "🔢 DEM interattivo",
-        "👁️ Getman (manipolazione visiva)",
-        "👁️ Groffman (visual tracing)",
-        "👁️ Eye tracking",
-        "🎯 Piano Vision Therapy",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
-    ],
-    AREA_PNEV_SENSORIALE: [
-        "🧬 INPP — Valutazione diagnostica",
-        "🚧 Masgutova / MNRI (in arrivo)",
-        "🚧 TMR — Movimenti ritmici (in arrivo)",
-        "🚧 Melillo / NCHW (in arrivo)",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
-    ],
-    AREA_PNEV_UDITIVA: [
-        "🔉 Diagnostica uditiva",
-        "📊 Audiometria funzionale",
-        "🎧 Bilancio uditivo",
-        "🎧 MAPS",
-        "🗂 Programmi MAPS",
-        "🧭 Percorsi MAPS",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
     ],
     AREA_OCULISTICA: [
         "👁️ Lenti a contatto",

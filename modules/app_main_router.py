@@ -1316,8 +1316,22 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
 
     st.sidebar.markdown("---")
 
-    # ── Sottosezione nell'area ────────────────────────────────────────
-    voci = SOTTOSEZIONI.get(area, [])
+    # ── Area PNEV: selettore di ramo annidato (Child/Visiva/Sensoriale/Uditiva) ──
+    from .app_menu import AREA_PNEV, PNEV_RAMI
+    if area == AREA_PNEV:
+        rami = list(PNEV_RAMI.keys())
+        ramo = st.sidebar.radio(
+            "Ramo",
+            rami,
+            key="nav_pnev_ramo",
+            label_visibility="visible",
+        )
+        voci = PNEV_RAMI.get(ramo, [])
+        sotto_key = f"nav_sotto_{area}_{ramo}"
+        st.sidebar.markdown("---")
+    else:
+        voci = SOTTOSEZIONI.get(area, [])
+        sotto_key = f"nav_sotto_{area}"
 
     # Filtra admin-only
     if not is_admin:
@@ -1327,7 +1341,7 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     sotto = st.sidebar.radio(
         area,
         voci,
-        key=f"nav_sotto_{area}",
+        key=sotto_key,
         label_visibility="visible",
     )
 
