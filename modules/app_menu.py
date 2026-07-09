@@ -38,6 +38,7 @@
 AREA_AGENDA        = "📅 Agenda"
 AREA_PAZIENTI      = "👥 Pazienti"
 AREA_INVII         = "📋 Questionari"
+AREA_GAMES         = "🎮 PNEV Games"
 AREA_PNEV          = "🧠 Valutazione e Trattamento PNEV"
 AREA_OCULISTICA    = "👁️ Oculistica · LAC"
 AREA_ORTOTTICA     = "🩺 Ortottica"
@@ -66,6 +67,7 @@ AREE_ORDINE = [
     AREA_AGENDA,
     AREA_PAZIENTI,
     AREA_INVII,
+    AREA_GAMES,
     AREA_PNEV,
     AREA_OCULISTICA,
     AREA_ORTOTTICA,
@@ -114,6 +116,7 @@ PNEV_RAMI = {
         "🎧 MAPS",
         "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS",
+        "🎧 MAPS-CLEAR pubblico",
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
     ],
@@ -158,8 +161,9 @@ SOTTOSEZIONI = {
     AREA_INVII: [
         "📋 Questionari remoti",
         "🎧 Screening uditivo",
+    ],
+    AREA_GAMES: [
         "🎮 Esercizi Wordwall",
-        "🎧 MAPS-CLEAR pubblico",
     ],
     AREA_OCULISTICA: [
         "👁️ Lenti a contatto",
