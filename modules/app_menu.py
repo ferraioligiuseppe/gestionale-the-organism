@@ -1,62 +1,109 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║  APP MENU — Struttura a 7 aree (v4, in ordine di visita)             ║
-║                                                                     ║
-║  AREE:                                                              ║
-║  1. 👥 Pazienti                                                     ║
-║  2. 📨 Invii al paziente                                            ║
-║  3. 🔍 Valutazione funzionale  (occhi + orecchie + riflessi insieme)║
-║  4. 🖥️ Test live                                                    ║
-║  5. 🎧 Terapia & relazione                                          ║
-║  6. 🎓 Formazione & professionisti                                  ║
-║  7. ⚙️ Studio                                                       ║
-║                                                                     ║
-║  NOTA: il routing (app_main_router._dispatch_sotto) aggancia ogni   ║
-║  voce SOLO al suo nome, non all'area. Quindi qui si possono         ║
-║  riorganizzare le aree liberamente senza toccare il router, purché  ║
-║  le etichette delle voci restino identiche a quelle del router.     ║
+║  APP MENU — Struttura razionalizzata PNEV (v5)                       ║
+║                                                                      ║
+║  AREE (in ordine):                                                   ║
+║  1. 📅 Agenda                                                        ║
+║  2. 👥 Pazienti                                                      ║
+║  3. 📋 Questionari                                                   ║
+║  4. 👶 PNEV Child                                                    ║
+║  5. 👁️ PNEV Visiva                                                   ║
+║  6. 🧬 PNEV Integrazione sensoriale                                  ║
+║  7. 🎧 PNEV Uditiva                                                  ║
+║  8. 👁️ Oculistica · LAC                                              ║
+║  9. 🩺 Ortottica                                                     ║
+║  10. 🗣️ Logopedia / TNPEE                                           ║
+║  11. 🦴 Osteopatia                                                   ║
+║  12. 🏃 Fisioterapia                                                 ║
+║  13. 🧠 NPS / Psicologia                                             ║
+║  14. 🖥️ Test live (generico)                                        ║
+║  15. 📄 Relazioni & studio clinico                                   ║
+║  16. 📅 Eventi                                                       ║
+║  17. ⚙️ Studio                                                       ║
+║                                                                      ║
+║  Le voci contrassegnate "🚧 …(in arrivo)" sono placeholder:           ║
+║  compaiono nel menu (per rispecchiare la sitemap concordata) ma      ║
+║  mostrano un avviso "in costruzione" invece di dare errore — non     ║
+║  esiste ancora un modulo dietro.                                     ║
+║                                                                      ║
+║  NOTA: il routing (app_main_router._dispatch_sotto) aggancia ogni    ║
+║  voce SOLO al suo nome, non all'area. Quindi qui si possono          ║
+║  riorganizzare le aree liberamente senza toccare il router, purché   ║
+║  le etichette delle voci restino identiche a quelle del router.      ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
-# ── Costanti aree (7 attive) ──────────────────────────────────────────
-AREA_PAZIENTI    = "👥 Pazienti"
-AREA_AGENDA      = "📅 Agenda"
-AREA_INVII       = "📨 Invii al paziente"
-AREA_VALUTAZIONE = "🔍 Valutazione funzionale"
-AREA_TEST_LIVE   = "🖥️ Test live"
-AREA_TERAPIA     = "🎧 Terapia & relazione"
-AREA_OSTEOPATIA  = "🦴 Osteopatia"
-AREA_EVENTI      = "📅 Eventi"
-AREA_STUDIO      = "⚙️ Studio"
-
-# Vecchia area unica (Osteopatia+Eventi), ora separata. Mantenuta come
-# alias per non rompere gli import legacy nel router.
-AREA_FORMAZIONE  = AREA_OSTEOPATIA
+# ── Costanti aree ──────────────────────────────────────────────────────
+AREA_AGENDA        = "📅 Agenda"
+AREA_PAZIENTI      = "👥 Pazienti"
+AREA_INVII         = "📋 Questionari"
+AREA_PNEV_CHILD    = "👶 PNEV Child"
+AREA_PNEV_VISIVA   = "👁️ PNEV Visiva"
+AREA_PNEV_SENSORIALE = "🧬 PNEV Integrazione sensoriale"
+AREA_PNEV_UDITIVA  = "🎧 PNEV Uditiva"
+AREA_OCULISTICA    = "👁️ Oculistica · LAC"
+AREA_ORTOTTICA     = "🩺 Ortottica"
+AREA_TNPEE         = "🗣️ Logopedia / TNPEE"
+AREA_OSTEOPATIA    = "🦴 Osteopatia"
+AREA_FISIOTERAPIA  = "🏃 Fisioterapia"
+AREA_NPS_PSI       = "🧠 NPS / Psicologia"
+AREA_TEST_LIVE     = "🖥️ Test live"
+AREA_TERAPIA       = "📄 Relazioni & studio clinico"
+AREA_EVENTI        = "📅 Eventi"
+AREA_STUDIO        = "⚙️ Studio"
 
 # ── Alias legacy (mantengono validi gli import esistenti in
-#    app_main_router.py e app_main.py) ──────────────────────────────────
-AREA_VALUTAZIONE_VISIVA = AREA_VALUTAZIONE
-AREA_TEST_NEUROEVOL     = AREA_VALUTAZIONE
+#    app_main_router.py e app_main.py) — puntano all'area più coerente
+#    nella nuova struttura, il nome del modulo non cambia. ─────────────
+AREA_VALUTAZIONE        = AREA_PNEV_VISIVA
+AREA_VALUTAZIONE_VISIVA = AREA_PNEV_VISIVA
+AREA_TEST_NEUROEVOL     = AREA_PNEV_VISIVA
 AREA_QUESTIONARI        = AREA_INVII
 AREA_REPORT_AI          = AREA_TERAPIA
-AREA_AUDIOLOGIA         = AREA_TERAPIA
+AREA_AUDIOLOGIA         = AREA_PNEV_UDITIVA
 AREA_MARKETING          = AREA_EVENTI
+AREA_FORMAZIONE         = AREA_TNPEE
 
 AREE_ORDINE = [
-    AREA_PAZIENTI,
     AREA_AGENDA,
+    AREA_PAZIENTI,
     AREA_INVII,
-    AREA_VALUTAZIONE,
+    AREA_PNEV_CHILD,
+    AREA_PNEV_VISIVA,
+    AREA_PNEV_SENSORIALE,
+    AREA_PNEV_UDITIVA,
+    AREA_OCULISTICA,
+    AREA_ORTOTTICA,
+    AREA_TNPEE,
+    AREA_OSTEOPATIA,
+    AREA_FISIOTERAPIA,
+    AREA_NPS_PSI,
     AREA_TEST_LIVE,
     AREA_TERAPIA,
-    AREA_OSTEOPATIA,
     AREA_EVENTI,
     AREA_STUDIO,
 ]
 
+# Etichette delle voci "in arrivo" — vedi PLACEHOLDER_VOCI in
+# app_main_router.py per il messaggio mostrato al click.
+PLACEHOLDER_VOCI = [
+    "🚧 Castagnini (in arrivo)",
+    "🚧 Vojta (in arrivo)",
+    "🚧 Masgutova / MNRI (in arrivo)",
+    "🚧 TMR — Movimenti ritmici (in arrivo)",
+    "🚧 Melillo / NCHW (in arrivo)",
+    "🚧 Oculistica (da importare dal gestionale esistente)",
+    "🚧 Ortottica (in arrivo)",
+    "🚧 Fisioterapia (in arrivo)",
+    "🚧 Psicologia (in arrivo)",
+]
+
 # ── Sottosezioni per area ─────────────────────────────────────────────
 SOTTOSEZIONI = {
+    AREA_AGENDA: [
+        "📅 Agenda appuntamenti",
+    ],
     AREA_PAZIENTI: [
         "🏠 Dashboard",
         "👤 Anagrafica pazienti",
@@ -74,51 +121,79 @@ SOTTOSEZIONI = {
         "🔗 Sincronizza pnev.it",
         "🚀 Trasferisci a pnev.it",
     ],
-    AREA_AGENDA: [
-        "📅 Agenda appuntamenti",
-    ],
     AREA_INVII: [
         "📋 Questionari remoti",
         "🎧 Screening uditivo",
         "🎮 Esercizi Wordwall",
         "🎧 MAPS-CLEAR pubblico",
     ],
-    AREA_VALUTAZIONE: [
-        "📋 Anamnesi The Organism",
+    AREA_PNEV_CHILD: [
+        "📋 Anamnesi PNEV",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+        "🚧 Castagnini (in arrivo)",
+        "🚧 Vojta (in arrivo)",
+    ],
+    AREA_PNEV_VISIVA: [
         "👁️ Anamnesi visiva",
         "👁️ Valutazione visuo-percettiva",
-        "🔉 Diagnostica uditiva",
-        "📊 Audiometria funzionale",
-        "🎧 Bilancio uditivo",
-        "🧬 INPP — Valutazione diagnostica",
-        "🧠 NPS — Neuropsicologica",
-        "📚 DSA — Apprendimento",
-    ],
-    AREA_TEST_LIVE: [
         "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
         "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
+        "🎯 Piano Vision Therapy",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+    ],
+    AREA_PNEV_SENSORIALE: [
+        "🧬 INPP — Valutazione diagnostica",
+        "🚧 Masgutova / MNRI (in arrivo)",
+        "🚧 TMR — Movimenti ritmici (in arrivo)",
+        "🚧 Melillo / NCHW (in arrivo)",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+    ],
+    AREA_PNEV_UDITIVA: [
+        "🔉 Diagnostica uditiva",
+        "📊 Audiometria funzionale",
+        "🎧 Bilancio uditivo",
+        "🎧 MAPS",
+        "🗂 Programmi MAPS",
+        "🧭 Percorsi MAPS",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+    ],
+    AREA_OCULISTICA: [
+        "👁️ Lenti a contatto",
+        "🚧 Oculistica (da importare dal gestionale esistente)",
+    ],
+    AREA_ORTOTTICA: [
+        "🚧 Ortottica (in arrivo)",
+    ],
+    AREA_TNPEE: [
+        "🗣️ Logopedia / SMOF",
+    ],
+    AREA_OSTEOPATIA: [
+        "🦴 Osteopatia",
+    ],
+    AREA_FISIOTERAPIA: [
+        "🚧 Fisioterapia (in arrivo)",
+    ],
+    AREA_NPS_PSI: [
+        "🧠 NPS — Neuropsicologica",
+        "📚 DSA — Apprendimento",
+        "🚧 Psicologia (in arrivo)",
+    ],
+    AREA_TEST_LIVE: [
         "🖥️ Somministrazione test",
         "📸 Photoref AI",
         "📖 Lettura avanzata",
     ],
     AREA_TERAPIA: [
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
-        "🎧 MAPS",
-        "🗂 Programmi MAPS",
-        "🧭 Percorsi MAPS",
-        "🎯 Piano Vision Therapy",
-        "👁️ Lenti a contatto",
         "📝 Relazione clinica",
         "📄 Report PDF con grafici",
         "📊 Export statistici",
         "🧪 Caso demo",
-    ],
-    AREA_OSTEOPATIA: [
-        "🗣️ Logopedia / SMOF",
-        "🦴 Osteopatia",
     ],
     AREA_EVENTI: [
         "📅 Eventi e iscrizioni",
