@@ -517,6 +517,7 @@ def mark_token_used(cur, link_id: int):
 
 # Questionari supportati via link pubblico
 _QUESTIONARI_PUBBLICI = {
+    "ANAMNESI_PNEV":   "Anamnesi PNEV (Gravidanza, Sviluppo, Familiarità)",
     "INPPS":           "Questionario INPPS – Screening (Genitori)",
     "MELILLO_ADULTI":  "Questionario Melillo – Stile Cognitivo (Adulti)",
     "MELILLO_BAMBINI": "Questionario Melillo – Checklist Bambini",
@@ -569,6 +570,27 @@ def maybe_handle_public_questionario(get_conn) -> bool:
             submitted = st.form_submit_button("📤 INVIA QUESTIONARIO")
         chiave_json = "inpps_screening_genitori"
         motivo_label = "INPPS (genitori)"
+
+    elif q == "ANAMNESI_PNEV":
+        try:
+            from modules.pnev.ui_anamnesi_pnev import anamnesi_pnev_collect_ui
+        except Exception as _imp_err:
+            st.error(f"Modulo anamnesi non disponibile: {_imp_err}")
+            return True
+        _pub_key = f"pub_q_{t[:16]}"
+        if _pub_key not in st.session_state:
+            st.session_state[_pub_key] = {}
+        try:
+            q_data, q_summary = anamnesi_pnev_collect_ui(
+                prefix="pub_anampnev", existing=st.session_state[_pub_key])
+            st.session_state[_pub_key] = q_data
+        except Exception as _render_err:
+            st.error(f"Errore rendering anamnesi: {_render_err}")
+            return True
+        chiave_json = "anamnesi_pnev"
+        motivo_label = "Anamnesi PNEV (online)"
+        st.markdown("---")
+        submitted = st.button("📤 INVIA QUESTIONARIO", type="primary")
 
     elif q in ("MELILLO_ADULTI", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI", "VISIONE_ADULTI"):
         try:
@@ -11660,18 +11682,24 @@ def main():
     # crashare l'avvio (altrimenti l'app entra in loop di riavvio). Se init_db
     # fallisce, puliamo la transazione e proseguiamo: le tabelle base esistono
     # già in produzione, le migrazioni si ritentano al prossimo avvio.
-    try:
-        init_db()
-    except Exception as _e_init:
+    #
+    # VELOCITÀ: init_db() fa una serie di CREATE/ALTER TABLE (controlli DDL)
+    # — inutile ripeterli a ogni singolo clic sulla sidebar (ogni clic fa
+    # ripartire l'intero script). Lo eseguiamo una sola volta per sessione.
+    if not st.session_state.get("_db_initialized"):
         try:
-            get_connection().rollback()
-        except Exception:
-            pass
-        try:
-            st.warning("⚠️ Inizializzazione database saltata (verrà ritentata). "
-                       "L'app prosegue normalmente.")
-        except Exception:
-            pass
+            init_db()
+            st.session_state["_db_initialized"] = True
+        except Exception as _e_init:
+            try:
+                get_connection().rollback()
+            except Exception:
+                pass
+            try:
+                st.warning("⚠️ Inizializzazione database saltata (verrà ritentata). "
+                           "L'app prosegue normalmente.")
+            except Exception:
+                pass
 
     # login obbligatorio
     if not login(get_connection):

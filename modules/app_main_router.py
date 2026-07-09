@@ -406,6 +406,11 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     Le voci cliniche che richiedono un paziente selezionato mostrano
     prima l'header paziente.
     """
+    from .app_menu import PLACEHOLDER_VOCI
+    if sotto in PLACEHOLDER_VOCI:
+        st.info(f"🚧 **{sotto}** — sezione in costruzione, arriva presto.")
+        return True
+
     from .paziente_attivo import header_paziente_attivo
 
     VOCI_CON_PAZIENTE = {
@@ -413,7 +418,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📎 Documenti clinici", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
-        "🔬 PNEV", "📋 Anamnesi The Organism", "👁️ Anamnesi visiva",
+        "🔬 PNEV", "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
@@ -581,7 +586,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🔬 PNEV":
         from .pnev.ui_pnev import render_pnev_section
         render_pnev_section(); return True
-    if sotto == "📋 Anamnesi The Organism":
+    if sotto == "📋 Anamnesi PNEV":
         try:
             from .ui_anamnesi_the_organism import render_anamnesi_the_organism
             render_anamnesi_the_organism(conn, paz_id)
@@ -931,7 +936,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🔬 PNEV":
             from .pnev.ui_pnev import render_pnev_section
             render_pnev_section(); return
-        if sotto == "📋 Anamnesi The Organism":
+        if sotto == "📋 Anamnesi PNEV":
             try:
                 from .ui_anamnesi_the_organism import render_anamnesi_the_organism
                 render_anamnesi_the_organism(conn, paz_id)
@@ -1267,6 +1272,27 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
         "<style>[data-testid='stSidebarNav']{display:none}</style>",
         unsafe_allow_html=True)
 
+    # ── Tema grafico "Vision Manager" (Wellness Minimal) ──────────────
+    # Iniettato una sola volta per sessione: font DM Sans/DM Serif, palette
+    # sage/sand, bottoni sidebar grandi con solo il selezionato evidenziato.
+    # ── Tema grafico "Vision Manager" (navy + blu) ────────────────────
+    # Il contenuto del CSS si legge una sola volta (costoso: I/O su file),
+    # ma va INIETTATO a ogni rerun — Streamlit ridisegna la pagina da zero
+    # a ogni clic, quindi un <style> messo solo alla prima esecuzione
+    # sparisce ai clic successivi (era il motivo per cui il tema "spariva").
+    if "_pnev_theme_css" not in st.session_state:
+        try:
+            from pathlib import Path as _Path
+            _css_path = _Path(__file__).resolve().parent.parent / "assets" / "pnev_theme.css"
+            with open(_css_path, "r", encoding="utf-8") as _f:
+                st.session_state["_pnev_theme_css"] = _f.read()
+        except Exception as _e_theme:
+            st.session_state["_pnev_theme_css"] = ""
+            st.sidebar.caption(f"⚠️ Tema non caricato: {_e_theme}")
+    if st.session_state.get("_pnev_theme_css"):
+        st.markdown(f"<style>{st.session_state['_pnev_theme_css']}</style>",
+                    unsafe_allow_html=True)
+
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
 
@@ -1311,8 +1337,22 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
 
     st.sidebar.markdown("---")
 
-    # ── Sottosezione nell'area ────────────────────────────────────────
-    voci = SOTTOSEZIONI.get(area, [])
+    # ── Area PNEV: selettore di ramo annidato (Child/Visiva/Sensoriale/Uditiva) ──
+    from .app_menu import AREA_PNEV, PNEV_RAMI
+    if area == AREA_PNEV:
+        rami = list(PNEV_RAMI.keys())
+        ramo = st.sidebar.radio(
+            "Ramo",
+            rami,
+            key="nav_pnev_ramo",
+            label_visibility="visible",
+        )
+        voci = PNEV_RAMI.get(ramo, [])
+        sotto_key = f"nav_sotto_{area}_{ramo}"
+        st.sidebar.markdown("---")
+    else:
+        voci = SOTTOSEZIONI.get(area, [])
+        sotto_key = f"nav_sotto_{area}"
 
     # Filtra admin-only
     if not is_admin:
@@ -1322,7 +1362,7 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     sotto = st.sidebar.radio(
         area,
         voci,
-        key=f"nav_sotto_{area}",
+        key=sotto_key,
         label_visibility="visible",
     )
 
