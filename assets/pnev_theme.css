@@ -113,6 +113,13 @@ section[data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child 
 section[data-testid="stSidebar"] div[role="radiogroup"] label * {
   background: transparent !important;
 }
+section[data-testid="stSidebar"] div[role="radiogroup"] input {
+  position: absolute !important; opacity: 0 !important; width: 1px !important; height: 1px !important;
+  pointer-events: none !important;
+}
+section[data-testid="stSidebar"] div[role="radiogroup"] label > div {
+  background: transparent !important; background-color: transparent !important;
+}
 
 /* ── Card paziente (header con gradiente blu) ────────────────── */
 .vm-patient-header {
