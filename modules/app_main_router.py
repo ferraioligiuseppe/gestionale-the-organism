@@ -1272,6 +1272,42 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
         "<style>[data-testid='stSidebarNav']{display:none}</style>",
         unsafe_allow_html=True)
 
+    # ── Navigazione come bottoni grandi (solo l'opzione selezionata si
+    #    "accende"; le altre voci mostrate sono già solo quelle dell'area
+    #    scelta sopra, dato che la lista cambia in base all'area). ──────
+    st.markdown("""
+    <style>
+    section[data-testid="stSidebar"] div[role="radiogroup"] {
+        gap: 4px;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label {
+        background: #F4F1EA;
+        border: 1px solid #E4DCCD;
+        border-radius: 10px;
+        padding: 10px 14px !important;
+        margin: 0 !important;
+        font-size: 15px;
+        transition: background .12s ease, color .12s ease, border-color .12s ease;
+        width: 100%;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+        background: #EDE6D8;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
+        background: #C2683D !important;
+        border-color: #C2683D !important;
+    }
+    section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p {
+        color: #fff !important;
+        font-weight: 700 !important;
+    }
+    /* nasconde il pallino del radio, il colore di sfondo basta a indicare la scelta */
+    section[data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child {
+        display: none;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
 
