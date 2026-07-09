@@ -51,7 +51,7 @@ SCHEDE = {
         ]),
     ],
     "🔍 Valutazione": [
-        ("Anamnesi The Organism", [
+        ("Anamnesi PNEV", [
             ("Gravidanza e sviluppo",
              ["Gravidanza e parto:", "Sviluppo motorio:", "Sviluppo linguistico:",
               "Alimentazione:", "Sonno e respiro:"], 0),
