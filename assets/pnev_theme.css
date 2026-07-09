@@ -110,6 +110,9 @@ section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked)
   color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; font-weight: 700 !important;
 }
 section[data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child { display: none !important; }
+section[data-testid="stSidebar"] div[role="radiogroup"] label * {
+  background: transparent !important;
+}
 
 /* ── Card paziente (header con gradiente blu) ────────────────── */
 .vm-patient-header {
