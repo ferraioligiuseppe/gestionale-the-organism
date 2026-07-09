@@ -1294,11 +1294,11 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
         background: #EDE6D8;
     }
     section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
-        background: #1D6B44 !important;
-        border-color: #1D6B44 !important;
+        background: #DCEFE4 !important;
+        border: 2px solid #1D6B44 !important;
     }
     section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p {
-        color: #ffffff !important;
+        color: #14502F !important;
         font-weight: 700 !important;
     }
     /* nasconde il pallino del radio, il colore di sfondo basta a indicare la scelta */
