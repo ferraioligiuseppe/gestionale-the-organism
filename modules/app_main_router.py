@@ -1277,10 +1277,12 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     # sage/sand, bottoni sidebar grandi con solo il selezionato evidenziato.
     if not st.session_state.get("_pnev_theme_injected"):
         try:
-            with open("assets/pnev_theme.css", "r", encoding="utf-8") as _f:
+            from pathlib import Path as _Path
+            _css_path = _Path(__file__).resolve().parent.parent / "assets" / "pnev_theme.css"
+            with open(_css_path, "r", encoding="utf-8") as _f:
                 st.markdown(f"<style>{_f.read()}</style>", unsafe_allow_html=True)
-        except Exception:
-            pass
+        except Exception as _e_theme:
+            st.sidebar.caption(f"⚠️ Tema non caricato: {_e_theme}")
         st.session_state["_pnev_theme_injected"] = True
 
     # ── Selezione area ────────────────────────────────────────────────
