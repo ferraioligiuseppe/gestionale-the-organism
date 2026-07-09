@@ -14,19 +14,7 @@ from datetime import timedelta, timezone
 
 import streamlit as st
 from modules.app_menu import build_sections
-try:
-    from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
-except Exception:
-    _ui_diag_uditiva = None
 from modules.app_main_router import dispatch_main_section
-from modules.ui_lenti_contatto import ui_lenti_contatto
-from modules.ui_esami_strumentali import ui_esami_strumentali
-from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
-from modules.ui_audiometria_funzionale import ui_audiometria_funzionale
-try:
-    from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
-except Exception:
-    _ui_calib_cuffie_ext = None
 from modules.app_sections import (
     SECTION_DASHBOARD,
     SECTION_PAZIENTI,
