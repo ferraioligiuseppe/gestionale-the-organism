@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║  APP MENU — Struttura razionalizzata PNEV (v6, con rami annidati)    ║
+║  APP MENU — Struttura razionalizzata PNEV (v7, con rami annidati)    ║
 ║                                                                      ║
 ║  AREE (in ordine):                                                   ║
 ║  1. 📅 Agenda                                                        ║
 ║  2. 👥 Pazienti                                                      ║
 ║  3. 📋 Questionari                                                   ║
-║  4. 🧠 Valutazione e Trattamento PNEV                                ║
+║  4. 🎮 PNEV Games                                                    ║
+║  5. 🧠 Valutazione e Trattamento PNEV                                ║
 ║       ↳ 4 rami annidati (si sceglie il ramo, poi la voce):           ║
 ║         👶 PNEV Child · 👁️ PNEV Visiva ·                             ║
 ║         🧬 Integrazione sensoriale · 🎧 Uditiva                       ║
-║  5. 👁️ Oculistica · LAC                                              ║
-║  6. 🩺 Ortottica                                                     ║
-║  7. 🗣️ Logopedia / TNPEE                                            ║
-║  8. 🦴 Osteopatia                                                    ║
-║  9. 🏃 Fisioterapia                                                  ║
-║  10. 🧠 NPS / Psicologia                                             ║
-║  11. 🖥️ Test live (generico)                                        ║
-║  12. 📄 Relazioni & studio clinico                                   ║
-║  13. 📅 Eventi                                                       ║
+║  6. 👁️ Oculistica · LAC                                              ║
+║  7. 🩺 Ortottica                                                     ║
+║  8. 🗣️ Logopedia / TNPEE                                            ║
+║  9. 🎓 PNEV Academy  (Osteopatia + Eventi/iscrizioni)                 ║
+║  10. 🏃 Fisioterapia                                                 ║
+║  11. 🧠 NPS / Psicologia                                             ║
+║  12. 🖥️ Test live (generico)                                        ║
+║  13. 📄 Relazioni & studio clinico                                   ║
 ║  14. ⚙️ Studio                                                       ║
 ║                                                                      ║
 ║  Le voci "🚧 …(in arrivo)" sono placeholder: compaiono nel menu ma    ║
@@ -44,11 +44,11 @@ AREA_OCULISTICA    = "👁️ Oculistica · LAC"
 AREA_ORTOTTICA     = "🩺 Ortottica"
 AREA_TNPEE         = "🗣️ Logopedia / TNPEE"
 AREA_OSTEOPATIA    = "🦴 Osteopatia"
+AREA_ACADEMY       = "🎓 PNEV Academy"
 AREA_FISIOTERAPIA  = "🏃 Fisioterapia"
 AREA_NPS_PSI       = "🧠 NPS / Psicologia"
 AREA_TEST_LIVE     = "🖥️ Test live"
 AREA_TERAPIA       = "📄 Relazioni & studio clinico"
-AREA_EVENTI        = "📅 Eventi"
 AREA_STUDIO        = "⚙️ Studio"
 
 # ── Alias legacy (mantengono validi gli import esistenti in
@@ -60,8 +60,9 @@ AREA_TEST_NEUROEVOL     = AREA_PNEV
 AREA_QUESTIONARI        = AREA_INVII
 AREA_REPORT_AI          = AREA_TERAPIA
 AREA_AUDIOLOGIA         = AREA_PNEV
-AREA_MARKETING          = AREA_EVENTI
-AREA_FORMAZIONE         = AREA_TNPEE
+AREA_MARKETING          = AREA_ACADEMY
+AREA_FORMAZIONE         = AREA_ACADEMY
+AREA_EVENTI             = AREA_ACADEMY
 
 AREE_ORDINE = [
     AREA_AGENDA,
@@ -73,11 +74,11 @@ AREE_ORDINE = [
     AREA_ORTOTTICA,
     AREA_TNPEE,
     AREA_OSTEOPATIA,
+    AREA_ACADEMY,
     AREA_FISIOTERAPIA,
     AREA_NPS_PSI,
     AREA_TEST_LIVE,
     AREA_TERAPIA,
-    AREA_EVENTI,
     AREA_STUDIO,
 ]
 
@@ -134,6 +135,7 @@ PLACEHOLDER_VOCI = [
     "🚧 Ortottica (in arrivo)",
     "🚧 Fisioterapia (in arrivo)",
     "🚧 Psicologia (in arrivo)",
+    "🚧 Contenuti formativi PNEV Academy (in arrivo)",
 ]
 
 # ── Sottosezioni per area (tutte tranne AREA_PNEV, che usa PNEV_RAMI) ──
@@ -178,6 +180,10 @@ SOTTOSEZIONI = {
     AREA_OSTEOPATIA: [
         "🦴 Osteopatia",
     ],
+    AREA_ACADEMY: [
+        "📅 Eventi e iscrizioni",
+        "🚧 Contenuti formativi PNEV Academy (in arrivo)",
+    ],
     AREA_FISIOTERAPIA: [
         "🚧 Fisioterapia (in arrivo)",
     ],
@@ -196,9 +202,6 @@ SOTTOSEZIONI = {
         "📄 Report PDF con grafici",
         "📊 Export statistici",
         "🧪 Caso demo",
-    ],
-    AREA_EVENTI: [
-        "📅 Eventi e iscrizioni",
     ],
     AREA_STUDIO: [
         "📊 Dashboard incassi",
