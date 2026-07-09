@@ -1275,15 +1275,23 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     # ── Tema grafico "Vision Manager" (Wellness Minimal) ──────────────
     # Iniettato una sola volta per sessione: font DM Sans/DM Serif, palette
     # sage/sand, bottoni sidebar grandi con solo il selezionato evidenziato.
-    if not st.session_state.get("_pnev_theme_injected"):
+    # ── Tema grafico "Vision Manager" (navy + blu) ────────────────────
+    # Il contenuto del CSS si legge una sola volta (costoso: I/O su file),
+    # ma va INIETTATO a ogni rerun — Streamlit ridisegna la pagina da zero
+    # a ogni clic, quindi un <style> messo solo alla prima esecuzione
+    # sparisce ai clic successivi (era il motivo per cui il tema "spariva").
+    if "_pnev_theme_css" not in st.session_state:
         try:
             from pathlib import Path as _Path
             _css_path = _Path(__file__).resolve().parent.parent / "assets" / "pnev_theme.css"
             with open(_css_path, "r", encoding="utf-8") as _f:
-                st.markdown(f"<style>{_f.read()}</style>", unsafe_allow_html=True)
+                st.session_state["_pnev_theme_css"] = _f.read()
         except Exception as _e_theme:
+            st.session_state["_pnev_theme_css"] = ""
             st.sidebar.caption(f"⚠️ Tema non caricato: {_e_theme}")
-        st.session_state["_pnev_theme_injected"] = True
+    if st.session_state.get("_pnev_theme_css"):
+        st.markdown(f"<style>{st.session_state['_pnev_theme_css']}</style>",
+                    unsafe_allow_html=True)
 
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
