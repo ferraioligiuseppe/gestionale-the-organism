@@ -13,6 +13,10 @@ pandas>=2.2.2
 # Segmentation fault all'avvio). Lasciato libero: prende una versione
 # compatibile con l'ambiente corrente.
 numpy>=2.0.0
+# pyarrow (usato da Streamlit per le tabelle) pinnato a una versione
+# collaudata: quella auto-risolta (25.0.0) è sospettata di causare il
+# Segmentation fault persistente.
+pyarrow==17.0.0
 
 # PDF
 reportlab>=4.1.0
