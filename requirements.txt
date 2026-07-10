@@ -9,7 +9,10 @@ psycopg2-binary>=2.9.9
 
 # Data
 pandas>=2.2.2
-numpy==1.26.4
+# NB: numpy era pinnato a 1.26.4 (non supporta Python 3.13, causava un
+# Segmentation fault all'avvio). Lasciato libero: prende una versione
+# compatibile con l'ambiente corrente.
+numpy>=2.0.0
 
 # PDF
 reportlab>=4.1.0
