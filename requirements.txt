@@ -40,7 +40,10 @@ Pillow>=10.3.0
 
 # AI
 openai>=1.30.0
-google-generativeai>=0.7.0
+# NB: google-generativeai (Gemini) rimosso in via sperimentale: porta con sé
+# grpcio/google-ai-generativelanguage (librerie C pesanti, sospette per il
+# Segmentation fault). Gemini era comunque bloccato dalla quota gratuita;
+# l'AI oggi passa da OpenAI. Se serve Gemini in futuro, si aggiunge di nuovo.
 
 # Audio
 soundfile==0.12.1
