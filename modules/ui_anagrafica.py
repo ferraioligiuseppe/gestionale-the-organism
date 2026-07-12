@@ -1547,17 +1547,31 @@ def render_anagrafica(conn) -> None:
             selected = selected.to_dict("records")
         except Exception:
             selected = []
+    # Apertura scheda paziente: separata in due passi per non far sparire
+    # il dialog appena aperto (il semplice bump del nonce nello stesso giro
+    # in cui si chiama il dialog faceva rimontare la griglia "vuota" e
+    # richiudeva subito la scheda). Passo 1: click → salva l'id, resetta la
+    # griglia con un rerun esplicito. Passo 2: al giro successivo (griglia
+    # già vuota, nessun altro rerun in corso) si apre davvero il dialog.
     if selected:
         try:
             paz_id = int(selected[0].get("_id"))
-            # Incrementa il nonce: al prossimo rerun la grid si ricostruisce
-            # senza selezione, così cliccare di nuovo lo stesso paziente
-            # riaprirà correttamente il dialog.
+            st.session_state["ana_apri_paziente"] = paz_id
             st.session_state[sel_nonce_key] += 1
-            _dialog_modifica(conn, paz_id)
+            st.rerun()
         except Exception as _e_click:
             import traceback
-            st.error(f"Errore aprendo la scheda paziente: {_e_click}")
+            st.error(f"Errore selezionando il paziente: {_e_click}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+
+    if st.session_state.get("ana_apri_paziente"):
+        paz_id = st.session_state.pop("ana_apri_paziente")
+        try:
+            _dialog_modifica(conn, paz_id)
+        except Exception as _e_dlg:
+            import traceback
+            st.error(f"Errore aprendo la scheda paziente: {_e_dlg}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
 
