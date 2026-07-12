@@ -226,6 +226,45 @@ def render_quadro(conn=None, paz_id=None, paziente=None):
                         f"{r.get('stato','')} ({r.get('attuale','?')}/{r.get('target','?')})")
         st.markdown("---")
 
+    # ── Percorsi terapeutici ──────────────────────────────────────────
+    ts = _query(conn, "SELECT * FROM terapia_sedute WHERE paziente_id=%s", (paz_id,))
+    if ts:
+        trovato = True
+        per_ter = {}
+        for r in ts:
+            per_ter.setdefault(r.get("terapia", "—"), []).append(r)
+        st.markdown(f"#### 🧘 Percorsi terapeutici ({len(ts)} sedute)")
+        for ter, righe in per_ter.items():
+            righe.sort(key=lambda d: str(d.get("data_seduta")), reverse=True)
+            ultima = righe[0].get("data_seduta")
+            us = ultima.strftime("%d/%m/%Y") if hasattr(ultima, "strftime") else str(ultima or "")
+            st.markdown(f"- **{ter}**: {len(righe)} sedute (ultima {us})")
+        st.markdown("---")
+
+    tob = _query(conn, "SELECT * FROM terapia_obiettivi WHERE paziente_id=%s", (paz_id,))
+    if tob:
+        trovato = True
+        st.markdown(f"#### 🎯 Obiettivi terapeutici ({len(tob)})")
+        for r in tob:
+            st.markdown(f"- **{r.get('descrizione','')}** _{r.get('terapia','')}_ — "
+                        f"{r.get('stato','')} ({r.get('attuale','?')}/{r.get('target','?')})")
+        st.markdown("---")
+
+    # ── Programma PNEV (procedure) ────────────────────────────────────
+    prg = _query(conn, "SELECT * FROM terapia_programma WHERE paziente_id=%s", (paz_id,))
+    if prg:
+        trovato = True
+        per_appr = {}
+        for r in prg:
+            per_appr.setdefault(r.get("approccio", "—"), []).append(r)
+        st.markdown(f"#### 🧩 Programma PNEV ({len(prg)} procedure)")
+        for appr, lista in per_appr.items():
+            st.markdown(f"**{appr}**")
+            for r in lista:
+                step = f"{r.get('step')} · " if r.get("step") and r["step"] != "—" else ""
+                st.markdown(f"- {step}{r.get('nome','')} — {r.get('stato','')}")
+        st.markdown("---")
+
     # ── Esiti / Follow-up ─────────────────────────────────────────────
     es = _query(conn, "SELECT * FROM esiti_pnev WHERE paziente_id=%s", (paz_id,))
     if es:
@@ -242,3 +281,88 @@ def render_quadro(conn=None, paz_id=None, paziente=None):
     if not trovato:
         st.info("Nessuno storico ancora presente per questo paziente "
                 "(documenti, test o valutazioni).")
+        return
+
+    st.markdown("---")
+    try:
+        from .stampa_helper import scheda_stampabile_html, bottone_stampa
+        sezioni = []
+
+        if docs:
+            righe = []
+            for d in docs:
+                righe.append((f"{d.get('tipo') or 'Documento'} — {_fmt(_data_di(d))}",
+                              d.get("nome_file") or ""))
+            sezioni.append(("Documenti clinici", righe))
+
+        if blocchi:
+            sezioni.append(("Test funzionali", [(t, r) for t, r in blocchi]))
+
+        if vv:
+            sezioni.append(("Valutazioni visuo-percettive",
+                            [(f"Valutazione del {_fmt(_data_di(r))}", "") for r in vv]))
+
+        if an:
+            righe = []
+            for r in an:
+                riass = (r.get("pnev_summary") or r.get("Motivo") or "").strip()
+                righe.append((_fmt(_data_di(r)), riass))
+            sezioni.append(("Valutazioni PNEV / Anamnesi", righe))
+
+        if lo:
+            sezioni.append(("Logopedia / SMOF",
+                            [(_fmt(_data_di(r)), r.get("sintesi") or "") for r in lo]))
+
+        if ls:
+            righe = []
+            for r in ls[:8]:
+                d = r.get("data_seduta")
+                ds = d.strftime("%d/%m/%Y") if hasattr(d, "strftime") else str(d or "")
+                righe.append((f"Seduta n° {r.get('numero','?')} — {ds}",
+                              r.get("obiettivo") or ""))
+            sezioni.append(("Sedute logopediche", righe))
+
+        if ob:
+            sezioni.append(("Obiettivi logopedici",
+                            [(f"{r.get('descrizione','')} [{r.get('area','')}]",
+                              f"{r.get('stato','')} ({r.get('attuale','?')}/{r.get('target','?')})")
+                             for r in ob]))
+
+        if ts:
+            righe = []
+            for ter, lista in per_ter.items():
+                lista.sort(key=lambda d: str(d.get("data_seduta")), reverse=True)
+                ultima = lista[0].get("data_seduta")
+                us = ultima.strftime("%d/%m/%Y") if hasattr(ultima, "strftime") else str(ultima or "")
+                righe.append((ter, f"{len(lista)} sedute (ultima {us})"))
+            sezioni.append(("Percorsi terapeutici", righe))
+
+        if tob:
+            sezioni.append(("Obiettivi terapeutici",
+                            [(f"{r.get('descrizione','')} [{r.get('terapia','')}]",
+                              f"{r.get('stato','')} ({r.get('attuale','?')}/{r.get('target','?')})")
+                             for r in tob]))
+
+        if prg:
+            righe = []
+            for appr, lista in per_appr.items():
+                for r in lista:
+                    step = f"{r.get('step')} " if r.get("step") and r["step"] != "—" else ""
+                    righe.append((f"{appr} — {step}{r.get('nome','')}", r.get("stato", "")))
+            sezioni.append(("Programma PNEV", righe))
+
+        if es:
+            sezioni.append(("Esiti / Follow-up",
+                            [(r.get("intervento", ""),
+                              f"{r.get('esito','')} · {_fmt(_data_di(r))}"
+                              + (f" — {r['note']}" if r.get("note") else ""))
+                             for r in es]))
+
+        html_quadro = scheda_stampabile_html(
+            f"Quadro storico — {nome or paz_id}",
+            "Sintesi di documenti, test, valutazioni e percorsi",
+            sezioni)
+        bottone_stampa(html_quadro, f"quadro_storico_{nome or paz_id}",
+                       key=f"quadro_stampa_{paz_id}")
+    except Exception:
+        pass
