@@ -1180,6 +1180,7 @@ def _dialog_modifica(conn, paz_id: int):
     if not rec:
         st.error("Paziente non trovato.")
         if st.button("Chiudi"):
+            st.session_state.pop("ana_apri_paziente", None)
             st.rerun()
         return
 
@@ -1252,6 +1253,7 @@ def _dialog_modifica(conn, paz_id: int):
                             use_container_width=True)
 
     if chiudi:
+        st.session_state.pop("ana_apri_paziente", None)
         st.rerun()
     if salva:
         if not dati["cognome"].strip() or not dati["nome"].strip():
@@ -1260,15 +1262,18 @@ def _dialog_modifica(conn, paz_id: int):
             st.success("✅ Modifiche salvate.")
             import time
             time.sleep(0.3)
+            st.session_state.pop("ana_apri_paziente", None)
             st.rerun()
     if arch:
         ok = (_riattiva(conn, paz_id) if stato_corrente == "ARCHIVIATO"
                 else _archivia(conn, paz_id))
         if ok:
+            st.session_state.pop("ana_apri_paziente", None)
             st.rerun()
     if elim:
         st.session_state["ana_da_eliminare"] = paz_id
         st.session_state["ana_da_eliminare_nome"] = f"{cog} {nom}"
+        st.session_state.pop("ana_apri_paziente", None)
         st.rerun()
 
 
@@ -1583,7 +1588,7 @@ def render_anagrafica(conn) -> None:
                 st.code(traceback.format_exc())
 
     if st.session_state.get("ana_apri_paziente"):
-        paz_id = st.session_state.pop("ana_apri_paziente")
+        paz_id = st.session_state["ana_apri_paziente"]
         try:
             _dialog_modifica(conn, paz_id)
         except Exception as _e_dlg:
