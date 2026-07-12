@@ -1196,6 +1196,22 @@ def _dialog_modifica(conn, paz_id: int):
 
     dati = _form_anagrafici(f"mp_{paz_id}", rec)
 
+    try:
+        from .stampa_helper import scheda_stampabile_html, bottone_stampa
+        _html_scheda = scheda_stampabile_html(
+            f"Scheda anagrafica — {cog} {nom}",
+            f"ID paziente {paz_id}" + (f" · {eta} anni" if eta is not None else ""),
+            [("Dati anagrafici", [
+                ("Cognome", cog), ("Nome", nom), ("Data di nascita", _fmt_dn(dn)),
+                ("Telefono", rec.get("telefono", "")), ("Email", rec.get("email", "")),
+                ("Indirizzo", rec.get("indirizzo", "")),
+                ("Codice fiscale", rec.get("codice_fiscale", "")),
+            ])])
+        bottone_stampa(_html_scheda, f"anagrafica_{cog}_{nom}",
+                       key=f"mp_stampa_{paz_id}")
+    except Exception:
+        pass
+
     ultimo = _carica_ultimo_consenso(conn, paz_id)
     with st.expander("🔒 Privacy e consensi"):
         if ultimo and ultimo.get("data_ora"):
