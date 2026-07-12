@@ -1553,6 +1553,7 @@ def render_anagrafica(conn) -> None:
         allow_unsafe_jscode=False,
         theme="balham",
         fit_columns_on_grid_load=False,
+        reload_data=True,
         key=f"aggrid_pazienti_{st.session_state['ana_filtro']}_{st.session_state[sel_nonce_key]}",
     )
 
