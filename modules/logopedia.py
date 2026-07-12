@@ -288,6 +288,42 @@ def render_logopedia(conn=None, paz_id=None, paziente=None):
         dati["priorita"] = st.text_area(
             "Priorità terapeutiche", value=g("priorita"), key="logo_prio")
 
+        try:
+            from .stampa_helper import scheda_stampabile_html, bottone_stampa
+            nome_p = ""
+            if isinstance(paziente, dict):
+                nome_p = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
+            mf, lg, fl = dati.get("mf", {}), dati.get("lg", {}), dati.get("fl", {})
+            html_val = scheda_stampabile_html(
+                f"Valutazione logopedica — {nome_p or paz_id}",
+                "Scheda SMOF — Studio The Organism",
+                [("Anamnesi", [
+                    ("Motivo", dati.get("motivo")), ("Inviante", dati.get("inviante")),
+                    ("Diagnosi pregresse", dati.get("diagnosi_pregresse")),
+                    ("Familiarità", dati.get("familiarita")),
+                    ("Sviluppo linguistico", dati.get("sviluppo_linguistico")),
+                    ("Alimentazione", dati.get("alimentazione")),
+                    ("Respiro/sonno", dati.get("respiro_sonno")),
+                ]),
+                 ("SMOF — Miofunzionale", [(k.replace("_", " ").title(), v)
+                                          for k, v in mf.items()]),
+                 ("SMOF — Linguaggio/Fonologia", [(k.replace("_", " ").title(), v)
+                                                  for k, v in lg.items()]),
+                 ("SMOF — Fluenza/Balbuzie", [(k.replace("_", " ").title(),
+                                              ", ".join(v) if isinstance(v, list) else v)
+                                             for k, v in fl.items()]),
+                 ("Profilo funzionale", [
+                     ("Punti di forza", dati.get("punti_forza")),
+                     ("Fragilità", dati.get("fragilita")),
+                     ("Impatto funzionale", dati.get("impatto_funzionale")),
+                     ("Ipotesi funzionale", dati.get("ipotesi")),
+                     ("Priorità terapeutiche", dati.get("priorita")),
+                 ])])
+            bottone_stampa(html_val, f"logopedia_{nome_p or paz_id}",
+                           key=f"logo_stampa_{paz_id}")
+        except Exception:
+            pass
+
         st.markdown("---")
         if st.button("💾 Salva valutazione in cartella", type="primary",
                      key="logo_save"):
