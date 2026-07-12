@@ -1555,8 +1555,11 @@ def render_anagrafica(conn) -> None:
             # riaprirà correttamente il dialog.
             st.session_state[sel_nonce_key] += 1
             _dialog_modifica(conn, paz_id)
-        except Exception:
-            pass
+        except Exception as _e_click:
+            import traceback
+            st.error(f"Errore aprendo la scheda paziente: {_e_click}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
 
     # Dialog conferma eliminazione
     if st.session_state.get("ana_da_eliminare"):
