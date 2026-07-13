@@ -66,6 +66,17 @@ def _carica_dati(conn, paz_id):
         if row:
             raw = row["visita_json"] if isinstance(row,dict) else row[0]
             dati["visiva"] = raw if isinstance(raw,dict) else json.loads(raw or "{}")
+        cur.execute(
+            "SELECT riepilogo, note_finali, motivo FROM inpp_valutazioni "
+            "WHERE paziente_id=%s ORDER BY data_valutazione DESC, id DESC LIMIT 1", (paz_id,))
+        row = cur.fetchone()
+        if row:
+            if isinstance(row,dict):
+                dati["inpp_riepilogo"] = row.get("riepilogo") or {}
+                dati["inpp_note"] = row.get("note_finali") or ""
+            else:
+                dati["inpp_riepilogo"] = row[0] or {}
+                dati["inpp_note"] = row[2] or ""
     except Exception as e:
         st.caption(f"Dati parziali: {e}")
     return dati
@@ -348,10 +359,99 @@ Rimango a disposizione per qualsiasi informazione.
 """ + _firma(prof,spec)
 
 
+def _ai_corpo_sensori(dati, fascia, note):
+    """Prova a far scrivere all'AI le 4 sezioni cliniche sui dati REALI del
+    paziente (questionario/anamnesi PNEV + valutazione INPP). Ritorna None
+    se l'AI non è configurata o non ci sono dati da cui partire (in quel
+    caso il chiamante usa il testo fisso di riserva)."""
+    pnev = (dati.get("pnev_summary") or "").strip()
+    inpp_riep = dati.get("inpp_riepilogo") or {}
+    inpp_note = (dati.get("inpp_note") or "").strip()
+    if not pnev and not inpp_riep and not inpp_note:
+        return None
+    try:
+        from .ai_estrazione import genera_testo, ai_disponibile
+    except Exception:
+        return None
+    if not ai_disponibile():
+        return None
+
+    blocco = []
+    if pnev:
+        blocco.append("QUESTIONARIO / ANAMNESI PNEV:\n" + pnev)
+    if inpp_riep:
+        blocco.append("RIEPILOGO VALUTAZIONE INPP (riflessi primitivi):\n"
+                      + json.dumps(inpp_riep, ensure_ascii=False, indent=1))
+    if inpp_note:
+        blocco.append("NOTE FINALI VALUTAZIONE INPP:\n" + inpp_note)
+    if note:
+        blocco.append("NOTE CLINICHE DEL CLINICO PER QUESTA RELAZIONE:\n" + note)
+
+    sistema = (
+        "Sei un neuropsicologo dello Studio The Organism che scrive relazioni "
+        "secondo il Metodo PNEV. Scrivi in italiano, registro clinico, terza "
+        "persona. NON inventare dati: usa SOLO le informazioni fornite. Se un "
+        "aspetto non è documentato, scrivi che è «da approfondire» invece di "
+        "inventare."
+    )
+    richiesta = (
+        f"Scrivi il corpo di una RELAZIONE SENSORI-MOTORIA (fascia età {fascia}) "
+        "per il/la paziente, con ESATTAMENTE queste 4 sezioni (solo il testo, "
+        "senza titoli aggiuntivi, un paragrafo breve per sezione):\n\n"
+        "###PROFILO SENSORI-MOTORIO\n"
+        "###RIFLESSI PRIMITIVI\n"
+        "###MOTRICITÀ E PRASSIE\n"
+        "###AREA ORO-MIOFUNZIONALE\n\n"
+        "Usa il marcatore di sezione '###NOME_SEZIONE' seguito a capo dal "
+        "paragrafo, così posso separarle nel documento.\n\n"
+        + "\n\n".join(blocco)
+    )
+    testo = genera_testo(richiesta, sistema=sistema)
+    if not testo or testo.startswith("⚠️"):
+        return None
+
+    sezioni = {"PROFILO SENSORI-MOTORIO": "", "RIFLESSI PRIMITIVI": "",
+               "MOTRICITÀ E PRASSIE": "", "AREA ORO-MIOFUNZIONALE": ""}
+    corrente = None
+    for riga in testo.split("\n"):
+        r = riga.strip()
+        if r.startswith("###"):
+            nome = r.replace("###", "").strip().upper()
+            if nome in sezioni:
+                corrente = nome
+                continue
+        if corrente:
+            sezioni[corrente] = (sezioni[corrente] + "\n" + riga).strip()
+    if not any(sezioni.values()):
+        return None
+    return sezioni
+
+
 def _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val):
     paz = dati.get("paz",{})
     nome = f"{paz.get('Cognome','')} {paz.get('Nome','')}".strip()
     dn   = paz.get("Data_Nascita","")
+
+    ai_sez = _ai_corpo_sensori(dati, fascia, note)
+    if ai_sez:
+        sez_profilo = ai_sez.get("PROFILO SENSORI-MOTORIO") or "Da approfondire."
+        sez_riflessi = ai_sez.get("RIFLESSI PRIMITIVI") or "Da approfondire."
+        sez_motricita = ai_sez.get("MOTRICITÀ E PRASSIE") or "Da approfondire."
+        sez_oro = ai_sez.get("AREA ORO-MIOFUNZIONALE") or "Da approfondire."
+    else:
+        sez_profilo = ("Integrazione sensori-motoria in fase di maturazione con coinvolgimento\n"
+                      "dei sistemi propriocettivo, vestibolare e/o tattile. Si rilevano difficoltà\n"
+                      "nella modulazione degli input sensoriali con ricadute sul tono muscolare,\n"
+                      "sull'equilibrio e sulla qualità della motricità globale e fine.")
+        sez_riflessi = ("Presenza di riflessi primitivi non integrati (MORO, RTAC, TTS, STNL)\n"
+                       "che interferiscono con lo sviluppo della coordinazione motoria,\n"
+                       "dell'attenzione e dell'organizzazione percettiva.")
+        sez_motricita = ("Coordinazione e sequenzialità motoria in via di consolidamento.\n"
+                         "Difficoltà nelle attività bilaterali e nelle prassie costruttive\n"
+                         "con impatto sulle competenze grafo-motorie.")
+        sez_oro = ("Osservate alterazioni nelle funzioni miofunzionali oro-facciali con possibile impatto su respirazione, deglutizione e articolazione."
+                  if "6-10" in fascia or "10+" in fascia
+                  else "Da valutare in relazione allo sviluppo del linguaggio.")
 
     return _intestazione(prof,spec) + f"""RELAZIONE SENSORI-MOTORIA E NEURO-PSICO-MOTORIA ({fascia})
 
@@ -364,23 +464,16 @@ Data valutazione:  {data_val or _oggi()}
 Data relazione:    {_oggi()}
 
 PROFILO SENSORI-MOTORIO
-Integrazione sensori-motoria in fase di maturazione con coinvolgimento
-dei sistemi propriocettivo, vestibolare e/o tattile. Si rilevano difficoltà
-nella modulazione degli input sensoriali con ricadute sul tono muscolare,
-sull'equilibrio e sulla qualità della motricità globale e fine.
+{sez_profilo}
 
 RIFLESSI PRIMITIVI
-Presenza di riflessi primitivi non integrati (MORO, RTAC, TTS, STNL)
-che interferiscono con lo sviluppo della coordinazione motoria,
-dell'attenzione e dell'organizzazione percettiva.
+{sez_riflessi}
 
 MOTRICITÀ E PRASSIE
-Coordinazione e sequenzialità motoria in via di consolidamento.
-Difficoltà nelle attività bilaterali e nelle prassie costruttive
-con impatto sulle competenze grafo-motorie.
+{sez_motricita}
 
 AREA ORO-MIOFUNZIONALE
-{("Osservate alterazioni nelle funzioni miofunzionali oro-facciali con possibile impatto su respirazione, deglutizione e articolazione." if "6-10" in fascia or "10+" in fascia else "Da valutare in relazione allo sviluppo del linguaggio.")}
+{sez_oro}
 
 NOTE CLINICHE
 {note or "___________________________"}
