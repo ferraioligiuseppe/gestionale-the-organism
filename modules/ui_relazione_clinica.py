@@ -48,13 +48,13 @@ def _carica_dati(conn, paz_id):
         if row:
             dati["paz"] = dict(zip([d[0] for d in cur.description],row)) if not isinstance(row,dict) else row
         cur.execute(
-            "SELECT anamnesi_json, pnev_summary, pnev_json FROM anamnesi "
-            "WHERE paziente_id=%s ORDER BY created_at DESC LIMIT 1", (paz_id,))
+            "SELECT pnev_json, pnev_summary FROM anamnesi "
+            "WHERE paziente_id=%s ORDER BY id DESC LIMIT 1", (paz_id,))
         row = cur.fetchone()
         if row:
             def _j(v): return v if isinstance(v,dict) else json.loads(v or "{}")
             if isinstance(row,dict):
-                dati["anamnesi"] = _j(row.get("anamnesi_json"))
+                dati["anamnesi"] = _j(row.get("pnev_json"))
                 dati["pnev_summary"] = row.get("pnev_summary","") or ""
             else:
                 dati["anamnesi"] = _j(row[0])
