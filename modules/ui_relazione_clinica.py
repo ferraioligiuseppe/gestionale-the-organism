@@ -408,18 +408,29 @@ def _ai_corpo_sensori(dati, fascia, note):
     )
     richiesta = (
         f"Scrivi il corpo di una RELAZIONE SENSORI-MOTORIA (fascia età {fascia}) "
-        "per il/la paziente, con ESATTAMENTE queste 4 sezioni (solo il testo, "
-        "senza titoli aggiuntivi, un paragrafo breve per sezione):\n\n"
+        "per il/la paziente, con ESATTAMENTE queste 5 sezioni (solo il testo, "
+        "senza titoli aggiuntivi, un paragrafo per sezione):\n\n"
         "###PROFILO SENSORI-MOTORIO\n"
         "###RIFLESSI PRIMITIVI\n"
         "###MOTRICITÀ E PRASSIE\n"
         "###AREA ORO-MIOFUNZIONALE\n"
         "###PROPOSTA TERAPEUTICA\n\n"
+        "Nella sezione RIFLESSI PRIMITIVI, oltre al punteggio, spiega in modo "
+        "concreto cosa comporta la presenza dei riflessi non integrati emersi "
+        "nella valutazione sul piano funzionale: comportamento, apprendimento "
+        "scolastico (lettura, scrittura, attenzione), attività sportiva/motoria "
+        "e vita sociale/relazionale — collegando ogni effetto al riflesso "
+        "specifico quando possibile (es. ATNR/coordinazione bilaterale e "
+        "scrittura, Moro/reattività emotiva e ansia, STNL/postura seduta e "
+        "attenzione in classe).\n\n"
         "Nella sezione PROPOSTA TERAPEUTICA, sulla base di quanto emerso dalla "
-        "valutazione (non testo generico), indica quali approcci del Metodo PNEV "
-        "sono più indicati (tra: terapia visiva, integrazione riflessi primitivi/INPP, "
-        "movimenti ritmici, terapia miofunzionale, MAPS) e perché, con frequenza "
-        "delle sedute e indicazioni sul lavoro domiciliare.\n\n"
+        "valutazione (non testo generico), indica: quali approcci del Metodo "
+        "PNEV sono più indicati (tra: terapia visiva, integrazione riflessi "
+        "primitivi/INPP, movimenti ritmici, terapia miofunzionale, MAPS) e "
+        "perché; la frequenza delle sedute in studio (es. numero a settimana); "
+        "il TEMPO GIORNALIERO da dedicare a casa al home program (minuti/die) "
+        "e per quanti giorni/settimane consecutivi; quando è prevista la prima "
+        "rivalutazione del percorso.\n\n"
         "Usa il marcatore di sezione '###NOME_SEZIONE' seguito a capo dal "
         "paragrafo, così posso separarle nel documento.\n\n"
         + "\n\n".join(blocco)
@@ -604,13 +615,14 @@ Con stima,
 #  PDF
 # ══════════════════════════════════════════════════════════════════════
 
-def _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, pid, suffix):
+def _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, pid, suffix, timbro_bytes=None):
     try:
         from modules.pdf_templates import genera_carta_intestata
         pdf_bytes = genera_carta_intestata(
             professionista=prof, titolo=spec,
             paziente=paz_str, data=data_str,
             titolo_doc=titolo_doc, corpo_testo=testo,
+            timbro_bytes=timbro_bytes,
         )
         st.download_button(
             "📥 Scarica PDF",
@@ -687,6 +699,13 @@ def render_relazione_clinica(conn):
     prof = _get_prof()
     spec = _get_spec()
 
+    try:
+        from .timbri import render_gestione_timbro, carica_timbro, _username_corrente
+        render_gestione_timbro(conn)
+        timbro_bytes = carica_timbro(conn, _username_corrente())
+    except Exception:
+        timbro_bytes = None
+
     st.markdown("---")
 
     TIPI = [
@@ -761,4 +780,4 @@ def render_relazione_clinica(conn):
     if testo:
         titolo_doc = tipo.replace("🧠","").replace("🔄","").replace("🏫","").replace("🏥","").replace("🏃","").replace("👨‍👩‍👧","").strip().upper()
         suffix = tipo.split()[1].lower() if len(tipo.split())>1 else "relazione"
-        _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, paz_id, suffix)
+        _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, paz_id, suffix, timbro_bytes)

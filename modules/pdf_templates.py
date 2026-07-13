@@ -137,7 +137,7 @@ def _draw_justified(c, line, x0, yt, font, size, max_w):
 
 def genera_carta_intestata(professionista, titolo,
                             paziente, data, titolo_doc,
-                            corpo_testo="") -> bytes:
+                            corpo_testo="", timbro_bytes=None) -> bytes:
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY
@@ -211,16 +211,22 @@ def genera_carta_intestata(professionista, titolo,
 
     # Firma
     yt_firma = 6.5*cm if has_carta else 5.5*cm
-    # Timbro e firma del professionista (immagine), sopra la riga di destra
+    # Timbro e firma del professionista (immagine), sopra la riga di destra.
+    # Usa il timbro caricato dal professionista se presente, altrimenti
+    # il timbro di default (modules/assets/timbro.png).
     try:
         from reportlab.lib.utils import ImageReader
         import os as _os
-        _tp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets", "timbro.png")
-        if _os.path.exists(_tp):
-            _tw = 3.2*cm
-            _th = _tw * 1918/1982
+        if timbro_bytes:
+            _timbro_src = ImageReader(io.BytesIO(timbro_bytes))
+            _tw = 3.2*cm; _th = _tw  # proporzione gestita da preserveAspectRatio
+        else:
+            _tp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets", "timbro.png")
+            _timbro_src = ImageReader(_tp) if _os.path.exists(_tp) else None
+            _tw = 3.2*cm; _th = _tw * 1918/1982
+        if _timbro_src is not None:
             _tx = W/2 + 1*cm + ((W-1.8*cm) - (W/2+1*cm) - _tw)/2
-            c.drawImage(ImageReader(_tp), _tx, yt_firma+0.15*cm, width=_tw, height=_th,
+            c.drawImage(_timbro_src, _tx, yt_firma+0.15*cm, width=_tw, height=_th,
                         preserveAspectRatio=True, mask="auto")
     except Exception:
         pass
