@@ -615,13 +615,14 @@ Con stima,
 #  PDF
 # ══════════════════════════════════════════════════════════════════════
 
-def _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, pid, suffix):
+def _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, pid, suffix, timbro_bytes=None):
     try:
         from modules.pdf_templates import genera_carta_intestata
         pdf_bytes = genera_carta_intestata(
             professionista=prof, titolo=spec,
             paziente=paz_str, data=data_str,
             titolo_doc=titolo_doc, corpo_testo=testo,
+            timbro_bytes=timbro_bytes,
         )
         st.download_button(
             "📥 Scarica PDF",
@@ -698,6 +699,13 @@ def render_relazione_clinica(conn):
     prof = _get_prof()
     spec = _get_spec()
 
+    try:
+        from .timbri import render_gestione_timbro, carica_timbro, _username_corrente
+        render_gestione_timbro(conn)
+        timbro_bytes = carica_timbro(conn, _username_corrente())
+    except Exception:
+        timbro_bytes = None
+
     st.markdown("---")
 
     TIPI = [
@@ -772,4 +780,4 @@ def render_relazione_clinica(conn):
     if testo:
         titolo_doc = tipo.replace("🧠","").replace("🔄","").replace("🏫","").replace("🏥","").replace("🏃","").replace("👨‍👩‍👧","").strip().upper()
         suffix = tipo.split()[1].lower() if len(tipo.split())>1 else "relazione"
-        _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, paz_id, suffix)
+        _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, paz_id, suffix, timbro_bytes)
