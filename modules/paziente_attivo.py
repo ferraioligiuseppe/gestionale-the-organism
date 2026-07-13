@@ -118,10 +118,23 @@ def paziente_attivo_record() -> dict | None:
 
 
 def set_paziente_attivo(conn, paz_id: int) -> None:
-    """Imposta il paziente attivo. Carica e cachea il record completo."""
+    """Imposta il paziente attivo. Carica e cachea il record completo.
+    Aggiorna anche 'ultimo_accesso' (quando l'anagrafica è stata aperta
+    l'ultima volta), creando la colonna al volo se non esiste ancora."""
     st.session_state[KEY_ID] = int(paz_id)
     rec = _carica_paziente_record(conn, paz_id)
     st.session_state[KEY_REC] = rec or {}
+    try:
+        cur = conn.cursor()
+        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS ultimo_accesso TIMESTAMPTZ;")
+        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
+        cur.execute("UPDATE pazienti SET ultimo_accesso=NOW() WHERE id=%s", (int(paz_id),))
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def reset_paziente_attivo() -> None:

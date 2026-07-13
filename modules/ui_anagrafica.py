@@ -391,6 +391,12 @@ def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi", ordine: str = "Al
     conn = _conn
     try:
         cur = conn.cursor()
+        try:
+            cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
+            cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS ultimo_accesso TIMESTAMPTZ;")
+            conn.commit()
+        except Exception:
+            conn.rollback()
         where = []
         if filtro_stato == "Attivi":
             where.append("(stato_paziente IS NULL OR stato_paziente = 'ATTIVO')")
@@ -400,7 +406,7 @@ def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi", ordine: str = "Al
             where.append("stato_paziente = 'ARCHIVIATO'")
         sql = (
             "SELECT id, cognome, nome, data_nascita, telefono, email, "
-            "stato_paziente, codice_fiscale, citta "
+            "stato_paziente, codice_fiscale, citta, creato_il, ultimo_accesso "
             "FROM pazienti"
         )
         if where:
@@ -1485,6 +1491,8 @@ def render_anagrafica(conn) -> None:
             "Età": _eta_anni(p.get("data_nascita")) or "",
             "Ultima visita": (_fmt_dn(_last) if _last else ("sì" if _visited else "—")),
             "Telefono": p.get("telefono", "") or "",
+            "Inserito il": _fmt_dn(p.get("creato_il")) if p.get("creato_il") else "—",
+            "Ultimo accesso": _fmt_dn(p.get("ultimo_accesso")) if p.get("ultimo_accesso") else "mai",
         })
     df = pd.DataFrame(rows_df)
 
@@ -1535,6 +1543,8 @@ def render_anagrafica(conn) -> None:
     gob.configure_column("Età", width=80, type=["numericColumn"],
                           floatingFilter=False)
     gob.configure_column("Telefono", width=140, floatingFilter=False)
+    gob.configure_column("Inserito il", width=110, floatingFilter=False)
+    gob.configure_column("Ultimo accesso", width=130, floatingFilter=False)
     gob.configure_selection(selection_mode="single", use_checkbox=False)
     gob.configure_grid_options(
         rowHeight=34, headerHeight=36, floatingFiltersHeight=32,
