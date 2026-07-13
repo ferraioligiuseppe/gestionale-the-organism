@@ -211,6 +211,19 @@ def genera_carta_intestata(professionista, titolo,
 
     # Firma
     yt_firma = 6.5*cm if has_carta else 5.5*cm
+    # Timbro e firma del professionista (immagine), sopra la riga di destra
+    try:
+        from reportlab.lib.utils import ImageReader
+        import os as _os
+        _tp = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets", "timbro.png")
+        if _os.path.exists(_tp):
+            _tw = 3.2*cm
+            _th = _tw * 1918/1982
+            _tx = W/2 + 1*cm + ((W-1.8*cm) - (W/2+1*cm) - _tw)/2
+            c.drawImage(ImageReader(_tp), _tx, yt_firma+0.15*cm, width=_tw, height=_th,
+                        preserveAspectRatio=True, mask="auto")
+    except Exception:
+        pass
     c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.5)
     c.line(1.8*cm, yt_firma, W/2-1*cm, yt_firma)
     c.setFont("Helvetica", 8); c.setFillColor(GRIGIO)
