@@ -77,6 +77,18 @@ def _carica_dati(conn, paz_id):
             else:
                 dati["inpp_riepilogo"] = row[0] or {}
                 dati["inpp_note"] = row[2] or ""
+        cur.execute(
+            "SELECT approccio, step, nome, stato FROM terapia_programma "
+            "WHERE paziente_id=%s ORDER BY approccio, step, creato", (paz_id,))
+        rows = cur.fetchall() or []
+        programma = []
+        for r in rows:
+            if isinstance(r,dict):
+                programma.append({"approccio": r.get("approccio",""), "step": r.get("step",""),
+                                  "nome": r.get("nome",""), "stato": r.get("stato","")})
+            else:
+                programma.append({"approccio": r[0], "step": r[1], "nome": r[2], "stato": r[3]})
+        dati["programma"] = programma
     except Exception as e:
         st.caption(f"Dati parziali: {e}")
     return dati
@@ -401,7 +413,13 @@ def _ai_corpo_sensori(dati, fascia, note):
         "###PROFILO SENSORI-MOTORIO\n"
         "###RIFLESSI PRIMITIVI\n"
         "###MOTRICITÀ E PRASSIE\n"
-        "###AREA ORO-MIOFUNZIONALE\n\n"
+        "###AREA ORO-MIOFUNZIONALE\n"
+        "###PROPOSTA TERAPEUTICA\n\n"
+        "Nella sezione PROPOSTA TERAPEUTICA, sulla base di quanto emerso dalla "
+        "valutazione (non testo generico), indica quali approcci del Metodo PNEV "
+        "sono più indicati (tra: terapia visiva, integrazione riflessi primitivi/INPP, "
+        "movimenti ritmici, terapia miofunzionale, MAPS) e perché, con frequenza "
+        "delle sedute e indicazioni sul lavoro domiciliare.\n\n"
         "Usa il marcatore di sezione '###NOME_SEZIONE' seguito a capo dal "
         "paragrafo, così posso separarle nel documento.\n\n"
         + "\n\n".join(blocco)
@@ -411,7 +429,8 @@ def _ai_corpo_sensori(dati, fascia, note):
         return None
 
     sezioni = {"PROFILO SENSORI-MOTORIO": "", "RIFLESSI PRIMITIVI": "",
-               "MOTRICITÀ E PRASSIE": "", "AREA ORO-MIOFUNZIONALE": ""}
+               "MOTRICITÀ E PRASSIE": "", "AREA ORO-MIOFUNZIONALE": "",
+               "PROPOSTA TERAPEUTICA": ""}
     corrente = None
     for riga in testo.split("\n"):
         r = riga.strip()
@@ -427,6 +446,27 @@ def _ai_corpo_sensori(dati, fascia, note):
     return sezioni
 
 
+def _testo_progetto_terapia(dati):
+    """Elenco leggibile del programma PNEV assegnato al paziente (approcci e
+    procedure dal Programma PNEV), o testo di riserva se non ancora definito."""
+    programma = dati.get("programma") or []
+    if not programma:
+        return ("Progetto terapeutico da definire in sede di programmazione PNEV, "
+                "con selezione delle procedure più idonee tra gli approcci disponibili "
+                "(terapia visiva, integrazione riflessi primitivi/INPP, movimenti ritmici, "
+                "terapia miofunzionale, MAPS).")
+    per_appr = {}
+    for p in programma:
+        per_appr.setdefault(p.get("approccio") or "—", []).append(p)
+    righe = []
+    for appr, lista in per_appr.items():
+        righe.append(f"{appr}:")
+        for p in lista:
+            step = f"{p['step']} – " if p.get("step") and p["step"] != "—" else ""
+            righe.append(f"  • {step}{p.get('nome','')} ({p.get('stato','')})")
+    return "\n".join(righe)
+
+
 def _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val):
     paz = dati.get("paz",{})
     nome = f"{paz.get('Cognome','')} {paz.get('Nome','')}".strip()
@@ -438,6 +478,7 @@ def _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val):
         sez_riflessi = ai_sez.get("RIFLESSI PRIMITIVI") or "Da approfondire."
         sez_motricita = ai_sez.get("MOTRICITÀ E PRASSIE") or "Da approfondire."
         sez_oro = ai_sez.get("AREA ORO-MIOFUNZIONALE") or "Da approfondire."
+        sez_proposta = ai_sez.get("PROPOSTA TERAPEUTICA") or ""
     else:
         sez_profilo = ("Integrazione sensori-motoria in fase di maturazione con coinvolgimento\n"
                       "dei sistemi propriocettivo, vestibolare e/o tattile. Si rilevano difficoltà\n"
@@ -452,6 +493,7 @@ def _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val):
         sez_oro = ("Osservate alterazioni nelle funzioni miofunzionali oro-facciali con possibile impatto su respirazione, deglutizione e articolazione."
                   if "6-10" in fascia or "10+" in fascia
                   else "Da valutare in relazione allo sviluppo del linguaggio.")
+        sez_proposta = ""
 
     return _intestazione(prof,spec) + f"""RELAZIONE SENSORI-MOTORIA E NEURO-PSICO-MOTORIA ({fascia})
 
@@ -474,6 +516,9 @@ MOTRICITÀ E PRASSIE
 
 AREA ORO-MIOFUNZIONALE
 {sez_oro}
+
+PROGETTO TERAPEUTICO PNEV
+{(sez_proposta + chr(10) + chr(10)) if sez_proposta else ""}{_testo_progetto_terapia(dati)}
 
 NOTE CLINICHE
 {note or "___________________________"}
