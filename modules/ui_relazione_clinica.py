@@ -126,8 +126,6 @@ def _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val
     diag   = sez_g.get("diag","") or ""
 
     return _intestazione(prof,spec) + f"""RELAZIONE NEUROEVOLUTIVA INTEGRATA ({fascia})
-{"BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI" if biblio else ""}
-{BIBLIO if biblio else ""}
 
 DATI ANAGRAFICI
 Nome e Cognome:    {nome}
@@ -198,8 +196,6 @@ def _tpl_followup(dati, prof, spec, fascia, note, biblio, scuola, periodo, progr
     _difficolta_txt = difficolta if difficolta else _difficolta_default
 
     return _intestazione(prof,spec) + f"""RELAZIONE DI FOLLOW-UP ({fascia})
-{"BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI" if biblio else ""}
-{BIBLIO if biblio else ""}
 
 DATI ANAGRAFICI
 Nome e Cognome:       {nome}
@@ -304,8 +300,6 @@ def _tpl_npi(dati, prof, spec, fascia, note, biblio, scuola, data_val, diagnosi_
     pnev = dati.get("pnev_summary","") or ""
 
     return _intestazione(prof,spec) + f"""RELAZIONE NEUROPSICOLOGICA – INVIO OSPEDALIERO ({fascia})
-{"BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI" if biblio else ""}
-{BIBLIO if biblio else ""}
 
 DATI ANAGRAFICI
 Nome e Cognome:    {nome}
@@ -360,8 +354,6 @@ def _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val):
     dn   = paz.get("Data_Nascita","")
 
     return _intestazione(prof,spec) + f"""RELAZIONE SENSORI-MOTORIA E NEURO-PSICO-MOTORIA ({fascia})
-{"BIBLIOGRAFIA E RIFERIMENTI CLINICO-SCIENTIFICI" if biblio else ""}
-{BIBLIO if biblio else ""}
 
 DATI ANAGRAFICI
 Nome e Cognome:    {nome}
