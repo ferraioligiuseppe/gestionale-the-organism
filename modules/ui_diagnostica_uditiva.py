@@ -773,10 +773,12 @@ def _ui_test_tonale(conn, paz_id, operatore):
     # salvati, appena apri la scheda, e live mentre confermi nuove soglie) ───
     _od_ac_live = [ss.get("tt_soglie_OD_ac_v3", {}).get(i) for i in range(11)]
     _os_ac_live = [ss.get("tt_soglie_OS_ac_v3", {}).get(i) for i in range(11)]
+    _od_bc_live = [ss.get("tt_soglie_OD_bc_v3", {}).get(i) for i in range(11)]
+    _os_bc_live = [ss.get("tt_soglie_OS_bc_v3", {}).get(i) for i in range(11)]
     _tom_live = ss.get("tt_tomatis_v3", list(TOMATIS_STD))
-    if any(v is not None for v in _od_ac_live + _os_ac_live):
+    if any(v is not None for v in _od_ac_live + _os_ac_live + _od_bc_live + _os_bc_live):
         st.markdown("**📈 Audiogramma** (aggiornato in tempo reale)")
-        _disegna_audiogramma(_od_ac_live, _os_ac_live, _tom_live)
+        _disegna_audiogramma(_od_ac_live, _os_ac_live, _tom_live, _od_bc_live, _os_bc_live)
     else:
         st.caption("Il grafico comparirà qui appena confermi la prima soglia.")
     st.divider()
@@ -965,7 +967,7 @@ def _ui_test_tonale(conn, paz_id, operatore):
             st.success(f"Audiogramma salvato — {n} soglie.")
 
 
-def _disegna_audiogramma(od, os_, tom):
+def _disegna_audiogramma(od, os_, tom, od_bc=None, os_bc=None):
     try:
         import matplotlib; matplotlib.use("Agg")
         import matplotlib.pyplot as plt
@@ -985,6 +987,12 @@ def _disegna_audiogramma(od, os_, tom):
         if pts_os:
             xi,yi=zip(*pts_os); ax.plot(xi,yi,color="#2980b9",lw=1.8,marker="x",ms=6,label="OS AC",zorder=4)
             for x,y in pts_os: ax.text(x,y+5,"X",ha="center",fontsize=9,color="#2980b9",fontweight="bold")
+        pts_odbc=[(i,v) for i,v in enumerate(od_bc or [])if v is not None]
+        if pts_odbc:
+            xi,yi=zip(*pts_odbc); ax.scatter(xi,yi,color="#c0392b",marker="<",s=60,label="OD BC",zorder=4)
+        pts_osbc=[(i,v) for i,v in enumerate(os_bc or [])if v is not None]
+        if pts_osbc:
+            xi,yi=zip(*pts_osbc); ax.scatter(xi,yi,color="#2980b9",marker=">",s=60,label="OS BC",zorder=4)
         ax.legend(fontsize=8,loc="lower right"); fig.tight_layout(pad=0.5)
         buf = io.BytesIO(); fig.savefig(buf,format="png",dpi=110,bbox_inches="tight",facecolor="white")
         plt.close(fig); buf.seek(0); st.image(buf, use_container_width=True)
