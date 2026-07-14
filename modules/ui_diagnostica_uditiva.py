@@ -769,6 +769,18 @@ def _ui_test_tonale(conn, paz_id, operatore):
     modalita = st.radio("Modalità di ricerca soglia", ["🤖 Automatica (assistita)", "🖱️ Manuale"],
                         horizontal=True, key="tt_modalita_v3")
 
+    # ── Grafico SEMPRE in cima e sempre aggiornato (anche per esami già
+    # salvati, appena apri la scheda, e live mentre confermi nuove soglie) ───
+    _od_ac_live = [ss.get("tt_soglie_OD_ac_v3", {}).get(i) for i in range(11)]
+    _os_ac_live = [ss.get("tt_soglie_OS_ac_v3", {}).get(i) for i in range(11)]
+    _tom_live = ss.get("tt_tomatis_v3", list(TOMATIS_STD))
+    if any(v is not None for v in _od_ac_live + _os_ac_live):
+        st.markdown("**📈 Audiogramma** (aggiornato in tempo reale)")
+        _disegna_audiogramma(_od_ac_live, _os_ac_live, _tom_live)
+    else:
+        st.caption("Il grafico comparirà qui appena confermi la prima soglia.")
+    st.divider()
+
     # ── Parametri di stimolo (nativi: cambiano di rado) ──────────────────────
     c1, c2, c3 = st.columns(3)
     with c1: ear = st.selectbox("Orecchio", ["OD - Destro", "OS - Sinistro"], key="tt_ear_v3")
