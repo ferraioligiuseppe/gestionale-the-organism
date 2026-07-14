@@ -111,7 +111,7 @@ PNEV_RAMI = {
         "🧩 Programma PNEV",
     ],
     "🎧 Uditiva": [
-        "🔉 Diagnostica uditiva",
+        "🎧 Stimolazione uditiva",
         "📊 Audiometria funzionale",
         "🎧 Bilancio uditivo",
         "🎧 MAPS",
