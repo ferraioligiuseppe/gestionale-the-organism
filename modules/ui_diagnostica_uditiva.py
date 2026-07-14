@@ -891,6 +891,17 @@ def _ui_test_tonale(conn, paz_id, operatore):
         if st.button("✓ Conferma soglia", type="primary", use_container_width=True, key="tt_val_v3"):
             ss[key_s][fi] = int(soglia)
             st.success(f"Registrata: {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} = {int(soglia)} dB HL")
+            _od_bc_auto = [ss.get("tt_soglie_OD_bc_v3", {}).get(i) for i in range(11)]
+            _os_bc_auto = [ss.get("tt_soglie_OS_bc_v3", {}).get(i) for i in range(11)]
+            _od_ac_auto = [ss.get("tt_soglie_OD_ac_v3", {}).get(i) for i in range(11)]
+            _os_ac_auto = [ss.get("tt_soglie_OS_ac_v3", {}).get(i) for i in range(11)]
+            _tom_auto = ss.get("tt_tomatis_v3", list(TOMATIS_STD))
+            _eq_od_auto = [round(_tom_auto[i] - _od_ac_auto[i], 1) if _od_ac_auto[i] is not None else 0 for i in range(11)]
+            _n_auto = sum(1 for v in _od_ac_auto + _os_ac_auto if v is not None)
+            _dati_auto = {"od_ac": _od_ac_auto, "os_ac": _os_ac_auto, "od_bc": _od_bc_auto,
+                         "os_bc": _os_bc_auto, "tomatis": _tom_auto, "eq_od": _eq_od_auto}
+            _salva(conn, paz_id, "Audiogramma", _dati_auto, float(_n_auto), f"{_n_auto} soglie",
+                  operatore, ss.get("tt_note_v3", "") or "(salvataggio automatico)")
 
     # ── Soglie registrate ────────────────────────────────────────────────────
     st.divider()
