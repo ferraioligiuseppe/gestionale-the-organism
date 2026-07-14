@@ -893,8 +893,7 @@ def _ui_test_tonale(conn, paz_id, operatore):
         for fii, v in sorted(soglie.items()):
             col.markdown(
                 f"<span style='border:1px solid {color};border-radius:6px;"
-                f"padding:1px 5px;font-size:11px;color:{color};"
-                f"display:inline-block;margin:1px'>{FLABELS_TON[fii]}:{v}</span>",
+                f"padding:1px 5px;font-size:11px;color:{color};"                f"display:inline-block;margin:1px'>{FLABELS_TON[fii]}:{v}</span>",
                 unsafe_allow_html=True)
 
     # ── Curva Tomatis ─────────────────────────────────────────────────────────
