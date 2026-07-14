@@ -372,9 +372,9 @@ _PROSSIMO_PASSO = {
         "🔍 Valutazione funzionale", "👁️ Valutazione visuo-percettiva",
         "▶ Passo successivo: Valutazione visiva"),
     "👁️ Valutazione visuo-percettiva": (
-        "🔍 Valutazione funzionale", "🔉 Diagnostica uditiva",
+        "🔍 Valutazione funzionale", "🎧 Stimolazione uditiva",
         "▶ Passo successivo: Valutazione uditiva"),
-    "🔉 Diagnostica uditiva": (
+    "🎧 Stimolazione uditiva": (
         "👥 Pazienti", "📝 Diagnosi assistita",
         "▶ Passo successivo: Diagnosi"),
 }
@@ -428,7 +428,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall",
-        "🔉 Diagnostica uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
+        "🎧 Stimolazione uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
         "🤖 Relazioni cliniche (AI)", "📝 Relazione clinica",
         "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
@@ -780,7 +780,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
 
     # ── AUDIO (MAPS & diagnostica uditiva) ────────────────────────────
     _audio_map = {
-        "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
+        "🎧 Stimolazione uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
         "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
         "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
         "🧭 Percorsi MAPS":          ("ui_percorsi",              "ui_percorsi"),
@@ -1173,7 +1173,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         from .paziente_attivo import header_paziente_attivo
         # L'header serve solo per i moduli che richiedono un paziente
         _audio_map = {
-            "🔉 Diagnostica uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
+            "🎧 Stimolazione uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
             "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
             "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
             "🧭 Percorsi MAPS":          ("ui_percorsi",              "ui_percorsi"),
@@ -1404,7 +1404,7 @@ def dispatch_main_section(*, sezione: str,
         " Utenti / Ruoli":               (AREA_STUDIO,      "👥 Utenti / Ruoli"),
         " Eye Tracking":                 (AREA_AUDIOLOGIA,  "👁️ Eye tracking"),
         " Lettura Avanzata DOM":         (AREA_AUDIOLOGIA,  "📖 Lettura avanzata"),
-        "🔉 Diagnostica Uditiva":        (AREA_AUDIOLOGIA,  "🔉 Diagnostica uditiva"),
+        "🔉 Diagnostica Uditiva":        (AREA_AUDIOLOGIA,  "🎧 Stimolazione uditiva"),
         "🧠 Terapia":                    (AREA_VALUTAZIONE, "⚡ Funzioni esecutive"),
         "🧠 NPS — Valutazione Neuropsicologica": (AREA_VALUTAZIONE, "🧠 NPS — Neuropsicologica"),
         "📚 DSA — Apprendimento":        (AREA_VALUTAZIONE, "📚 DSA — Apprendimento"),

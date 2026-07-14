@@ -721,6 +721,27 @@ render();
 </script></body></html>"""
 
 
+def _carica_ultimo_audiogramma(conn, paz_id):
+    """Ultimo audiogramma salvato per il paziente (dati_json), o None."""
+    try:
+        cur = conn.cursor()
+        ph1 = _ph(1, conn)
+        cur.execute(
+            "SELECT dati_json FROM diagnostica_uditiva WHERE paziente_id = " + ph1 +
+            " AND tipo = 'Audiogramma' ORDER BY data_esame DESC, id DESC LIMIT 1",
+            (paz_id,))
+        row = cur.fetchone()
+        if row and row[0]:
+            return json.loads(row[0])
+    except Exception:
+        pass
+    return None
+
+
+# Ordine clinico standard di somministrazione (dalle centrali alle estreme)
+FREQ_ORDER_AUTO = [1000, 2000, 4000, 8000, 500, 250, 125, 750, 1500, 3000, 6000]
+
+
 def _ui_test_tonale(conn, paz_id, operatore):
     st.subheader("Test tonale audiometrico")
     st.caption("Via aerea (AC) e ossea (BC) · WebAudio istantaneo · Metodo Hipérion · Curva Tomatis")
@@ -728,26 +749,65 @@ def _ui_test_tonale(conn, paz_id, operatore):
     import streamlit.components.v1 as _sc
     ss = st.session_state
 
+    # ── Ricarica automatica dell'ultimo audiogramma di QUESTO paziente ───────
+    # (evita che le soglie di un paziente restino a video passando a un altro,
+    # e fa sì che tornando sul paziente si veda subito l'ultimo esame fatto)
+    if ss.get("_tt_loaded_for") != paz_id:
+        for k in list(ss.keys()):
+            if k.startswith("tt_soglie_") or k == "tt_tomatis_v3":
+                del ss[k]
+        ultimo = _carica_ultimo_audiogramma(conn, paz_id)
+        if ultimo:
+            if ultimo.get("od_ac"): ss["tt_soglie_OD_ac_v3"] = {i: v for i, v in enumerate(ultimo["od_ac"]) if v is not None}
+            if ultimo.get("os_ac"): ss["tt_soglie_OS_ac_v3"] = {i: v for i, v in enumerate(ultimo["os_ac"]) if v is not None}
+            if ultimo.get("od_bc"): ss["tt_soglie_OD_bc_v3"] = {i: v for i, v in enumerate(ultimo["od_bc"]) if v is not None}
+            if ultimo.get("os_bc"): ss["tt_soglie_OS_bc_v3"] = {i: v for i, v in enumerate(ultimo["os_bc"]) if v is not None}
+            if ultimo.get("tomatis"): ss["tt_tomatis_v3"] = list(ultimo["tomatis"])
+            st.info("📥 Caricato automaticamente l'ultimo audiogramma salvato per questo paziente.")
+        ss["_tt_loaded_for"] = paz_id
+
+    modalita = st.radio("Modalità di ricerca soglia", ["🤖 Automatica (assistita)", "🖱️ Manuale"],
+                        horizontal=True, key="tt_modalita_v3")
+
     # ── Parametri di stimolo (nativi: cambiano di rado) ──────────────────────
     c1, c2, c3 = st.columns(3)
     with c1: ear = st.selectbox("Orecchio", ["OD - Destro", "OS - Sinistro"], key="tt_ear_v3")
     with c2: via = st.selectbox("Via", ["AC - Aerea", "BC - Ossea"], key="tt_via_v3")
     with c3: dur_str = st.select_slider("Durata tono", ["1.0", "1.5", "2.0", "2.5", "3.0"],
                                         value="2.0", key="tt_dur_v3")
-
-    cur_f = st.selectbox("Frequenza", FREQS_TON,
-                         format_func=lambda f: str(f) if f < 1000 else f"{f//1000}k Hz",
-                         key="tt_freq_v3")
-
     ear_code = "OD" if "OD" in ear else "OS"
     via_code = "ac" if "AC" in via else "bc"
     dur = float(dur_str)
-    fi = FREQS_TON.index(cur_f)
+
+    if modalita.startswith("🤖"):
+        st.markdown("##### Ricerca automatica della soglia (metodo Hughson–Westlake)")
+        st.caption("Il sistema propone un livello, tu rispondi «🔊 Ho sentito» / «🔇 Non ho sentito»: "
+                   "scende di 10 dB dopo ogni «sentito», sale di 5 dB dopo ogni «non sentito». "
+                   "Dopo 2 inversioni concordanti la soglia è proposta in automatico — "
+                   "resta comunque visibile e modificabile col mouse prima di validarla.")
+        auto_key = f"tt_auto_{ear_code}_{via_code}"
+        if auto_key not in ss or ss[auto_key].get("freq_seq_i") is None:
+            ss[auto_key] = {"freq_seq_i": 0, "level": 40, "phase": "down", "reversals": [], "found": None}
+        auto = ss[auto_key]
+        fi = FREQS_TON.index(FREQ_ORDER_AUTO[auto["freq_seq_i"] % len(FREQ_ORDER_AUTO)])
+        cur_f = FREQS_TON[fi]
+        st.progress((auto["freq_seq_i"] % len(FREQ_ORDER_AUTO)) / len(FREQ_ORDER_AUTO),
+                    text=f"Frequenza {auto['freq_seq_i'] % len(FREQ_ORDER_AUTO) + 1} di {len(FREQ_ORDER_AUTO)}")
+        db_init = int(auto["level"])
+    else:
+        cur_f = st.selectbox("Frequenza", FREQS_TON,
+                             format_func=lambda f: str(f) if f < 1000 else f"{f//1000}k Hz",
+                             key="tt_freq_v3")
+        fi = FREQS_TON.index(cur_f)
 
     # Offset di calibrazione (per orecchio), iniettato nella console
     cal_offset = ss.get("cal_profilo_globale", {}).get(f"offset_{ear_code.lower()}", 0)
     pan_val = 0.9 if ear_code == "OD" else -0.9
-    db_init = int(ss.get(f"tt_soglie_{ear_code}_{via_code}_v3", {}).get(fi, 30))
+
+    if modalita.startswith("🤖"):
+        db_init = int(auto["level"])
+    else:
+        db_init = int(ss.get(f"tt_soglie_{ear_code}_{via_code}_v3", {}).get(fi, 30))
 
     # ── Console audio autonoma: AudioContext persistente, zero ricariche ─────
     console = (_TONALE_CONSOLE_HTML
@@ -765,19 +825,58 @@ def _ui_test_tonale(conn, paz_id, operatore):
     if cal_offset:
         st.caption(f"Offset calibrazione cuffie applicato: {cal_offset:+d} dB")
 
-    # ── Registrazione soglia (nativa → salva davvero) ────────────────────────
     key_s = f"tt_soglie_{ear_code}_{via_code}_v3"
     if key_s not in ss:
         ss[key_s] = {}
+
+    if modalita.startswith("🤖"):
+        bc1, bc2, bc3 = st.columns([1, 1, 1])
+        with bc1:
+            sentito = st.button("🔊 Ho sentito", type="primary", use_container_width=True, key="tt_auto_yes")
+        with bc2:
+            non_sentito = st.button("🔇 Non ho sentito", use_container_width=True, key="tt_auto_no")
+        with bc3:
+            salta = st.button("⏭️ Salta frequenza", use_container_width=True, key="tt_auto_skip")
+
+        if sentito or non_sentito:
+            prev_phase = auto["phase"]
+            if sentito:
+                auto["phase"] = "down"
+                auto["level"] = max(-20, auto["level"] - 10)
+            else:
+                auto["phase"] = "up"
+                auto["level"] = min(90, auto["level"] + 5)
+            if prev_phase != auto["phase"] and prev_phase in ("up", "down"):
+                auto["reversals"].append(auto["level"])
+            if len(auto["reversals"]) >= 2 and sentito:
+                soglia_auto = round(sum(auto["reversals"][-2:]) / 2 / 5) * 5
+                ss[key_s][fi] = int(soglia_auto)
+                st.success(f"Soglia proposta: {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} "
+                           f"= {int(soglia_auto)} dB HL (modificabile qui sotto prima di confermare)")
+                auto["freq_seq_i"] += 1
+                auto["level"] = 40
+                auto["phase"] = "down"
+                auto["reversals"] = []
+            st.rerun()
+        if salta:
+            auto["freq_seq_i"] += 1
+            auto["level"] = 40
+            auto["phase"] = "down"
+            auto["reversals"] = []
+            st.rerun()
+
+    # ── Registrazione / conferma soglia (sempre visibile e modificabile) ─────
+    valore_proposto = ss[key_s].get(fi, db_init)
     rc1, rc2 = st.columns([2, 1])
     with rc1:
         soglia = st.number_input(
-            f"Soglia trovata — {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} (dB HL)",
-            -20, 120, db_init, 5, key="tt_soglia_in_v3")
+            f"Soglia — {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} (dB HL) · "
+            "modificabile col mouse o a tastiera",
+            -20, 120, int(valore_proposto), 5, key=f"tt_soglia_in_{fi}_v3")
     with rc2:
         st.write("")
         st.write("")
-        if st.button("✓ Valida soglia", type="primary", use_container_width=True, key="tt_val_v3"):
+        if st.button("✓ Conferma soglia", type="primary", use_container_width=True, key="tt_val_v3"):
             ss[key_s][fi] = int(soglia)
             st.success(f"Registrata: {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} = {int(soglia)} dB HL")
 
