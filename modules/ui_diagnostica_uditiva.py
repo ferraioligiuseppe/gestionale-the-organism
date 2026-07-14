@@ -722,17 +722,26 @@ render();
 
 
 def _carica_ultimo_audiogramma(conn, paz_id):
-    """Ultimo audiogramma salvato per il paziente (dati_json), o None."""
+    """Ultimo audiogramma CON ALMENO UNA SOGLIA reale per il paziente
+    (salta eventuali salvataggi vuoti/accidentali più recenti)."""
     try:
         cur = conn.cursor()
         ph1 = _ph(1, conn)
         cur.execute(
             "SELECT dati_json FROM diagnostica_uditiva WHERE paziente_id = " + ph1 +
-            " AND tipo = 'Audiogramma' ORDER BY data_esame DESC, id DESC LIMIT 1",
+            " AND tipo = 'Audiogramma' ORDER BY data_esame DESC, id DESC LIMIT 20",
             (paz_id,))
-        row = cur.fetchone()
-        if row and row[0]:
-            return json.loads(row[0])
+        for (raw,) in cur.fetchall():
+            if not raw:
+                continue
+            try:
+                d = json.loads(raw)
+            except Exception:
+                continue
+            liste = [d.get("od_ac") or [], d.get("os_ac") or [],
+                    d.get("od_bc") or [], d.get("os_bc") or []]
+            if any(v is not None for lst in liste for v in lst):
+                return d
     except Exception:
         pass
     return None
