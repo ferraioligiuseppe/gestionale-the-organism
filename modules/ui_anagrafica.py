@@ -1193,6 +1193,34 @@ def _sezione_coupon_paziente(conn, paz_id):
 
 
 @st.dialog("Modifica paziente", width="large")
+def _mostra_nucleo_familiare(conn, paz_id, indirizzo, citta):
+    """Segnala altri pazienti attivi con stesso indirizzo (via+civico) e città:
+    possibile stesso nucleo familiare, da verificare a mano."""
+    ind = (indirizzo or "").strip()
+    if not ind:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, cognome, nome FROM pazienti "
+            "WHERE id<>%s AND TRIM(LOWER(indirizzo))=%s "
+            "AND COALESCE(stato_paziente,'ATTIVO')='ATTIVO' "
+            + ("AND TRIM(LOWER(citta))=%s" if (citta or "").strip() else ""),
+            (paz_id, ind.lower(), (citta or "").strip().lower())
+            if (citta or "").strip() else (paz_id, ind.lower()))
+        altri = cur.fetchall()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        altri = []
+    if altri:
+        nomi = ", ".join(f"{r[1]} {r[2]}" for r in altri)
+        st.info(f"🏠 Stesso indirizzo trovato per: **{nomi}** — potrebbero essere "
+                "dello stesso nucleo familiare. Verifica a mano se collegarli.")
+
+
 def _dialog_modifica(conn, paz_id: int):
     rec = _carica_paziente(conn, paz_id)
     if not rec:
@@ -1212,6 +1240,7 @@ def _dialog_modifica(conn, paz_id: int):
         info_text += f" · {eta} anni"
     st.caption(info_text)
     st.markdown(f"### {cog} {nom}")
+    _mostra_nucleo_familiare(conn, paz_id, rec.get("indirizzo", ""), rec.get("citta", ""))
 
     dati = _form_anagrafici(f"mp_{paz_id}", rec)
 
