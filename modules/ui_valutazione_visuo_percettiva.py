@@ -1263,6 +1263,20 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         _prof_spec = _titolo_prof()
 
     st.markdown("---")
+    st.markdown("""<style>
+        div[data-baseweb="tab-list"]{
+            overflow-x: auto !important;
+            flex-wrap: nowrap !important;
+            scrollbar-width: thin;
+        }
+        div[data-baseweb="tab-list"]::-webkit-scrollbar{ height:8px; }
+        div[data-baseweb="tab-list"]::-webkit-scrollbar-thumb{
+            background:#bbb; border-radius:4px;
+        }
+        div[data-baseweb="tab-list"] button[data-baseweb="tab"]{
+            flex: 0 0 auto !important;
+        }
+    </style>""", unsafe_allow_html=True)
     tabs = st.tabs([
         "Intestazione",
         "👁️ Anamnesi",
