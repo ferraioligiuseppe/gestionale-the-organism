@@ -129,6 +129,13 @@ def render_protocolli(conn, paz_id, paziente=None):
     st.text_area("Testo del consenso (modificabile)", value=testo, height=320,
                  key="prot_testo")
 
+    st.download_button(
+        "🖨️ Scarica consenso (Word, da stampare o inviare per firma)",
+        data=_docx_consenso(st.session_state.get("prot_testo", testo)),
+        file_name=f"consenso_pnev_{nome_paz or paz_id}.docx".replace(" ", "_"),
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        key="prot_consenso_dl")
+
     accetta = st.checkbox(
         ("Il paziente ha letto, compreso e **sottoscrive** il presente consenso, "
          "impegnandosi al lavoro a casa secondo il programma.") if is_adult else
@@ -301,6 +308,8 @@ def _elenco_assegnati(conn, paz_id):
         st.caption("Nessun protocollo ancora assegnato a questo paziente.")
         return
     st.markdown("#### Protocolli assegnati")
+    st.caption("Qui sotto trovi i protocolli che hai inserito per questo paziente, "
+               "con l'avanzamento settimanale.")
     for rid, nome, durata, dini, sett_cur, strut, stato in righe:
         settimane = strut if isinstance(strut, list) else (json.loads(strut) if strut else [])
         tot = len(settimane)
@@ -333,6 +342,20 @@ def _elenco_assegnati(conn, paz_id):
                     pass
         st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
                     unsafe_allow_html=True)
+
+
+def _docx_consenso(testo: str) -> bytes:
+    """Consenso informato in Word, pronto da stampare o inviare per firma."""
+    import io
+    from docx import Document
+    doc = Document()
+    for para in (testo or "").split("\n"):
+        doc.add_paragraph(para)
+    doc.add_paragraph("")
+    doc.add_paragraph("Firma: ______________________________     Data: __________")
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
 
 
 def _set_settimana(conn, rid, n):
