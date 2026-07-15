@@ -197,9 +197,7 @@ def _form_nuovo_paziente(conn, key_suffix=None):
     key_suffix rende univoche le chiavi quando il form compare in più punti
     nello stesso run (es. schermata coupon + dialog selezione)."""
     if key_suffix is None:
-        n = st.session_state.get("_nfp_counter", 0) + 1
-        st.session_state["_nfp_counter"] = n
-        key_suffix = str(n)
+        key_suffix = "default"
     ks = key_suffix
     with st.form(f"form_nuovo_paziente_rapido_{ks}", clear_on_submit=False):
         c1, c2 = st.columns(2)
@@ -233,7 +231,7 @@ def _dialog_seleziona(conn):
     if not pazienti:
         st.info("Nessun paziente registrato. Puoi aggiungerne uno qui sotto.")
         st.markdown("##### ➕ Nuovo paziente")
-        _form_nuovo_paziente(conn)
+        _form_nuovo_paziente(conn, key_suffix="empty")
         if st.button("Chiudi"):
             st.rerun()
         return
@@ -264,7 +262,7 @@ def _dialog_seleziona(conn):
                      expanded=True):
         st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
                    "il paziente viene creato e selezionato subito.")
-        _form_nuovo_paziente(conn)
+        _form_nuovo_paziente(conn, key_suffix="inline")
 
     # Tabella ag-grid
     try:
