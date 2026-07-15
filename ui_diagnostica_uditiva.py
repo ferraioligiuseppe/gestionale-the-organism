@@ -338,9 +338,20 @@ def ui_diagnostica_uditiva(conn=None):
         st.info("Nessun paziente registrato."); return
 
     options = [(int(r[0]), f"{r[1]} {r[2]}") for r in rows]
+    try:
+        from .paziente_attivo import paziente_attivo_id
+        _pid_attivo = paziente_attivo_id()
+    except Exception:
+        _pid_attivo = None
+    _default_idx = 0
+    if _pid_attivo:
+        for _i, _o in enumerate(options):
+            if _o[0] == int(_pid_attivo):
+                _default_idx = _i
+                break
     c1, c2 = st.columns([3,1])
     with c1:
-        sel = st.selectbox("Paziente", options=options,
+        sel = st.selectbox("Paziente", options=options, index=_default_idx,
                            format_func=lambda x: x[1], key="du_paz")
     with c2:
         op = st.text_input("Operatore", "", key="du_op")
@@ -1379,10 +1390,23 @@ def _ui_storico(conn, cur, paz_id):
         note = _rg(r,"note","")
 
         with st.expander(f"#{eid} | {tipo} | {data} | {cls}"):
-            c1,c2 = st.columns(2)
+            c1,c2,c3 = st.columns([2,2,1])
             if score is not None:
                 c1.metric("Punteggio", f"{score}")
             c2.metric("Classificazione", cls or "—")
+            with c3:
+                st.write("")
+                if st.button("🗑 Elimina", key=f"du_del_{eid}"):
+                    try:
+                        cur2 = conn.cursor()
+                        ph1b = _ph(1, conn)
+                        cur2.execute("DELETE FROM diagnostica_uditiva WHERE id = " + ph1b, (eid,))
+                        conn.commit()
+                        st.success("Record eliminato.")
+                        st.rerun()
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"Errore eliminazione: {e}")
             if note: st.caption(f"Note: {note}")
             try:
                 dati = json.loads(_rg(r,"dati_json","{}") or "{}")
