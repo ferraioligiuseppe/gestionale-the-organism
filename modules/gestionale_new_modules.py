@@ -2128,9 +2128,11 @@ def render_nuovi_moduli(conn, sezione: str, paziente_id: Optional[int] = None) -
         render_seed_panel(conn)
         return
 
-    # Sezioni con selettore paziente autonomo
+    # Sezioni con selettore paziente autonomo (usa il paziente già selezionato
+    # nell'header, se presente — evita la doppia selezione duplicata)
     if sezione in ("NPS", "PianoVT", "ReportPDF"):
-        paziente_id = _seleziona_paziente(conn, key_suffix=sezione)
+        if not paziente_id:
+            paziente_id = _seleziona_paziente(conn, key_suffix=sezione)
         if not paziente_id:
             return
         if sezione == "NPS":
