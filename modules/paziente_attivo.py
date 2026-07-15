@@ -74,8 +74,16 @@ def _carica_lista_pazienti(_conn):
     conn = _conn
     try:
         cur = conn.cursor()
+        try:
+            cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         cur.execute(
-            "SELECT id, cognome, nome, data_nascita, telefono, stato_paziente "
+            "SELECT id, cognome, nome, data_nascita, telefono, stato_paziente, creato_il "
             "FROM pazienti "
             "WHERE COALESCE(stato_paziente, 'ATTIVO') = 'ATTIVO' "
             "ORDER BY cognome, nome"
@@ -256,6 +264,12 @@ def _dialog_seleziona(conn):
 
     st.caption(f"{len(pazienti)} paziente/i")
 
+    ordina_recenti = False
+    if not cerca.strip():
+        ordina_recenti = st.checkbox("🕓 Ordina per ultimi registrati", key="paz_attivo_recenti")
+        if ordina_recenti:
+            pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
+
     # Nuovo paziente al volo — SEMPRE APERTO e in evidenza, così le
     # collaboratrici vedono subito come creare un'anagrafica senza uscire.
     with st.expander("➕ Crea NUOVA anagrafica (senza uscire da qui)",
@@ -298,6 +312,7 @@ def _dialog_seleziona(conn):
             "Data nasc.": _fmt_dn(p.get("data_nascita")),
             "Età": _eta_anni(p.get("data_nascita")) or "",
             "Telefono": p.get("telefono", "") or "",
+            "Registrato il": _fmt_dn(p.get("creato_il")) if p.get("creato_il") else "",
         })
     df = pd.DataFrame(rows_df)
 
