@@ -338,9 +338,20 @@ def ui_diagnostica_uditiva(conn=None):
         st.info("Nessun paziente registrato."); return
 
     options = [(int(r[0]), f"{r[1]} {r[2]}") for r in rows]
+    try:
+        from .paziente_attivo import paziente_attivo_id
+        _pid_attivo = paziente_attivo_id()
+    except Exception:
+        _pid_attivo = None
+    _default_idx = 0
+    if _pid_attivo:
+        for _i, _o in enumerate(options):
+            if _o[0] == int(_pid_attivo):
+                _default_idx = _i
+                break
     c1, c2 = st.columns([3,1])
     with c1:
-        sel = st.selectbox("Paziente", options=options,
+        sel = st.selectbox("Paziente", options=options, index=_default_idx,
                            format_func=lambda x: x[1], key="du_paz")
     with c2:
         op = st.text_input("Operatore", "", key="du_op")
