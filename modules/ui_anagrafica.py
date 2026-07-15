@@ -1127,7 +1127,7 @@ def _sezione_coupon_paziente(conn, paz_id):
             cod = _g(r, "Codice_Coupon") or "—"
             tip = _g(r, "Tipo_Coupon") or ""
             luogo = _g(r, "Luogo_Utilizzo") or ""
-            c1, c2, c3 = st.columns([3, 2, 2])
+            c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
             with c1:
                 st.markdown(f"{'✅' if usato else '🟡'} **{cod}** · {tip}"
                             + (f" · {luogo}" if luogo else ""))
@@ -1142,6 +1142,18 @@ def _sezione_coupon_paziente(conn, paz_id):
                         cur.execute("UPDATE Coupons SET Utilizzato=%s, Luogo_Utilizzo=%s "
                                     "WHERE id=%s",
                                     (0 if usato else 1, nl.strip() or None, cid))
+                        conn.commit()
+                        st.rerun()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+            with c4:
+                if st.button("🗑", key=f"anac_del_{cid}", use_container_width=True,
+                             help="Elimina coupon"):
+                    try:
+                        cur.execute("DELETE FROM Coupons WHERE id=%s", (cid,))
                         conn.commit()
                         st.rerun()
                     except Exception:
