@@ -19,6 +19,31 @@ SINTOMI = [
 PATOLOGIE_MED = ["Diabete", "Ipertensione", "Allergie", "Tiroide", "Emicrania"]
 
 
+def _multiselect_estendibile(label, opzioni_base, default, key):
+    """Multiselect + possibilità di aggiungere una voce non presente in elenco."""
+    extra_key = f"{key}_extra"
+    extra = st.session_state.get(extra_key, [])
+    for v in default:
+        if v not in opzioni_base and v not in extra:
+            extra.append(v)
+    st.session_state[extra_key] = extra
+    opzioni = opzioni_base + [e for e in extra if e not in opzioni_base]
+    scelti = st.multiselect(label, opzioni,
+                            default=[v for v in default if v in opzioni],
+                            key=f"{key}_ms")
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        nuova = st.text_input("Non in elenco? Aggiungi qui", key=f"{key}_new",
+                              placeholder="Scrivi e premi Aggiungi", label_visibility="collapsed")
+    with c2:
+        if st.button("➕ Aggiungi", key=f"{key}_add") and nuova.strip():
+            if nuova.strip() not in st.session_state[extra_key]:
+                st.session_state[extra_key].append(nuova.strip())
+            st.session_state[f"{key}_ms"] = list(set(scelti + [nuova.strip()]))
+            st.rerun()
+    return scelti
+
+
 # ── DB ────────────────────────────────────────────────────────────────
 def _ensure_table(conn) -> None:
     cur = conn.cursor()
@@ -146,8 +171,8 @@ def render_anamnesi_visiva(conn, paz_id: int) -> None:
         # 1. Motivo / sintomi
         st.markdown("**1. Motivo della visita e sintomi**")
         motivo = st.text_input("Motivo della visita", value=d.get("motivo", ""))
-        sintomi = st.multiselect("Sintomi visivi riferiti", SINTOMI,
-                                 default=[s for s in d.get("sintomi", []) if s in SINTOMI])
+        sintomi = _multiselect_estendibile("Sintomi visivi riferiti", SINTOMI,
+                                           d.get("sintomi", []), key="anv_sintomi")
         sintomi_altro = st.text_area("Altri sintomi / note", value=d.get("sintomi_altro", ""), height=70)
 
         # 2. Storia visiva
@@ -177,8 +202,8 @@ def render_anamnesi_visiva(conn, paz_id: int) -> None:
 
         # 5. Storia medica generale
         st.markdown("**5. Storia medica generale**")
-        patologie_med = st.multiselect("Condizioni mediche", PATOLOGIE_MED,
-                                       default=[p for p in d.get("patologie_med", []) if p in PATOLOGIE_MED])
+        patologie_med = _multiselect_estendibile("Condizioni mediche", PATOLOGIE_MED,
+                                                 d.get("patologie_med", []), key="anv_patmed")
         farmaci = st.text_input("Farmaci in uso", value=d.get("farmaci", ""))
         note_med = st.text_area("Altre note mediche / allergie", value=d.get("note_med", ""), height=70)
 
