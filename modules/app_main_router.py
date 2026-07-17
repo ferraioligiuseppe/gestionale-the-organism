@@ -151,15 +151,18 @@ def _render_dashboard(conn) -> None:
             unsafe_allow_html=True
         )
 
-    paz_id, paz_label, paz_info = _seleziona_paziente_card(conn)
+    from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
+    paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
+    paz_info = paziente_attivo_record() or {}
 
     # ── Card paziente ────────────────────────────────────────────────
-    cognome  = paz_info.get("Cognome","")
-    nome     = paz_info.get("Nome","")
-    dn_raw   = paz_info.get("Data_Nascita","")
-    email    = paz_info.get("Email","") or "—"
+    _g = lambda *ks: next((paz_info.get(k) for k in ks if paz_info.get(k)), "")
+    cognome  = _g("Cognome", "cognome")
+    nome     = _g("Nome", "nome")
+    dn_raw   = _g("Data_Nascita", "data_nascita")
+    email    = _g("Email", "email") or "—"
     dn_fmt   = _fmt_data(dn_raw)
 
     try:
