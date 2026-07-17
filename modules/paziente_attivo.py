@@ -143,6 +143,52 @@ def set_paziente_attivo(conn, paz_id: int) -> None:
             conn.rollback()
         except Exception:
             pass
+    _salva_ultimo_paziente_utente(conn, paz_id)
+
+
+def _salva_ultimo_paziente_utente(conn, paz_id: int) -> None:
+    """Ricorda per l'utente loggato l'ultimo paziente aperto, così al prossimo
+    accesso (anche dopo un riavvio dell'app) si ripresenta da solo."""
+    try:
+        u = st.session_state.get("user") or {}
+        uid = u.get("id")
+        if not uid:
+            return
+        cur = conn.cursor()
+        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;")
+        cur.execute("UPDATE auth_users SET ultimo_paziente_id=%s WHERE id=%s",
+                    (int(paz_id), int(uid)))
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def ripristina_ultimo_paziente(conn) -> None:
+    """Se non c'è ancora un paziente attivo in questa sessione, ricarica
+    l'ultimo aperto dall'utente loggato (persistito su DB)."""
+    if st.session_state.get(KEY_ID):
+        return
+    try:
+        u = st.session_state.get("user") or {}
+        uid = u.get("id")
+        if not uid:
+            return
+        cur = conn.cursor()
+        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;")
+        cur.execute("SELECT ultimo_paziente_id FROM auth_users WHERE id=%s", (int(uid),))
+        row = cur.fetchone()
+        conn.commit()
+        pid = row[0] if row and not isinstance(row, dict) else (row.get("ultimo_paziente_id") if row else None)
+        if pid:
+            set_paziente_attivo(conn, int(pid))
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def reset_paziente_attivo() -> None:
@@ -412,6 +458,10 @@ def header_paziente_attivo(conn) -> int | None:
     """
     pid = paziente_attivo_id()
     rec = paziente_attivo_record()
+    if not pid:
+        ripristina_ultimo_paziente(conn)
+        pid = paziente_attivo_id()
+        rec = paziente_attivo_record()
 
     # Se ho l'id ma non il record (cache pulita o sessione nuova) → ricarico
     if pid and not rec:
