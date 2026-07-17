@@ -525,4 +525,60 @@ def header_paziente_attivo(conn) -> int | None:
                       use_container_width=True):
             _dialog_seleziona(conn)
 
+    with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            n_cog = st.text_input("Cognome", value=cog, key=f"hpa_edit_cog_{pid}")
+            n_nom = st.text_input("Nome", value=nom, key=f"hpa_edit_nom_{pid}")
+        with c2:
+            n_dn = st.text_input("Data nascita (GG/MM/AAAA)",
+                                 value=_fmt_dn(dn) if dn else "",
+                                 key=f"hpa_edit_dn_{pid}")
+            n_tel = st.text_input("Telefono", value=rec.get("telefono", "") or "",
+                                  key=f"hpa_edit_tel_{pid}")
+        with c3:
+            n_ind = st.text_input("Indirizzo", value=rec.get("indirizzo", "") or "",
+                                  key=f"hpa_edit_ind_{pid}")
+            n_email = st.text_input("Email", value=rec.get("email", "") or "",
+                                    key=f"hpa_edit_email_{pid}")
+        if st.button("💾 Salva modifiche", key=f"hpa_edit_save_{pid}", type="primary"):
+            errore = _salva_modifica_rapida(conn, pid, n_cog, n_nom, n_dn, n_tel,
+                                            n_ind, n_email)
+            if errore:
+                st.error(errore)
+            else:
+                st.session_state[KEY_REC] = _carica_paziente_record(conn, pid)
+                st.success("Anagrafica aggiornata.")
+                st.rerun()
+
     return pid
+
+
+def _salva_modifica_rapida(conn, pid, cognome, nome, dn_str, telefono, indirizzo, email):
+    """Aggiorna i campi base dell'anagrafica dal riquadro rapido dell'header.
+    Ritorna un messaggio d'errore, o None se tutto ok."""
+    cognome = (cognome or "").strip()
+    nome = (nome or "").strip()
+    if not cognome or not nome:
+        return "Cognome e Nome sono obbligatori."
+    data_iso = None
+    if (dn_str or "").strip():
+        d, err = _parse_dn(dn_str)
+        if err:
+            return err
+        data_iso = d.isoformat() if d else None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE pazienti SET cognome=%s, nome=%s, data_nascita=%s, "
+            "telefono=%s, indirizzo=%s, email=%s WHERE id=%s",
+            (cognome, nome, data_iso, telefono.strip(), indirizzo.strip(),
+             email.strip(), int(pid)))
+        conn.commit()
+        return None
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return f"Salvataggio non riuscito: {e}"
