@@ -1652,12 +1652,82 @@ def _ensure_first_admin(conn) -> bool:
         st.rerun()
     return False
 
+def _session_token_secret() -> bytes:
+    key = _token_secret() or "pnev-fallback-session-secret"
+    return key.encode("utf-8") if isinstance(key, str) else key
+
+
+def _make_session_token(user_id: int, studio_id: int, days: int = 30) -> str:
+    """Token firmato (HMAC) per il login persistente via URL: sopravvive ai
+    riavvii del processo Streamlit (session_state si azzera, il token no)."""
+    exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
+    payload = f"{user_id}.{studio_id}.{exp}"
+    sig = hmac.new(_session_token_secret(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def _check_session_token(token: str):
+    """Ritorna (user_id, studio_id) se il token è valido e non scaduto, altrimenti None."""
+    try:
+        uid_s, sid_s, exp_s, sig = token.split(".")
+        payload = f"{uid_s}.{sid_s}.{exp_s}"
+        expected = hmac.new(_session_token_secret(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            return None
+        if int(exp_s) < int(datetime.now(timezone.utc).timestamp()):
+            return None
+        return int(uid_s), int(sid_s)
+    except Exception:
+        return None
+
+
 def login(get_conn) -> bool:
     """Login su DB con ruoli."""
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
     if "user" not in st.session_state:
         st.session_state["user"] = None
+
+    # Login persistente: se la sessione Streamlit è stata azzerata (riavvio del
+    # processo per inattività/risorse) ma il browser ha ancora in URL un token
+    # valido, rientra da solo senza richiedere username/password.
+    if not st.session_state["logged_in"]:
+        _tok = st.query_params.get("auth_tok", "")
+        if isinstance(_tok, list):
+            _tok = _tok[0] if _tok else ""
+        if _tok:
+            _chk = _check_session_token(_tok)
+            if _chk:
+                _uid, _sid = _chk
+                try:
+                    _conn0 = get_conn()
+                    _cur0 = _conn0.cursor()
+                    _cur0.execute(
+                        "SELECT id, username, email, is_active FROM auth_users WHERE id=%s",
+                        (_uid,))
+                    _row0 = _cur0.fetchone()
+                except Exception:
+                    _row0 = None
+                if _row0 and (_row0[3] if not isinstance(_row0, dict) else _row0.get("is_active")):
+                    _uname0 = _row0[1] if not isinstance(_row0, dict) else _row0.get("username")
+                    _email0 = _row0[2] if not isinstance(_row0, dict) else _row0.get("email")
+                    st.session_state["logged_in"] = True
+                    st.session_state["studio_id"] = _sid
+                    try:
+                        _roles0 = _get_roles_for_user(_conn0, _uid)
+                    except Exception:
+                        _roles0 = []
+                    st.session_state["user"] = {
+                        "id": _uid, "username": _uname0, "email": _email0,
+                        "roles": _roles0, "must_change_password": False,
+                        "display_name": "", "specializzazioni": "", "titolo": "",
+                        "nome": "", "profilo": {},
+                    }
+                    try:
+                        from modules.ui_intestazione_studio import get_intestazione_studio
+                        st.session_state["intestazione_studio"] = get_intestazione_studio(_conn0, _sid)
+                    except Exception:
+                        pass
 
     if st.session_state["logged_in"] and st.session_state["user"]:
         u = st.session_state["user"]
@@ -1666,6 +1736,10 @@ def login(get_conn) -> bool:
         if st.sidebar.button("Logout"):
             st.session_state["logged_in"] = False
             st.session_state["user"] = None
+            try:
+                del st.query_params["auth_tok"]
+            except Exception:
+                pass
             st.rerun()
         return True
 
@@ -1715,6 +1789,10 @@ def login(get_conn) -> bool:
             except Exception:
                 pass
             st.warning("✅ Accesso di emergenza attivo (break-glass). Disattivalo nei Secrets dopo aver sistemato gli utenti.")
+            try:
+                st.query_params["auth_tok"] = _make_session_token(0, 1)
+            except Exception:
+                pass
             st.rerun()
             return True  # breakglass: st.rerun() dovrebbe interrompere, ma per sicurezza
         row = _get_user_by_username(conn, username.strip().lower())
@@ -1794,6 +1872,10 @@ def login(get_conn) -> bool:
             "profilo": _profilo,
         }
         st.success("Accesso effettuato.")
+        try:
+            st.query_params["auth_tok"] = _make_session_token(int(user_id), int(st.session_state.get("studio_id", 1)))
+        except Exception:
+            pass
         st.rerun()
 
     return False
