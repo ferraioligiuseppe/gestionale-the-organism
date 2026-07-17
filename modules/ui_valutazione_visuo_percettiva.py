@@ -902,6 +902,38 @@ def _sez_f(pid, d):
 #  SEZIONE G — PRESCRIZIONE E RELAZIONE
 # ══════════════════════════════════════════════════════════════════════
 
+def _testo_solo_optometrico(d: dict) -> str:
+    """Riassunto testuale delle sole sezioni optometriche (A-D) per la stampa
+    separata dalla relazione completa (Profilo funzionale/Sports Vision esclusi)."""
+    a = d.get("sez_a", {}); b = d.get("sez_b", {})
+    c = d.get("sez_c", {}); dd = d.get("sez_d", {})
+    def _f(v):
+        try:
+            fv = float(v or 0); return f"+{fv:.2f}" if fv >= 0 else f"{fv:.2f}"
+        except Exception:
+            return str(v or "nd")
+    rs_od = a.get("rs_od", {}); rs_os = a.get("rs_os", {})
+    ar_od = a.get("ar_od", {}); ar_os = a.get("ar_os", {})
+    righe = ["### A — Stato refrattivo",
+             f"Autorefrattometro OD: {_f(ar_od.get('sf'))} / {_f(ar_od.get('cil'))} x {ar_od.get('ax',0)}",
+             f"Autorefrattometro OS: {_f(ar_os.get('sf'))} / {_f(ar_os.get('cil'))} x {ar_os.get('ax',0)}",
+             f"Refrazione soggettiva OD: {_f(rs_od.get('sf'))} / {_f(rs_od.get('cil'))} x {rs_od.get('ax',0)} — Visus {rs_od.get('acuita','nd')}",
+             f"Refrazione soggettiva OS: {_f(rs_os.get('sf'))} / {_f(rs_os.get('cil'))} x {rs_os.get('ax',0)} — Visus {rs_os.get('acuita','nd')}",
+             "", "### B — Equilibrio binoculare"]
+    for k, v in b.items():
+        if v not in (None, "", {}):
+            righe.append(f"{k}: {v}")
+    righe += ["", "### C — Accomodazione"]
+    for k, v in c.items():
+        if v not in (None, "", {}):
+            righe.append(f"{k}: {v}")
+    righe += ["", "### D — Oculomotricità"]
+    for k, v in dd.items():
+        if v not in (None, "", {}):
+            righe.append(f"{k}: {v}")
+    return "\n".join(righe)
+
+
 def _sez_g(conn, pid, d, paziente):
     st.markdown("### G — Prescrizione e Relazione")
     s = lambda c: _sk("g", c, pid)
@@ -932,7 +964,7 @@ def _sez_g(conn, pid, d, paziente):
     rx = d.get("sez_a",{})
     ob = d.get("sez_e",{})
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
 
     with c1:
         try:
@@ -968,6 +1000,29 @@ def _sez_g(conn, pid, d, paziente):
         except Exception as e:
             st.error(f"Errore ricetta: {e}")
 
+    with c4:
+        if st.button("🖨️ Stampa solo parte optometrica", key=s("btn_optom")):
+            try:
+                from modules.pdf_templates import genera_carta_intestata
+                try:
+                    from .timbri import carica_timbro, _username_corrente
+                    _timbro_b2 = carica_timbro(conn, _username_corrente())
+                except Exception:
+                    _timbro_b2 = None
+                corpo_optom = _testo_solo_optometrico(d)
+                pdf_optom = genera_carta_intestata(
+                    professionista=prof, titolo=titolo_pdf,
+                    paziente=f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}",
+                    data=datetime.date.today().strftime("%d/%m/%Y"),
+                    titolo_doc="Valutazione Optometrica",
+                    corpo_testo=corpo_optom, timbro_bytes=_timbro_b2)
+                st.download_button(
+                    "Scarica Valutazione Optometrica PDF", data=pdf_optom,
+                    file_name=f"optometria_{cog}_{nom}_{datetime.date.today()}.pdf",
+                    mime="application/pdf", key=s("dl_optom"), type="primary")
+            except Exception as e:
+                st.error(f"Errore stampa optometrica: {e}")
+
     with c2:
         if ob.get("anomalie_n",0)>0 or ob.get("iop_alta"):
             if st.button("Lettera invio oculista", key=s("btn_inv")):
@@ -978,6 +1033,11 @@ def _sez_g(conn, pid, d, paziente):
     with c3:
         try:
             from modules.pdf_templates import genera_carta_intestata
+            try:
+                from .timbri import carica_timbro, _username_corrente
+                _timbro_b = carica_timbro(conn, _username_corrente())
+            except Exception:
+                _timbro_b = None
             data_vis = d.get("intestazione",{}).get("data_vis","")
             try:
                 data_vis_fmt = datetime.date.fromisoformat(str(data_vis)[:10]).strftime("%d/%m/%Y")
@@ -1017,6 +1077,7 @@ MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
             pdf_rel = genera_carta_intestata(
                 professionista=prof, titolo=titolo_prof2,
                 paziente=paz_str, data=data_vis_fmt,
+                timbro_bytes=_timbro_b,
                 titolo_doc="RELAZIONE CLINICA VISUO-PERCETTIVA",
                 corpo_testo=corpo,
             )
@@ -1288,6 +1349,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         "F. Profilo funzionale",
         "G. Prescrizione",
         "H. Sports Vision",
+        "🖥️ Test online",
         "💶 Incasso",
     ])
 
@@ -1343,6 +1405,28 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
             _salva(conn, paz_id, dati)
 
     with tabs[10]:
+        st.markdown("#### 🖥️ Esami visuo-percettivi online")
+        st.caption("Eseguibili direttamente da qui, senza uscire dalla valutazione.")
+        with st.expander("🔢 DEM"):
+            try:
+                from .dem_test import render_dem
+                render_dem(conn, paz_id)
+            except Exception as e:
+                st.error(f"DEM non disponibile: {e}")
+        with st.expander("👁️ Getman (manipolazione visiva)"):
+            try:
+                from .getman import render_getman
+                render_getman(conn, paz_id)
+            except Exception as e:
+                st.error(f"Getman non disponibile: {e}")
+        with st.expander("👁️ Groffman (visual tracing)"):
+            try:
+                from .groffman import render_groffman
+                render_groffman(conn, paz_id)
+            except Exception as e:
+                st.error(f"Groffman non disponibile: {e}")
+
+    with tabs[11]:
         st.markdown("#### 💶 Incasso visita")
         try:
             from modules.incasso import campi_incasso, salva_incasso, riepilogo_incasso, ensure_incasso_columns
