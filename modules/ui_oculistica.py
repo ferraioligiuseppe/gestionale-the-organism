@@ -104,11 +104,11 @@ def _ensure_table(conn):
         )
     """)
     for col, tipo in [
-        ("sf_abit_od", "REAL"), ("cil_abit_od", "REAL"), ("ax_abit_od", "INT"),
-        ("sf_abit_os", "REAL"), ("cil_abit_os", "REAL"), ("ax_abit_os", "INT"),
+        ("sf_abit_od", "REAL"), ("cil_abit_od", "REAL"), ("ax_abit_od", "INT"), ("add_abit_od", "REAL"),
+        ("sf_abit_os", "REAL"), ("cil_abit_os", "REAL"), ("ax_abit_os", "INT"), ("add_abit_os", "REAL"),
         ("metodo_ogg", "TEXT"),
-        ("sf_fin_od", "REAL"), ("cil_fin_od", "REAL"), ("ax_fin_od", "INT"),
-        ("sf_fin_os", "REAL"), ("cil_fin_os", "REAL"), ("ax_fin_os", "INT"),
+        ("sf_fin_od", "REAL"), ("cil_fin_od", "REAL"), ("ax_fin_od", "INT"), ("add_fin_od", "REAL"),
+        ("sf_fin_os", "REAL"), ("cil_fin_os", "REAL"), ("ax_fin_os", "INT"), ("add_fin_os", "REAL"),
         ("tipo_correzione_fin", "TEXT"), ("note_prescrizione", "TEXT"),
         ("cover_test_od", "TEXT"), ("cover_test_os", "TEXT"),
         ("fondo_od", "TEXT"), ("fondo_os", "TEXT"),
@@ -167,8 +167,8 @@ def _testo_visita(d: dict) -> str:
         f"- Naturale: OD {g('ac_nat_od','—')} | OS {g('ac_nat_os','—')} | OO {g('ac_nat_oo','—')}\n"
         f"- Corretta: OD {g('ac_cor_od','—')} | OS {g('ac_cor_os','—')} | OO {g('ac_cor_oo','—')}\n\n"
         f"CORREZIONE ABITUALE (occhiali attualmente portati)\n"
-        f"- OD: {g('sf_abit_od',0)} ({g('cil_abit_od',0)} x {g('ax_abit_od',0)}°)\n"
-        f"- OS: {g('sf_abit_os',0)} ({g('cil_abit_os',0)} x {g('ax_abit_os',0)}°)\n\n"
+        f"- OD: {g('sf_abit_od',0)} ({g('cil_abit_od',0)} x {g('ax_abit_od',0)}°) Add. {g('add_abit_od',0)}\n"
+        f"- OS: {g('sf_abit_os',0)} ({g('cil_abit_os',0)} x {g('ax_abit_os',0)}°) Add. {g('add_abit_os',0)}\n\n"
         f"REFRAZIONE OGGETTIVA — metodo: {g('metodo_ogg','—')}\n"
         f"- OD: {g('sf_ogg_od',0)} ({g('cil_ogg_od',0)} x {g('ax_ogg_od',0)}°)\n"
         f"- OS: {g('sf_ogg_os',0)} ({g('cil_ogg_os',0)} x {g('ax_ogg_os',0)}°)\n\n"
@@ -176,8 +176,8 @@ def _testo_visita(d: dict) -> str:
         f"- OD: {g('sf_sogg_od',0)} ({g('cil_sogg_od',0)} x {g('ax_sogg_od',0)}°)\n"
         f"- OS: {g('sf_sogg_os',0)} ({g('cil_sogg_os',0)} x {g('ax_sogg_os',0)}°)\n\n"
         f"PRESCRIZIONE FINALE — {g('tipo_correzione_fin','—')}\n"
-        f"- OD: {g('sf_fin_od',0)} ({g('cil_fin_od',0)} x {g('ax_fin_od',0)}°)\n"
-        f"- OS: {g('sf_fin_os',0)} ({g('cil_fin_os',0)} x {g('ax_fin_os',0)}°)\n"
+        f"- OD: {g('sf_fin_od',0)} ({g('cil_fin_od',0)} x {g('ax_fin_od',0)}°) Add. {g('add_fin_od',0)}\n"
+        f"- OS: {g('sf_fin_os',0)} ({g('cil_fin_os',0)} x {g('ax_fin_os',0)}°) Add. {g('add_fin_os',0)}\n"
         f"Note prescrizione: {g('note_prescrizione','—')}\n\n"
         f"CHERATOMETRIA\n"
         f"- OD: K1 {g('k1_od_mm',0)}mm/{g('k1_od_d',0)}D  K2 {g('k2_od_mm',0)}mm/{g('k2_od_d',0)}D\n"
@@ -289,14 +289,16 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         ac_cor_oo = _av_select(c3, "OO corretta", _dv.get("ac_cor_oo",""), "ocul_cor_oo")
 
         st.markdown("**Correzione abituale** (quello che il paziente porta già)")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         sf_abit_od = c1.number_input("OD SF abit. (D)", -30.0, 30.0, float(_dv.get("sf_abit_od",0.0) or 0.0), 0.25, key="ocul_sf_abit_od")
         cil_abit_od = c2.number_input("OD CIL abit. (D)", -10.0, 10.0, float(_dv.get("cil_abit_od",0.0) or 0.0), 0.25, key="ocul_cil_abit_od")
         ax_abit_od = c3.number_input("OD AX abit. (°)", 0, 180, int(_dv.get("ax_abit_od",0) or 0), 1, key="ocul_ax_abit_od")
-        c1, c2, c3 = st.columns(3)
+        add_abit_od = c4.number_input("OD Add. vicino (D)", 0.0, 6.0, float(_dv.get("add_abit_od",0.0) or 0.0), 0.25, key="ocul_add_abit_od")
+        c1, c2, c3, c4 = st.columns(4)
         sf_abit_os = c1.number_input("OS SF abit. (D)", -30.0, 30.0, float(_dv.get("sf_abit_os",0.0) or 0.0), 0.25, key="ocul_sf_abit_os")
         cil_abit_os = c2.number_input("OS CIL abit. (D)", -10.0, 10.0, float(_dv.get("cil_abit_os",0.0) or 0.0), 0.25, key="ocul_cil_abit_os")
         ax_abit_os = c3.number_input("OS AX abit. (°)", 0, 180, int(_dv.get("ax_abit_os",0) or 0), 1, key="ocul_ax_abit_os")
+        add_abit_os = c4.number_input("OS Add. vicino (D)", 0.0, 6.0, float(_dv.get("add_abit_os",0.0) or 0.0), 0.25, key="ocul_add_abit_os")
 
         st.markdown("**Refrazione oggettiva**")
         _metodi_prec = [m.strip() for m in (_dv.get("metodo_ogg") or "").split(",") if m.strip()]
@@ -326,14 +328,16 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         tipo_correzione_fin = st.selectbox("Tipo correzione prescritta", TIPI_CORREZIONE,
                                            index=TIPI_CORREZIONE.index(_dv["tipo_correzione_fin"]) if _dv.get("tipo_correzione_fin") in TIPI_CORREZIONE else 0,
                                            key="ocul_tipo_corr_fin")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         sf_fin_od = c1.number_input("OD SF finale (D)", -30.0, 30.0, float(_dv.get("sf_fin_od",0.0) or 0.0), 0.25, key="ocul_sf_fin_od")
         cil_fin_od = c2.number_input("OD CIL finale (D)", -10.0, 10.0, float(_dv.get("cil_fin_od",0.0) or 0.0), 0.25, key="ocul_cil_fin_od")
         ax_fin_od = c3.number_input("OD AX finale (°)", 0, 180, int(_dv.get("ax_fin_od",0) or 0), 1, key="ocul_ax_fin_od")
-        c4, c5, c6 = st.columns(3)
+        add_fin_od = c4.number_input("OD Add. vicino (D)", 0.0, 6.0, float(_dv.get("add_fin_od",0.0) or 0.0), 0.25, key="ocul_add_fin_od")
+        c4, c5, c6, c7 = st.columns(4)
         sf_fin_os = c4.number_input("OS SF finale (D)", -30.0, 30.0, float(_dv.get("sf_fin_os",0.0) or 0.0), 0.25, key="ocul_sf_fin_os")
         cil_fin_os = c5.number_input("OS CIL finale (D)", -10.0, 10.0, float(_dv.get("cil_fin_os",0.0) or 0.0), 0.25, key="ocul_cil_fin_os")
         ax_fin_os = c6.number_input("OS AX finale (°)", 0, 180, int(_dv.get("ax_fin_os",0) or 0), 1, key="ocul_ax_fin_os")
+        add_fin_os = c7.number_input("OS Add. vicino (D)", 0.0, 6.0, float(_dv.get("add_fin_os",0.0) or 0.0), 0.25, key="ocul_add_fin_os")
         note_prescrizione = st.text_input("Note prescrizione (es. add. vicino, prismi)", _dv.get("note_prescrizione","") or "", key="ocul_note_prescr")
 
         st.markdown("**Cheratometria**")
@@ -402,16 +406,16 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
             data_visita=data_v.isoformat(), tipo_visita=tipo, professionista=prof,
             ac_nat_od=ac_nat_od, ac_nat_os=ac_nat_os, ac_nat_oo=ac_nat_oo,
             ac_cor_od=ac_cor_od, ac_cor_os=ac_cor_os, ac_cor_oo=ac_cor_oo,
-            sf_abit_od=sf_abit_od, cil_abit_od=cil_abit_od, ax_abit_od=int(ax_abit_od),
-            sf_abit_os=sf_abit_os, cil_abit_os=cil_abit_os, ax_abit_os=int(ax_abit_os),
+            sf_abit_od=sf_abit_od, cil_abit_od=cil_abit_od, ax_abit_od=int(ax_abit_od), add_abit_od=add_abit_od,
+            sf_abit_os=sf_abit_os, cil_abit_os=cil_abit_os, ax_abit_os=int(ax_abit_os), add_abit_os=add_abit_os,
             metodo_ogg=", ".join(metodo_ogg),
             sf_ogg_od=sf_ogg_od, cil_ogg_od=cil_ogg_od, ax_ogg_od=int(ax_ogg_od),
             sf_ogg_os=sf_ogg_os, cil_ogg_os=cil_ogg_os, ax_ogg_os=int(ax_ogg_os),
             sf_sogg_od=sf_sogg_od, cil_sogg_od=cil_sogg_od, ax_sogg_od=int(ax_sogg_od),
             sf_sogg_os=sf_sogg_os, cil_sogg_os=cil_sogg_os, ax_sogg_os=int(ax_sogg_os),
             tipo_correzione_fin=tipo_correzione_fin,
-            sf_fin_od=sf_fin_od, cil_fin_od=cil_fin_od, ax_fin_od=int(ax_fin_od),
-            sf_fin_os=sf_fin_os, cil_fin_os=cil_fin_os, ax_fin_os=int(ax_fin_os),
+            sf_fin_od=sf_fin_od, cil_fin_od=cil_fin_od, ax_fin_od=int(ax_fin_od), add_fin_od=add_fin_od,
+            sf_fin_os=sf_fin_os, cil_fin_os=cil_fin_os, ax_fin_os=int(ax_fin_os), add_fin_os=add_fin_os,
             note_prescrizione=note_prescrizione,
             k1_od_mm=k1_od_mm, k1_od_d=k1_od_d, k2_od_mm=k2_od_mm, k2_od_d=k2_od_d,
             k1_os_mm=k1_os_mm, k1_os_d=k1_os_d, k2_os_mm=k2_os_mm, k2_os_d=k2_os_d,
