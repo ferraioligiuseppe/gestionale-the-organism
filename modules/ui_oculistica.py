@@ -491,12 +491,13 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
             if delta2 is not None:
                 st.info(f"Correzione: {delta2:+.1f} mmHg → PIO corretta ≈ {corr2:.1f} mmHg\n\n{rischio2}")
 
-    with st.expander("📸 Stima refrazione rapida (Photoref AI)"):
-        try:
-            from .photoref_ai.ui_photoref import render_photoref
-            render_photoref(conn, paz_id, paziente)
-        except Exception as e:
-            st.error(f"Photoref AI non disponibile: {e}")
+    st.markdown("#### 📸 Stima refrazione rapida (Photoref AI)")
+    try:
+        from .photoref_ai.ui_photoref import render_photoref
+        render_photoref(conn, paz_id, paziente)
+    except Exception as e:
+        st.error(f"Photoref AI non disponibile: {e}")
+    st.markdown("---")
 
     with st.expander("🧮 Cheratometria rapida (mm ⇄ diottrie)"):
         modo = st.radio("Conversione", ["mm → diottrie", "diottrie → mm"], key="ocul_cherato_modo", horizontal=True)
