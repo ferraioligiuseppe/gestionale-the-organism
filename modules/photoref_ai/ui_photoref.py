@@ -136,6 +136,7 @@ def _analizza_riflesso(img: "Image.Image", occhio: str):
 
 
 _CAPTURE_HTML = """
+<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
 <div style="font-family:-apple-system,sans-serif;background:#0d1117;color:#e6edf3;padding:14px;border-radius:10px">
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
     <span id="pr_step" style="font-weight:700">1/2 — Occhio destro (OD)</span>
@@ -238,6 +239,7 @@ _CAPTURE_HTML = """
   start();
 })();
 </script>
+</body></html>
 """
 
 
@@ -246,8 +248,8 @@ def render_capture_mobile(conn, paz_id: int, token: str = None) -> None:
     quando arrivata da link con photoref_token."""
     st.markdown("### 📸 Photoref AI — Cattura guidata")
     st.caption("Tieni il telefono a circa 40 cm dal viso, ambiente poco illuminato per attivare il riflesso pupillare.")
-    b64 = base64.b64encode(_CAPTURE_HTML.encode("utf-8")).decode("ascii")
-    iframe = (f'<iframe src="data:text/html;base64,{b64}" '
+    html_escaped = _CAPTURE_HTML.replace('"', "&quot;")
+    iframe = (f'<iframe srcdoc="{html_escaped}" '
              f'allow="camera; fullscreen" '
              f'style="width:100%;height:640px;border:none;border-radius:10px"></iframe>')
     st.markdown(iframe, unsafe_allow_html=True)
