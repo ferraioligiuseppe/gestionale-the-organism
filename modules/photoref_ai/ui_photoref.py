@@ -246,7 +246,11 @@ def render_capture_mobile(conn, paz_id: int, token: str = None) -> None:
     quando arrivata da link con photoref_token."""
     st.markdown("### 📸 Photoref AI — Cattura guidata")
     st.caption("Tieni il telefono a circa 40 cm dal viso, ambiente poco illuminato per attivare il riflesso pupillare.")
-    components.html(_CAPTURE_HTML, height=600, scrolling=False)
+    b64 = base64.b64encode(_CAPTURE_HTML.encode("utf-8")).decode("ascii")
+    iframe = (f'<iframe src="data:text/html;base64,{b64}" '
+             f'allow="camera; fullscreen" '
+             f'style="width:100%;height:640px;border:none;border-radius:10px"></iframe>')
+    st.markdown(iframe, unsafe_allow_html=True)
 
     captured = st.query_params.get("pr_data", "")
     data_json = st.text_area("Incolla qui il risultato se l'invio automatico non parte", "", height=0,
