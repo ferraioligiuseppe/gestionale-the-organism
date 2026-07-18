@@ -345,6 +345,14 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         ax_sogg_os = c6.number_input("OS AX sogg. (°)", 0, 180, int(_dv.get("ax_sogg_os",0) or 0), 1, key="ocul_ax_sogg_os")
 
         st.markdown("**Prescrizione finale**")
+        if st.form_submit_button("📋 Copia soggettiva → prescrizione finale", use_container_width=False):
+            st.session_state["ocul_sf_fin_od"] = st.session_state.get("ocul_sf_sogg_od", 0.0)
+            st.session_state["ocul_cil_fin_od"] = st.session_state.get("ocul_cil_sogg_od", 0.0)
+            st.session_state["ocul_ax_fin_od"] = st.session_state.get("ocul_ax_sogg_od", 0)
+            st.session_state["ocul_sf_fin_os"] = st.session_state.get("ocul_sf_sogg_os", 0.0)
+            st.session_state["ocul_cil_fin_os"] = st.session_state.get("ocul_cil_sogg_os", 0.0)
+            st.session_state["ocul_ax_fin_os"] = st.session_state.get("ocul_ax_sogg_os", 0)
+            st.rerun()
         tipo_correzione_fin = st.selectbox("Tipo correzione prescritta", TIPI_CORREZIONE,
                                            index=TIPI_CORREZIONE.index(_dv["tipo_correzione_fin"]) if _dv.get("tipo_correzione_fin") in TIPI_CORREZIONE else 0,
                                            key="ocul_tipo_corr_fin")
