@@ -1425,12 +1425,12 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
                 render_groffman(conn, paz_id)
             except Exception as e:
                 st.error(f"Groffman non disponibile: {e}")
-        with st.expander("📸 Photoref AI (stima refrazione da foto)"):
-            try:
-                from .photoref_ai.ui_photoref import render_photoref
-                render_photoref(conn, paz_id, paziente)
-            except Exception as e:
-                st.error(f"Photoref AI non disponibile: {e}")
+        st.markdown("##### 📸 Photoref AI (stima refrazione da foto)")
+        try:
+            from .photoref_ai.ui_photoref import render_photoref
+            render_photoref(conn, paz_id, paziente)
+        except Exception as e:
+            st.error(f"Photoref AI non disponibile: {e}")
 
     with tabs[11]:
         st.markdown("#### 💶 Incasso visita")
