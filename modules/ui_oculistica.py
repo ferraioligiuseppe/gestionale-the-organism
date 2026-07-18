@@ -13,15 +13,41 @@ AV_OPTIONS = [
     "8/10", "9/10", "10/10", "12/10", "14/10", "16/10",
 ]
 
+METODI_REFRAZIONE = ["Autorefrattometro", "Schiascopia", "Cicloplegia", "Soggettiva pura", "Altro"]
+TIPI_CORREZIONE = ["Nessuna", "Occhiali", "Lenti a contatto", "Occhiali + LAC"]
+COVER_TEST_ESITI = ["Ortoforia", "Eteroforia (latente)", "Esoforia", "Exoforia",
+                    "Esotropia", "Exotropia", "Ipertropia", "Ipotropia"]
 
-def _av_select(label, current, key):
+
+def _fmt_data_it(iso_or_date):
+    if not iso_or_date:
+        return ""
+    if isinstance(iso_or_date, datetime.date):
+        return iso_or_date.strftime("%d/%m/%Y")
+    try:
+        return datetime.date.fromisoformat(str(iso_or_date)).strftime("%d/%m/%Y")
+    except Exception:
+        return str(iso_or_date)
+
+
+def _parse_data_it(s, fallback=None):
+    s = (s or "").strip()
+    if not s:
+        return fallback
+    try:
+        return datetime.datetime.strptime(s, "%d/%m/%Y").date()
+    except Exception:
+        return fallback
+
+
+def _av_select(container, label, current, key):
     opts = AV_OPTIONS.copy()
     if current and current not in opts:
         opts = [current] + opts
     else:
         opts = [""] + opts
     idx = opts.index(current) if current in opts else 0
-    return st.selectbox(label, opts, index=idx, key=key)
+    return container.selectbox(label, opts, index=idx, key=key)
 
 
 def _cherato_mm_to_D(r_mm):
@@ -30,6 +56,23 @@ def _cherato_mm_to_D(r_mm):
 
 def _cherato_D_to_mm(D):
     return 337.5 / D if D else 0.0
+
+
+def _correzione_pio(cct_um, pio):
+    """Regola pratica: ~0.5 mmHg / 10µm rispetto a 545µm di riferimento.
+    Valore positivo = PIO vera probabilmente più alta (cornea sottile) — sommare.
+    Valore negativo = PIO vera più bassa (cornea spessa) — sottrarre."""
+    if not cct_um:
+        return None, None, None
+    delta = (545.0 - cct_um) * 0.05  # 0.5 mmHg ogni 10 µm
+    pio_corretta = (pio or 0) + delta
+    if cct_um < 555:
+        rischio = "Elevato — CCT <555µm: fattore di rischio indipendente (OHTS)"
+    elif cct_um <= 588:
+        rischio = "Intermedio — correlare con PIO, papilla e campo visivo"
+    else:
+        rischio = "Basso — cornea spessa, PIO misurata tende a sovrastimare"
+    return round(delta, 1), round(pio_corretta, 1), rischio
 
 
 def _ensure_table(conn):
@@ -60,6 +103,19 @@ def _ensure_table(conn):
             creato_il TIMESTAMP DEFAULT now()
         )
     """)
+    for col, tipo in [
+        ("sf_abit_od", "REAL"), ("cil_abit_od", "REAL"), ("ax_abit_od", "INT"),
+        ("sf_abit_os", "REAL"), ("cil_abit_os", "REAL"), ("ax_abit_os", "INT"),
+        ("metodo_ogg", "TEXT"),
+        ("sf_fin_od", "REAL"), ("cil_fin_od", "REAL"), ("ax_fin_od", "INT"),
+        ("sf_fin_os", "REAL"), ("cil_fin_os", "REAL"), ("ax_fin_os", "INT"),
+        ("tipo_correzione_fin", "TEXT"), ("note_prescrizione", "TEXT"),
+        ("cover_test_od", "TEXT"), ("cover_test_os", "TEXT"),
+        ("fondo_od", "TEXT"), ("fondo_os", "TEXT"),
+        ("campo_visivo_od", "TEXT"), ("campo_visivo_os", "TEXT"),
+        ("oct_od", "TEXT"), ("oct_os", "TEXT"),
+    ]:
+        cur.execute(f"ALTER TABLE oculistica_visite ADD COLUMN IF NOT EXISTS {col} {tipo}")
     conn.commit()
 
 
@@ -70,6 +126,13 @@ def _salva(conn, paz_id, d):
     cur.execute(
         f"INSERT INTO oculistica_visite (paziente_id,{','.join(cols)}) VALUES (%s,{ph})",
         [paz_id] + list(d.values()))
+    conn.commit()
+
+
+def _aggiorna(conn, vid, d):
+    cur = conn.cursor()
+    set_clause = ",".join([f"{k}=%s" for k in d.keys()])
+    cur.execute(f"UPDATE oculistica_visite SET {set_clause} WHERE id=%s", list(d.values()) + [vid])
     conn.commit()
 
 
@@ -90,40 +153,48 @@ def _carica_visita(conn, vid):
     return dict(row) if hasattr(row, "keys") else row
 
 
-def _aggiorna(conn, vid, d):
-    cur = conn.cursor()
-    set_clause = ",".join([f"{k}=%s" for k in d.keys()])
-    cur.execute(f"UPDATE oculistica_visite SET {set_clause} WHERE id=%s", list(d.values()) + [vid])
-    conn.commit()
-
-
 def _testo_visita(d: dict) -> str:
     def g(k, default=""):
         v = d.get(k, default)
         return v if v not in (None, "") else default
+
+    _, pio_corr_od, rischio_od = _correzione_pio(g("pachim_od", 0) or 0, g("tono_od", 0) or 0)
+    _, pio_corr_os, rischio_os = _correzione_pio(g("pachim_os", 0) or 0, g("tono_os", 0) or 0)
+
     return (
-        f"Data: {g('data_visita')}    Tipo: {g('tipo_visita')}    Professionista: {g('professionista')}\n\n"
+        f"Data: {_fmt_data_it(g('data_visita'))}    Tipo: {g('tipo_visita')}    Professionista: {g('professionista')}\n\n"
         f"ACUITÀ VISIVA\n"
         f"- Naturale: OD {g('ac_nat_od','—')} | OS {g('ac_nat_os','—')} | OO {g('ac_nat_oo','—')}\n"
         f"- Corretta: OD {g('ac_cor_od','—')} | OS {g('ac_cor_os','—')} | OO {g('ac_cor_oo','—')}\n\n"
-        f"REFRAZIONE OGGETTIVA (SF/CIL x AX)\n"
+        f"CORREZIONE ABITUALE (occhiali attualmente portati)\n"
+        f"- OD: {g('sf_abit_od',0)} ({g('cil_abit_od',0)} x {g('ax_abit_od',0)}°)\n"
+        f"- OS: {g('sf_abit_os',0)} ({g('cil_abit_os',0)} x {g('ax_abit_os',0)}°)\n\n"
+        f"REFRAZIONE OGGETTIVA — metodo: {g('metodo_ogg','—')}\n"
         f"- OD: {g('sf_ogg_od',0)} ({g('cil_ogg_od',0)} x {g('ax_ogg_od',0)}°)\n"
         f"- OS: {g('sf_ogg_os',0)} ({g('cil_ogg_os',0)} x {g('ax_ogg_os',0)}°)\n\n"
-        f"REFRAZIONE SOGGETTIVA (SF/CIL x AX)\n"
+        f"REFRAZIONE SOGGETTIVA\n"
         f"- OD: {g('sf_sogg_od',0)} ({g('cil_sogg_od',0)} x {g('ax_sogg_od',0)}°)\n"
         f"- OS: {g('sf_sogg_os',0)} ({g('cil_sogg_os',0)} x {g('ax_sogg_os',0)}°)\n\n"
+        f"PRESCRIZIONE FINALE — {g('tipo_correzione_fin','—')}\n"
+        f"- OD: {g('sf_fin_od',0)} ({g('cil_fin_od',0)} x {g('ax_fin_od',0)}°)\n"
+        f"- OS: {g('sf_fin_os',0)} ({g('cil_fin_os',0)} x {g('ax_fin_os',0)}°)\n"
+        f"Note prescrizione: {g('note_prescrizione','—')}\n\n"
         f"CHERATOMETRIA\n"
         f"- OD: K1 {g('k1_od_mm',0)}mm/{g('k1_od_d',0)}D  K2 {g('k2_od_mm',0)}mm/{g('k2_od_d',0)}D\n"
         f"- OS: K1 {g('k1_os_mm',0)}mm/{g('k1_os_d',0)}D  K2 {g('k2_os_mm',0)}mm/{g('k2_os_d',0)}D\n\n"
-        f"TONOMETRIA\n- OD: {g('tono_od',0)} mmHg   OS: {g('tono_os',0)} mmHg\n\n"
-        f"MOTILITÀ / ALLINEAMENTO\n"
-        f"- Motilità: {g('motilita','—')}\n- Cover test: {g('cover_test','—')}\n"
+        f"TONOMETRIA E SPESSORE CORNEALE (CCT)\n"
+        f"- OD: {g('tono_od',0)} mmHg · CCT {g('pachim_od',0)}µm · PIO corretta ≈ {pio_corr_od if pio_corr_od is not None else '—'} mmHg · Rischio: {rischio_od or '—'}\n"
+        f"- OS: {g('tono_os',0)} mmHg · CCT {g('pachim_os',0)}µm · PIO corretta ≈ {pio_corr_os if pio_corr_os is not None else '—'} mmHg · Rischio: {rischio_os or '—'}\n\n"
+        f"MOTILITÀ / COVER TEST / STEREOPSI / PPC\n"
+        f"- Motilità: {g('motilita','—')}\n"
+        f"- Cover test OD: {g('cover_test_od','—')}   Cover test OS: {g('cover_test_os','—')}\n"
         f"- Stereopsi: {g('stereopsi','—')}\n- PPC: {g('ppc_cm',0)} cm\n\n"
-        f"COLORI / PACHIMETRIA\n"
-        f"- Ishihara: {g('ishihara','—')}\n- Pachimetria OD: {g('pachim_od',0)}µm  OS: {g('pachim_os',0)}µm\n\n"
+        f"ISHIHARA\n- {g('ishihara','—')}\n\n"
         f"ESAMI STRUTTURALI/FUNZIONALI\n"
-        f"- Fondo oculare: {g('fondo','—')}\n- Campo visivo: {g('campo_visivo','—')}\n"
-        f"- OCT: {g('oct','—')}\n- Topografia corneale: {g('topo','—')}\n\n"
+        f"- Fondo oculare: OD {g('fondo_od','—')} | OS {g('fondo_os','—')}\n"
+        f"- Campo visivo: OD {g('campo_visivo_od','—')} | OS {g('campo_visivo_os','—')}\n"
+        f"- OCT: OD {g('oct_od','—')} | OS {g('oct_os','—')}\n"
+        f"- Topografia corneale: {g('topo','—')}\n\n"
         f"ESAME OBIETTIVO\n"
         f"- Cornea: {g('cornea','—')}\n- Camera anteriore: {g('camera_ant','—')}\n"
         f"- Cristallino: {g('cristallino','—')}\n- Congiuntiva/Sclera: {g('congiuntiva','—')}\n"
@@ -147,7 +218,7 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
             rid, data_v, tipo, prof, od, os_ = (r.get(k) if hasattr(r, "get") else r[i]
                                                  for i, k in enumerate(["id","data_visita","tipo_visita","professionista","ac_cor_od","ac_cor_os"]))
             c1, c2, c3 = st.columns([5, 1, 1])
-            c1.caption(f"📅 {data_v or '—'} · {tipo or 'Visita'} · {prof or ''} · OD {od or '—'} / OS {os_ or '—'}")
+            c1.caption(f"📅 {_fmt_data_it(data_v)} · {tipo or 'Visita'} · {prof or ''} · OD {od or '—'} / OS {os_ or '—'}")
             if c2.button("✏️ Modifica", key=f"ocul_edit_{rid}"):
                 st.session_state["ocul_edit_id"] = rid
                 st.rerun()
@@ -171,7 +242,7 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
                 nom = (paziente or {}).get("nome") or (paziente or {}).get("Nome") or ""
                 pdf_bytes = genera_carta_intestata(
                     professionista=dv.get("professionista", ""), titolo="Studio The Organism",
-                    paziente=f"{cog} {nom}", data=str(dv.get("data_visita", "")),
+                    paziente=f"{cog} {nom}", data=_fmt_data_it(dv.get("data_visita")),
                     titolo_doc="Scheda Oculistica", corpo_testo=_testo_visita(dv),
                     timbro_bytes=_timbro)
                 st.download_button("⬇️ Scarica PDF scheda oculistica", data=pdf_bytes,
@@ -195,32 +266,43 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         if st.button("✖️ Annulla modifica / torna a nuova visita", key="ocul_cancel_edit"):
             st.session_state.pop("ocul_edit_id", None)
             st.rerun()
+
     form_key = f"ocul_edit_{edit_id}" if edit_id else f"ocul_nuova_{paz_id}"
     with st.form(form_key):
         st.markdown("**Modifica visita oculistica**" if edit_id else "**Nuova visita oculistica**")
         c1, c2, c3 = st.columns(3)
-        _def_data = datetime.date.today()
-        if _dv.get("data_visita"):
-            try:
-                _def_data = _dv["data_visita"] if isinstance(_dv["data_visita"], datetime.date) else datetime.date.fromisoformat(str(_dv["data_visita"]))
-            except Exception:
-                pass
-        data_v = c1.date_input("Data visita", _def_data)
+        data_str = c1.text_input("Data visita (gg/mm/aaaa)",
+                                 _fmt_data_it(_dv.get("data_visita")) or datetime.date.today().strftime("%d/%m/%Y"))
         tipo = c2.text_input("Tipo visita", _dv.get("tipo_visita", "Controllo"))
         prof = c3.text_input("Professionista", _dv.get("professionista", ""))
 
         st.markdown("**Acuità visiva naturale**")
         c1, c2, c3 = st.columns(3)
-        ac_nat_od = _av_select("OD naturale", _dv.get("ac_nat_od",""), "ocul_nat_od")
-        ac_nat_os = _av_select("OS naturale", _dv.get("ac_nat_os",""), "ocul_nat_os")
-        ac_nat_oo = _av_select("OO naturale", _dv.get("ac_nat_oo",""), "ocul_nat_oo")
+        ac_nat_od = _av_select(c1, "OD naturale", _dv.get("ac_nat_od",""), "ocul_nat_od")
+        ac_nat_os = _av_select(c2, "OS naturale", _dv.get("ac_nat_os",""), "ocul_nat_os")
+        ac_nat_oo = _av_select(c3, "OO naturale", _dv.get("ac_nat_oo",""), "ocul_nat_oo")
 
         st.markdown("**Acuità visiva corretta**")
-        ac_cor_od = _av_select("OD corretta", _dv.get("ac_cor_od",""), "ocul_cor_od")
-        ac_cor_os = _av_select("OS corretta", _dv.get("ac_cor_os",""), "ocul_cor_os")
-        ac_cor_oo = _av_select("OO corretta", _dv.get("ac_cor_oo",""), "ocul_cor_oo")
+        c1, c2, c3 = st.columns(3)
+        ac_cor_od = _av_select(c1, "OD corretta", _dv.get("ac_cor_od",""), "ocul_cor_od")
+        ac_cor_os = _av_select(c2, "OS corretta", _dv.get("ac_cor_os",""), "ocul_cor_os")
+        ac_cor_oo = _av_select(c3, "OO corretta", _dv.get("ac_cor_oo",""), "ocul_cor_oo")
 
-        st.markdown("**Refrazione oggettiva (SF / CIL / AX)**")
+        st.markdown("**Correzione abituale** (quello che il paziente porta già)")
+        c1, c2, c3 = st.columns(3)
+        sf_abit_od = c1.number_input("OD SF abit. (D)", -30.0, 30.0, float(_dv.get("sf_abit_od",0.0) or 0.0), 0.25, key="ocul_sf_abit_od")
+        cil_abit_od = c2.number_input("OD CIL abit. (D)", -10.0, 10.0, float(_dv.get("cil_abit_od",0.0) or 0.0), 0.25, key="ocul_cil_abit_od")
+        ax_abit_od = c3.number_input("OD AX abit. (°)", 0, 180, int(_dv.get("ax_abit_od",0) or 0), 1, key="ocul_ax_abit_od")
+        c1, c2, c3 = st.columns(3)
+        sf_abit_os = c1.number_input("OS SF abit. (D)", -30.0, 30.0, float(_dv.get("sf_abit_os",0.0) or 0.0), 0.25, key="ocul_sf_abit_os")
+        cil_abit_os = c2.number_input("OS CIL abit. (D)", -10.0, 10.0, float(_dv.get("cil_abit_os",0.0) or 0.0), 0.25, key="ocul_cil_abit_os")
+        ax_abit_os = c3.number_input("OS AX abit. (°)", 0, 180, int(_dv.get("ax_abit_os",0) or 0), 1, key="ocul_ax_abit_os")
+
+        st.markdown("**Refrazione oggettiva**")
+        _metodi_prec = [m.strip() for m in (_dv.get("metodo_ogg") or "").split(",") if m.strip()]
+        metodo_ogg = st.multiselect("Metodo/i usati", METODI_REFRAZIONE,
+                                    default=[m for m in _metodi_prec if m in METODI_REFRAZIONE],
+                                    key="ocul_metodo_ogg")
         c1, c2, c3 = st.columns(3)
         sf_ogg_od = c1.number_input("OD SF ogg. (D)", -30.0, 30.0, float(_dv.get("sf_ogg_od",0.0) or 0.0), 0.25, key="ocul_sf_ogg_od")
         cil_ogg_od = c2.number_input("OD CIL ogg. (D)", -10.0, 10.0, float(_dv.get("cil_ogg_od",0.0) or 0.0), 0.25, key="ocul_cil_ogg_od")
@@ -230,7 +312,7 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         cil_ogg_os = c5.number_input("OS CIL ogg. (D)", -10.0, 10.0, float(_dv.get("cil_ogg_os",0.0) or 0.0), 0.25, key="ocul_cil_ogg_os")
         ax_ogg_os = c6.number_input("OS AX ogg. (°)", 0, 180, int(_dv.get("ax_ogg_os",0) or 0), 1, key="ocul_ax_ogg_os")
 
-        st.markdown("**Refrazione soggettiva (SF / CIL / AX)**")
+        st.markdown("**Refrazione soggettiva**")
         c1, c2, c3 = st.columns(3)
         sf_sogg_od = c1.number_input("OD SF sogg. (D)", -30.0, 30.0, float(_dv.get("sf_sogg_od",0.0) or 0.0), 0.25, key="ocul_sf_sogg_od")
         cil_sogg_od = c2.number_input("OD CIL sogg. (D)", -10.0, 10.0, float(_dv.get("cil_sogg_od",0.0) or 0.0), 0.25, key="ocul_cil_sogg_od")
@@ -239,6 +321,20 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         sf_sogg_os = c4.number_input("OS SF sogg. (D)", -30.0, 30.0, float(_dv.get("sf_sogg_os",0.0) or 0.0), 0.25, key="ocul_sf_sogg_os")
         cil_sogg_os = c5.number_input("OS CIL sogg. (D)", -10.0, 10.0, float(_dv.get("cil_sogg_os",0.0) or 0.0), 0.25, key="ocul_cil_sogg_os")
         ax_sogg_os = c6.number_input("OS AX sogg. (°)", 0, 180, int(_dv.get("ax_sogg_os",0) or 0), 1, key="ocul_ax_sogg_os")
+
+        st.markdown("**Prescrizione finale**")
+        tipo_correzione_fin = st.selectbox("Tipo correzione prescritta", TIPI_CORREZIONE,
+                                           index=TIPI_CORREZIONE.index(_dv["tipo_correzione_fin"]) if _dv.get("tipo_correzione_fin") in TIPI_CORREZIONE else 0,
+                                           key="ocul_tipo_corr_fin")
+        c1, c2, c3 = st.columns(3)
+        sf_fin_od = c1.number_input("OD SF finale (D)", -30.0, 30.0, float(_dv.get("sf_fin_od",0.0) or 0.0), 0.25, key="ocul_sf_fin_od")
+        cil_fin_od = c2.number_input("OD CIL finale (D)", -10.0, 10.0, float(_dv.get("cil_fin_od",0.0) or 0.0), 0.25, key="ocul_cil_fin_od")
+        ax_fin_od = c3.number_input("OD AX finale (°)", 0, 180, int(_dv.get("ax_fin_od",0) or 0), 1, key="ocul_ax_fin_od")
+        c4, c5, c6 = st.columns(3)
+        sf_fin_os = c4.number_input("OS SF finale (D)", -30.0, 30.0, float(_dv.get("sf_fin_os",0.0) or 0.0), 0.25, key="ocul_sf_fin_os")
+        cil_fin_os = c5.number_input("OS CIL finale (D)", -10.0, 10.0, float(_dv.get("cil_fin_os",0.0) or 0.0), 0.25, key="ocul_cil_fin_os")
+        ax_fin_os = c6.number_input("OS AX finale (°)", 0, 180, int(_dv.get("ax_fin_os",0) or 0), 1, key="ocul_ax_fin_os")
+        note_prescrizione = st.text_input("Note prescrizione (es. add. vicino, prismi)", _dv.get("note_prescrizione","") or "", key="ocul_note_prescr")
 
         st.markdown("**Cheratometria**")
         c1, c2, c3, c4 = st.columns(4)
@@ -252,27 +348,36 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         k2_os_mm = c3.number_input("OS K2 (mm)", 6.0, 9.5, float(_dv.get("k2_os_mm",7.80) or 7.80), 0.01, key="ocul_k2_os_mm")
         k2_os_d = c4.number_input("OS K2 (D)", 35.0, 50.0, float(_dv.get("k2_os_d",43.0) or 43.0), 0.25, key="ocul_k2_os_d")
 
-        st.markdown("**Tonometria**")
+        st.markdown("**Tonometria e spessore corneale (CCT)**")
         c1, c2 = st.columns(2)
-        tono_od = c1.number_input("OD (mmHg)", 0.0, 60.0, float(_dv.get("tono_od",15.0) or 15.0), 0.5, key="ocul_tono_od")
-        tono_os = c2.number_input("OS (mmHg)", 0.0, 60.0, float(_dv.get("tono_os",15.0) or 15.0), 0.5, key="ocul_tono_os")
+        tono_od = c1.number_input("OD tonometria (mmHg)", 0.0, 60.0, float(_dv.get("tono_od",15.0) or 15.0), 0.5, key="ocul_tono_od")
+        pachim_od = c1.number_input("OD pachimetria/CCT (µm)", 400.0, 700.0, float(_dv.get("pachim_od",540.0) or 540.0), 1.0, key="ocul_pachim_od")
+        tono_os = c2.number_input("OS tonometria (mmHg)", 0.0, 60.0, float(_dv.get("tono_os",15.0) or 15.0), 0.5, key="ocul_tono_os")
+        pachim_os = c2.number_input("OS pachimetria/CCT (µm)", 400.0, 700.0, float(_dv.get("pachim_os",540.0) or 540.0), 1.0, key="ocul_pachim_os")
 
         st.markdown("**Motilità, cover test, stereopsi, PPC**")
         motilita = st.text_input("Motilità oculare", _dv.get("motilita","") or "", key="ocul_motilita")
-        cover_test = st.text_input("Cover test", _dv.get("cover_test","") or "", key="ocul_cover")
+        c1, c2 = st.columns(2)
+        cover_test_od = c1.selectbox("Cover test OD", [""] + COVER_TEST_ESITI,
+                                     index=([""] + COVER_TEST_ESITI).index(_dv["cover_test_od"]) if _dv.get("cover_test_od") in COVER_TEST_ESITI else 0,
+                                     key="ocul_cover_od")
+        cover_test_os = c2.selectbox("Cover test OS", [""] + COVER_TEST_ESITI,
+                                     index=([""] + COVER_TEST_ESITI).index(_dv["cover_test_os"]) if _dv.get("cover_test_os") in COVER_TEST_ESITI else 0,
+                                     key="ocul_cover_os")
         stereopsi = st.text_input("Stereopsi", _dv.get("stereopsi","") or "", key="ocul_stereo")
         ppc_cm = st.number_input("PPC (cm)", 0.0, 50.0, float(_dv.get("ppc_cm",10.0) or 10.0), 0.5, key="ocul_ppc")
-
-        st.markdown("**Colori e pachimetria**")
         ishihara = st.text_input("Ishihara (esito)", _dv.get("ishihara","") or "", key="ocul_ishihara")
-        c1, c2 = st.columns(2)
-        pachim_od = c1.number_input("Pachimetria OD (µm)", 400.0, 700.0, float(_dv.get("pachim_od",540.0) or 540.0), 1.0, key="ocul_pachim_od")
-        pachim_os = c2.number_input("Pachimetria OS (µm)", 400.0, 700.0, float(_dv.get("pachim_os",540.0) or 540.0), 1.0, key="ocul_pachim_os")
 
         st.markdown("**Esami strutturali/funzionali**")
-        fondo = st.text_area("Fondo oculare", _dv.get("fondo","") or "", height=68, key="ocul_fondo")
-        campo_visivo = st.text_area("Campo visivo", _dv.get("campo_visivo","") or "", height=68, key="ocul_campo")
-        oct_txt = st.text_area("OCT", _dv.get("oct","") or "", height=68, key="ocul_oct")
+        c1, c2 = st.columns(2)
+        fondo_od = c1.text_area("Fondo oculare OD", _dv.get("fondo_od","") or "", height=68, key="ocul_fondo_od")
+        fondo_os = c2.text_area("Fondo oculare OS", _dv.get("fondo_os","") or "", height=68, key="ocul_fondo_os")
+        c1, c2 = st.columns(2)
+        campo_visivo_od = c1.text_area("Campo visivo OD", _dv.get("campo_visivo_od","") or "", height=68, key="ocul_campo_od")
+        campo_visivo_os = c2.text_area("Campo visivo OS", _dv.get("campo_visivo_os","") or "", height=68, key="ocul_campo_os")
+        c1, c2 = st.columns(2)
+        oct_od = c1.text_area("OCT OD", _dv.get("oct_od","") or "", height=68, key="ocul_oct_od")
+        oct_os = c2.text_area("OCT OS", _dv.get("oct_os","") or "", height=68, key="ocul_oct_os")
         topo = st.text_area("Topografia corneale", _dv.get("topo","") or "", height=68, key="ocul_topo")
 
         st.markdown("**Esame obiettivo**")
@@ -291,58 +396,63 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         salva = st.form_submit_button("💾 Salva modifiche" if edit_id else "💾 Salva visita oculistica",
                                       type="primary", use_container_width=True)
 
-    if salva and edit_id:
+    if salva:
+        data_v = _parse_data_it(data_str, datetime.date.today())
         d = dict(
             data_visita=data_v.isoformat(), tipo_visita=tipo, professionista=prof,
             ac_nat_od=ac_nat_od, ac_nat_os=ac_nat_os, ac_nat_oo=ac_nat_oo,
             ac_cor_od=ac_cor_od, ac_cor_os=ac_cor_os, ac_cor_oo=ac_cor_oo,
+            sf_abit_od=sf_abit_od, cil_abit_od=cil_abit_od, ax_abit_od=int(ax_abit_od),
+            sf_abit_os=sf_abit_os, cil_abit_os=cil_abit_os, ax_abit_os=int(ax_abit_os),
+            metodo_ogg=", ".join(metodo_ogg),
             sf_ogg_od=sf_ogg_od, cil_ogg_od=cil_ogg_od, ax_ogg_od=int(ax_ogg_od),
             sf_ogg_os=sf_ogg_os, cil_ogg_os=cil_ogg_os, ax_ogg_os=int(ax_ogg_os),
             sf_sogg_od=sf_sogg_od, cil_sogg_od=cil_sogg_od, ax_sogg_od=int(ax_sogg_od),
             sf_sogg_os=sf_sogg_os, cil_sogg_os=cil_sogg_os, ax_sogg_os=int(ax_sogg_os),
+            tipo_correzione_fin=tipo_correzione_fin,
+            sf_fin_od=sf_fin_od, cil_fin_od=cil_fin_od, ax_fin_od=int(ax_fin_od),
+            sf_fin_os=sf_fin_os, cil_fin_os=cil_fin_os, ax_fin_os=int(ax_fin_os),
+            note_prescrizione=note_prescrizione,
             k1_od_mm=k1_od_mm, k1_od_d=k1_od_d, k2_od_mm=k2_od_mm, k2_od_d=k2_od_d,
             k1_os_mm=k1_os_mm, k1_os_d=k1_os_d, k2_os_mm=k2_os_mm, k2_os_d=k2_os_d,
-            tono_od=tono_od, tono_os=tono_os,
-            motilita=motilita, cover_test=cover_test, stereopsi=stereopsi, ppc_cm=ppc_cm,
-            ishihara=ishihara, pachim_od=pachim_od, pachim_os=pachim_os,
-            fondo=fondo, campo_visivo=campo_visivo, oct=oct_txt, topo=topo,
+            tono_od=tono_od, tono_os=tono_os, pachim_od=pachim_od, pachim_os=pachim_os,
+            motilita=motilita, cover_test_od=cover_test_od, cover_test_os=cover_test_os,
+            stereopsi=stereopsi, ppc_cm=ppc_cm, ishihara=ishihara,
+            fondo_od=fondo_od, fondo_os=fondo_os,
+            campo_visivo_od=campo_visivo_od, campo_visivo_os=campo_visivo_os,
+            oct_od=oct_od, oct_os=oct_os, topo=topo,
             cornea=cornea, camera_ant=camera_ant, cristallino=cristallino,
             congiuntiva=congiuntiva, iride_pupilla=iride_pupilla, vitreo=vitreo,
             costo=float(costo), pagato=1 if pagato else 0, note=note,
         )
         try:
-            _aggiorna(conn, edit_id, d)
-            st.success("Visita aggiornata.")
-            st.session_state.pop("ocul_edit_id", None)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Errore aggiornamento: {e}")
-
-    if salva and not edit_id:
-        d = dict(
-            data_visita=data_v.isoformat(), tipo_visita=tipo, professionista=prof,
-            ac_nat_od=ac_nat_od, ac_nat_os=ac_nat_os, ac_nat_oo=ac_nat_oo,
-            ac_cor_od=ac_cor_od, ac_cor_os=ac_cor_os, ac_cor_oo=ac_cor_oo,
-            sf_ogg_od=sf_ogg_od, cil_ogg_od=cil_ogg_od, ax_ogg_od=int(ax_ogg_od),
-            sf_ogg_os=sf_ogg_os, cil_ogg_os=cil_ogg_os, ax_ogg_os=int(ax_ogg_os),
-            sf_sogg_od=sf_sogg_od, cil_sogg_od=cil_sogg_od, ax_sogg_od=int(ax_sogg_od),
-            sf_sogg_os=sf_sogg_os, cil_sogg_os=cil_sogg_os, ax_sogg_os=int(ax_sogg_os),
-            k1_od_mm=k1_od_mm, k1_od_d=k1_od_d, k2_od_mm=k2_od_mm, k2_od_d=k2_od_d,
-            k1_os_mm=k1_os_mm, k1_os_d=k1_os_d, k2_os_mm=k2_os_mm, k2_os_d=k2_os_d,
-            tono_od=tono_od, tono_os=tono_os,
-            motilita=motilita, cover_test=cover_test, stereopsi=stereopsi, ppc_cm=ppc_cm,
-            ishihara=ishihara, pachim_od=pachim_od, pachim_os=pachim_os,
-            fondo=fondo, campo_visivo=campo_visivo, oct=oct_txt, topo=topo,
-            cornea=cornea, camera_ant=camera_ant, cristallino=cristallino,
-            congiuntiva=congiuntiva, iride_pupilla=iride_pupilla, vitreo=vitreo,
-            costo=float(costo), pagato=1 if pagato else 0, note=note,
-        )
-        try:
-            _salva(conn, paz_id, d)
-            st.success("Visita oculistica salvata.")
+            if edit_id:
+                _aggiorna(conn, edit_id, d)
+                st.success("Visita aggiornata.")
+                st.session_state.pop("ocul_edit_id", None)
+            else:
+                _salva(conn, paz_id, d)
+                st.success("Visita oculistica salvata.")
             st.rerun()
         except Exception as e:
             st.error(f"Errore salvataggio: {e}")
+
+    with st.expander("📊 Interpretazione PIO/CCT (correzione tonometria)"):
+        st.caption("Regola pratica: ~0,5 mmHg ogni 10µm di scostamento da 545µm di riferimento. "
+                  "Positivo = PIO vera probabilmente più alta (cornea sottile); negativo = più bassa (cornea spessa).")
+        c1, c2 = st.columns(2)
+        with c1:
+            _pio_od = st.number_input("PIO misurata OD", 0.0, 60.0, 15.0, 0.5, key="ocul_calc_pio_od")
+            _cct_od = st.number_input("CCT OD (µm)", 400.0, 700.0, 540.0, 1.0, key="ocul_calc_cct_od")
+            delta, corr, rischio = _correzione_pio(_cct_od, _pio_od)
+            if delta is not None:
+                st.info(f"Correzione: {delta:+.1f} mmHg → PIO corretta ≈ {corr:.1f} mmHg\n\n{rischio}")
+        with c2:
+            _pio_os = st.number_input("PIO misurata OS", 0.0, 60.0, 15.0, 0.5, key="ocul_calc_pio_os")
+            _cct_os = st.number_input("CCT OS (µm)", 400.0, 700.0, 540.0, 1.0, key="ocul_calc_cct_os")
+            delta2, corr2, rischio2 = _correzione_pio(_cct_os, _pio_os)
+            if delta2 is not None:
+                st.info(f"Correzione: {delta2:+.1f} mmHg → PIO corretta ≈ {corr2:.1f} mmHg\n\n{rischio2}")
 
     with st.expander("🧮 Cheratometria rapida (mm ⇄ diottrie)"):
         modo = st.radio("Conversione", ["mm → diottrie", "diottrie → mm"], key="ocul_cherato_modo", horizontal=True)
