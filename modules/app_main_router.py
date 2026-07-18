@@ -777,6 +777,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except ImportError as e:
             st.error(f"Modulo non disponibile: {e}")
         return True
+    if sotto == "👁️ Oculistica":
+        try:
+            from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
+            pid = header_paziente_attivo(conn)
+            if pid:
+                from .ui_oculistica import render_oculistica
+                render_oculistica(conn, pid, paziente_attivo_record())
+        except Exception as e:
+            st.error(f"Modulo Oculistica non disponibile: {e}")
+        return True
     if sotto == "👁️ Lenti a contatto":
         from .ui_lenti_contatto import ui_lenti_contatto
         ui_lenti_contatto(); return True
@@ -1423,6 +1433,7 @@ def dispatch_main_section(*, sezione: str,
         "🧪 Caso Demo":                  (AREA_REPORT_AI,   "🧪 Caso demo"),
         "🏥 Il mio studio":              (AREA_STUDIO,      "🏥 Il mio studio"),
         "⚙️ Platform Admin":             (AREA_STUDIO,      "⚙️ Platform Admin"),
+        "👁️ Oculistica":                  (AREA_OCULISTICA,  "👁️ Oculistica"),
         "👁️ Lenti a contatto":           (AREA_QUESTIONARI, "👁️ Lenti a contatto"),
         "📸 Photoref AI":                (AREA_QUESTIONARI, "📸 Photoref AI"),
     }
