@@ -11741,8 +11741,13 @@ def main():
     if isinstance(photoref_token, list):
         photoref_token = photoref_token[0] if photoref_token else ''
     if photoref_token:
-        from modules.photoref_ai.ui_photoref import ui_photoref
-        ui_photoref(conn=get_connection())
+        from modules.photoref_ai.ui_photoref import render_capture_mobile, verifica_token_cattura
+        _conn = get_connection()
+        _pid = verifica_token_cattura(_conn, photoref_token)
+        if not _pid:
+            st.error("Link scaduto o già utilizzato. Chiedi un nuovo link dallo studio.")
+            return
+        render_capture_mobile(_conn, _pid, photoref_token)
         return
 
     _sidebar_db_indicator()
