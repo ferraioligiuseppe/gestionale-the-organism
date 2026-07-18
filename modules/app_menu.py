@@ -168,8 +168,8 @@ SOTTOSEZIONI = {
         "🎮 Esercizi Wordwall",
     ],
     AREA_OCULISTICA: [
+        "👁️ Oculistica",
         "👁️ Lenti a contatto",
-        "🚧 Oculistica (da importare dal gestionale esistente)",
     ],
     AREA_ORTOTTICA: [
         "🚧 Ortottica (in arrivo)",
