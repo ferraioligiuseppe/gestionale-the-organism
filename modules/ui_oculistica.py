@@ -75,6 +75,23 @@ def _correzione_pio(cct_um, pio):
     return round(delta, 1), round(pio_corretta, 1), rischio
 
 
+def _valuta_ppc(rottura_cm, recupero_cm):
+    """Norme NPC (punto prossimo di convergenza): rottura normale ~ 6-10 cm,
+    recupero normale ~ 10-15 cm. Oltre = insufficienza di convergenza probabile."""
+    esiti = []
+    if rottura_cm:
+        if rottura_cm <= 10:
+            esiti.append(f"Rottura {rottura_cm:.1f} cm — nella norma (≤10 cm)")
+        else:
+            esiti.append(f"Rottura {rottura_cm:.1f} cm — RECEDUTA (norma ≤10 cm): possibile insufficienza di convergenza")
+    if recupero_cm:
+        if recupero_cm <= 15:
+            esiti.append(f"Recupero {recupero_cm:.1f} cm — nella norma (≤15 cm)")
+        else:
+            esiti.append(f"Recupero {recupero_cm:.1f} cm — RECEDUTO (norma ≤15 cm): possibile insufficienza di convergenza")
+    return " · ".join(esiti) if esiti else ""
+
+
 def _ensure_table(conn):
     cur = conn.cursor()
     cur.execute("""
@@ -114,6 +131,7 @@ def _ensure_table(conn):
         ("fondo_od", "TEXT"), ("fondo_os", "TEXT"),
         ("campo_visivo_od", "TEXT"), ("campo_visivo_os", "TEXT"),
         ("oct_od", "TEXT"), ("oct_os", "TEXT"),
+        ("ppc_rottura_cm", "REAL"), ("ppc_recupero_cm", "REAL"),
     ]:
         cur.execute(f"ALTER TABLE oculistica_visite ADD COLUMN IF NOT EXISTS {col} {tipo}")
     conn.commit()
@@ -188,7 +206,9 @@ def _testo_visita(d: dict) -> str:
         f"MOTILITÀ / COVER TEST / STEREOPSI / PPC\n"
         f"- Motilità: {g('motilita','—')}\n"
         f"- Cover test OD: {g('cover_test_od','—')}   Cover test OS: {g('cover_test_os','—')}\n"
-        f"- Stereopsi: {g('stereopsi','—')}\n- PPC: {g('ppc_cm',0)} cm\n\n"
+        f"- Stereopsi: {g('stereopsi','—')}\n"
+        f"- PPC rottura: {g('ppc_rottura_cm',0)} cm · recupero: {g('ppc_recupero_cm',0)} cm"
+        f" ({_valuta_ppc(g('ppc_rottura_cm',0) or 0, g('ppc_recupero_cm',0) or 0) or 'n.d.'})\n\n"
         f"ISHIHARA\n- {g('ishihara','—')}\n\n"
         f"ESAMI STRUTTURALI/FUNZIONALI\n"
         f"- Fondo oculare: OD {g('fondo_od','—')} | OS {g('fondo_os','—')}\n"
@@ -369,7 +389,12 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
                                      index=([""] + COVER_TEST_ESITI).index(_dv["cover_test_os"]) if _dv.get("cover_test_os") in COVER_TEST_ESITI else 0,
                                      key="ocul_cover_os")
         stereopsi = st.text_input("Stereopsi", _dv.get("stereopsi","") or "", key="ocul_stereo")
-        ppc_cm = st.number_input("PPC (cm)", 0.0, 50.0, float(_dv.get("ppc_cm",10.0) or 10.0), 0.5, key="ocul_ppc")
+        c1, c2 = st.columns(2)
+        ppc_rottura_cm = c1.number_input("PPC rottura (cm)", 0.0, 30.0, float(_dv.get("ppc_rottura_cm",6.0) or 6.0), 0.5, key="ocul_ppc_rottura")
+        ppc_recupero_cm = c2.number_input("PPC recupero (cm)", 0.0, 30.0, float(_dv.get("ppc_recupero_cm",10.0) or 10.0), 0.5, key="ocul_ppc_recupero")
+        _ppc_esito = _valuta_ppc(ppc_rottura_cm, ppc_recupero_cm)
+        if _ppc_esito:
+            st.caption(f"📐 {_ppc_esito}")
         ishihara = st.text_input("Ishihara (esito)", _dv.get("ishihara","") or "", key="ocul_ishihara")
 
         st.markdown("**Esami strutturali/funzionali**")
@@ -421,7 +446,7 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
             k1_os_mm=k1_os_mm, k1_os_d=k1_os_d, k2_os_mm=k2_os_mm, k2_os_d=k2_os_d,
             tono_od=tono_od, tono_os=tono_os, pachim_od=pachim_od, pachim_os=pachim_os,
             motilita=motilita, cover_test_od=cover_test_od, cover_test_os=cover_test_os,
-            stereopsi=stereopsi, ppc_cm=ppc_cm, ishihara=ishihara,
+            stereopsi=stereopsi, ppc_rottura_cm=ppc_rottura_cm, ppc_recupero_cm=ppc_recupero_cm, ishihara=ishihara,
             fondo_od=fondo_od, fondo_os=fondo_os,
             campo_visivo_od=campo_visivo_od, campo_visivo_os=campo_visivo_os,
             oct_od=oct_od, oct_os=oct_os, topo=topo,
