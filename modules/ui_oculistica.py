@@ -172,12 +172,12 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         topo = st.text_area("Topografia corneale", "", height=68, key="ocul_topo")
 
         st.markdown("**Esame obiettivo**")
-        cornea = st.text_area("Cornea", "", height=60, key="ocul_cornea")
-        camera_ant = st.text_area("Camera anteriore", "", height=60, key="ocul_camera")
-        cristallino = st.text_area("Cristallino", "", height=60, key="ocul_cristallino")
-        congiuntiva = st.text_area("Congiuntiva / Sclera", "", height=60, key="ocul_congiuntiva")
-        iride_pupilla = st.text_area("Iride / Pupilla", "", height=60, key="ocul_iride")
-        vitreo = st.text_area("Vitreo", "", height=60, key="ocul_vitreo")
+        cornea = st.text_area("Cornea", "", height=68, key="ocul_cornea")
+        camera_ant = st.text_area("Camera anteriore", "", height=68, key="ocul_camera")
+        cristallino = st.text_area("Cristallino", "", height=68, key="ocul_cristallino")
+        congiuntiva = st.text_area("Congiuntiva / Sclera", "", height=68, key="ocul_congiuntiva")
+        iride_pupilla = st.text_area("Iride / Pupilla", "", height=68, key="ocul_iride")
+        vitreo = st.text_area("Vitreo", "", height=68, key="ocul_vitreo")
 
         c1, c2 = st.columns(2)
         costo = c1.number_input("Costo visita €", min_value=0.0, step=5.0, value=0.0, key="ocul_costo")
