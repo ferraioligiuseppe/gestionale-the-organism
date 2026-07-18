@@ -167,12 +167,17 @@ def render_anamnesi_visiva(conn, paz_id: int) -> None:
     if d:
         st.caption("Scheda già presente: i campi sono precompilati, modifica e risalva.")
 
+    # Fuori dal form: usano pulsanti propri (non form_submit_button), quindi non
+    # possono stare dentro un st.form.
+    st.markdown("**1. Motivo della visita e sintomi**")
+    sintomi = _multiselect_estendibile("Sintomi visivi riferiti", SINTOMI,
+                                       d.get("sintomi", []), key="anv_sintomi")
+    st.markdown("**5. Condizioni mediche**")
+    patologie_med = _multiselect_estendibile("Condizioni mediche", PATOLOGIE_MED,
+                                             d.get("patologie_med", []), key="anv_patmed")
+
     with st.form(f"anam_vis_{paz_id}"):
-        # 1. Motivo / sintomi
-        st.markdown("**1. Motivo della visita e sintomi**")
         motivo = st.text_input("Motivo della visita", value=d.get("motivo", ""))
-        sintomi = _multiselect_estendibile("Sintomi visivi riferiti", SINTOMI,
-                                           d.get("sintomi", []), key="anv_sintomi")
         sintomi_altro = st.text_area("Altri sintomi / note", value=d.get("sintomi_altro", ""), height=70)
 
         # 2. Storia visiva
@@ -201,9 +206,7 @@ def render_anamnesi_visiva(conn, paz_id: int) -> None:
         interventi = st.text_area("Interventi o traumi oculari", value=d.get("interventi", ""), height=70)
 
         # 5. Storia medica generale
-        st.markdown("**5. Storia medica generale**")
-        patologie_med = _multiselect_estendibile("Condizioni mediche", PATOLOGIE_MED,
-                                                 d.get("patologie_med", []), key="anv_patmed")
+        st.markdown("**Altre note storia medica**")
         farmaci = st.text_input("Farmaci in uso", value=d.get("farmaci", ""))
         note_med = st.text_area("Altre note mediche / allergie", value=d.get("note_med", ""), height=70)
 
