@@ -272,13 +272,14 @@ def render_photoref(conn, paz_id: int, paziente: dict = None) -> None:
         st.error(f"Impossibile preparare la tabella: {e}")
         return
 
-    with st.expander("📱 Genera link cattura mobile (guidata, con flash/zoom)"):
-        base_url = st.text_input("URL pubblico del gestionale", "https://theorganism.com", key="pr_base_url")
-        ttl = st.number_input("Validità link (minuti)", 5, 180, 30, 5, key="pr_ttl")
-        if st.button("🔗 Genera link", key="pr_gen_link"):
-            url = genera_link_cattura_mobile(conn, paz_id, base_url, int(ttl))
-            st.code(url, language="text")
-            st.caption("Apri questo link sul telefono del paziente/operatore: guida flash+zoom+distanza, poi le foto tornano qui.")
+    st.markdown("##### 📱 Genera link cattura mobile (guidata, con flash/zoom)")
+    base_url = st.text_input("URL pubblico del gestionale", "https://theorganism.com", key="pr_base_url")
+    ttl = st.number_input("Validità link (minuti)", 5, 180, 30, 5, key="pr_ttl")
+    if st.button("🔗 Genera link", key="pr_gen_link"):
+        url = genera_link_cattura_mobile(conn, paz_id, base_url, int(ttl))
+        st.code(url, language="text")
+        st.caption("Apri questo link sul telefono del paziente/operatore: guida flash+zoom+distanza, poi le foto tornano qui.")
+    st.markdown("---")
 
     rows = _storico(conn, paz_id)
     if rows:
