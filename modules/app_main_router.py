@@ -720,9 +720,12 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         render_gaze_section(); return True
     if sotto == "📸 Photoref AI":
         try:
-            from .photoref_ai.ui_photoref import ui_photoref
-            ui_photoref()
-        except ImportError as e:
+            from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
+            pid = header_paziente_attivo(conn)
+            if pid:
+                from .photoref_ai.ui_photoref import render_photoref
+                render_photoref(conn, pid, paziente_attivo_record())
+        except Exception as e:
             st.error(f"Modulo Photoref non disponibile: {e}")
         return True
     if sotto == "📖 Lettura avanzata":
@@ -1141,9 +1144,12 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             render_osteopatia_section(); return
         if sotto == "📸 Photoref AI":
             try:
-                from .photoref_ai.ui_photoref import ui_photoref
-                ui_photoref()
-            except ImportError as e:
+                from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
+                pid = header_paziente_attivo(conn)
+                if pid:
+                    from .photoref_ai.ui_photoref import render_photoref
+                    render_photoref(conn, pid, paziente_attivo_record())
+            except Exception as e:
                 st.error(f"Modulo Photoref non disponibile: {e}")
             return
 
