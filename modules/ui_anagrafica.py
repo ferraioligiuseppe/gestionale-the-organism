@@ -394,6 +394,9 @@ def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi", ordine: str = "Al
         try:
             cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
             cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS ultimo_accesso TIMESTAMPTZ;")
+            cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS comune_nascita TEXT;")
+            cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS provincia_nascita TEXT;")
+            cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS telefono_fisso TEXT;")
             conn.commit()
         except Exception:
             conn.rollback()
@@ -524,16 +527,18 @@ def _salva_nuovo(conn, d: dict):
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO pazienti
-            (cognome, nome, data_nascita, sesso, telefono, email,
-             indirizzo, cap, citta, provincia, codice_fiscale, stato_paziente)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'ATTIVO')
+            (cognome, nome, data_nascita, sesso, telefono, telefono_fisso, email,
+             indirizzo, cap, citta, provincia, comune_nascita, provincia_nascita,
+             codice_fiscale, stato_paziente)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'ATTIVO')
             RETURNING id
         """, (
             d["cognome"].strip().upper(), d["nome"].strip().title(),
             data_iso, d["sesso"],
-            d["tel"].strip(), d["email"].strip().lower(),
+            d["tel"].strip(), d.get("tel_fisso","").strip(), d["email"].strip().lower(),
             d["indirizzo"].strip(), d["cap"].strip(),
             d["citta"].strip().title(), d["prov"].strip().upper(),
+            d.get("comune_nascita","").strip().title(), d.get("prov_nascita","").strip().upper(),
             d["cf"].strip().upper() or None,
         ))
         row = cur.fetchone()
@@ -572,16 +577,18 @@ def _salva_modifica(conn, paz_id, d: dict) -> bool:
         cur.execute("""
             UPDATE pazienti SET
                 cognome=%s, nome=%s, data_nascita=%s, sesso=%s,
-                telefono=%s, email=%s, indirizzo=%s, cap=%s,
-                citta=%s, provincia=%s, codice_fiscale=%s,
+                telefono=%s, telefono_fisso=%s, email=%s, indirizzo=%s, cap=%s,
+                citta=%s, provincia=%s, comune_nascita=%s, provincia_nascita=%s,
+                codice_fiscale=%s,
                 stato_paziente=%s
             WHERE id=%s
         """, (
             d["cognome"].strip().upper(), d["nome"].strip().title(),
             data_iso, d["sesso"],
-            d["tel"].strip(), d["email"].strip().lower(),
+            d["tel"].strip(), d.get("tel_fisso","").strip(), d["email"].strip().lower(),
             d["indirizzo"].strip(), d["cap"].strip(),
             d["citta"].strip().title(), d["prov"].strip().upper(),
+            d.get("comune_nascita","").strip().title(), d.get("prov_nascita","").strip().upper(),
             d["cf"].strip().upper() or None,
             d["stato"], paz_id,
         ))
@@ -741,7 +748,7 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
         nome = st.text_input("Nome *", value=r.get("nome", "") or "",
                               key=f"{key}_nom")
 
-    c3, c4, c5 = st.columns([2, 1, 2])
+    c3, c4 = st.columns(2)
     with c3:
         data_str = st.text_input("Data nascita",
                                    value=_fmt_dn(r.get("data_nascita", "")),
@@ -753,13 +760,42 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
         sesso = st.selectbox("Sesso", sesso_opts,
                               index=sesso_opts.index(sesso_val) if sesso_val in sesso_opts else 0,
                               key=f"{key}_sex")
+
+    c6b, c7b = st.columns(2)
+    with c6b:
+        comune_nascita = st.text_input("Comune di nascita *",
+                                       value=r.get("comune_nascita", "") or "",
+                                       key=f"{key}_comune_nasc",
+                                       placeholder="Es. Pagani")
+    with c7b:
+        prov_nascita = st.text_input("Prov. di nascita *",
+                                     value=r.get("provincia_nascita", "") or "",
+                                     key=f"{key}_prov_nasc",
+                                     max_chars=2, placeholder="Es. SA").upper()
+
+    # Auto-generazione CF: appena cognome/nome/data/sesso/comune/prov nascita
+    # sono tutti compilati, calcolo il CF PRIMA di istanziare il suo widget
+    # (Streamlit consente di preimpostare session_state solo prima del render).
+    cf_widget_key = f"{key}_cf"
+    if (cognome.strip() and nome.strip() and data_str.strip()
+            and comune_nascita.strip() and prov_nascita.strip()
+            and not st.session_state.get(cf_widget_key)):
+        genera, _ = _cf_helpers()
+        if genera is not None:
+            _cf_auto = genera(cognome=cognome, nome=nome, data_nascita_str=data_str,
+                              sesso=sesso, comune_nascita=comune_nascita,
+                              provincia_nascita=prov_nascita)
+            if _cf_auto:
+                st.session_state[cf_widget_key] = _cf_auto
+
+    c5 = st.container()
     with c5:
         cf_default = st.session_state.pop(f"{key}_cf_generato", None)
         if cf_default is None:
             cf_default = r.get("codice_fiscale", "") or ""
-        cf = st.text_input("Codice fiscale", value=cf_default,
-                            key=f"{key}_cf",
-                            placeholder="Lascia vuoto se non disponibile").upper()
+        cf = st.text_input("Codice fiscale *", value=cf_default,
+                            key=cf_widget_key,
+                            placeholder="Si genera da solo con nome, data e comune di nascita").upper()
 
     if cf.strip():
         _, valida = _cf_helpers()
@@ -774,15 +810,15 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
                     "⚠️ Non riconosciuto dall'algoritmo (puoi salvarlo comunque)</div>",
                     unsafe_allow_html=True)
 
-    _genera_cf_expander(key, cognome, nome, data_str, sesso)
-
     c6, c7 = st.columns(2)
     with c6:
-        tel = st.text_input("Telefono", value=r.get("telefono", "") or "",
+        tel = st.text_input("Cellulare *", value=r.get("telefono", "") or "",
                              key=f"{key}_tel")
     with c7:
-        email = st.text_input("Email", value=r.get("email", "") or "",
-                                key=f"{key}_email")
+        tel_fisso = st.text_input("Telefono fisso", value=r.get("telefono_fisso", "") or "",
+                                  key=f"{key}_tel_fisso")
+    email = st.text_input("Email *", value=r.get("email", "") or "",
+                            key=f"{key}_email")
 
     indirizzo = st.text_input("Indirizzo (via, civico)",
                                 value=r.get("indirizzo", "") or "",
@@ -971,7 +1007,8 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
 
     return {
         "cognome": cognome, "nome": nome, "data_str": data_str,
-        "sesso": sesso, "cf": cf, "tel": tel, "email": email,
+        "sesso": sesso, "cf": cf, "tel": tel, "tel_fisso": tel_fisso, "email": email,
+        "comune_nascita": comune_nascita, "prov_nascita": prov_nascita,
         "indirizzo": indirizzo, "cap": cap, "citta": citta, "prov": prov,
         "stato": stato, "_is_nuovo": is_nuovo,
     }
@@ -1240,6 +1277,17 @@ def _dialog_modifica(conn, paz_id: int):
         info_text += f" · {eta} anni"
     st.caption(info_text)
     st.markdown(f"### {cog} {nom}")
+
+    if eta is not None:
+        if eta < 2:
+            fascia, emoji, voce_menu = "Neonati (0-2 anni)", "👶", "👶 PNEV Neonati"
+        elif eta < 14:
+            fascia, emoji, voce_menu = "Bambini (2-14 anni)", "🧒", "🧒 PNEV Bambini"
+        else:
+            fascia, emoji, voce_menu = "Adulti (>14 anni)", "🧑", "🧑 PNEV Adulti"
+        st.info(f"{emoji} **Percorso PNEV suggerito: {fascia}** — vai su "
+               f"*🧠 Valutazione e Trattamento PNEV → {voce_menu}* per la valutazione di ingresso.")
+
     _mostra_nucleo_familiare(conn, paz_id, rec.get("indirizzo", ""), rec.get("citta", ""))
 
     dati = _form_anagrafici(f"mp_{paz_id}", rec)
@@ -1303,8 +1351,18 @@ def _dialog_modifica(conn, paz_id: int):
         st.session_state.pop("ana_apri_paziente", None)
         st.rerun()
     if salva:
-        if not dati["cognome"].strip() or not dati["nome"].strip():
-            st.error("Cognome e Nome sono obbligatori.")
+        _mancanti2 = []
+        if not dati["cognome"].strip(): _mancanti2.append("Cognome")
+        if not dati["nome"].strip(): _mancanti2.append("Nome")
+        if not dati["data_str"].strip(): _mancanti2.append("Data di nascita")
+        if not dati.get("comune_nascita","").strip(): _mancanti2.append("Comune di nascita")
+        if not dati.get("prov_nascita","").strip(): _mancanti2.append("Prov. di nascita")
+        if not dati["cf"].strip(): _mancanti2.append("Codice fiscale")
+        if not dati["indirizzo"].strip(): _mancanti2.append("Indirizzo")
+        if not dati["tel"].strip(): _mancanti2.append("Cellulare")
+        if not dati["email"].strip(): _mancanti2.append("Email")
+        if _mancanti2:
+            st.error("Campi obbligatori mancanti: " + ", ".join(_mancanti2))
         elif _salva_modifica(conn, paz_id, dati):
             st.success("✅ Modifiche salvate.")
             import time
@@ -1344,8 +1402,18 @@ def _dialog_nuovo(conn):
                 del st.session_state[k]
         st.rerun()
     if salva:
-        if not dati["cognome"].strip() or not dati["nome"].strip():
-            st.error("Cognome e Nome sono obbligatori.")
+        _mancanti = []
+        if not dati["cognome"].strip(): _mancanti.append("Cognome")
+        if not dati["nome"].strip(): _mancanti.append("Nome")
+        if not dati["data_str"].strip(): _mancanti.append("Data di nascita")
+        if not dati.get("comune_nascita","").strip(): _mancanti.append("Comune di nascita")
+        if not dati.get("prov_nascita","").strip(): _mancanti.append("Prov. di nascita")
+        if not dati["cf"].strip(): _mancanti.append("Codice fiscale")
+        if not dati["indirizzo"].strip(): _mancanti.append("Indirizzo")
+        if not dati["tel"].strip(): _mancanti.append("Cellulare")
+        if not dati["email"].strip(): _mancanti.append("Email")
+        if _mancanti:
+            st.error("Campi obbligatori mancanti: " + ", ".join(_mancanti))
         elif not consenso_dati["consenso_tratt"]:
             st.error("Il consenso al trattamento dati è obbligatorio.")
         else:
