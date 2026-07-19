@@ -93,6 +93,10 @@ def _valuta_ppc(rottura_cm, recupero_cm):
 
 
 def _ensure_table(conn):
+    try:
+        conn.rollback()
+    except Exception:
+        pass
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS oculistica_visite (
@@ -132,6 +136,9 @@ def _ensure_table(conn):
         ("campo_visivo_od", "TEXT"), ("campo_visivo_os", "TEXT"),
         ("oct_od", "TEXT"), ("oct_os", "TEXT"),
         ("ppc_rottura_cm", "REAL"), ("ppc_recupero_cm", "REAL"),
+        ("an_motivo", "TEXT"), ("an_storia_oculare", "TEXT"), ("an_storia_sistemica", "TEXT"),
+        ("an_familiarita", "TEXT"), ("an_farmaci", "TEXT"), ("an_allergie", "TEXT"),
+        ("an_uso_attuale", "TEXT"), ("an_lavoro_hobby", "TEXT"), ("an_note", "TEXT"),
     ]:
         cur.execute(f"ALTER TABLE oculistica_visite ADD COLUMN IF NOT EXISTS {col} {tipo}")
     conn.commit()
@@ -181,6 +188,16 @@ def _testo_visita(d: dict) -> str:
 
     return (
         f"Data: {_fmt_data_it(g('data_visita'))}    Tipo: {g('tipo_visita')}    Professionista: {g('professionista')}\n\n"
+        f"ANAMNESI\n"
+        f"- Motivo della visita: {g('an_motivo','—')}\n"
+        f"- Storia oculare: {g('an_storia_oculare','—')}\n"
+        f"- Storia sistemica/generale: {g('an_storia_sistemica','—')}\n"
+        f"- Familiarità oculare: {g('an_familiarita','—')}\n"
+        f"- Farmaci in uso: {g('an_farmaci','—')}\n"
+        f"- Allergie: {g('an_allergie','—')}\n"
+        f"- Uso attuale occhiali/LAC: {g('an_uso_attuale','—')}\n"
+        f"- Lavoro/attività visive (video, guida, sport): {g('an_lavoro_hobby','—')}\n"
+        f"- Altre note anamnestiche: {g('an_note','—')}\n\n"
         f"ACUITÀ VISIVA\n"
         f"- Naturale: OD {g('ac_nat_od','—')} | OS {g('ac_nat_os','—')} | OO {g('ac_nat_oo','—')}\n"
         f"- Corretta: OD {g('ac_cor_od','—')} | OS {g('ac_cor_os','—')} | OO {g('ac_cor_oo','—')}\n\n"
@@ -295,6 +312,22 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
                                  _fmt_data_it(_dv.get("data_visita")) or datetime.date.today().strftime("%d/%m/%Y"))
         tipo = c2.text_input("Tipo visita", _dv.get("tipo_visita", "Controllo"))
         prof = c3.text_input("Professionista", _dv.get("professionista", ""))
+
+        st.markdown("**Anamnesi**")
+        an_motivo = st.text_area("Motivo della visita", _dv.get("an_motivo","") or "", height=68, key="ocul_an_motivo")
+        c1, c2 = st.columns(2)
+        an_storia_oculare = c1.text_area("Storia oculare (traumi, interventi, patologie pregresse)", _dv.get("an_storia_oculare","") or "", height=68, key="ocul_an_storia_oc")
+        an_storia_sistemica = c2.text_area("Storia sistemica/generale (diabete, ipertensione, ecc.)", _dv.get("an_storia_sistemica","") or "", height=68, key="ocul_an_storia_sist")
+        c1, c2 = st.columns(2)
+        an_familiarita = c1.text_area("Familiarità oculare (glaucoma, maculopatia, strabismo...)", _dv.get("an_familiarita","") or "", height=68, key="ocul_an_famil")
+        an_farmaci = c2.text_area("Farmaci in uso", _dv.get("an_farmaci","") or "", height=68, key="ocul_an_farmaci")
+        c1, c2 = st.columns(2)
+        an_allergie = c1.text_input("Allergie", _dv.get("an_allergie","") or "", key="ocul_an_allergie")
+        an_uso_attuale = c2.selectbox("Uso attuale", ["Nessuno","Occhiali","Lenti a contatto","Occhiali + LAC"],
+                                      index=["Nessuno","Occhiali","Lenti a contatto","Occhiali + LAC"].index(_dv["an_uso_attuale"]) if _dv.get("an_uso_attuale") in ["Nessuno","Occhiali","Lenti a contatto","Occhiali + LAC"] else 0,
+                                      key="ocul_an_uso")
+        an_lavoro_hobby = st.text_input("Lavoro/attività visive (video, guida, sport, lettura prolungata)", _dv.get("an_lavoro_hobby","") or "", key="ocul_an_lavoro")
+        an_note = st.text_area("Altre note anamnestiche", _dv.get("an_note","") or "", height=68, key="ocul_an_note")
 
         st.markdown("**Acuità visiva naturale**")
         c1, c2, c3 = st.columns(3)
@@ -437,6 +470,9 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         data_v = _parse_data_it(data_str, datetime.date.today())
         d = dict(
             data_visita=data_v.isoformat(), tipo_visita=tipo, professionista=prof,
+            an_motivo=an_motivo, an_storia_oculare=an_storia_oculare, an_storia_sistemica=an_storia_sistemica,
+            an_familiarita=an_familiarita, an_farmaci=an_farmaci, an_allergie=an_allergie,
+            an_uso_attuale=an_uso_attuale, an_lavoro_hobby=an_lavoro_hobby, an_note=an_note,
             ac_nat_od=ac_nat_od, ac_nat_os=ac_nat_os, ac_nat_oo=ac_nat_oo,
             ac_cor_od=ac_cor_od, ac_cor_os=ac_cor_os, ac_cor_oo=ac_cor_oo,
             sf_abit_od=sf_abit_od, cil_abit_od=cil_abit_od, ax_abit_od=int(ax_abit_od), add_abit_od=add_abit_od,
