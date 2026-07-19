@@ -302,36 +302,22 @@ _CAPTURE_HTML = """
 
 
 def render_capture_mobile(conn, paz_id: int, token: str = None) -> None:
-    """Pagina di cattura mobile guidata (flash, zoom, crop) — no login richiesto
-    quando arrivata da link con photoref_token. Apre una finestra separata
-    (come per l'analisi facciale) perché Streamlit ospita l'app in un iframe
-    che blocca la fotocamera indipendentemente dagli attributi allow."""
+    """Link che apre la cattura guidata (flash, zoom, crop) in una scheda NUOVA,
+    su pagina statica top-level reale (stesso schema, già funzionante, di
+    pnev_capture.py) — un iframe/popup vuoto perde il permesso fotocamera."""
+    import urllib.parse, time
     st.markdown("### 📸 Photoref AI — Cattura guidata")
-    st.caption("Tieni il telefono a circa 40 cm dal viso, ambiente poco illuminato per attivare il riflesso pupillare.")
-    st.info("Tocca il pulsante qui sotto: si apre una finestra dedicata con accesso diretto alla fotocamera.")
-    html_js = _CAPTURE_HTML.replace("\\", "\\\\").replace("`", "\\`").replace("</script>", "<\\/script>")
-    trigger = f"""
-<button id="pr_open_btn" style="padding:14px 22px;border-radius:8px;border:none;background:#2ea44f;color:#fff;font-weight:700;font-size:16px;width:100%">
-📸 Apri cattura fotocamera
-</button>
-<script>
-document.getElementById('pr_open_btn').onclick = function(){{
-  const w = window.open('', '_blank');
-  if(!w){{ alert('Consenti le finestre popup per aprire la cattura.'); return; }}
-  const APP = `{html_js}`;
-  w.document.open(); w.document.write(APP); w.document.close(); w.focus();
-}};
-</script>
-"""
-    components.html(trigger, height=70)
-
-    captured = st.query_params.get("pr_data", "")
-    data_json = st.text_area("Incolla qui il risultato se l'invio automatico non parte", "", height=0,
-                             key="pr_manual_fallback", label_visibility="collapsed") if False else None
-
-    result = st.session_state.get("_photoref_capture_payload")
-    if st.button("🔄 Ho scattato entrambe le foto — analizza ora", key="pr_confirm_capture"):
-        st.info("Se le foto sono state acquisite dal riquadro sopra, usa il modulo standard 'Carica foto' per completare l'analisi (upload manuale) finché l'invio automatico via browser non è collegato al backend.")
+    st.caption("Si apre in una scheda separata (necessario per il permesso fotocamera). "
+              "Tieni il telefono a ~40 cm dal viso, ambiente poco illuminato.")
+    q = urllib.parse.urlencode({"v": str(int(time.time()))})
+    url = f"https://www.pnev.it/wp-content/uploads/photoref_capture.html?{q}"
+    st.markdown(
+        f'<a href="{url}" target="_blank" rel="noopener" '
+        'style="display:inline-block;padding:11px 18px;border-radius:8px;'
+        'background:#2ea44f;color:#fff;font-weight:bold;text-decoration:none;'
+        'font-size:15px">📸 Apri cattura guidata (scheda nuova)</a>',
+        unsafe_allow_html=True)
+    st.caption("Scatta OD e OS: le 2 foto si scaricano da sole, poi caricale qui sotto per l'analisi.")
 
 
 def render_photoref(conn, paz_id: int, paziente: dict = None) -> None:
@@ -350,7 +336,7 @@ def render_photoref(conn, paz_id: int, paziente: dict = None) -> None:
         return
 
     st.markdown("##### 📱 Genera link cattura mobile (guidata, con flash/zoom)")
-    base_url = st.text_input("URL pubblico del gestionale", "https://theorganism.com", key="pr_base_url")
+    base_url = st.text_input("URL pubblico del gestionale", "https://gestionale-the-organism.streamlit.app", key="pr_base_url")
     ttl = st.number_input("Validità link (minuti)", 5, 180, 30, 5, key="pr_ttl")
     if st.button("🔗 Genera link", key="pr_gen_link"):
         url = genera_link_cattura_mobile(conn, paz_id, base_url, int(ttl))
