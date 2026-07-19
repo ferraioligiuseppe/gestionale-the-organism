@@ -1230,7 +1230,6 @@ def _sezione_coupon_paziente(conn, paz_id):
                 st.error(f"Inserimento non riuscito: {e}")
 
 
-@st.dialog("Modifica paziente", width="large")
 def _mostra_nucleo_familiare(conn, paz_id, indirizzo, citta):
     """Segnala altri pazienti attivi con stesso indirizzo (via+civico) e città:
     possibile stesso nucleo familiare, da verificare a mano."""
@@ -1259,6 +1258,7 @@ def _mostra_nucleo_familiare(conn, paz_id, indirizzo, citta):
                 "dello stesso nucleo familiare. Verifica a mano se collegarli.")
 
 
+@st.dialog("Modifica paziente", width="large")
 def _dialog_modifica(conn, paz_id: int):
     rec = _carica_paziente(conn, paz_id)
     if not rec:
