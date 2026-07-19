@@ -303,14 +303,15 @@ _CAPTURE_HTML = """
 
 def render_capture_mobile(conn, paz_id: int, token: str = None) -> None:
     """Link che apre la cattura guidata (flash, zoom, crop) in una scheda NUOVA,
-    su pagina statica top-level reale (stesso schema, già funzionante, di
-    pnev_capture.py) — un iframe/popup vuoto perde il permesso fotocamera."""
+    servita direttamente dal gestionale (Streamlit static serving) — un
+    iframe/popup vuoto perde il permesso fotocamera, serve una pagina
+    top-level reale sullo stesso dominio del gestionale."""
     import urllib.parse, time
     st.markdown("### 📸 Photoref AI — Cattura guidata")
     st.caption("Si apre in una scheda separata (necessario per il permesso fotocamera). "
               "Tieni il telefono a ~40 cm dal viso, ambiente poco illuminato.")
     q = urllib.parse.urlencode({"v": str(int(time.time()))})
-    url = f"https://www.pnev.it/wp-content/uploads/photoref_capture.html?{q}"
+    url = f"app/static/photoref_capture.html?{q}"
     st.markdown(
         f'<a href="{url}" target="_blank" rel="noopener" '
         'style="display:inline-block;padding:11px 18px;border-radius:8px;'
