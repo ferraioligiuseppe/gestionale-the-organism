@@ -38,8 +38,7 @@
 AREA_AGENDA        = "📅 Agenda"
 AREA_PAZIENTI      = "👥 Pazienti"
 AREA_INVII         = "📋 Questionari"
-AREA_GAMES         = "🎮 PNEV Games"
-AREA_PNEV          = "🧠 Valutazione e Trattamento PNEV"
+AREA_PNEV          = "🧠 Valutazione e Trattamento Multisensoriale"
 AREA_OCULISTICA    = "👁️ Oculistica · LAC"
 AREA_ORTOTTICA     = "🩺 Ortottica"
 AREA_TNPEE         = "🗣️ Logopedia / TNPEE"
@@ -68,7 +67,6 @@ AREE_ORDINE = [
     AREA_AGENDA,
     AREA_PAZIENTI,
     AREA_INVII,
-    AREA_GAMES,
     AREA_PNEV,
     AREA_OCULISTICA,
     AREA_ORTOTTICA,
@@ -121,6 +119,9 @@ PNEV_RAMI = {
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
     ],
+    "🎮 PNEV Games": [
+        "🎮 Esercizi Wordwall",
+    ],
 }
 
 # Etichette delle voci "in arrivo" — vedi PLACEHOLDER_VOCI in
@@ -163,9 +164,6 @@ SOTTOSEZIONI = {
     AREA_INVII: [
         "📋 Questionari remoti",
         "🎧 Screening uditivo",
-    ],
-    AREA_GAMES: [
-        "🎮 Esercizi Wordwall",
     ],
     AREA_OCULISTICA: [
         "👁️ Oculistica",
