@@ -311,21 +311,28 @@ _CAPTURE_HTML = """
 
 def render_capture_mobile(conn, paz_id: int, token: str = None) -> None:
     """Link che apre la cattura guidata (flash, zoom, crop) in una scheda NUOVA,
-    servita direttamente dal gestionale (Streamlit static serving) — un
-    iframe/popup vuoto perde il permesso fotocamera, serve una pagina
-    top-level reale sullo stesso dominio del gestionale."""
-    import urllib.parse, time
+    servita direttamente dal gestionale (Streamlit static serving). Il link è
+    costruito lato browser (JS) per rispettare l'eventuale prefisso di
+    percorso che Streamlit Cloud aggiunge all'URL (es. /~/+/...) — un
+    percorso assoluto fisso lo ignora e apre la pagina sbagliata."""
+    import time
     st.markdown("### 📸 Photoref AI — Cattura guidata")
     st.caption("Si apre in una scheda separata (necessario per il permesso fotocamera). "
               "Tieni il telefono a ~40 cm dal viso, ambiente poco illuminato.")
-    q = urllib.parse.urlencode({"v": str(int(time.time()))})
-    url = f"/app/static/photoref_capture.html?{q}"
-    st.markdown(
-        f'<a href="{url}" target="_blank" rel="noopener" '
-        'style="display:inline-block;padding:11px 18px;border-radius:8px;'
-        'background:#2ea44f;color:#fff;font-weight:bold;text-decoration:none;'
-        'font-size:15px">📸 Apri cattura guidata (scheda nuova)</a>',
-        unsafe_allow_html=True)
+    v = int(time.time())
+    trigger = f"""
+<button id="pr_open_link" style="padding:12px 20px;border-radius:8px;border:none;background:#2ea44f;color:#fff;font-weight:700;font-size:15px;width:100%;cursor:pointer">
+📸 Apri cattura guidata (scheda nuova)
+</button>
+<script>
+document.getElementById('pr_open_link').onclick = function(){{
+  const base = document.baseURI.split('?')[0].replace(/\\/$/, '');
+  const url = base + '/static/photoref_capture.html?v={v}';
+  window.open(url, '_blank');
+}};
+</script>
+"""
+    components.html(trigger, height=60)
     st.caption("Scatta OD e OS: le 2 foto si scaricano da sole, poi caricale qui sotto per l'analisi.")
 
 
