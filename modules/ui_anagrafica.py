@@ -790,11 +790,12 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
 
     c5 = st.container()
     with c5:
-        cf_default = st.session_state.pop(f"{key}_cf_generato", None)
-        if cf_default is None:
-            cf_default = r.get("codice_fiscale", "") or ""
-        cf = st.text_input("Codice fiscale *", value=cf_default,
-                            key=cf_widget_key,
+        if cf_widget_key not in st.session_state:
+            _cf_default = st.session_state.pop(f"{key}_cf_generato", None)
+            if _cf_default is None:
+                _cf_default = r.get("codice_fiscale", "") or ""
+            st.session_state[cf_widget_key] = _cf_default
+        cf = st.text_input("Codice fiscale *", key=cf_widget_key,
                             placeholder="Si genera da solo con nome, data e comune di nascita").upper()
 
     if cf.strip():
