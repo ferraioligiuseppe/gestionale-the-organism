@@ -561,6 +561,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🎧 Screening uditivo":
         from .ui_screening_link import render_screening_link
         render_screening_link(conn); return True
+    if sotto == "📋 Consenso screening scolastico":
+        from .ui_screening_scolastico import render_screening_scolastico
+        render_screening_scolastico(conn); return True
     if sotto == "🎧 MAPS-CLEAR pubblico":
         try:
             from modules.pnev_pubblico.ui_pnev_pubblico_admin import render_pnev_pubblico_admin
@@ -584,6 +587,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except ImportError as e:
             st.error(f"Modulo Wordwall non disponibile: {e}")
         return True
+    if sotto == "🕹️ PNEV Game Center":
+        from .ui_gamecenter import render_gamecenter
+        render_gamecenter(); return True
 
     # ── VALUTAZIONE FUNZIONALE ────────────────────────────────────────
     if sotto == "🔬 PNEV":
@@ -935,6 +941,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🎧 Screening uditivo":
             from .ui_screening_link import render_screening_link
             render_screening_link(conn); return
+        if sotto == "📋 Consenso screening scolastico":
+            from .ui_screening_scolastico import render_screening_scolastico
+            render_screening_scolastico(conn); return
         if sotto == "🎧 MAPS-CLEAR pubblico":
             try:
                 from modules.pnev_pubblico.ui_pnev_pubblico_admin import render_pnev_pubblico_admin
@@ -1136,6 +1145,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 except ImportError as e:
                     st.error(f"Modulo Wordwall non disponibile: {e}")
             return
+        if sotto == "🕹️ PNEV Game Center":
+            from .ui_gamecenter import render_gamecenter
+            render_gamecenter(); return
         if sotto == "👁️ Lenti a contatto":
             from .ui_lenti_contatto import ui_lenti_contatto
             ui_lenti_contatto(); return
