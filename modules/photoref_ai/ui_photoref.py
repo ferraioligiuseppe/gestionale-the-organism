@@ -95,14 +95,20 @@ def _ensure_table(conn):
         )
     """)
     conn.commit()
+    for col, tipo in [("asse_od", "REAL"), ("asse_os", "REAL"),
+                      ("working_distance_m", "REAL"), ("eccentricita_mm", "REAL")]:
+        cur.execute(f"ALTER TABLE photoref_sessioni ADD COLUMN IF NOT EXISTS {col} {tipo}")
+    conn.commit()
 
 
-def _salva(conn, paz_id, data_s, stima_od, stima_os, asimmetria, note):
+def _salva(conn, paz_id, data_s, stima_od, stima_os, asimmetria, note, asse_od=0, asse_os=0,
+          working_distance_m=1.0, eccentricita_mm=20.0):
     cur = conn.cursor()
     cur.execute(
-        """INSERT INTO photoref_sessioni (paziente_id, data_sessione, stima_od, stima_os, asimmetria, note)
-           VALUES (%s,%s,%s,%s,%s,%s)""",
-        (paz_id, data_s, stima_od, stima_os, asimmetria, note))
+        """INSERT INTO photoref_sessioni (paziente_id, data_sessione, stima_od, stima_os, asimmetria, note,
+                                          asse_od, asse_os, working_distance_m, eccentricita_mm)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+        (paz_id, data_s, stima_od, stima_os, asimmetria, note, asse_od, asse_os, working_distance_m, eccentricita_mm))
     conn.commit()
 
 
@@ -113,26 +119,78 @@ def _storico(conn, paz_id):
     return cur.fetchall()
 
 
-def _analizza_riflesso(img: "Image.Image", occhio: str):
-    """Stima grezza da luminosità/asimmetria del crescent nel riflesso pupillare.
-    Placeholder scientificamente onesto: converte la posizione/ampiezza del
-    riflesso chiaro rispetto al centro pupilla in una stima approssimativa (D).
-    Va tarato con foto reali; qui resta un valore indicativo, non clinico."""
-    arr = np.asarray(img.convert("L"), dtype=float)
-    h, w = arr.shape
-    cy, cx = h // 2, w // 2
-    r = min(h, w) // 4
-    region = arr[max(0, cy - r):cy + r, max(0, cx - r):cx + r]
+def _rileva_pupilla(gray: "np.ndarray"):
+    """Individua il bordo della pupilla (disco scuro) nella regione centrale
+    tramite soglia adattiva; ritorna (cy, cx, raggio_px) o None."""
+    h, w = gray.shape
+    cy0, cx0 = h // 2, w // 2
+    win = min(h, w) // 2
+    region = gray[max(0, cy0 - win):cy0 + win, max(0, cx0 - win):cx0 + win]
     if region.size == 0:
-        return 0.0
-    thresh = region.mean() + region.std()
-    bright = region > thresh
-    ys, xs = np.where(bright)
+        return None
+    # La pupilla nel riflesso è la macchia più scura circondata dall'iride;
+    # sogliamo sotto la mediana per isolarla.
+    thresh = np.percentile(region, 25)
+    dark = region < thresh
+    ys, xs = np.where(dark)
+    if len(xs) < 20:
+        return None
+    cy = ys.mean() + max(0, cy0 - win)
+    cx = xs.mean() + max(0, cx0 - win)
+    raggio = (np.sqrt(len(xs) / np.pi))
+    return cy, cx, raggio
+
+
+def _analizza_riflesso(img: "Image.Image", occhio: str, working_distance_m: float = 1.0,
+                        eccentricita_mm: float = 20.0):
+    """Eccentric photorefraction (metodo Howland/Braddick, alla base dei
+    photoscreener clinici tipo GoCheck Kids/PediaVision):
+    - si individua la pupilla nel riflesso;
+    - dentro il riflesso pupillare si cerca il crescent (mezzaluna) di luce:
+      la sua estensione, come frazione del diametro pupillare, è proporzionale
+      alla sfocatura (dioptrie) tramite l'eccentricità sorgente-obiettivo e la
+      distanza di lavoro: D ≈ (crescent/diametro) * (eccentricità_mm/10) / working_distance_m;
+    - la posizione del crescent (alto/basso/lato) rispetto al centro pupilla
+      dà il segno/direzione (crescent sul lato opposto alla sorgente = miopia,
+      stesso lato = ipermetropia) e l'asse approssimativo.
+    Resta uno SCREENING qualitativo: la calibrazione va verificata con casi noti."""
+    arr = np.asarray(img.convert("L"), dtype=float)
+    pupilla = _rileva_pupilla(arr)
+    if pupilla is None:
+        return 0.0, 0.0, "Pupilla non rilevata — riscattare più vicino/più a fuoco"
+    cy, cx, raggio = pupilla
+    if raggio < 3:
+        return 0.0, 0.0, "Pupilla troppo piccola nel campo — avvicinare il telefono"
+
+    win = int(raggio * 1.4)
+    y0, y1 = max(0, int(cy - win)), int(cy + win)
+    x0, x1 = max(0, int(cx - win)), int(cx + win)
+    disco = arr[y0:y1, x0:x1]
+    if disco.size == 0:
+        return 0.0, 0.0, "Regione pupillare non valida"
+
+    # Crescent = pixel più luminosi dentro il disco pupillare
+    soglia_luce = disco.mean() + 0.7 * disco.std()
+    luce = disco > soglia_luce
+    ys, xs = np.where(luce)
     if len(xs) == 0:
-        return 0.0
-    offset_x = (xs.mean() - region.shape[1] / 2) / (region.shape[1] / 2)
-    stima_D = round(offset_x * 4.0, 2)  # scala arbitraria ±4D, da calibrare
-    return stima_D
+        return 0.0, 0.0, "Nessun riflesso luminoso rilevato — verificare flash e ambiente scuro"
+
+    dcy, dcx = disco.shape[0] / 2, disco.shape[1] / 2
+    off_y = (ys.mean() - dcy)
+    off_x = (xs.mean() - dcx)
+    estensione_crescent = np.sqrt(len(xs) / np.pi)  # raggio equivalente area luce
+    frazione = estensione_crescent / max(raggio, 1e-6)
+
+    stima_D = round(frazione * (eccentricita_mm / 10.0) / max(working_distance_m, 0.1), 2)
+    # Segno: crescent spostato verso il basso/nasale nella foto standard (sorgente
+    # sopra l'obiettivo) → ipermetropia; verso l'alto → miopia. Approssimazione.
+    segno = 1.0 if off_y > 0 else -1.0
+    stima_D *= segno
+
+    asse = round((np.degrees(np.arctan2(off_y, off_x)) + 360) % 180)
+    note_tecniche = f"Crescent {estensione_crescent:.1f}px su pupilla {raggio:.1f}px, asse ~{asse}°"
+    return stima_D, asse, note_tecniche
 
 
 _CAPTURE_HTML = """
@@ -307,14 +365,20 @@ def render_photoref(conn, paz_id: int, paziente: dict = None) -> None:
             data_s, s_od, s_os, asim = (r.get(k) if hasattr(r, "get") else r[i]
                                         for i, k in enumerate(["data_sessione","stima_od","stima_os","asimmetria"]))
             st.caption(f"📅 {data_s} · Stima OD {s_od:+.2f} D · OS {s_os:+.2f} D · Asimmetria {asim:.2f} D")
-        st.markdown("---")
 
+    st.markdown("---")
     st.markdown("#### Carica foto (o usa il link mobile sopra e poi carica qui il risultato)")
     c1, c2 = st.columns(2)
     with c1:
         foto_od = st.file_uploader("Foto riflesso OD", type=["jpg","jpeg","png"], key="photoref_od")
     with c2:
         foto_os = st.file_uploader("Foto riflesso OS", type=["jpg","jpeg","png"], key="photoref_os")
+
+    st.markdown("**Parametri di scatto** (necessari per convertire il crescent in diottrie)")
+    c1, c2 = st.columns(2)
+    working_distance_m = c1.number_input("Distanza di lavoro (m)", 0.3, 3.0, 1.0, 0.1, key="photoref_wd")
+    eccentricita_mm = c2.number_input("Eccentricità flash-obiettivo (mm)", 5.0, 40.0, 20.0, 1.0, key="photoref_ecc",
+                                      help="Distanza tra il flash del telefono e l'obiettivo della fotocamera.")
 
     data_s = st.date_input("Data sessione", datetime.date.today(), key="photoref_data")
     note = st.text_area("Note (distanza, illuminazione, collaborazione paziente)", "", height=68, key="photoref_note")
@@ -326,11 +390,14 @@ def render_photoref(conn, paz_id: int, paziente: dict = None) -> None:
         try:
             img_od = Image.open(io.BytesIO(foto_od.read()))
             img_os = Image.open(io.BytesIO(foto_os.read()))
-            stima_od = _analizza_riflesso(img_od, "OD")
-            stima_os = _analizza_riflesso(img_os, "OS")
+            stima_od, asse_od, note_od = _analizza_riflesso(img_od, "OD", working_distance_m, eccentricita_mm)
+            stima_os, asse_os, note_os = _analizza_riflesso(img_os, "OS", working_distance_m, eccentricita_mm)
             asimmetria = round(abs(stima_od - stima_os), 2)
-            _salva(conn, paz_id, data_s.isoformat(), stima_od, stima_os, asimmetria, note)
-            st.success(f"Stima OD {stima_od:+.2f} D · OS {stima_os:+.2f} D · Asimmetria {asimmetria:.2f} D")
+            _salva(conn, paz_id, data_s.isoformat(), stima_od, stima_os, asimmetria, note,
+                  asse_od, asse_os, working_distance_m, eccentricita_mm)
+            st.success(f"Stima OD {stima_od:+.2f} D (asse {asse_od}°) · OS {stima_os:+.2f} D (asse {asse_os}°) · Asimmetria {asimmetria:.2f} D")
+            st.caption(f"OD: {note_od}")
+            st.caption(f"OS: {note_os}")
             if asimmetria >= 1.0:
                 st.warning("⚠️ Asimmetria ≥1.00 D — consigliata verifica con refrazione oggettiva completa.")
             st.rerun()
