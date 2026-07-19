@@ -46,9 +46,9 @@ def pubblica_evento(conn, evento: dict, link_pubblico: str) -> tuple[bool, str]:
     wp_post_id = evento.get("wp_post_id")
     try:
         if wp_post_id:
-            resp = requests.post(f"{WP_BASE}/posts/{wp_post_id}", json=payload, auth=auth, timeout=15)
+            resp = requests.post(f"{WP_BASE}/posts/{wp_post_id}", data=payload, auth=auth, timeout=15)
         else:
-            resp = requests.post(f"{WP_BASE}/posts", json=payload, auth=auth, timeout=15)
+            resp = requests.post(f"{WP_BASE}/posts", data=payload, auth=auth, timeout=15)
         if resp.status_code not in (200, 201):
             return False, f"Errore WordPress ({resp.status_code}): {resp.text[:200]}"
         data = resp.json()
