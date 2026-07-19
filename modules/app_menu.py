@@ -82,14 +82,14 @@ AREE_ORDINE = [
 
 # ── Rami dell'area PNEV (annidati: si sceglie prima il ramo, poi la voce) ──
 PNEV_RAMI = {
-    "👶 PNEV Child": [
+    "👶 Child": [
         "📋 Anamnesi PNEV",
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
         "🚧 Castagnini (in arrivo)",
         "🚧 Vojta (in arrivo)",
     ],
-    "👁️ PNEV Visiva": [
+    "👁️ Visivo": [
         "👁️ Anamnesi visiva",
         "👁️ Valutazione visuo-percettiva",
         "🔢 DEM interattivo",
@@ -100,7 +100,7 @@ PNEV_RAMI = {
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
     ],
-    "🧬 Integrazione sensoriale": [
+    "🧬 Neurosensorimotor Reflex Integration": [
         "🧬 INPP — Valutazione diagnostica",
         "🚧 Masgutova / MNRI (in arrivo)",
         "🚧 TMR — Movimenti ritmici (in arrivo)",
@@ -108,7 +108,7 @@ PNEV_RAMI = {
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
     ],
-    "🎧 Uditiva": [
+    "🎧 Valutazione e Stimolazione Uditiva": [
         "🎧 Stimolazione uditiva",
         "📊 Audiometria funzionale",
         "🎧 Bilancio uditivo",
