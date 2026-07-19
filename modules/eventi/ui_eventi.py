@@ -236,6 +236,18 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
         "su WhatsApp, ecc. (La pagina pubblica verrà attivata allo step 4.)"
     )
 
+    st.markdown("**🌐 Pubblicazione su pnev.it**")
+    if ev.get("wp_url"):
+        st.caption(f"Già pubblicato: {ev['wp_url']}")
+    if st.button("🚀 Pubblica / aggiorna su pnev.it", key=f"wp_pub_{ev['id']}"):
+        from .wp_publish import pubblica_evento
+        ok, msg = pubblica_evento(conn, ev, link_pubblico)
+        if ok:
+            st.success(f"Pubblicato: {msg}")
+            st.rerun()
+        else:
+            st.error(msg)
+
 
 # ----- TAB ISCRITTI -----
 
