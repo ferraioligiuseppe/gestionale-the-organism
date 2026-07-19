@@ -22,6 +22,10 @@ def _token_secret():
 
 
 def _ensure_link_table(conn):
+    try:
+        conn.rollback()
+    except Exception:
+        pass
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS photoref_link_token (
@@ -82,6 +86,10 @@ def marca_token_usato(conn, token: str):
 
 
 def _ensure_table(conn):
+    try:
+        conn.rollback()
+    except Exception:
+        pass
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS photoref_sessioni (
