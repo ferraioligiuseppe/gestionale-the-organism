@@ -121,6 +121,7 @@ PNEV_RAMI = {
     ],
     "🎮 PNEV Games": [
         "🎮 Esercizi Wordwall",
+        "🕹️ PNEV Game Center",
     ],
 }
 
@@ -164,6 +165,7 @@ SOTTOSEZIONI = {
     AREA_INVII: [
         "📋 Questionari remoti",
         "🎧 Screening uditivo",
+        "📋 Consenso screening scolastico",
     ],
     AREA_OCULISTICA: [
         "👁️ Oculistica",
