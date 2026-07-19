@@ -239,14 +239,26 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
     st.markdown("**🌐 Pubblicazione su pnev.it**")
     if ev.get("wp_url"):
         st.caption(f"Già pubblicato: {ev['wp_url']}")
-    if st.button("🚀 Pubblica / aggiorna su pnev.it", key=f"wp_pub_{ev['id']}"):
-        from .wp_publish import pubblica_evento
-        ok, msg = pubblica_evento(conn, ev, link_pubblico)
-        if ok:
-            st.success(f"Pubblicato: {msg}")
-            st.rerun()
-        else:
-            st.error(msg)
+    c_wp1, c_wp2 = st.columns(2)
+    with c_wp1:
+        if st.button("🚀 Pubblica / aggiorna su pnev.it", key=f"wp_pub_{ev['id']}"):
+            from .wp_publish import pubblica_evento
+            ok, msg = pubblica_evento(conn, ev, link_pubblico)
+            if ok:
+                st.success(f"Pubblicato: {msg}")
+                st.rerun()
+            else:
+                st.error(msg)
+    with c_wp2:
+        if ev.get("wp_url"):
+            if st.button("🗑️ Rimuovi da pnev.it", key=f"wp_rm_{ev['id']}"):
+                from .wp_publish import rimuovi_evento
+                ok, msg = rimuovi_evento(conn, ev)
+                if ok:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
 
 
 # ----- TAB ISCRITTI -----
@@ -650,6 +662,9 @@ def _render_tab_azioni(conn, ev: dict):
                 type="primary",
             ):
                 try:
+                    if ev.get("wp_post_id"):
+                        from .wp_publish import rimuovi_evento
+                        rimuovi_evento(conn, ev)
                     elimina_evento(conn, ev["id"])
                     st.success("Evento eliminato")
                     st.rerun()

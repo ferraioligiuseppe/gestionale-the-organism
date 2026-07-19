@@ -59,3 +59,23 @@ def pubblica_evento(conn, evento: dict, link_pubblico: str) -> tuple[bool, str]:
         return True, data.get("link", "")
     except Exception as e:
         return False, f"Errore di connessione: {e}"
+
+
+def rimuovi_evento(conn, evento: dict) -> tuple[bool, str]:
+    """Sposta nel cestino (o elimina) il post WordPress collegato all'evento."""
+    auth = _auth()
+    if not auth:
+        return False, "Credenziali WordPress non configurate (secrets [wordpress])."
+    wp_post_id = evento.get("wp_post_id")
+    if not wp_post_id:
+        return True, "Nessun articolo pubblicato su pnev.it da rimuovere."
+    try:
+        resp = requests.delete(f"{WP_BASE}/posts/{wp_post_id}", auth=auth, timeout=15)
+        if resp.status_code not in (200, 410):
+            return False, f"Errore WordPress ({resp.status_code}): {resp.text[:200]}"
+        cur = conn.cursor()
+        cur.execute("UPDATE ev_eventi SET wp_post_id=NULL, wp_url=NULL WHERE id=%s", (evento.get("id"),))
+        conn.commit()
+        return True, "Rimosso da pnev.it."
+    except Exception as e:
+        return False, f"Errore di connessione: {e}"
