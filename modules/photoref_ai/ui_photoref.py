@@ -311,7 +311,7 @@ def render_capture_mobile(conn, paz_id: int, token: str = None) -> None:
     st.caption("Si apre in una scheda separata (necessario per il permesso fotocamera). "
               "Tieni il telefono a ~40 cm dal viso, ambiente poco illuminato.")
     q = urllib.parse.urlencode({"v": str(int(time.time()))})
-    url = f"app/static/photoref_capture.html?{q}"
+    url = f"/app/static/photoref_capture.html?{q}"
     st.markdown(
         f'<a href="{url}" target="_blank" rel="noopener" '
         'style="display:inline-block;padding:11px 18px;border-radius:8px;'
