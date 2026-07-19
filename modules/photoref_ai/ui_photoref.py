@@ -245,14 +245,27 @@ _CAPTURE_HTML = """
 
 def render_capture_mobile(conn, paz_id: int, token: str = None) -> None:
     """Pagina di cattura mobile guidata (flash, zoom, crop) — no login richiesto
-    quando arrivata da link con photoref_token."""
+    quando arrivata da link con photoref_token. Apre una finestra separata
+    (come per l'analisi facciale) perché Streamlit ospita l'app in un iframe
+    che blocca la fotocamera indipendentemente dagli attributi allow."""
     st.markdown("### 📸 Photoref AI — Cattura guidata")
     st.caption("Tieni il telefono a circa 40 cm dal viso, ambiente poco illuminato per attivare il riflesso pupillare.")
-    html_escaped = _CAPTURE_HTML.replace('"', "&quot;")
-    iframe = (f'<iframe srcdoc="{html_escaped}" '
-             f'allow="camera; fullscreen" '
-             f'style="width:100%;height:640px;border:none;border-radius:10px"></iframe>')
-    st.markdown(iframe, unsafe_allow_html=True)
+    st.info("Tocca il pulsante qui sotto: si apre una finestra dedicata con accesso diretto alla fotocamera.")
+    html_js = _CAPTURE_HTML.replace("\\", "\\\\").replace("`", "\\`").replace("</script>", "<\\/script>")
+    trigger = f"""
+<button id="pr_open_btn" style="padding:14px 22px;border-radius:8px;border:none;background:#2ea44f;color:#fff;font-weight:700;font-size:16px;width:100%">
+📸 Apri cattura fotocamera
+</button>
+<script>
+document.getElementById('pr_open_btn').onclick = function(){{
+  const w = window.open('', '_blank');
+  if(!w){{ alert('Consenti le finestre popup per aprire la cattura.'); return; }}
+  const APP = `{html_js}`;
+  w.document.open(); w.document.write(APP); w.document.close(); w.focus();
+}};
+</script>
+"""
+    components.html(trigger, height=70)
 
     captured = st.query_params.get("pr_data", "")
     data_json = st.text_area("Incolla qui il risultato se l'invio automatico non parte", "", height=0,
