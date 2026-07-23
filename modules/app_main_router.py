@@ -319,9 +319,9 @@ def _render_dashboard(conn) -> None:
         ("📎 Documenti clinici", "👥 Pazienti", "📎 Documenti clinici"),
         ("📝 Diagnosi assistita", "👥 Pazienti", "📝 Diagnosi assistita"),
         ("📈 Esiti / Follow-up", "👥 Pazienti", "📈 Esiti / Follow-up"),
-        ("🧘 Percorsi terapeutici", "🎧 Terapia & relazione", "🧘 Percorsi terapeutici"),
-        ("🧩 Programma PNEV", "🎧 Terapia & relazione", "🧩 Programma PNEV"),
-        ("👁️ Valutazione visuo-percettiva", "🔍 Valutazione funzionale",
+        ("🧘 Percorsi terapeutici", "🧠 Valutazione e Trattamento Multisensoriale", "🧘 Percorsi terapeutici"),
+        ("🧩 Programma PNEV", "🧠 Valutazione e Trattamento Multisensoriale", "🧩 Programma PNEV"),
+        ("👁️ Valutazione visuo-percettiva", "🧠 Valutazione e Trattamento Multisensoriale",
          "👁️ Valutazione visuo-percettiva"),
         ("🎟️ Coupon OF / SDS", "👥 Pazienti", "🎟️ Coupon OF / SDS"),
     ]
@@ -1368,7 +1368,17 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
         st.session_state["nav_area"] = _goto_a
         _goto_s = st.session_state.pop("goto_sotto", None)
         if _goto_s:
-            st.session_state[f"nav_sotto_{_goto_a}"] = _goto_s
+            from .app_menu import AREA_PNEV as _AP, PNEV_RAMI as _PR
+            if _goto_a == _AP:
+                # Area PNEV: trova il ramo che contiene la voce e imposta
+                # la chiave annidata giusta (nav_sotto_{area}_{ramo}).
+                for _ramo, _voci in _PR.items():
+                    if _goto_s in _voci:
+                        st.session_state["nav_pnev_ramo"] = _ramo
+                        st.session_state[f"nav_sotto_{_goto_a}_{_ramo}"] = _goto_s
+                        break
+            else:
+                st.session_state[f"nav_sotto_{_goto_a}"] = _goto_s
 
     area = st.sidebar.radio(
         "Area",
