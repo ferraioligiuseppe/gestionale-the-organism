@@ -200,7 +200,12 @@ def _render_dashboard(conn) -> None:
             if s:
                 data = _fmt_data(s[0] if not isinstance(s, dict) else s.get("Data_Ora",""))
                 tipo = (s[1] if not isinstance(s, dict) else s.get("Tipo","")) or "—"
-                st.info(f"**{data}** — {tipo}")
+                if st.button(f"📅 {data} — {tipo}", key="dash_go_seduta",
+                             use_container_width=True):
+                    st.session_state["goto_area"] = "👥 Pazienti"
+                    st.session_state["goto_sotto"] = "📅 Sedute / Terapie"
+                    st.session_state["paziente_attivo_id"] = paz_id
+                    st.rerun()
             else:
                 st.caption("Nessuna seduta")
         except Exception:
@@ -226,11 +231,12 @@ def _render_dashboard(conn) -> None:
                     else:
                         q, used, exp = lk[0], lk[1], lk[2]
                     q_clean = q.replace("_"," ").title()
-                    if used:
-                        st.markdown(f"✅ &nbsp;{q_clean}", unsafe_allow_html=True)
-                    else:
-                        exp_fmt = _fmt_data(exp)
-                        st.markdown(f"⏳ {q_clean} — scade {exp_fmt}", unsafe_allow_html=True)
+                    _lbl = f"✅ {q_clean}" if used else f"⏳ {q_clean} — scade {_fmt_data(exp)}"
+                    if st.button(_lbl, key=f"dash_go_quest_{q}", use_container_width=True):
+                        st.session_state["goto_area"] = "📋 Questionari"
+                        st.session_state["goto_sotto"] = "📋 Questionari remoti"
+                        st.session_state["paziente_attivo_id"] = paz_id
+                        st.rerun()
             else:
                 st.caption("Nessun link inviato")
         except Exception:
@@ -247,10 +253,15 @@ def _render_dashboard(conn) -> None:
             )
             tests = cur.fetchall() or []
             if tests:
-                for t in tests:
+                for _i, t in enumerate(tests):
                     nome = t[0] if not isinstance(t, dict) else t.get("nome_test","")
                     data = _fmt_data(t[1] if not isinstance(t, dict) else t.get("data_somm",""))
-                    st.markdown(f"**{nome}** — {data}")
+                    if st.button(f"🔬 {nome} — {data}", key=f"dash_go_test_{_i}",
+                                 use_container_width=True):
+                        st.session_state["goto_area"] = "🖥️ Test live"
+                        st.session_state["goto_sotto"] = "🖥️ Somministrazione test"
+                        st.session_state["paziente_attivo_id"] = paz_id
+                        st.rerun()
             else:
                 st.caption("Nessun test registrato")
         except Exception:
