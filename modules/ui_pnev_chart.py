@@ -1,11 +1,28 @@
 # -*- coding: utf-8 -*-
-"""PNEV-Chart — generatori di schede stampabili per il Visual Training
-(Hart chart, saccadi, scansione, inseguimenti, fusion, slap-tap, stereogrammi).
-File statico servito dal repo; qui solo embed + link a schermo intero."""
+"""PNEV-Chart — generatori di schede stampabili per il Visual Training.
+L'HTML completo è incorporato con components.html (renderizza sempre,
+senza dipendere dal content-type dello static serving)."""
+import os
 import streamlit as st
+import streamlit.components.v1 as components
 
-# Servito da /app/static (Streamlit) — stessa logica di pnev_capture.
+# Percorso del file HTML (in static/pnev_chart/index.html nel repo)
+_CANDIDATI = [
+    os.path.join("static", "pnev_chart", "index.html"),
+    os.path.join(os.path.dirname(__file__), "..", "static", "pnev_chart", "index.html"),
+]
+# Link diretto per apertura a schermo intero / stampa
 CHART_URL = "app/static/pnev_chart/index.html"
+
+
+def _carica_html() -> str:
+    for p in _CANDIDATI:
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            continue
+    return ""
 
 
 def render_pnev_chart() -> None:
@@ -18,7 +35,10 @@ def render_pnev_chart() -> None:
         'background:#1D6B44;color:#fff;font-weight:bold;text-decoration:none;'
         'font-size:14px">🖨️ Apri a schermo intero (per stampare)</a>',
         unsafe_allow_html=True)
-    st.markdown(
-        f'<iframe src="{CHART_URL}" style="width:100%;height:900px;'
-        'border:1px solid #dce5df;border-radius:12px"></iframe>',
-        unsafe_allow_html=True)
+
+    html = _carica_html()
+    if html:
+        components.html(html, height=900, scrolling=True)
+    else:
+        st.error("File PNEV-Chart non trovato. Verifica che static/pnev_chart/index.html "
+                "sia stato caricato su GitHub.")
