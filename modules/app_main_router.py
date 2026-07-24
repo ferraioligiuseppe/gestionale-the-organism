@@ -438,6 +438,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
         "👁️ Groffman (visual tracing)",
+        "📐 PNEV-Chart (schede stampabili)",
         "👁️ Eye tracking",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🖥️ Somministrazione test",
@@ -725,6 +726,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
                 st.code(traceback.format_exc())
         _assistente_coda(conn, paz_id)
         return True
+    if sotto == "📐 PNEV-Chart (schede stampabili)":
+        from .ui_pnev_chart import render_pnev_chart
+        render_pnev_chart(); return True
     if sotto == "🖥️ Somministrazione test":
         try:
             from .ui_test_somministrazione import render_somministrazione

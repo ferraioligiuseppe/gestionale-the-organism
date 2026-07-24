@@ -97,6 +97,7 @@ PNEV_RAMI = {
         "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
         "🎯 Piano Vision Therapy",
+        "📐 PNEV-Chart (schede stampabili)",
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
     ],
