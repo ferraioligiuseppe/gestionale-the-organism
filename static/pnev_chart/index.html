@@ -31,7 +31,7 @@
   #vista iframe{width:100%;height:100%;border:none;background:var(--grigio)}
 
   footer.base{padding:10px 20px;font-size:.72rem;color:#888;text-align:center;background:#fff;border-top:1px solid #e2e2e2}
-  @media print{ body{display:block} header.top,footer.base,#home{display:none!important} #vista,{display:block} }
+  @media print{ body{display:block} header.top,footer.base,#home{display:none!important} #vista{display:block} }
 </style>
 </head>
 <body>
@@ -110,7 +110,14 @@ function srcPer(id){
 }
 
 function apri(id){
-  document.getElementById("frame").srcdoc = srcPer(id);
+  /* Apre il modulo in una FINESTRA NUOVA (documento di primo livello):
+     la stampa esce in A4 al 100%, senza scalature dovute agli iframe. */
+  const html = srcPer(id);
+  let w = null;
+  try { w = window.open("", "pnev_chart_" + id, "width=1200,height=900"); } catch(e) { w = null; }
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); w.focus(); return; }
+  alert("Consenti le finestre popup: la scheda va aperta in una finestra separata per stampare in A4 al 100%.");
+  document.getElementById("frame").srcdoc = html;
   document.getElementById("home").style.display = "none";
   document.getElementById("vista").style.display = "block";
   document.getElementById("btn-menu").style.display = "block";
