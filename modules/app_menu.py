@@ -158,6 +158,7 @@ SOTTOSEZIONI = {
         "📝 Diagnosi assistita",
         "📄 Modulistica / Schede da stampare",
         "🎟️ Coupon OF / SDS",
+        "📨 Contatti dal sito",
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",
         "📥 Import pazienti",

@@ -556,6 +556,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             st.error(f"Errore coupon: {e}")
         return True
+    if sotto == "📨 Contatti dal sito":
+        from .lead_sito import render_contatti_sito
+        render_contatti_sito(conn); return True
     if sotto == "📅 Sedute / Terapie":
         from .sections.ui_cliniche import render_sedute_section
         render_sedute_section(); return True
@@ -601,8 +604,14 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Modulo Wordwall non disponibile: {e}")
         return True
     if sotto == "🕹️ PNEV Game Center":
-        from .ui_gamecenter import render_gamecenter
-        render_gamecenter(); return True
+        from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
+        _pid = header_paziente_attivo(conn)
+        if _pid:
+            _rec = paziente_attivo_record() or {}
+            _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
+            from .pnev_gamecenter.ui_gamecenter import ui_gamecenter
+            ui_gamecenter(conn=conn, paziente_id=_pid, paziente_nome=_nome)
+        return True
 
     # ── VALUTAZIONE FUNZIONALE ────────────────────────────────────────
     if sotto == "🔬 PNEV":
@@ -934,6 +943,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except Exception as e:
                 st.error(f"Errore coupon: {e}")
             return
+        if sotto == "📨 Contatti dal sito":
+            from .lead_sito import render_contatti_sito
+            render_contatti_sito(conn); return
         if sotto == "📅 Sedute / Terapie":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
@@ -1165,8 +1177,14 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                     st.error(f"Modulo Wordwall non disponibile: {e}")
             return
         if sotto == "🕹️ PNEV Game Center":
-            from .ui_gamecenter import render_gamecenter
-            render_gamecenter(); return
+            from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
+            _pid = header_paziente_attivo(conn)
+            if _pid:
+                _rec = paziente_attivo_record() or {}
+                _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
+                from .pnev_gamecenter.ui_gamecenter import ui_gamecenter
+                ui_gamecenter(conn=conn, paziente_id=_pid, paziente_nome=_nome)
+            return
         if sotto == "👁️ Lenti a contatto":
             from .ui_lenti_contatto import ui_lenti_contatto
             ui_lenti_contatto(); return
