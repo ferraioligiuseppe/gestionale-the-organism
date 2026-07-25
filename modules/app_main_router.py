@@ -1391,6 +1391,21 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     # ── Menu a FISARMONICA ────────────────────────────────────────────
     # Le voci si aprono SUBITO SOTTO l'area cliccata (prima erano in fondo
     # a tutto l'elenco delle aree: si doveva scorrere fino in basso).
+    # CSS compatto: il tema rende i bottoni sidebar molto alti, con la
+    # fisarmonica servono più righe visibili contemporaneamente.
+    st.markdown("""<style>
+    section[data-testid="stSidebar"] .stButton > button{
+        padding:5px 10px !important; min-height:0 !important;
+        font-size:.82rem !important; line-height:1.25 !important;
+        border-radius:7px !important; text-align:left !important;
+        justify-content:flex-start !important; white-space:normal !important;
+        margin:0 !important;
+    }
+    section[data-testid="stSidebar"] .stButton{margin-bottom:2px !important}
+    section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"]{gap:2px !important}
+    section[data-testid="stSidebar"] hr{margin:6px 0 !important}
+    </style>""", unsafe_allow_html=True)
+
     from .app_menu import AREA_PNEV, PNEV_RAMI
 
     area = st.session_state.get("nav_area") or AREE_ORDINE[0]
