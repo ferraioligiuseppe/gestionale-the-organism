@@ -1388,43 +1388,89 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
             else:
                 st.session_state[f"nav_sotto_{_goto_a}"] = _goto_s
 
-    area = st.sidebar.radio(
-        "Area",
-        AREE_ORDINE,
-        key="nav_area",
-        label_visibility="collapsed",
-    )
-
-    st.sidebar.markdown("---")
-
-    # ── Area PNEV: selettore di ramo annidato (Child/Visiva/Sensoriale/Uditiva) ──
+    # ── Menu a FISARMONICA ────────────────────────────────────────────
+    # Le voci si aprono SUBITO SOTTO l'area cliccata (prima erano in fondo
+    # a tutto l'elenco delle aree: si doveva scorrere fino in basso).
     from .app_menu import AREA_PNEV, PNEV_RAMI
-    if area == AREA_PNEV:
-        rami = list(PNEV_RAMI.keys())
-        ramo = st.sidebar.radio(
-            "Ramo",
-            rami,
-            key="nav_pnev_ramo",
-            label_visibility="visible",
-        )
-        voci = PNEV_RAMI.get(ramo, [])
-        sotto_key = f"nav_sotto_{area}_{ramo}"
-        st.sidebar.markdown("---")
-    else:
-        voci = SOTTOSEZIONI.get(area, [])
-        sotto_key = f"nav_sotto_{area}"
 
-    # Filtra admin-only
-    if not is_admin:
-        voci = [v for v in voci if "Admin" not in v and "Utenti" not in v
+    area = st.session_state.get("nav_area") or AREE_ORDINE[0]
+    if area not in AREE_ORDINE:
+        area = AREE_ORDINE[0]
+    st.session_state["nav_area"] = area
+
+    def _filtra(voci_lista):
+        if is_admin:
+            return voci_lista
+        return [v for v in voci_lista
+                if "Admin" not in v and "Utenti" not in v
                 and "Debug" not in v and "demo" not in v.lower()]
 
-    sotto = st.sidebar.radio(
-        area,
-        voci,
-        key=sotto_key,
-        label_visibility="visible",
-    )
+    for _a in AREE_ORDINE:
+        _aperta = (_a == area)
+        # Intestazione area: cliccabile, apre/chiude le sue voci
+        if st.sidebar.button(
+                ("▾ " if _aperta else "▸ ") + _a,
+                key=f"navbtn_area_{_a}",
+                use_container_width=True,
+                type="primary" if _aperta else "secondary"):
+            if not _aperta:
+                st.session_state["nav_area"] = _a
+                st.rerun()
+
+        if not _aperta:
+            continue
+
+        # ── Voci dell'area aperta, indentate subito sotto ──
+        if _a == AREA_PNEV:
+            rami = list(PNEV_RAMI.keys())
+            ramo = st.session_state.get("nav_pnev_ramo") or rami[0]
+            if ramo not in rami:
+                ramo = rami[0]
+            st.session_state["nav_pnev_ramo"] = ramo
+            _c = st.sidebar.container()
+            for _r in rami:
+                _r_aperto = (_r == ramo)
+                if _c.button(("• " if _r_aperto else "  ") + _r,
+                             key=f"navbtn_ramo_{_r}",
+                             use_container_width=True,
+                             type="primary" if _r_aperto else "secondary"):
+                    if not _r_aperto:
+                        st.session_state["nav_pnev_ramo"] = _r
+                        st.rerun()
+                if _r_aperto:
+                    _voci_r = _filtra(PNEV_RAMI.get(_r, []))
+                    _sk = f"nav_sotto_{_a}_{_r}"
+                    _cur = st.session_state.get(_sk)
+                    if _cur not in _voci_r:
+                        _cur = _voci_r[0] if _voci_r else None
+                        st.session_state[_sk] = _cur
+                    for _v in _voci_r:
+                        if _c.button(("→ " if _v == _cur else "   ") + _v,
+                                     key=f"navbtn_voce_{_a}_{_r}_{_v}",
+                                     use_container_width=True,
+                                     type="primary" if _v == _cur else "secondary"):
+                            if _v != _cur:
+                                st.session_state[_sk] = _v
+                                st.rerun()
+            sotto = st.session_state.get(f"nav_sotto_{_a}_{ramo}")
+        else:
+            _voci = _filtra(SOTTOSEZIONI.get(_a, []))
+            _sk = f"nav_sotto_{_a}"
+            _cur = st.session_state.get(_sk)
+            if _cur not in _voci:
+                _cur = _voci[0] if _voci else None
+                st.session_state[_sk] = _cur
+            _c = st.sidebar.container()
+            for _v in _voci:
+                if _c.button(("→ " if _v == _cur else "   ") + _v,
+                             key=f"navbtn_voce_{_a}_{_v}",
+                             use_container_width=True,
+                             type="primary" if _v == _cur else "secondary"):
+                    if _v != _cur:
+                        st.session_state[_sk] = _v
+                        st.rerun()
+            sotto = _cur
+        st.sidebar.markdown("---")
 
     return area, sotto
 
