@@ -1394,29 +1394,23 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     # CSS compatto: il tema rende i bottoni sidebar molto alti, con la
     # fisarmonica servono più righe visibili contemporaneamente.
     st.markdown("""<style>
-    section[data-testid="stSidebar"] .stButton > button,
-    section[data-testid="stSidebar"] button[data-testid^="stBaseButton"],
-    section[data-testid="stSidebar"] button[kind="primary"],
-    section[data-testid="stSidebar"] button[kind="secondary"]{
-        padding:3px 9px !important; min-height:0 !important; height:auto !important;
-        font-size:.79rem !important; line-height:1.2 !important;
-        border-radius:6px !important; text-align:left !important;
-        justify-content:flex-start !important; white-space:normal !important;
-        margin:0 !important; border-width:1px !important;
+    /* Compatta i bottoni del menu e distingue AREE (maiuscolo, grassetto)
+       dalle sotto-voci (rientrate con colonne, testo piccolo). */
+    section[data-testid="stSidebar"] .stButton > button{
+        padding:5px 10px !important; min-height:0 !important; height:auto !important;
+        font-size:.78rem !important; line-height:1.25 !important;
+        text-align:left !important; justify-content:flex-start !important;
+        white-space:normal !important; margin:0 !important; border-radius:7px !important;
+        transition:background .12s ease !important;
     }
-    section[data-testid="stSidebar"] .stButton > button p,
-    section[data-testid="stSidebar"] button[data-testid^="stBaseButton"] p{
-        font-size:.79rem !important; line-height:1.2 !important; margin:0 !important;
+    section[data-testid="stSidebar"] .stButton > button p{margin:0 !important;font-size:.78rem !important}
+    section[data-testid="stSidebar"] .stButton > button:hover{
+        background:#dbe8f6 !important; border-color:#2563a8 !important;
     }
-    section[data-testid="stSidebar"] .stButton,
-    section[data-testid="stSidebar"] [data-testid="stElementContainer"]{
-        margin:0 !important; padding:0 !important;
-    }
-    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"],
-    section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] > div{
-        gap:1px !important;
-    }
-    section[data-testid="stSidebar"] hr{margin:4px 0 !important}
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]{margin:0 !important;padding:0 !important}
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:2px !important}
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]{gap:0 !important;margin:0 !important}
+    section[data-testid="stSidebar"] hr{margin:5px 0 !important}
     </style>""", unsafe_allow_html=True)
 
     from .app_menu import AREA_PNEV, PNEV_RAMI
@@ -1437,7 +1431,7 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
         _aperta = (_a == area)
         # Intestazione area: cliccabile, apre/chiude le sue voci
         if st.sidebar.button(
-                ("▾ " if _aperta else "▸ ") + _a,
+                ("▼ " if _aperta else "▸ ") + _a.upper(),
                 key=f"navbtn_area_{_a}",
                 use_container_width=True,
                 type="primary" if _aperta else "secondary"):
@@ -1448,20 +1442,27 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
         if not _aperta:
             continue
 
-        # ── Voci dell'area aperta, indentate subito sotto ──
+        # ── Voci dell'area aperta, RIENTRATE con colonne reali ──
+        def _btn_liv2(label, key, attivo):
+            _sp, _cc = st.sidebar.columns([0.07, 0.93], gap="small")
+            return _cc.button(label, key=key, use_container_width=True,
+                              type="primary" if attivo else "secondary")
+
+        def _btn_liv3(label, key, attivo):
+            _sp, _cc = st.sidebar.columns([0.16, 0.84], gap="small")
+            return _cc.button(label, key=key, use_container_width=True,
+                              type="primary" if attivo else "secondary")
+
         if _a == AREA_PNEV:
             rami = list(PNEV_RAMI.keys())
             ramo = st.session_state.get("nav_pnev_ramo") or rami[0]
             if ramo not in rami:
                 ramo = rami[0]
             st.session_state["nav_pnev_ramo"] = ramo
-            _c = st.sidebar.container()
             for _r in rami:
                 _r_aperto = (_r == ramo)
-                if _c.button(("• " if _r_aperto else "  ") + _r,
-                             key=f"navbtn_ramo_{_r}",
-                             use_container_width=True,
-                             type="primary" if _r_aperto else "secondary"):
+                if _btn_liv2(("▼ " if _r_aperto else "▸ ") + _r,
+                             f"navbtn_ramo_{_r}", _r_aperto):
                     if not _r_aperto:
                         st.session_state["nav_pnev_ramo"] = _r
                         st.rerun()
@@ -1473,10 +1474,7 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
                         _cur = _voci_r[0] if _voci_r else None
                         st.session_state[_sk] = _cur
                     for _v in _voci_r:
-                        if _c.button(("→ " if _v == _cur else "   ") + _v,
-                                     key=f"navbtn_voce_{_a}_{_r}_{_v}",
-                                     use_container_width=True,
-                                     type="primary" if _v == _cur else "secondary"):
+                        if _btn_liv3(_v, f"navbtn_voce_{_a}_{_r}_{_v}", _v == _cur):
                             if _v != _cur:
                                 st.session_state[_sk] = _v
                                 st.rerun()
@@ -1488,12 +1486,8 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
             if _cur not in _voci:
                 _cur = _voci[0] if _voci else None
                 st.session_state[_sk] = _cur
-            _c = st.sidebar.container()
             for _v in _voci:
-                if _c.button(("→ " if _v == _cur else "   ") + _v,
-                             key=f"navbtn_voce_{_a}_{_v}",
-                             use_container_width=True,
-                             type="primary" if _v == _cur else "secondary"):
+                if _btn_liv2(_v, f"navbtn_voce_{_a}_{_v}", _v == _cur):
                     if _v != _cur:
                         st.session_state[_sk] = _v
                         st.rerun()
