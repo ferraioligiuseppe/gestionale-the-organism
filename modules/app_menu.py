@@ -98,6 +98,7 @@ PNEV_RAMI = {
         "👁️ Eye tracking",
         "🎯 Piano Vision Therapy",
         "📐 PNEV-Chart (schede stampabili)",
+        "🥁 PNEV Metronomo",
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
     ],
