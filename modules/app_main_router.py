@@ -1394,16 +1394,29 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     # CSS compatto: il tema rende i bottoni sidebar molto alti, con la
     # fisarmonica servono più righe visibili contemporaneamente.
     st.markdown("""<style>
-    section[data-testid="stSidebar"] .stButton > button{
-        padding:5px 10px !important; min-height:0 !important;
-        font-size:.82rem !important; line-height:1.25 !important;
-        border-radius:7px !important; text-align:left !important;
+    section[data-testid="stSidebar"] .stButton > button,
+    section[data-testid="stSidebar"] button[data-testid^="stBaseButton"],
+    section[data-testid="stSidebar"] button[kind="primary"],
+    section[data-testid="stSidebar"] button[kind="secondary"]{
+        padding:3px 9px !important; min-height:0 !important; height:auto !important;
+        font-size:.79rem !important; line-height:1.2 !important;
+        border-radius:6px !important; text-align:left !important;
         justify-content:flex-start !important; white-space:normal !important;
-        margin:0 !important;
+        margin:0 !important; border-width:1px !important;
     }
-    section[data-testid="stSidebar"] .stButton{margin-bottom:2px !important}
-    section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"]{gap:2px !important}
-    section[data-testid="stSidebar"] hr{margin:6px 0 !important}
+    section[data-testid="stSidebar"] .stButton > button p,
+    section[data-testid="stSidebar"] button[data-testid^="stBaseButton"] p{
+        font-size:.79rem !important; line-height:1.2 !important; margin:0 !important;
+    }
+    section[data-testid="stSidebar"] .stButton,
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]{
+        margin:0 !important; padding:0 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"],
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] > div{
+        gap:1px !important;
+    }
+    section[data-testid="stSidebar"] hr{margin:4px 0 !important}
     </style>""", unsafe_allow_html=True)
 
     from .app_menu import AREA_PNEV, PNEV_RAMI
