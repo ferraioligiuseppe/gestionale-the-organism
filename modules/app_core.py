@@ -11731,6 +11731,15 @@ def main():
     if maybe_handle_public_questionario(get_connection):
         return
 
+    # --- PUBLIC LEAD PAGE (no login) — contatti dal sito pnev.it ---
+    if st.query_params.get('lead'):
+        try:
+            from modules.lead_sito import ui_public_lead_page
+            ui_public_lead_page(get_connection)
+        except Exception as _e:
+            st.error(f"Modulo contatti non disponibile: {_e}")
+        return
+
     # --- PUBLIC SIGN PAGE (no login) ---
     if st.query_params.get('sign'):
         ui_public_sign_page()
