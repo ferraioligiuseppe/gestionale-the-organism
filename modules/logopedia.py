@@ -92,8 +92,35 @@ def render_logopedia(conn=None, paz_id=None, paziente=None):
     g = lambda *k: _get(pre, *k)
     dati = {}
 
-    t1, t2, t3, t4 = st.tabs([
-        "1 · Anamnesi", "2 · Osservazione", "3 · SMOF", "4 · Profilo & salva"])
+    t1, t2, t3, t4, t5, t6 = st.tabs([
+        "1 · Anamnesi", "2 · Osservazione", "3 · SMOF", "4 · Profilo & salva",
+        "5 · PVB", "6 · Linguaggio 3–6 anni"])
+
+    with t6:
+        st.markdown("#### 🗣️ Checklist linguaggio PNEV (3–6 anni)")
+        st.caption("Osservazione dei genitori. Copre la fascia in cui il PVB non "
+                  "arriva più e non esistono strumenti liberi validati.")
+        try:
+            from modules.questionario_linguaggio import (
+                linguaggio_pnev_ui, mostra_esito)
+            _d, _s, _n = linguaggio_pnev_ui(prefix=f"logo_ling_{paz_id}")
+            st.markdown("---")
+            mostra_esito(_d)
+            if st.button("💾 Salva nella cartella", key=f"logo_ling_save_{paz_id}",
+                         type="primary"):
+                dati_ling = dict(dati)
+                dati_ling["checklist_linguaggio"] = _d
+                if _salva(conn, paz_id, dati_ling, _s):
+                    st.success("Checklist salvata.")
+        except Exception as _e:
+            st.error(f"Checklist non disponibile: {_e}")
+
+    with t5:
+        try:
+            from modules.pvb_scheda import render_pvb
+            render_pvb(conn, paz_id, paziente)
+        except Exception as _e:
+            st.error(f"Scheda PVB non disponibile: {_e}")
 
     # ── 1. ANAMNESI ───────────────────────────────────────────────────
     with t1:
