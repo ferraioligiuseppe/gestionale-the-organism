@@ -74,8 +74,32 @@ STATI = ["nuovo", "contattato", "appuntamento fissato", "convertito", "archiviat
 
 # ══════════════════════════════════════════════════════════ dati
 def init_lead_db(conn):
-    """Crea la tabella con RLS multi-studio. Idempotente."""
+    """Crea le tabelle con RLS multi-studio. Idempotente."""
     cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lead_visite (
+            id          BIGSERIAL PRIMARY KEY,
+            studio_id   BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+            src_gioco   TEXT,
+            dominio     TEXT,
+            tipo_segnale TEXT,
+            eta         INT,
+            creato_il   TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """)
+    cur.execute("ALTER TABLE lead_visite ENABLE ROW LEVEL SECURITY;")
+    cur.execute("ALTER TABLE lead_visite FORCE ROW LEVEL SECURITY;")
+    cur.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_policies
+                           WHERE tablename='lead_visite' AND policyname='lead_visite_studio') THEN
+                CREATE POLICY lead_visite_studio ON lead_visite
+                    USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                    WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+            END IF;
+        END $$;
+    """)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lead_sito (
             id             BIGSERIAL PRIMARY KEY,
@@ -181,6 +205,91 @@ def _g(row, chiave, default=None):
         return default
 
 
+def registra_visita(conn, src, dom, tipo, eta):
+    """Traccia l'arrivo sulla pagina (anonimo: nessun dato personale)."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO lead_visite (src_gioco, dominio, tipo_segnale, eta)
+                       VALUES (%s,%s,%s,%s)""",
+                    (src or None, dom or None, tipo or None,
+                     int(eta) if str(eta).isdigit() else None))
+        conn.commit()
+    except Exception:
+        pass
+
+
+def statistiche_imbuto(conn, giorni=90):
+    """Numeri dell'imbuto: visite → dati → questionari → pazienti."""
+    cur = conn.cursor()
+    out = {}
+    cur.execute("""SELECT count(*) FROM lead_visite
+                   WHERE creato_il > now() - (%s || ' days')::interval""", (giorni,))
+    out["visite"] = int(cur.fetchone()[0] or 0)
+    cur.execute("""SELECT count(*) FROM lead_sito
+                   WHERE creato_il > now() - (%s || ' days')::interval""", (giorni,))
+    out["contatti"] = int(cur.fetchone()[0] or 0)
+    cur.execute("""SELECT count(*) FROM lead_sito
+                   WHERE quest_sintesi IS NOT NULL
+                     AND creato_il > now() - (%s || ' days')::interval""", (giorni,))
+    out["questionari"] = int(cur.fetchone()[0] or 0)
+    cur.execute("""SELECT count(*) FROM lead_sito
+                   WHERE paziente_id IS NOT NULL
+                     AND creato_il > now() - (%s || ' days')::interval""", (giorni,))
+    out["pazienti"] = int(cur.fetchone()[0] or 0)
+    cur.execute("""SELECT dominio, count(*) FROM lead_visite
+                   WHERE creato_il > now() - (%s || ' days')::interval
+                   GROUP BY dominio ORDER BY 2 DESC""", (giorni,))
+    out["per_dominio"] = [(r[0] if not hasattr(r, "keys") else r["dominio"],
+                           r[1] if not hasattr(r, "keys") else r["count"])
+                          for r in cur.fetchall()]
+    cur.execute("""SELECT src_gioco, count(*) FROM lead_visite
+                   WHERE creato_il > now() - (%s || ' days')::interval
+                   GROUP BY src_gioco ORDER BY 2 DESC LIMIT 12""", (giorni,))
+    out["per_gioco"] = [(r[0] if not hasattr(r, "keys") else r["src_gioco"],
+                         r[1] if not hasattr(r, "keys") else r["count"])
+                        for r in cur.fetchall()]
+    return out
+
+
+def render_statistiche(conn):
+    st.markdown("##### 📊 L'imbuto: da chi gioca a chi diventa paziente")
+    giorni = st.selectbox("Periodo", [30, 90, 180, 365],
+                          format_func=lambda g: f"ultimi {g} giorni",
+                          index=1, key="lead_stat_giorni")
+    try:
+        s = statistiche_imbuto(conn, giorni)
+    except Exception as e:
+        st.info(f"Statistiche non ancora disponibili ({e}).")
+        return
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Arrivati dal gioco", s["visite"])
+    c2.metric("Hanno lasciato i dati", s["contatti"],
+              f"{round(s['contatti']/s['visite']*100)}%" if s["visite"] else None)
+    c3.metric("Questionario finito", s["questionari"],
+              f"{round(s['questionari']/s['contatti']*100)}%" if s["contatti"] else None)
+    c4.metric("Diventati pazienti", s["pazienti"],
+              f"{round(s['pazienti']/s['contatti']*100)}%" if s["contatti"] else None)
+
+    if s["visite"] == 0:
+        st.caption("Nessun arrivo dai giochi in questo periodo.")
+        return
+
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        st.markdown("**Da quale area**")
+        for d, n in s["per_dominio"]:
+            st.markdown(f"- {DOMINI.get(d, ('—',''))[0] or '(non indicata)'}: **{n}**")
+    with cc2:
+        st.markdown("**Da quale gioco**")
+        for g, n in s["per_gioco"]:
+            st.markdown(f"- {g or '(non indicato)'}: **{n}**")
+
+    st.caption("«Arrivati dal gioco» conta i click sull'invito, non le partite: "
+              "per il traffico complessivo del sito serve uno strumento di "
+              "statistiche web. Nessun dato personale in questa tabella.")
+
+
 # ══════════════════════════════════════════════════ pagina pubblica
 def ui_public_lead_page(get_conn):
     """Pagina pubblica (no login): modulo contatti + questionario di screening."""
@@ -236,6 +345,11 @@ def ui_public_lead_page(get_conn):
         return
 
     lead_id = st.session_state.get("_lead_id")
+
+    # Traccia l'arrivo una sola volta per sessione (anonimo)
+    if not st.session_state.get("_lead_visita_tracciata"):
+        registra_visita(conn, src, dom, tipo_seg, eta_gioco)
+        st.session_state["_lead_visita_tracciata"] = True
 
     # ── Passo 1: i contatti ──────────────────────────────────────────
     if not lead_id:
@@ -459,8 +573,10 @@ def render_contatti_sito(conn):
         st.error(f"Tabella contatti non disponibile: {e}")
         return
 
-    filtro = st.radio("Mostra", ["tutti"] + STATI, horizontal=True, key="lead_filtro")
-    try:
+    with st.expander("📊 Statistiche dell'imbuto", expanded=False):
+        render_statistiche(conn)
+
+    filtro = st.radio("Mostra", ["tutti"] + STATI, horizontal=True, key="lead_filtro")    try:
         righe = lista_lead(conn, None if filtro == "tutti" else filtro)
     except Exception as e:
         st.error(f"Errore lettura contatti: {e}")
