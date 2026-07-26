@@ -43,10 +43,30 @@ DOMINI = {
 }
 
 QUESTIONARI = {
-    "INPPS": "Screening riflessi primitivi (INPP) — genitori",
+    "INPPS": "INPP-R — screening riflessi primitivi (Sally Goddard Blythe)",    "MELILLO_BAMBINI": "Questionario neuro-evolutivo — bambini",
+    "MELILLO_ADULTI": "Questionario neuro-evolutivo — adulti",
+    "FISHER": "Questionario uditivo — bambini",
     "VISIONE_BAMBINI": "Questionario visivo — bambini",
     "VISIONE_ADULTI": "Questionario visivo — adulti",
 }
+
+# Dominio segnalato dai giochi → questionario più pertinente.
+# (bambino, adulto)
+QUEST_PER_DOMINIO = {
+    "occhiomano":   ("INPPS",           "MELILLO_ADULTI"),
+    "bilaterale":   ("INPPS",           "MELILLO_ADULTI"),
+    "oculomotor":   ("VISIONE_BAMBINI", "VISIONE_ADULTI"),
+    "linguaggio":   ("FISHER",          "MELILLO_ADULTI"),
+    "attenzione":   ("MELILLO_BAMBINI", "MELILLO_ADULTI"),
+    "inibizione":   ("MELILLO_BAMBINI", "MELILLO_ADULTI"),
+    "memoria":      ("MELILLO_BAMBINI", "MELILLO_ADULTI"),
+    "flessibilita": ("MELILLO_BAMBINI", "MELILLO_ADULTI"),
+}
+
+
+def scegli_questionario(dominio, adulto=False):
+    coppia = QUEST_PER_DOMINIO.get(dominio or "", ("INPPS", "MELILLO_ADULTI"))
+    return coppia[1] if adulto else coppia[0]
 
 STATI = ["nuovo", "contattato", "appuntamento fissato", "convertito", "archiviato"]
 
@@ -247,6 +267,7 @@ def ui_public_lead_page(get_conn):
                         "consenso": True,
                     })
                     st.session_state["_lead_id"] = new_id
+                    st.session_state["_lead_adulto"] = ("me stesso" in per_chi.lower())
                     st.rerun()
                 except Exception as e:
                     st.error(f"Non è stato possibile salvare: {e}")
@@ -256,26 +277,64 @@ def ui_public_lead_page(get_conn):
     st.success("Dati registrati. Ti ricontattiamo noi — nel frattempo, se hai "
               "cinque minuti, questo questionario ci fa arrivare molto più preparati.")
 
-    tipo = "VISIONE_ADULTI" if st.session_state.get("_lead_adulto") else "INPPS"
+    adulto = bool(st.session_state.get("_lead_adulto"))
+    tipo = scegli_questionario(dom, adulto)
     st.markdown("---")
     st.markdown("#### Questionario di screening")
     st.caption(QUESTIONARI.get(tipo, ""))
+    if tipo == "INPPS":
+        st.caption("Fonte: INPP — Institute for Neuro-Physiological Psychology (Chester, UK), "
+                  "questionario di Sally Goddard Blythe. È uno strumento di screening: "
+                  "segnala qualcosa da approfondire, non è una diagnosi.")
+    if dom_label:
+        st.caption(f"Scelto in base all'area emersa dai giochi: {dom_label}.")
 
-    try:
-        from modules.app_core import inpps_collect_ui
-    except Exception:
-        inpps_collect_ui = None
+    q_data, q_sintesi, ok = None, "", False
 
-    if inpps_collect_ui is None:
-        st.info("Il questionario non è disponibile in questo momento: "
-                "te lo invieremo per email.")
-        return
+    if tipo == "INPPS":
+        try:
+            from modules.app_core import inpps_collect_ui
+        except Exception:
+            inpps_collect_ui = None
+        if inpps_collect_ui is None:
+            st.info("Il questionario non è disponibile ora: te lo invieremo per email.")
+            return
+        with st.form("form_lead_quest"):
+            q_data, q_sintesi = inpps_collect_ui(prefix="lead_inpps", existing=None)
+            ok = st.form_submit_button("📤 Invia questionario", type="primary",
+                                       use_container_width=True)
+    else:
+        try:
+            from modules.pnev.ui_questionari_pnev import (
+                melillo_adulti_ui, melillo_bambini_ui, fisher_auditivo_bambini_ui,
+                visione_bambini_ui, visione_adulti_ui,
+            )
+        except Exception as e:
+            st.info(f"Il questionario non è disponibile ora: te lo invieremo per email. ({e})")
+            return
+        fn = {"MELILLO_ADULTI": melillo_adulti_ui,
+              "MELILLO_BAMBINI": melillo_bambini_ui,
+              "FISHER": fisher_auditivo_bambini_ui,
+              "VISIONE_BAMBINI": visione_bambini_ui,
+              "VISIONE_ADULTI": visione_adulti_ui}.get(tipo)
+        if fn is None:
+            st.info("Questionario non riconosciuto: te lo invieremo per email.")
+            return
+        # Questi questionari hanno widget interattivi: niente st.form
+        chiave = f"_lead_q_{lead_id}"
+        if chiave not in st.session_state:
+            st.session_state[chiave] = {}
+        try:
+            q_data, q_sintesi = fn(prefix=f"lead_{tipo.lower()}",
+                                   existing=st.session_state[chiave])
+            st.session_state[chiave] = q_data
+        except Exception as e:
+            st.error(f"Errore nel questionario: {e}")
+            return
+        st.markdown("---")
+        ok = st.button("📤 Invia questionario", type="primary", use_container_width=True)
 
-    with st.form("form_lead_quest"):
-        q_data, q_sintesi = inpps_collect_ui(prefix="lead_inpps", existing=None)
-        ok = st.form_submit_button("📤 Invia questionario", type="primary",
-                                   use_container_width=True)
-    if ok:
+    if ok and q_data is not None:
         try:
             aggiorna_questionario(conn, lead_id, tipo, q_data, q_sintesi)
             st.balloons()
