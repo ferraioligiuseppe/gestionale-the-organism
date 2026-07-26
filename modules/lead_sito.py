@@ -675,7 +675,7 @@ def render_contatti_sito(conn):
                     st.caption(f"Lettura clinica: {dom_nota}")
 
             if _g(r, "quest_sintesi"):
-                with st.expander("📋 Questionario compilato"):
+                if st.checkbox("📋 Mostra questionario compilato", key=f"lead_qs_{lid}"):
                     st.write(_g(r, "quest_sintesi"))
             elif _g(r, "quest_tipo"):
                 st.caption("Questionario iniziato ma non completato.")
@@ -700,7 +700,7 @@ def render_contatti_sito(conn):
                 st.markdown("**Altri questionari da inviare**")
                 st.caption("Sul sito ne compila uno solo (quello dell'area emersa "
                           "dai giochi). Gli altri li mandi da qui, quando serve.")
-                with st.expander("📋 Scegli e invia un questionario", expanded=False):
+                if st.checkbox("📋 Scegli e invia un questionario", key=f"lead_qinv_{lid}"):
                     try:
                         from modules.ui_questionari import render_genera_link_email
                         render_genera_link_email(conn, paz_id)
