@@ -22,11 +22,18 @@ import json
 # Catalogo dei giochi (slug -> nome, categoria). Tenuto in codice: niente tabella
 # da mantenere. Lo slug è quello che ogni gioco scrive nella colonna "gioco".
 GIOCHI = {
-    "gonogo":     {"nome": "Premi o fermati (Go/No-Go)", "categoria": "Controllo degli impulsi"},
-    "talpa":      {"nome": "Acchiappa la talpa",          "categoria": "Attenzione selettiva"},
-    "coppie":     {"nome": "Trova le coppie",             "categoria": "Memoria di lavoro"},
-    "palloncini": {"nome": "Palloncini",                  "categoria": "Attenzione selettiva"},
-    "labirinto":  {"nome": "Labirinto",                   "categoria": "Coordinazione occhio-mano"},
+    "gonogo":       {"nome": "Premi o fermati (Go/No-Go)", "categoria": "Controllo degli impulsi"},
+    "talpa":        {"nome": "Acchiappa la talpa",         "categoria": "Attenzione selettiva"},
+    "coppie":       {"nome": "Trova le coppie",            "categoria": "Memoria di lavoro"},
+    "palloncini":   {"nome": "Palloncini",                 "categoria": "Attenzione selettiva"},
+    "labirinto":    {"nome": "Labirinto",                  "categoria": "Coordinazione occhio-mano"},
+    "seguipuntino": {"nome": "Segui il puntino",           "categoria": "Inseguimenti oculari"},
+    "sequenza":     {"nome": "Sequenza luminosa",          "categoria": "Memoria sequenziale"},
+    "smista":       {"nome": "Smista",                     "categoria": "Flessibilità cognitiva"},
+    "parolelampo":  {"nome": "Parole lampo",               "categoria": "Lettura rapida"},
+    "sillabe":      {"nome": "Sillabe",                    "categoria": "Consapevolezza fonologica"},
+    "rime":         {"nome": "Rime",                       "categoria": "Consapevolezza fonologica"},
+    "slaptap":      {"nome": "Slap-Tap Lettere",           "categoria": "Integrazione bilaterale"},
 }
 
 

@@ -45,7 +45,10 @@ except Exception:
 GIOCHI_BASE_URL = "https://www.pnev.it/wp-content/uploads/giochi"
 
 # Ordine di presentazione dei giochi
-ORDINE = ["gonogo", "talpa", "coppie", "palloncini", "labirinto"]
+ORDINE = ["gonogo", "talpa", "palloncini", "seguipuntino", "labirinto",
+          "coppie", "sequenza", "smista",
+          "slaptap",
+          "parolelampo", "sillabe", "rime"]
 
 # slug -> file html su pnev.it
 FILE_GIOCO = {
@@ -54,6 +57,13 @@ FILE_GIOCO = {
     "coppie": "trovacoppie.html",
     "palloncini": "palloncini.html",
     "labirinto": "labirinto.html",
+    "seguipuntino": "seguipuntino.html",
+    "sequenza": "sequenza.html",
+    "smista": "smista.html",
+    "parolelampo": "parolelampo.html",
+    "sillabe": "sillabe.html",
+    "rime": "rime.html",
+    "slaptap": "slaptap.html",
 }
 
 
@@ -71,6 +81,20 @@ def rileva_gioco(testo):
         return "palloncini"
     if "labirinto" in t:
         return "labirinto"
+    if "segui il puntino" in t:
+        return "seguipuntino"
+    if "sequenza luminosa" in t:
+        return "sequenza"
+    if "smista" in t:
+        return "smista"
+    if "parole lampo" in t:
+        return "parolelampo"
+    if "sillabe" in t:
+        return "sillabe"
+    if "slap-tap" in t or "slap tap" in t:
+        return "slaptap"
+    if "rime" in t:
+        return "rime"
     return None
 
 
@@ -125,11 +149,11 @@ def _sezione_apri(paziente_id, paziente_nome):
                 suffix += "&nome=" + quote(str(paziente_nome))
             except Exception:
                 pass
-    cols = st.columns(2)
+    cols = st.columns(3)
     for i, slug in enumerate(ORDINE):
         info = GIOCHI.get(slug, {"nome": slug, "categoria": ""})
         url = f"{GIOCHI_BASE_URL}/{FILE_GIOCO.get(slug, slug + '.html')}{suffix}"
-        with cols[i % 2]:
+        with cols[i % 3]:
             try:
                 st.link_button(f"▶ {info['nome']}", url, use_container_width=True)
             except Exception:
