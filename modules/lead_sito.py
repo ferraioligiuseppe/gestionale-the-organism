@@ -576,7 +576,8 @@ def render_contatti_sito(conn):
     with st.expander("📊 Statistiche dell'imbuto", expanded=False):
         render_statistiche(conn)
 
-    filtro = st.radio("Mostra", ["tutti"] + STATI, horizontal=True, key="lead_filtro")    try:
+    filtro = st.radio("Mostra", ["tutti"] + STATI, horizontal=True, key="lead_filtro")
+    try:
         righe = lista_lead(conn, None if filtro == "tutti" else filtro)
     except Exception as e:
         st.error(f"Errore lettura contatti: {e}")
