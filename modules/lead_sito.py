@@ -608,6 +608,24 @@ def render_contatti_sito(conn):
     with st.expander("📊 Statistiche dell'imbuto", expanded=False):
         render_statistiche(conn)
 
+    with st.expander("✉️ Prova la notifica email", expanded=False):
+        st.caption("Verifica che l'avviso di nuovo contatto funzioni.")
+        try:
+            cfg = st.secrets.get("smtp", {})
+            dest = cfg.get("NOTIFICA_A") or cfg.get("USERNAME")
+            st.markdown(f"Destinatario avvisi: **{dest or '(non configurato)'}**")
+        except Exception:
+            dest = None
+        if st.button("Invia email di prova", key="lead_test_mail"):
+            try:
+                from modules.ui_questionari import _invia_email
+                _invia_email(dest, "PNEV — prova notifica contatti",
+                             "Se leggi questa email, la notifica dei nuovi "
+                             "contatti dal sito funziona.")
+                st.success(f"Inviata a {dest}. Controlla anche la posta indesiderata.")
+            except Exception as e:
+                st.error(f"Invio non riuscito: {e}")
+
     filtro = st.radio("Mostra", ["tutti"] + STATI, horizontal=True, key="lead_filtro")
     try:
         righe = lista_lead(conn, None if filtro == "tutti" else filtro)
@@ -677,6 +695,17 @@ def render_contatti_sito(conn):
                     _canali_invio(url, _g(r, "nome", "") or "")
                 except Exception as e:
                     st.error(f"Impossibile generare il link firma: {e}")
+
+                st.markdown("---")
+                st.markdown("**Altri questionari da inviare**")
+                st.caption("Sul sito ne compila uno solo (quello dell'area emersa "
+                          "dai giochi). Gli altri li mandi da qui, quando serve.")
+                with st.expander("📋 Scegli e invia un questionario", expanded=False):
+                    try:
+                        from modules.ui_questionari import render_genera_link_email
+                        render_genera_link_email(conn, paz_id)
+                    except Exception as e:
+                        st.error(f"Invio questionari non disponibile: {e}")
             else:
                 st.caption("Il consenso al ricontatto è già stato dato sul sito. "
                           "Il consenso privacy completo (dati sanitari) si firma "
