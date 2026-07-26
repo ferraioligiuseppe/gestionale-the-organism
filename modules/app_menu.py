@@ -213,6 +213,7 @@ SOTTOSEZIONI = {
         "👥 Utenti / Ruoli",
         "⚙️ Platform Admin",
         "🐛 Debug DB",
+        "🩺 Diagnostica moduli",
     ],
 }
 

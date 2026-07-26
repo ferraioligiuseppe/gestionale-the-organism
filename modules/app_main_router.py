@@ -151,13 +151,32 @@ def _render_dashboard(conn) -> None:
             unsafe_allow_html=True
         )
 
+    # ── Nuovi contatti arrivati dal sito pnev.it ──────────────────────
+    try:
+        _cur = conn.cursor()
+        _cur.execute("SELECT count(*) FROM lead_sito WHERE stato='nuovo'")
+        _n_lead = int(_cur.fetchone()[0] or 0)
+    except Exception:
+        _n_lead = 0
+    if _n_lead:
+        _cav1, _cav2 = st.columns([4, 1])
+        _cav1.warning(
+            f"📨 **{_n_lead} " +
+            ("nuovo contatto" if _n_lead == 1 else "nuovi contatti") +
+            " dal sito pnev.it** — hanno giocato e lasciato i dati.")
+        if _cav2.button("Vai ai contatti", key="dash_goto_lead",
+                        use_container_width=True):
+            st.session_state["goto_area"] = "👥 Pazienti"
+            st.session_state["goto_sotto"] = "📨 Contatti dal sito"
+            st.rerun()
+
     from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
     paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
     paz_info = paziente_attivo_record() or {}
 
-    # ── Card paziente ────────────────────────────────────────────────
+    # ── Card paziente ─────────────────────────────────────────────────
     _g = lambda *ks: next((paz_info.get(k) for k in ks if paz_info.get(k)), "")
     cognome  = _g("Cognome", "cognome")
     nome     = _g("Nome", "nome")
@@ -901,6 +920,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🐛 Debug DB":
         from .sections.ui_cliniche import render_debug_section
         render_debug_section(); return True
+    if sotto == "🩺 Diagnostica moduli":
+        from .diagnostica_moduli import render_diagnostica
+        render_diagnostica(); return True
 
     return False
 
@@ -1320,6 +1342,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🐛 Debug DB":
             from .sections.ui_cliniche import render_debug_section
             render_debug_section(); return
+        if sotto == "🩺 Diagnostica moduli":
+            from .diagnostica_moduli import render_diagnostica
+            render_diagnostica(); return
 
     st.warning(f"Sezione '{sotto}' non ancora implementata.")
 
