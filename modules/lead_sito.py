@@ -142,6 +142,32 @@ def init_lead_db(conn):
     conn.commit()
 
 
+def _notifica_nuovo_contatto(dati, dom_label=""):
+    """Avvisa per email che è arrivato un contatto dal sito. Silenzioso se
+    lo SMTP non è configurato: il contatto è già salvato, la mail è un extra."""
+    try:
+        from modules.ui_questionari import _invia_email
+        dest = (st.secrets.get("smtp", {}).get("NOTIFICA_A")
+                or st.secrets.get("smtp", {}).get("USERNAME"))
+        if not dest:
+            return
+        nome = f"{dati.get('cognome','')} {dati.get('nome','')}".strip()
+        corpo = (
+            f"Nuovo contatto dal sito pnev.it\n\n"
+            f"Nome: {nome}\n"
+            f"Email: {dati.get('email','—')}\n"
+            f"Cellulare: {dati.get('telefono','—')}\n"
+            f"Per chi: {dati.get('per_chi','—')}\n"
+            f"Età: {dati.get('eta_bambino','—')}\n"
+            f"Area segnalata dai giochi: {dom_label or '—'}\n"
+            f"Gioco d'origine: {dati.get('src_gioco','—')}\n\n"
+            f"Lo trovi nel gestionale in «Contatti dal sito»."
+        )
+        _invia_email(dest, f"PNEV — nuovo contatto dal sito: {nome}", corpo)
+    except Exception:
+        pass
+
+
 def salva_lead(conn, dati):
     cur = conn.cursor()
     cur.execute("""
@@ -398,6 +424,12 @@ def ui_public_lead_page(get_conn):
                     st.session_state["_lead_id"] = new_id
                     st.session_state["_lead_adulto"] = ("me stesso" in per_chi.lower())
                     st.session_state["_lead_tipo"] = tipo_seg
+                    _notifica_nuovo_contatto({
+                        "nome": nome.strip(), "cognome": cognome.strip(),
+                        "email": email.strip(), "telefono": telefono.strip(),
+                        "per_chi": per_chi, "eta_bambino": (eta or "").strip(),
+                        "src_gioco": src,
+                    }, dom_label)
                     st.rerun()
                 except Exception as e:
                     st.error(f"Non è stato possibile salvare: {e}")
