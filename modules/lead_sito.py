@@ -74,8 +74,32 @@ STATI = ["nuovo", "contattato", "appuntamento fissato", "convertito", "archiviat
 
 # ══════════════════════════════════════════════════════════ dati
 def init_lead_db(conn):
-    """Crea la tabella con RLS multi-studio. Idempotente."""
+    """Crea le tabelle con RLS multi-studio. Idempotente."""
     cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lead_visite (
+            id          BIGSERIAL PRIMARY KEY,
+            studio_id   BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+            src_gioco   TEXT,
+            dominio     TEXT,
+            tipo_segnale TEXT,
+            eta         INT,
+            creato_il   TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """)
+    cur.execute("ALTER TABLE lead_visite ENABLE ROW LEVEL SECURITY;")
+    cur.execute("ALTER TABLE lead_visite FORCE ROW LEVEL SECURITY;")
+    cur.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_policies
+                           WHERE tablename='lead_visite' AND policyname='lead_visite_studio') THEN
+                CREATE POLICY lead_visite_studio ON lead_visite
+                    USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                    WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+            END IF;
+        END $$;
+    """)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lead_sito (
             id             BIGSERIAL PRIMARY KEY,
@@ -181,6 +205,91 @@ def _g(row, chiave, default=None):
         return default
 
 
+def registra_visita(conn, src, dom, tipo, eta):
+    """Traccia l'arrivo sulla pagina (anonimo: nessun dato personale)."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO lead_visite (src_gioco, dominio, tipo_segnale, eta)
+                       VALUES (%s,%s,%s,%s)""",
+                    (src or None, dom or None, tipo or None,
+                     int(eta) if str(eta).isdigit() else None))
+        conn.commit()
+    except Exception:
+        pass
+
+
+def statistiche_imbuto(conn, giorni=90):
+    """Numeri dell'imbuto: visite → dati → questionari → pazienti."""
+    cur = conn.cursor()
+    out = {}
+    cur.execute("""SELECT count(*) FROM lead_visite
+                   WHERE creato_il > now() - (%s || ' days')::interval""", (giorni,))
+    out["visite"] = int(cur.fetchone()[0] or 0)
+    cur.execute("""SELECT count(*) FROM lead_sito
+                   WHERE creato_il > now() - (%s || ' days')::interval""", (giorni,))
+    out["contatti"] = int(cur.fetchone()[0] or 0)
+    cur.execute("""SELECT count(*) FROM lead_sito
+                   WHERE quest_sintesi IS NOT NULL
+                     AND creato_il > now() - (%s || ' days')::interval""", (giorni,))
+    out["questionari"] = int(cur.fetchone()[0] or 0)
+    cur.execute("""SELECT count(*) FROM lead_sito
+                   WHERE paziente_id IS NOT NULL
+                     AND creato_il > now() - (%s || ' days')::interval""", (giorni,))
+    out["pazienti"] = int(cur.fetchone()[0] or 0)
+    cur.execute("""SELECT dominio, count(*) FROM lead_visite
+                   WHERE creato_il > now() - (%s || ' days')::interval
+                   GROUP BY dominio ORDER BY 2 DESC""", (giorni,))
+    out["per_dominio"] = [(r[0] if not hasattr(r, "keys") else r["dominio"],
+                           r[1] if not hasattr(r, "keys") else r["count"])
+                          for r in cur.fetchall()]
+    cur.execute("""SELECT src_gioco, count(*) FROM lead_visite
+                   WHERE creato_il > now() - (%s || ' days')::interval
+                   GROUP BY src_gioco ORDER BY 2 DESC LIMIT 12""", (giorni,))
+    out["per_gioco"] = [(r[0] if not hasattr(r, "keys") else r["src_gioco"],
+                         r[1] if not hasattr(r, "keys") else r["count"])
+                        for r in cur.fetchall()]
+    return out
+
+
+def render_statistiche(conn):
+    st.markdown("##### 📊 L'imbuto: da chi gioca a chi diventa paziente")
+    giorni = st.selectbox("Periodo", [30, 90, 180, 365],
+                          format_func=lambda g: f"ultimi {g} giorni",
+                          index=1, key="lead_stat_giorni")
+    try:
+        s = statistiche_imbuto(conn, giorni)
+    except Exception as e:
+        st.info(f"Statistiche non ancora disponibili ({e}).")
+        return
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Arrivati dal gioco", s["visite"])
+    c2.metric("Hanno lasciato i dati", s["contatti"],
+              f"{round(s['contatti']/s['visite']*100)}%" if s["visite"] else None)
+    c3.metric("Questionario finito", s["questionari"],
+              f"{round(s['questionari']/s['contatti']*100)}%" if s["contatti"] else None)
+    c4.metric("Diventati pazienti", s["pazienti"],
+              f"{round(s['pazienti']/s['contatti']*100)}%" if s["contatti"] else None)
+
+    if s["visite"] == 0:
+        st.caption("Nessun arrivo dai giochi in questo periodo.")
+        return
+
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        st.markdown("**Da quale area**")
+        for d, n in s["per_dominio"]:
+            st.markdown(f"- {DOMINI.get(d, ('—',''))[0] or '(non indicata)'}: **{n}**")
+    with cc2:
+        st.markdown("**Da quale gioco**")
+        for g, n in s["per_gioco"]:
+            st.markdown(f"- {g or '(non indicato)'}: **{n}**")
+
+    st.caption("«Arrivati dal gioco» conta i click sull'invito, non le partite: "
+              "per il traffico complessivo del sito serve uno strumento di "
+              "statistiche web. Nessun dato personale in questa tabella.")
+
+
 # ══════════════════════════════════════════════════ pagina pubblica
 def ui_public_lead_page(get_conn):
     """Pagina pubblica (no login): modulo contatti + questionario di screening."""
@@ -190,7 +299,10 @@ def ui_public_lead_page(get_conn):
         return (v[0] if isinstance(v, list) and v else v) or d
 
     src = _p("src"); dom = _p("dom"); n = _p("n", "0"); dev = _p("dev", "0")
+    tipo_seg = _p("tipo", "specifico")
+    dom2 = _p("dom2"); domini_tutti = _p("domini"); eta_gioco = _p("eta")
     dom_label, dom_nota = DOMINI.get(dom, ("", ""))
+    dom2_label = DOMINI.get(dom2, ("", ""))[0] if dom2 else ""
 
     st.markdown("""<style>
       #MainMenu, footer, header {visibility:hidden}
@@ -205,7 +317,18 @@ def ui_public_lead_page(get_conn):
         '<div style="font-size:1.5rem;font-weight:800;color:#14502F;margin-top:4px">'
         'Approfondiamo insieme</div></div>', unsafe_allow_html=True)
 
-    if dom_label:
+    if tipo_seg == "globale":
+        st.info("Dai giochi è emersa fatica in **più aree diverse**. Può dipendere "
+                "da tante cose — anche solo stanchezza o poca familiarità con i "
+                "giochi. Proprio perché il quadro è ampio, il passo utile non è un "
+                "test su una singola abilità ma uno sguardo d'insieme: partiamo "
+                "da qualche domanda sulla storia dello sviluppo.")
+    elif tipo_seg == "convergenza" and dom_label and dom2_label:
+        st.info(f"Dai giochi emergono insieme **{dom_label}** e **{dom2_label}**: "
+                f"due aree che nello sviluppo si sostengono a vicenda. Quando "
+                f"cedono insieme il dato è più informativo — non è una diagnosi, "
+                f"ma vale la pena guardarlo bene.")
+    elif dom_label:
         st.info(f"Dai giochi è emerso un segnale ripetuto nell'area **{dom_label}** "
                 f"({n} partite). Non è una diagnosi: serve una valutazione vera per "
                 f"capire se c'è qualcosa su cui lavorare — e spesso la risposta è "
@@ -222,6 +345,11 @@ def ui_public_lead_page(get_conn):
         return
 
     lead_id = st.session_state.get("_lead_id")
+
+    # Traccia l'arrivo una sola volta per sessione (anonimo)
+    if not st.session_state.get("_lead_visita_tracciata"):
+        registra_visita(conn, src, dom, tipo_seg, eta_gioco)
+        st.session_state["_lead_visita_tracciata"] = True
 
     # ── Passo 1: i contatti ──────────────────────────────────────────
     if not lead_id:
@@ -269,6 +397,7 @@ def ui_public_lead_page(get_conn):
                     })
                     st.session_state["_lead_id"] = new_id
                     st.session_state["_lead_adulto"] = ("me stesso" in per_chi.lower())
+                    st.session_state["_lead_tipo"] = tipo_seg
                     st.rerun()
                 except Exception as e:
                     st.error(f"Non è stato possibile salvare: {e}")
@@ -279,9 +408,38 @@ def ui_public_lead_page(get_conn):
               "cinque minuti, questo questionario ci fa arrivare molto più preparati.")
 
     adulto = bool(st.session_state.get("_lead_adulto"))
-    tipo = scegli_questionario(dom, adulto)
+    # Quadro globale: nessun questionario mirato, si parte dalla storia
+    if st.session_state.get("_lead_tipo") == "globale":
+        tipo = "ANAMNESI_GLOBALE"
+    else:
+        tipo = scegli_questionario(dom, adulto)
     st.markdown("---")
     st.markdown("#### Questionario di screening")
+
+    if tipo == "ANAMNESI_GLOBALE":
+        st.caption("Poche domande sulla storia dello sviluppo: sono quelle che "
+                  "orientano di più quando il quadro è ampio.")
+        try:
+            from modules.app_core import inpps_collect_ui
+        except Exception:
+            inpps_collect_ui = None
+        if inpps_collect_ui is None:
+            st.info("Non disponibile ora: ti ricontattiamo noi.")
+            return
+        with st.form("form_lead_glob"):
+            q_data, q_sintesi = inpps_collect_ui(prefix="lead_glob", existing=None)
+            ok = st.form_submit_button("📤 Invia le risposte", type="primary",
+                                       use_container_width=True)
+        if ok and q_data is not None:
+            try:
+                aggiorna_questionario(conn, lead_id, "INPPS", q_data, q_sintesi)
+                st.balloons()
+                st.success("Ricevuto, grazie. Ti ricontattiamo a breve.")
+                st.session_state.pop("_lead_id", None)
+            except Exception as e:
+                st.error(f"Errore nell'invio: {e}")
+        return
+
     st.caption(QUESTIONARI.get(tipo, ""))
     if tipo == "INPPS":
         st.caption("Fonte: INPP — Institute for Neuro-Physiological Psychology (Chester, UK), "
@@ -415,8 +573,10 @@ def render_contatti_sito(conn):
         st.error(f"Tabella contatti non disponibile: {e}")
         return
 
-    filtro = st.radio("Mostra", ["tutti"] + STATI, horizontal=True, key="lead_filtro")
-    try:
+    with st.expander("📊 Statistiche dell'imbuto", expanded=False):
+        render_statistiche(conn)
+
+    filtro = st.radio("Mostra", ["tutti"] + STATI, horizontal=True, key="lead_filtro")    try:
         righe = lista_lead(conn, None if filtro == "tutti" else filtro)
     except Exception as e:
         st.error(f"Errore lettura contatti: {e}")
