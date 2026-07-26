@@ -190,7 +190,10 @@ def ui_public_lead_page(get_conn):
         return (v[0] if isinstance(v, list) and v else v) or d
 
     src = _p("src"); dom = _p("dom"); n = _p("n", "0"); dev = _p("dev", "0")
+    tipo_seg = _p("tipo", "specifico")
+    dom2 = _p("dom2"); domini_tutti = _p("domini"); eta_gioco = _p("eta")
     dom_label, dom_nota = DOMINI.get(dom, ("", ""))
+    dom2_label = DOMINI.get(dom2, ("", ""))[0] if dom2 else ""
 
     st.markdown("""<style>
       #MainMenu, footer, header {visibility:hidden}
@@ -205,7 +208,18 @@ def ui_public_lead_page(get_conn):
         '<div style="font-size:1.5rem;font-weight:800;color:#14502F;margin-top:4px">'
         'Approfondiamo insieme</div></div>', unsafe_allow_html=True)
 
-    if dom_label:
+    if tipo_seg == "globale":
+        st.info("Dai giochi è emersa fatica in **più aree diverse**. Può dipendere "
+                "da tante cose — anche solo stanchezza o poca familiarità con i "
+                "giochi. Proprio perché il quadro è ampio, il passo utile non è un "
+                "test su una singola abilità ma uno sguardo d'insieme: partiamo "
+                "da qualche domanda sulla storia dello sviluppo.")
+    elif tipo_seg == "convergenza" and dom_label and dom2_label:
+        st.info(f"Dai giochi emergono insieme **{dom_label}** e **{dom2_label}**: "
+                f"due aree che nello sviluppo si sostengono a vicenda. Quando "
+                f"cedono insieme il dato è più informativo — non è una diagnosi, "
+                f"ma vale la pena guardarlo bene.")
+    elif dom_label:
         st.info(f"Dai giochi è emerso un segnale ripetuto nell'area **{dom_label}** "
                 f"({n} partite). Non è una diagnosi: serve una valutazione vera per "
                 f"capire se c'è qualcosa su cui lavorare — e spesso la risposta è "
@@ -269,6 +283,7 @@ def ui_public_lead_page(get_conn):
                     })
                     st.session_state["_lead_id"] = new_id
                     st.session_state["_lead_adulto"] = ("me stesso" in per_chi.lower())
+                    st.session_state["_lead_tipo"] = tipo_seg
                     st.rerun()
                 except Exception as e:
                     st.error(f"Non è stato possibile salvare: {e}")
@@ -279,9 +294,38 @@ def ui_public_lead_page(get_conn):
               "cinque minuti, questo questionario ci fa arrivare molto più preparati.")
 
     adulto = bool(st.session_state.get("_lead_adulto"))
-    tipo = scegli_questionario(dom, adulto)
+    # Quadro globale: nessun questionario mirato, si parte dalla storia
+    if st.session_state.get("_lead_tipo") == "globale":
+        tipo = "ANAMNESI_GLOBALE"
+    else:
+        tipo = scegli_questionario(dom, adulto)
     st.markdown("---")
     st.markdown("#### Questionario di screening")
+
+    if tipo == "ANAMNESI_GLOBALE":
+        st.caption("Poche domande sulla storia dello sviluppo: sono quelle che "
+                  "orientano di più quando il quadro è ampio.")
+        try:
+            from modules.app_core import inpps_collect_ui
+        except Exception:
+            inpps_collect_ui = None
+        if inpps_collect_ui is None:
+            st.info("Non disponibile ora: ti ricontattiamo noi.")
+            return
+        with st.form("form_lead_glob"):
+            q_data, q_sintesi = inpps_collect_ui(prefix="lead_glob", existing=None)
+            ok = st.form_submit_button("📤 Invia le risposte", type="primary",
+                                       use_container_width=True)
+        if ok and q_data is not None:
+            try:
+                aggiorna_questionario(conn, lead_id, "INPPS", q_data, q_sintesi)
+                st.balloons()
+                st.success("Ricevuto, grazie. Ti ricontattiamo a breve.")
+                st.session_state.pop("_lead_id", None)
+            except Exception as e:
+                st.error(f"Errore nell'invio: {e}")
+        return
+
     st.caption(QUESTIONARI.get(tipo, ""))
     if tipo == "INPPS":
         st.caption("Fonte: INPP — Institute for Neuro-Physiological Psychology (Chester, UK), "
