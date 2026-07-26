@@ -62,7 +62,8 @@ def _invia_email(to: str, subject: str, body: str) -> None:
 # ══════════════════════════════════════════════════════════════════════
 
 _Q_LABELS = {
-    "INPPS":           "📋 INPPS Screening (Genitori)",
+    "ANAMNESI_PNEV":   "📋 Anamnesi PNEV (Gravidanza · Sviluppo · Familiarità)",
+    "INPPS":           "📋 INPP-R Screening (Sally Goddard Blythe)",
     "MELILLO_BAMBINI": "🧒 Melillo Bambini (Genitori)",
     "MELILLO_ADULTI":  "🧠 Melillo Adulti (Paziente)",
     "FISHER":          "👂 Fisher Auditivo",
@@ -334,10 +335,17 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
 
     st.markdown("---")
 
+    # ── ANAMNESI PNEV ──────────────────────────────────────────────────
+    anam_pnev = questionari.get("anamnesi_pnev", {})
+    if anam_pnev:
+        with st.expander("📋 Anamnesi PNEV (compilata online)", expanded=True):
+            st.caption(f"Fascia d'età indicata: {anam_pnev.get('fascia', '—')}")
+            _mostra_questionario_generico(anam_pnev, "anamnesi_pnev")
+
     # ── INPPS ────────────────────────────────────────────────────────
     inpps = questionari.get("inpps_screening_genitori", {})
     if inpps:
-        with st.expander("📋 INPPS — Screening (compilato dai genitori)", expanded=True):
+        with st.expander("📋 INPP-R — Screening (compilato dai genitori)", expanded=True):
             screening = inpps.get("screening", {})
             positivi  = inpps.get("positivi", {})
             score     = inpps.get("score", 0)
@@ -348,7 +356,7 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
             col2.metric("Soglia clinica", soglia)
 
             if score >= soglia:
-                st.error(f"🔴 Score ≥ soglia ({soglia}): profilo positivo INPPS")
+                st.error(f"🔴 Score ≥ soglia ({soglia}): profilo positivo INPP-R")
             else:
                 st.success(f"🟢 Score < soglia: profilo nella norma")
 

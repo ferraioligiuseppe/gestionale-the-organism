@@ -506,7 +506,7 @@ def mark_token_used(cur, link_id: int):
 # Questionari supportati via link pubblico
 _QUESTIONARI_PUBBLICI = {
     "ANAMNESI_PNEV":   "Anamnesi PNEV (Gravidanza, Sviluppo, Familiarità)",
-    "INPPS":           "Questionario INPPS – Screening (Genitori)",
+    "INPPS":           "Questionario INPP-R – Screening (Genitori)",
     "MELILLO_ADULTI":  "Questionario Melillo – Stile Cognitivo (Adulti)",
     "MELILLO_BAMBINI": "Questionario Melillo – Checklist Bambini",
     "FISHER":          "Questionario Fisher – Problemi Uditivi (Bambini)",
@@ -557,7 +557,7 @@ def maybe_handle_public_questionario(get_conn) -> bool:
             q_data, q_summary = inpps_collect_ui(prefix="pub_inpps", existing=None)
             submitted = st.form_submit_button("📤 INVIA QUESTIONARIO")
         chiave_json = "inpps_screening_genitori"
-        motivo_label = "INPPS (genitori)"
+        motivo_label = "INPP-R (genitori)"
 
     elif q == "ANAMNESI_PNEV":
         try:
@@ -753,7 +753,15 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
     existing: dict precedente (pnev_json["questionari"]["inpps_screening_genitori"]) o None.
     """
     existing = existing or {}
-    st.markdown("### INPPS – Screening (Genitori)")
+    st.markdown("### INPP-R – Screening riflessi primitivi\n\n*Questionario di Sally Goddard Blythe (INPP, Chester)*")
+    st.caption(
+        "Fonte: **INPP — Institute for Neuro-Physiological Psychology** (Chester, UK), "
+        "questionario di screening di **Sally Goddard Blythe**. "
+        "Riferimento: Goddard Blythe S., *Attention, Balance and Coordination: "
+        "The A.B.C. of Learning Success*, Wiley-Blackwell. "
+        "Strumento di screening: segnala la possibilità di un'immaturità neuromotoria, "
+        "non sostituisce la valutazione clinica diretta."
+    )
 
     # --- Prima parte: Neurologica (1-29) ---
     neuro_items = [
@@ -930,20 +938,20 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
         "cutoff": int(cutoff),
         "totale_positivi": int(totale),
         "flag_possibile_immaturita_neuromotoria": bool(flag),
-        "nota": "Criterio operativo di screening (protocollo PNEV/INPPS). Richiede conferma clinica diretta.",
+        "nota": "Criterio operativo di screening (protocollo PNEV / INPP-R). Richiede conferma clinica diretta.",
     }
 
     # Semaforo in UI
     if flag:
         st.warning(
-            f"⚠️ Screening INPPS: {totale} positivi (cut-off ≥ {cutoff}) → possibile immaturità neuromotoria. "
+            f"⚠️ Screening INPP-R: {totale} positivi (cut-off ≥ {cutoff}) → possibile immaturità neuromotoria. "
             "Richiede conferma con valutazione clinica diretta."
         )
     else:
-        st.success(f"✅ Screening INPPS: {totale} positivi (cut-off ≥ {cutoff}) → nessun alert da screening.")
+        st.success(f"✅ Screening INPP-R: {totale} positivi (cut-off ≥ {cutoff}) → nessun alert da screening.")
 
     summary = (
-        f"INPPS genitori: Neurologica/Scuola {n_neuro} • Nutrizione {nutr_count} • Udito {n_udito} "
+        f"INPP-R (genitori): Neurologica/Scuola {n_neuro} • Nutrizione {nutr_count} • Udito {n_udito} "
         f"(Totale {totale}, cut-off ≥ {cutoff})"
     )
     if flag:
@@ -5529,7 +5537,7 @@ def ui_anamnesi():
             _base = _public_base_url()
 
             _ql_configs = [
-                ("INPPS",           "📋 INPPS Screening (Genitori)",         "gen_link_inpps"),
+                ("INPPS",           "📋 INPP-R Screening (Sally Goddard Blythe)",         "gen_link_inpps"),
                 ("MELILLO_BAMBINI", "🧒 Melillo Bambini (Genitori)",          "gen_link_melb"),
                 ("MELILLO_ADULTI",  "🧠 Melillo Adulti (Paziente)",           "gen_link_mela"),
                 ("FISHER",          "👂 Fisher Auditivo (Genitori/Paziente)", "gen_link_fish"),
@@ -5590,7 +5598,7 @@ def ui_anamnesi():
     tab_cat, tab_pnev_cl, tab_inpps, tab_quest = st.tabs([
         "📋 Anamnesi Catagnini (0–2 anni)",
         "🧠 Valutazione PNEV clinica",
-        "📊 Questionario INPPS",
+        "📊 Questionario INPP-R",
         "📝 Questionari PNEV",
     ])
 
@@ -5857,7 +5865,7 @@ def ui_anamnesi():
     tab_cat_m, tab_pnev_m, tab_inpps_m, tab_quest_m = st.tabs([
         "📋 Anamnesi Catagnini (0–2 anni)",
         "🧠 Valutazione PNEV clinica",
-        "📊 Questionario INPPS",
+        "📊 Questionario INPP-R",
         "📝 Questionari PNEV",
     ])
 
@@ -11901,7 +11909,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
                     tot = scr.get("totale_positivi")
                     cutoff = scr.get("cutoff", 7)
                     flag = bool(scr.get("flag_possibile_immaturita_neuromotoria"))
-                    txt = f"Screening INPPS (genitori): totale positivi {tot} (cut-off ≥ {cutoff}). "
+                    txt = f"Screening INPP-R (genitori): totale positivi {tot} (cut-off ≥ {cutoff}). "
                     if flag:
                         txt += "Indicativo di possibile immaturità neuromotoria (screening) – raccomandata conferma clinica diretta."
                     else:
