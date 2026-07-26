@@ -46,6 +46,7 @@ QUESTIONARI = {
     "INPPS": "INPP-R — screening riflessi primitivi (Sally Goddard Blythe)",    "MELILLO_BAMBINI": "Questionario neuro-evolutivo — bambini",
     "MELILLO_ADULTI": "Questionario neuro-evolutivo — adulti",
     "FISHER": "Questionario uditivo — bambini",
+    "LINGUAGGIO_PNEV": "Screening linguaggio PNEV (3–6 anni)",
     "VISIONE_BAMBINI": "Questionario visivo — bambini",
     "VISIONE_ADULTI": "Questionario visivo — adulti",
 }
@@ -56,7 +57,7 @@ QUEST_PER_DOMINIO = {
     "occhiomano":   ("INPPS",           "MELILLO_ADULTI"),
     "bilaterale":   ("INPPS",           "MELILLO_ADULTI"),
     "oculomotor":   ("VISIONE_BAMBINI", "VISIONE_ADULTI"),
-    "linguaggio":   ("FISHER",          "MELILLO_ADULTI"),
+    "linguaggio":   ("LINGUAGGIO_PNEV", "MELILLO_ADULTI"),
     "attenzione":   ("MELILLO_BAMBINI", "MELILLO_ADULTI"),
     "inibizione":   ("MELILLO_BAMBINI", "MELILLO_ADULTI"),
     "memoria":      ("MELILLO_BAMBINI", "MELILLO_ADULTI"),
@@ -291,7 +292,26 @@ def ui_public_lead_page(get_conn):
 
     q_data, q_sintesi, ok = None, "", False
 
-    if tipo == "INPPS":
+    if tipo == "LINGUAGGIO_PNEV":
+        try:
+            from modules.questionario_linguaggio import (
+                linguaggio_breve_ui, mostra_esito_breve)
+        except Exception as e:
+            st.info(f"Il questionario non è disponibile ora: te lo invieremo per email. ({e})")
+            return
+        st.caption("Nove domande, due minuti. Nato per la fascia in cui gli "
+                  "strumenti disponibili non arrivano più.")
+        try:
+            q_data, q_sintesi, _p = linguaggio_breve_ui(prefix="lead_ling", pubblico=True)
+        except Exception as e:
+            st.error(f"Errore nel questionario: {e}")
+            return
+        st.markdown("---")
+        mostra_esito_breve(q_data, pubblico=True)
+        st.markdown("---")
+        ok = st.button("📤 Invia le risposte", type="primary", use_container_width=True)
+
+    elif tipo == "INPPS":
         try:
             from modules.app_core import inpps_collect_ui
         except Exception:
