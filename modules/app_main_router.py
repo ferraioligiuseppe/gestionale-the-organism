@@ -875,6 +875,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🦴 Osteopatia":
         from .sections.ui_cliniche import render_osteopatia_section
         render_osteopatia_section(); return True
+    if sotto == "🎬 Animazioni dei riflessi":
+        from .ui_riflessi_animazioni import render_riflessi_animazioni
+        render_riflessi_animazioni(); return True
     if sotto == "📅 Eventi e iscrizioni":
         try:
             from .eventi.ui_eventi import render_eventi_section
@@ -1296,6 +1299,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA MARKETING ────────────────────────────────────────────────
     elif area == AREA_MARKETING:
+        if sotto == "🎬 Animazioni dei riflessi":
+            from .ui_riflessi_animazioni import render_riflessi_animazioni
+            render_riflessi_animazioni(); return
         if sotto == "📅 Eventi e iscrizioni":
             try:
                 from .eventi.ui_eventi import render_eventi_section
