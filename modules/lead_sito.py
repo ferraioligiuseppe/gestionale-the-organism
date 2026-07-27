@@ -22,28 +22,24 @@ import json
 import datetime
 import streamlit as st
 
-# Domini usati da pnev-lead.js → etichetta leggibile + lettura clinica
-DOMINI = {
-    "attenzione":   ("Attenzione e costanza",
-                     "Tenuta attentiva e variabilità delle risposte."),
-    "inibizione":   ("Controllo degli impulsi",
-                     "Difficoltà a frenare la risposta già avviata."),
-    "occhiomano":   ("Coordinazione occhio-mano",
-                     "Prassie e controllo del gesto guidato dalla vista: "
-                     "area da leggere insieme a integrazione sensoriale e riflessi."),
-    "oculomotor":   ("Controllo dei movimenti oculari",
-                     "Inseguimenti e stabilità dello sguardo: da confermare con DEM "
-                     "e valutazione oculomotoria."),
-    "memoria":      ("Memoria di lavoro",
-                     "Tenuta e manipolazione dell'informazione a breve termine."),
-    "flessibilita": ("Flessibilità nel cambiare regola",
-                     "Costo del passaggio da una regola all'altra (set-shifting)."),
-    "linguaggio":   ("Linguaggio e lettura",
-                     "Accesso fonologico e rapidità di riconoscimento."),
-}
+# Domini clinici: la definizione unica sta in soglie_cliniche.py (server-side)
+try:
+    from modules.soglie_cliniche import DOMINI
+except Exception:
+    DOMINI = {
+        "attenzione":   ("Attenzione e costanza", ""),
+        "inibizione":   ("Controllo degli impulsi", ""),
+        "occhiomano":   ("Coordinazione occhio-mano", ""),
+        "oculomotor":   ("Controllo dei movimenti oculari", ""),
+        "memoria":      ("Memoria di lavoro", ""),
+        "flessibilita": ("Flessibilit\u00e0 nel cambiare regola", ""),
+        "linguaggio":   ("Linguaggio e lettura", ""),
+        "bilaterale":   ("Integrazione destra/sinistra", ""),
+    }
 
 QUESTIONARI = {
-    "INPPS": "INPP-R — screening riflessi primitivi (Sally Goddard Blythe)",    "MELILLO_BAMBINI": "Questionario neuro-evolutivo — bambini",
+    "INPPS": "INPP-R \u2014 screening riflessi primitivi (Sally Goddard Blythe)",
+    "MELILLO_BAMBINI": "Questionario neuro-evolutivo \u2014 bambini",
     "MELILLO_ADULTI": "Questionario neuro-evolutivo — adulti",
     "FISHER": "Questionario uditivo — bambini",
     "LINGUAGGIO_PNEV": "Screening linguaggio PNEV (3–6 anni)",
@@ -327,6 +323,30 @@ def ui_public_lead_page(get_conn):
     src = _p("src"); dom = _p("dom"); n = _p("n", "0"); dev = _p("dev", "0")
     tipo_seg = _p("tipo", "specifico")
     dom2 = _p("dom2"); domini_tutti = _p("domini"); eta_gioco = _p("eta")
+
+    # Pacchetto grezzo dai giochi: il criterio clinico si applica QUI,
+    # non nel file pubblico su pnev.it.
+    _raw = _p("raw")
+    if _raw:
+        try:
+            from modules.soglie_cliniche import decodifica_payload, calcola_segnale
+            _storico = decodifica_payload(_raw)
+            if _storico:
+                if not eta_gioco:
+                    for _p0 in _storico:
+                        if _p0.get("eta"):
+                            eta_gioco = str(_p0["eta"]); break
+                _seg = calcola_segnale(_storico)
+                if _seg:
+                    dom = _seg.get("dominio") or ""
+                    dom2 = _seg.get("dominio2") or ""
+                    tipo_seg = _seg.get("tipo", "specifico")
+                    n = str(_seg.get("n", 0))
+                    dev = str(_seg.get("dev", 0))
+                    domini_tutti = ",".join(_seg.get("domini", []) or [])
+        except Exception:
+            pass
+
     dom_label, dom_nota = DOMINI.get(dom, ("", ""))
     dom2_label = DOMINI.get(dom2, ("", ""))[0] if dom2 else ""
 
