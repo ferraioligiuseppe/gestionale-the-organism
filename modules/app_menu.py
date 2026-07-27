@@ -104,6 +104,7 @@ PNEV_RAMI = {
     ],
     "🧬 Neurosensorimotor Reflex Integration": [
         "🧬 INPP — Valutazione diagnostica",
+        "🎬 Animazioni dei riflessi",
         "🚧 Masgutova / MNRI (in arrivo)",
         "🚧 TMR — Movimenti ritmici (in arrivo)",
         "🚧 Melillo / NCHW (in arrivo)",
@@ -185,6 +186,7 @@ SOTTOSEZIONI = {
     ],
     AREA_ACADEMY: [
         "📅 Eventi e iscrizioni",
+        "🎬 Animazioni dei riflessi",
         "🚧 Contenuti formativi PNEV Academy (in arrivo)",
     ],
     AREA_FISIOTERAPIA: [
