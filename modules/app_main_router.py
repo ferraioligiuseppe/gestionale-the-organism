@@ -400,15 +400,17 @@ def _assistente_coda(conn, paz_id):
 
 # ── Sequenza guidata di visita: INPP → Visiva → Uditiva → Diagnosi ────
 # (area_destinazione, sotto_destinazione, etichetta bottone)
+from .app_menu import AREA_PNEV as _AREA_PNEV_SEQ
+
 _PROSSIMO_PASSO = {
     "🧬 INPP — Valutazione diagnostica": (
-        "🔍 Valutazione funzionale", "👁️ Valutazione visuo-percettiva",
+        _AREA_PNEV_SEQ, "👁️ Valutazione visuo-percettiva",
         "▶ Passo successivo: Valutazione visiva"),
     "👁️ Valutazione visuo-percettiva": (
-        "🔍 Valutazione funzionale", "🎧 Stimolazione uditiva",
+        _AREA_PNEV_SEQ, "🎧 Stimolazione uditiva",
         "▶ Passo successivo: Valutazione uditiva"),
     "🎧 Stimolazione uditiva": (
-        "👥 Pazienti", "📝 Diagnosi assistita",
+        _AREA_PNEV_SEQ, "📝 Diagnosi assistita",
         "▶ Passo successivo: Diagnosi"),
 }
 
@@ -578,6 +580,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "📨 Contatti dal sito":
         from .lead_sito import render_contatti_sito
         render_contatti_sito(conn); return True
+    if sotto == "🎧 Aderenza ascolti MAPS":
+        from .ascolti_maps import render_aderenza_ascolti
+        render_aderenza_ascolti(conn); return True
     if sotto == "📅 Sedute / Terapie":
         from .sections.ui_cliniche import render_sedute_section
         render_sedute_section(); return True
@@ -971,6 +976,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📨 Contatti dal sito":
             from .lead_sito import render_contatti_sito
             render_contatti_sito(conn); return
+        if sotto == "🎧 Aderenza ascolti MAPS":
+            from .ascolti_maps import render_aderenza_ascolti
+            render_aderenza_ascolti(conn); return
         if sotto == "📅 Sedute / Terapie":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
