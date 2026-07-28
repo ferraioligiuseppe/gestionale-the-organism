@@ -76,7 +76,7 @@ def _carica_dati(conn, paz_id):
                 dati["inpp_note"] = row.get("note_finali") or ""
             else:
                 dati["inpp_riepilogo"] = row[0] or {}
-                dati["inpp_note"] = row[2] or ""
+                dati["inpp_note"] = row[1] or ""
         cur.execute(
             "SELECT approccio, step, nome, stato FROM terapia_programma "
             "WHERE paziente_id=%s ORDER BY approccio, step, creato", (paz_id,))
@@ -694,7 +694,8 @@ def render_relazione_clinica(conn):
     col1,col2,col3 = st.columns(3)
     col1.metric("Anamnesi", "✅" if dati.get("anamnesi") else "❌")
     col2.metric("Val. visiva", "✅" if dati.get("visiva") else "❌")
-    col3.metric("PNEV", "✅" if dati.get("pnev_summary") else "❌")
+    col3.metric("PNEV", "✅" if (dati.get("pnev_summary") or dati.get("inpp_riepilogo")
+                                 or dati.get("inpp_note")) else "❌")
 
     prof = _get_prof()
     spec = _get_spec()
