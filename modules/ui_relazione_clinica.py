@@ -409,24 +409,26 @@ Rimango a disposizione per qualsiasi informazione.
 
 
 def _dump_riepilogo_inpp(inpp_riep):
-    """Stampa leggibile del riepilogo INPP (punteggi per area), qualunque sia
-    la struttura del dict — non presuppone chiavi fisse."""
+    """Stampa leggibile del riepilogo INPP (punteggi per area). Se un'area
+    non è stata eseguita (massimo assente o 0) lo dichiara esplicitamente,
+    invece di mostrare 0% — che si confonderebbe con un risultato negativo."""
     if not inpp_riep or not isinstance(inpp_riep, dict):
         return ""
     righe = []
-    for area, val in inpp_riep.items():
-        etichetta = str(area).replace("_", " ").strip().upper()
-        if isinstance(val, dict):
-            punti = val.get("punteggio", val.get("score", val.get("ottenuto")))
-            tot = val.get("totale", val.get("max"))
-            pct = val.get("percentuale", val.get("pct"))
-            if punti is not None and tot is not None:
-                pct_txt = f" ({pct:.1f}%)" if isinstance(pct, (int, float)) else ""
-                righe.append(f"- {etichetta}: {punti}/{tot}{pct_txt}")
-            elif val:
-                righe.append(f"- {etichetta}: {val}")
-        elif val not in (None, "", 0):
-            righe.append(f"- {etichetta}: {val}")
+    for chiave, val in inpp_riep.items():
+        if not isinstance(val, dict):
+            if val not in (None, "", 0):
+                righe.append(f"- {str(chiave).replace('_',' ').strip().upper()}: {val}")
+            continue
+        etichetta = (val.get("label") or str(chiave).replace("_", " ").strip()).upper()
+        ottenuto = val.get("ottenuto", val.get("punteggio", val.get("score")))
+        massimo = val.get("massimo", val.get("totale", val.get("max")))
+        perc = val.get("perc", val.get("percentuale", val.get("pct")))
+        if not massimo:
+            righe.append(f"- {etichetta}: non eseguito in questa valutazione")
+        elif ottenuto is not None:
+            pct_txt = f" — {perc:.1f}%" if isinstance(perc, (int, float)) else ""
+            righe.append(f"- {etichetta}: {ottenuto}/{massimo}{pct_txt}")
     return "\n".join(righe)
 
 
@@ -451,8 +453,10 @@ def _ai_corpo_sensori(dati, fascia, note):
     if pnev:
         blocco.append("QUESTIONARIO / ANAMNESI PNEV:\n" + pnev)
     if inpp_riep:
-        blocco.append("RIEPILOGO VALUTAZIONE INPP (riflessi primitivi):\n"
-                      + json.dumps(inpp_riep, ensure_ascii=False, indent=1))
+        blocco.append("RIEPILOGO VALUTAZIONE INPP (riflessi primitivi) — punteggi ottenuto/massimo "
+                      "per area; se un'area è segnata «non eseguita» NON descriverla come deficitaria, "
+                      "ometti semplicemente quell'area dal commento clinico:\n"
+                      + (_dump_riepilogo_inpp(inpp_riep) or json.dumps(inpp_riep, ensure_ascii=False, indent=1)))
     if inpp_note:
         blocco.append("NOTE FINALI VALUTAZIONE INPP:\n" + inpp_note)
     if note:
