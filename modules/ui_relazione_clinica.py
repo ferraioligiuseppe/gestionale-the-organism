@@ -148,6 +148,46 @@ def _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val
     sez_g  = visiva.get("sez_g",{})
     diag   = sez_g.get("diag","") or ""
 
+    # Prova a far scrivere all'AI le sezioni cliniche sui dati REALI
+    # (stessa logica già usata per la relazione Sensori-motoria).
+    ai_sez = _ai_corpo_sensori(dati, fascia, note)
+
+    inpp_riep = dati.get("inpp_riepilogo") or {}
+    inpp_note = (dati.get("inpp_note") or "").strip()
+    dump_inpp = _dump_riepilogo_inpp(inpp_riep)
+
+    if ai_sez:
+        sez_profilo = ai_sez.get("PROFILO SENSORI-MOTORIO") or ""
+        sez_riflessi = ai_sez.get("RIFLESSI PRIMITIVI") or ""
+        sez_motricita = ai_sez.get("MOTRICITÀ E PRASSIE") or ""
+        sez_oro = ai_sez.get("AREA ORO-MIOFUNZIONALE") or ""
+        sez_proposta = ai_sez.get("PROPOSTA TERAPEUTICA") or ""
+        blocco_profilo = sez_profilo or (pnev if pnev else
+            "Maturazione disomogenea tra linguaggio, sensorialità, motricità e regolazione.")
+        blocco_sensorialita = "\n\n".join(x for x in [sez_motricita, sez_oro] if x) or \
+            ("Modulazione sensoriale in fase di maturazione con possibili difficoltà di soglia "
+             "(iper/iporeattività) in uno o più canali (tattile, propriocettivo, vestibolare, "
+             "uditivo, visivo). Coordinazione motoria e prassie da valutare in relazione al "
+             "profilo evolutivo.")
+        blocco_riflessi = ("\n\nRIFLESSI PRIMITIVI (dati della valutazione INPP)\n"
+                           + (dump_inpp + "\n\n" if dump_inpp else "")
+                           + (sez_riflessi or inpp_note or
+                              "Valutazione INPP non ancora eseguita.")) if (sez_riflessi or dump_inpp or inpp_note) else ""
+        blocco_indicazioni = (sez_proposta + "\n\n" if sez_proposta else "") + _testo_progetto_terapia(dati)
+    else:
+        blocco_profilo = pnev if pnev else \
+            "Maturazione disomogenea tra linguaggio, sensorialità, motricità e regolazione."
+        blocco_sensorialita = (
+            "Modulazione sensoriale in fase di maturazione con possibili difficoltà di soglia "
+            "(iper/iporeattività) in uno o più canali (tattile, propriocettivo, vestibolare, "
+            "uditivo, visivo). Coordinazione motoria e prassie da valutare in relazione al "
+            "profilo evolutivo.")
+        blocco_riflessi = ("\n\nRIFLESSI PRIMITIVI (dati della valutazione INPP)\n"
+                           + (dump_inpp + "\n\n" if dump_inpp else "")
+                           + (inpp_note or "Valutazione INPP non ancora eseguita.")) \
+                          if (dump_inpp or inpp_note) else ""
+        blocco_indicazioni = _testo_progetto_terapia(dati)
+
     return _intestazione(prof,spec) + f"""RELAZIONE NEUROEVOLUTIVA INTEGRATA ({fascia})
 
 DATI ANAGRAFICI
@@ -168,7 +208,7 @@ neuropsicologo, optometrista comportamentale, logopedista,
 terapista miofunzionale, psicomotricista, osteopata, fisioterapista.
 
 PROFILO INTEGRATO
-{pnev if pnev else "Maturazione disomogenea tra linguaggio, sensorialità, motricità e regolazione."}
+{blocco_profilo}
 
 LINGUAGGIO E COMUNICAZIONE
 Fragilità espressive e/o recettive con variabilità nella comprensione di consegne
@@ -176,9 +216,8 @@ complesse. Il profilo linguistico risulta condizionato dalla qualità dell'integ
 neuro-funzionale e dalla capacità di regolazione attentiva e sensoriale.
 
 SENSORIALITÀ E MOTRICITÀ
-Modulazione sensoriale in fase di maturazione con possibili difficoltà di soglia
-(iper/iporeattività) in uno o più canali (tattile, propriocettivo, vestibolare, uditivo,
-visivo). Coordinazione motoria e prassie da valutare in relazione al profilo evolutivo.
+{blocco_sensorialita}
+{blocco_riflessi}
 
 VALUTAZIONE VISUO-PERCETTIVA
 {("Diagnosi visiva: " + diag) if diag else "Valutazione optometrico-comportamentale in corso/completata."}
@@ -201,9 +240,7 @@ NOTE CLINICHE
 {note or "___________________________"}
 
 INDICAZIONI
-Si ritiene indicata la continuazione/avvio del percorso terapeutico integrato PNEV
-con frequenza di 2 sedute/settimana, home program strutturato (80 min/die),
-e rivalutazione dopo il primo step di 10 settimane.
+{blocco_indicazioni}
 """ + _firma(prof,spec)
 
 
@@ -369,6 +406,28 @@ Valutazione neuropsichiatrica infantile completa con eventuale:
 
 Rimango a disposizione per qualsiasi informazione.
 """ + _firma(prof,spec)
+
+
+def _dump_riepilogo_inpp(inpp_riep):
+    """Stampa leggibile del riepilogo INPP (punteggi per area), qualunque sia
+    la struttura del dict — non presuppone chiavi fisse."""
+    if not inpp_riep or not isinstance(inpp_riep, dict):
+        return ""
+    righe = []
+    for area, val in inpp_riep.items():
+        etichetta = str(area).replace("_", " ").strip().upper()
+        if isinstance(val, dict):
+            punti = val.get("punteggio", val.get("score", val.get("ottenuto")))
+            tot = val.get("totale", val.get("max"))
+            pct = val.get("percentuale", val.get("pct"))
+            if punti is not None and tot is not None:
+                pct_txt = f" ({pct:.1f}%)" if isinstance(pct, (int, float)) else ""
+                righe.append(f"- {etichetta}: {punti}/{tot}{pct_txt}")
+            elif val:
+                righe.append(f"- {etichetta}: {val}")
+        elif val not in (None, "", 0):
+            righe.append(f"- {etichetta}: {val}")
+    return "\n".join(righe)
 
 
 def _ai_corpo_sensori(dati, fascia, note):
