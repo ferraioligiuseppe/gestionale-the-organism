@@ -161,6 +161,7 @@ def _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val
         sez_riflessi = ai_sez.get("RIFLESSI PRIMITIVI") or ""
         sez_motricita = ai_sez.get("MOTRICITÀ E PRASSIE") or ""
         sez_oro = ai_sez.get("AREA ORO-MIOFUNZIONALE") or ""
+        sez_visiva_ai = ai_sez.get("VALUTAZIONE VISUO-PERCETTIVA") or ""
         sez_proposta = ai_sez.get("PROPOSTA TERAPEUTICA") or ""
         blocco_profilo = sez_profilo or (pnev if pnev else
             "Maturazione disomogenea tra linguaggio, sensorialità, motricità e regolazione.")
@@ -174,6 +175,8 @@ def _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val
                            + (sez_riflessi or inpp_note or
                               "Valutazione INPP non ancora eseguita.")) if (sez_riflessi or dump_inpp or inpp_note) else ""
         blocco_indicazioni = (sez_proposta + "\n\n" if sez_proposta else "") + _testo_progetto_terapia(dati)
+        blocco_visiva = ("Diagnosi visiva: " + diag + "\n\n" if diag else "") + \
+            (sez_visiva_ai or "Valutazione optometrico-comportamentale in corso/completata.")
     else:
         blocco_profilo = pnev if pnev else \
             "Maturazione disomogenea tra linguaggio, sensorialità, motricità e regolazione."
@@ -187,6 +190,9 @@ def _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val
                            + (inpp_note or "Valutazione INPP non ancora eseguita.")) \
                           if (dump_inpp or inpp_note) else ""
         blocco_indicazioni = _testo_progetto_terapia(dati)
+        _dv = _dump_dati_visiva(dati)
+        blocco_visiva = ("Diagnosi visiva: " + diag + "\n\n" if diag else "") + \
+            (_dv if _dv else "Valutazione optometrico-comportamentale in corso/completata.")
 
     return _intestazione(prof,spec) + f"""RELAZIONE NEUROEVOLUTIVA INTEGRATA ({fascia})
 
@@ -220,7 +226,7 @@ SENSORIALITÀ E MOTRICITÀ
 {blocco_riflessi}
 
 VALUTAZIONE VISUO-PERCETTIVA
-{("Diagnosi visiva: " + diag) if diag else "Valutazione optometrico-comportamentale in corso/completata."}
+{blocco_visiva}
 
 REGOLAZIONE E FUNZIONI ESECUTIVE
 Variabilità nella qualità attentiva con fluttuazioni legate al livello di attivazione
@@ -432,15 +438,31 @@ def _dump_riepilogo_inpp(inpp_riep):
     return "\n".join(righe)
 
 
+def _dump_dati_visiva(dati):
+    """Riassunto testuale dei dati reali della valutazione visuo-percettiva
+    (refrazione, oculomotricità, binoculare, accomodazione), riusando lo
+    stesso formatter della schermata di Valutazione visuo-percettiva."""
+    visiva = dati.get("visita_visiva", {}) or dati.get("visiva", {}) or {}
+    if not visiva:
+        return ""
+    try:
+        from .ui_valutazione_visuo_percettiva import _testo_solo_optometrico
+        return (_testo_solo_optometrico(visiva) or "").strip()
+    except Exception:
+        return ""
+
+
 def _ai_corpo_sensori(dati, fascia, note):
     """Prova a far scrivere all'AI le 4 sezioni cliniche sui dati REALI del
-    paziente (questionario/anamnesi PNEV + valutazione INPP). Ritorna None
-    se l'AI non è configurata o non ci sono dati da cui partire (in quel
-    caso il chiamante usa il testo fisso di riserva)."""
+    paziente (questionario/anamnesi PNEV + valutazione INPP + valutazione
+    visuo-percettiva). Ritorna None se l'AI non è configurata o non ci sono
+    dati da cui partire (in quel caso il chiamante usa il testo fisso di
+    riserva)."""
     pnev = (dati.get("pnev_summary") or "").strip()
     inpp_riep = dati.get("inpp_riepilogo") or {}
     inpp_note = (dati.get("inpp_note") or "").strip()
-    if not pnev and not inpp_riep and not inpp_note:
+    visiva_txt = _dump_dati_visiva(dati)
+    if not pnev and not inpp_riep and not inpp_note and not visiva_txt:
         return None
     try:
         from .ai_estrazione import genera_testo, ai_disponibile
@@ -459,6 +481,9 @@ def _ai_corpo_sensori(dati, fascia, note):
                       + (_dump_riepilogo_inpp(inpp_riep) or json.dumps(inpp_riep, ensure_ascii=False, indent=1)))
     if inpp_note:
         blocco.append("NOTE FINALI VALUTAZIONE INPP:\n" + inpp_note)
+    if visiva_txt:
+        blocco.append("VALUTAZIONE VISUO-PERCETTIVA (dati reali della visita — refrazione, "
+                      "oculomotricità, binoculare, accomodazione):\n" + visiva_txt)
     if note:
         blocco.append("NOTE CLINICHE DEL CLINICO PER QUESTA RELAZIONE:\n" + note)
 
@@ -471,12 +496,13 @@ def _ai_corpo_sensori(dati, fascia, note):
     )
     richiesta = (
         f"Scrivi il corpo di una RELAZIONE SENSORI-MOTORIA (fascia età {fascia}) "
-        "per il/la paziente, con ESATTAMENTE queste 5 sezioni (solo il testo, "
+        "per il/la paziente, con ESATTAMENTE queste 6 sezioni (solo il testo, "
         "senza titoli aggiuntivi, un paragrafo per sezione):\n\n"
         "###PROFILO SENSORI-MOTORIO\n"
         "###RIFLESSI PRIMITIVI\n"
         "###MOTRICITÀ E PRASSIE\n"
         "###AREA ORO-MIOFUNZIONALE\n"
+        "###VALUTAZIONE VISUO-PERCETTIVA\n"
         "###PROPOSTA TERAPEUTICA\n\n"
         "Nella sezione RIFLESSI PRIMITIVI, oltre al punteggio, spiega in modo "
         "concreto cosa comporta la presenza dei riflessi non integrati emersi "
@@ -486,6 +512,16 @@ def _ai_corpo_sensori(dati, fascia, note):
         "specifico quando possibile (es. ATNR/coordinazione bilaterale e "
         "scrittura, Moro/reattività emotiva e ansia, STNL/postura seduta e "
         "attenzione in classe).\n\n"
+        "Nella sezione VALUTAZIONE VISUO-PERCETTIVA, se sono forniti dati reali della "
+        "visita (refrazione, oculomotricità, DEM/Groffman, binoculare, accomodazione), "
+        "collega OGNI dato anomalo al suo significato funzionale concreto — sul modello: "
+        "«un DEM di tipo II/disfunzione oculomotoria comporta difficoltà a copiare dalla "
+        "lavagna, perdita del segno in lettura, uso del dito per seguire il rigo»; «una "
+        "insufficienza di convergenza (PPC ridotto) comporta mal di testa, visione doppia "
+        "o sfuocata da vicino, evitamento della lettura»; «un'eteroforia scompensata "
+        "comporta affaticamento, sfregamento degli occhi, avvicinamento eccessivo al "
+        "testo». NON inventare valori non forniti: se un dato non è presente, ometti "
+        "quella frase invece di scriverla con segnaposto.\n\n"
         "Nella sezione PROPOSTA TERAPEUTICA, sulla base di quanto emerso dalla "
         "valutazione (non testo generico), indica: quali approcci del Metodo "
         "PNEV sono più indicati (tra: terapia visiva, integrazione riflessi "
@@ -504,7 +540,7 @@ def _ai_corpo_sensori(dati, fascia, note):
 
     sezioni = {"PROFILO SENSORI-MOTORIO": "", "RIFLESSI PRIMITIVI": "",
                "MOTRICITÀ E PRASSIE": "", "AREA ORO-MIOFUNZIONALE": "",
-               "PROPOSTA TERAPEUTICA": ""}
+               "VALUTAZIONE VISUO-PERCETTIVA": "", "PROPOSTA TERAPEUTICA": ""}
     corrente = None
     for riga in testo.split("\n"):
         r = riga.strip()
@@ -724,10 +760,26 @@ def render_relazione_clinica(conn):
     def _get_id(r): return r["id"] if isinstance(r,dict) else r[0]
     def _get_dn(r): return r.get("Data_Nascita","") if isinstance(r,dict) else (r[3] if len(r)>3 else "")
 
+    # Segue il paziente attivo globale (header in alto): non resta fermo
+    # sull'ultima scelta fatta qui se nel frattempo se n'è scelto un altro.
+    try:
+        from .paziente_attivo import paziente_attivo_record
+        _attivo = paziente_attivo_record() or {}
+        _attivo_id = _attivo.get("id") or _attivo.get("ID")
+    except Exception:
+        _attivo_id = None
+    if _attivo_id is not None and st.session_state.get("rel_paz_seguito") != _attivo_id:
+        for i, r in enumerate(pazienti):
+            if _get_id(r) == _attivo_id:
+                st.session_state["rel_paz"] = r
+                st.session_state["rel_paz_seguito"] = _attivo_id
+                break
+
     c1,c2,c3 = st.columns([2,1,1])
     with c1:
         sel = st.selectbox("Paziente", pazienti, format_func=_label, key="rel_paz")
     paz_id = _get_id(sel)
+    st.session_state["rel_paz_seguito"] = paz_id
     paz_label = _label(sel)
     dn = _get_dn(sel)
     dn_fmt = _fmt_dn(dn)
