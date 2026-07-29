@@ -498,6 +498,12 @@ def header_paziente_attivo(conn) -> int | None:
         info_parts.append(f"{eta} anni")
     info_str = " · ".join(info_parts)
 
+    # Questo header viene richiamato più volte nello stesso caricamento da
+    # punti diversi del codice (router + modulo specifico): rendo la chiave
+    # del bottone sempre unica per evitare "duplicate element key".
+    st.session_state["_hpa_render_n"] = st.session_state.get("_hpa_render_n", 0) + 1
+    _hpa_key = f"hpa_change_{st.session_state['_hpa_render_n']}"
+
     c1, c2 = st.columns([4, 1])
     with c1:
         st.markdown(
@@ -521,7 +527,7 @@ def header_paziente_attivo(conn) -> int | None:
         )
     with c2:
         st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Cambia paziente", key="hpa_change",
+        if st.button("🔄 Cambia paziente", key=_hpa_key,
                       use_container_width=True):
             _dialog_seleziona(conn)
 
