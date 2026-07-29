@@ -458,6 +458,11 @@ def header_paziente_attivo(conn) -> int | None:
     """
     pid = paziente_attivo_id()
     rec = paziente_attivo_record()
+    # Questo header può essere richiamato più volte nello stesso caricamento
+    # da punti diversi del codice (router + modulo specifico): rendo ogni
+    # chiave dei suoi widget sempre unica per evitare "duplicate element key".
+    st.session_state["_hpa_render_n"] = st.session_state.get("_hpa_render_n", 0) + 1
+    _hpa_n = st.session_state["_hpa_render_n"]
     if not pid:
         ripristina_ultimo_paziente(conn)
         pid = paziente_attivo_id()
@@ -480,7 +485,7 @@ def header_paziente_attivo(conn) -> int | None:
             st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
         with c2:
             if st.button("👤 Seleziona paziente", type="primary",
-                          key="hpa_select", use_container_width=True):
+                          key=f"hpa_select_{_hpa_n}", use_container_width=True):
                 _dialog_seleziona(conn)
         return None
 
@@ -501,8 +506,7 @@ def header_paziente_attivo(conn) -> int | None:
     # Questo header viene richiamato più volte nello stesso caricamento da
     # punti diversi del codice (router + modulo specifico): rendo la chiave
     # del bottone sempre unica per evitare "duplicate element key".
-    st.session_state["_hpa_render_n"] = st.session_state.get("_hpa_render_n", 0) + 1
-    _hpa_key = f"hpa_change_{st.session_state['_hpa_render_n']}"
+    _hpa_key = f"hpa_change_{_hpa_n}"
 
     c1, c2 = st.columns([4, 1])
     with c1:
@@ -534,20 +538,20 @@ def header_paziente_attivo(conn) -> int | None:
     with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
         c1, c2, c3 = st.columns(3)
         with c1:
-            n_cog = st.text_input("Cognome", value=cog, key=f"hpa_edit_cog_{pid}")
-            n_nom = st.text_input("Nome", value=nom, key=f"hpa_edit_nom_{pid}")
+            n_cog = st.text_input("Cognome", value=cog, key=f"hpa_edit_cog_{pid}_{_hpa_n}")
+            n_nom = st.text_input("Nome", value=nom, key=f"hpa_edit_nom_{pid}_{_hpa_n}")
         with c2:
             n_dn = st.text_input("Data nascita (GG/MM/AAAA)",
                                  value=_fmt_dn(dn) if dn else "",
-                                 key=f"hpa_edit_dn_{pid}")
+                                 key=f"hpa_edit_dn_{pid}_{_hpa_n}")
             n_tel = st.text_input("Telefono", value=rec.get("telefono", "") or "",
-                                  key=f"hpa_edit_tel_{pid}")
+                                  key=f"hpa_edit_tel_{pid}_{_hpa_n}")
         with c3:
             n_ind = st.text_input("Indirizzo", value=rec.get("indirizzo", "") or "",
-                                  key=f"hpa_edit_ind_{pid}")
+                                  key=f"hpa_edit_ind_{pid}_{_hpa_n}")
             n_email = st.text_input("Email", value=rec.get("email", "") or "",
-                                    key=f"hpa_edit_email_{pid}")
-        if st.button("💾 Salva modifiche", key=f"hpa_edit_save_{pid}", type="primary"):
+                                    key=f"hpa_edit_email_{pid}_{_hpa_n}")
+        if st.button("💾 Salva modifiche", key=f"hpa_edit_save_{pid}_{_hpa_n}", type="primary"):
             errore = _salva_modifica_rapida(conn, pid, n_cog, n_nom, n_dn, n_tel,
                                             n_ind, n_email)
             if errore:
