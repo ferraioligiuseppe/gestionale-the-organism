@@ -472,3 +472,10 @@ def render_questionari_section(conn, paziente_id: int) -> None:
 
     with tab_risposte:
         render_questionari_viewer(conn, paziente_id)
+
+    st.markdown("---")
+    try:
+        from modules.questionari_cartacei import render_questionari_cartacei
+        render_questionari_cartacei()
+    except Exception as _e:
+        st.caption(f"Versione cartacea non disponibile: {_e}")
