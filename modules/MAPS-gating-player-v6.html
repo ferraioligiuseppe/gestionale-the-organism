@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAPS · Ascolto del giorno</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: linear-gradient(135deg, #1D6B44 0%, #14533A 100%);
+  color: #fff; min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px 14px;
+}
+.card {
+  width: 100%; max-width: 560px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 20px; padding: 26px 24px;
+  backdrop-filter: blur(8px);
+  text-align: center;
+}
+h1 { font-size: 22px; margin-bottom: 2px; }
+.sub { font-size: 12px; opacity: 0.75; margin-bottom: 18px; }
+.day-label { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.cat {
+  display: inline-block; padding: 5px 16px; border-radius: 999px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.5px;
+  background: rgba(255,255,255,0.18); margin-bottom: 16px;
+}
+.dots { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin: 10px 0 20px; }
+.dot {
+  width: 17px; height: 17px; border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  font-size: 9px; line-height: 17px; color: rgba(255,255,255,0.6);
+}
+.dot.done { background: #7DDFA8; color: #14533A; font-weight: 700; }
+.dot.today { outline: 2px solid #fff; background: rgba(255,255,255,0.35); color: #fff; font-weight: 700; }
+.btn {
+  background: #fff; color: #14533A; border: none;
+  padding: 15px 30px; border-radius: 14px;
+  font-size: 16px; font-weight: 700; cursor: pointer;
+  margin: 6px 4px; transition: transform 0.15s;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn-ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.4); font-size: 13px; padding: 10px 18px; }
+audio { display: none; }
+.msg { font-size: 13px; line-height: 1.6; opacity: 0.9; margin-top: 10px; min-height: 20px; }
+.ok { color: #7DDFA8; font-weight: 700; }
+.warn-box {
+  background: rgba(255, 193, 7, 0.2); border: 1px solid rgba(255,193,7,0.5);
+  border-radius: 10px; padding: 10px 14px; font-size: 12.5px;
+  line-height: 1.55; margin-top: 14px; display: none;
+}
+.warn-box.on { display: block; }
+.foot { font-size: 10.5px; opacity: 0.55; margin-top: 20px; }
+#completaBox {
+  display: none;
+  background: #7DDFA8; color: #14533A;
+  border-radius: 16px; padding: 18px 20px;
+  margin-top: 16px; font-weight: 700;
+  font-size: 16px; line-height: 1.5;
+  animation: pulsa 2s ease-in-out infinite;
+}
+#completaBox.on { display: block; }
+#completaBox .freccia { font-size: 30px; display: block; margin-top: 6px; }
+#upsellBox {
+  display: none;
+  background: #fff; color: #14533A;
+  border-radius: 16px; padding: 20px;
+  margin-top: 16px; font-size: 14.5px; line-height: 1.6;
+}
+#upsellBox.on { display: block; }
+#upsellBox h3 { font-size: 18px; margin-bottom: 8px; }
+#upsellBox a.cta {
+  display: inline-block; margin-top: 12px;
+  background: #1D6B44; color: #fff; text-decoration: none;
+  padding: 13px 26px; border-radius: 12px; font-weight: 700; font-size: 15px;
+}
+@keyframes pulsa {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(125,223,168,0.4); }
+  50% { transform: scale(1.025); box-shadow: 0 0 24px rgba(125,223,168,0.55); }
+}
+.headset { font-size: 34px; margin-bottom: 6px; }
+#fractal {
+  position: fixed; inset: 0; width: 100vw; height: 100vh;
+  z-index: -1; opacity: 0; transition: opacity 3s ease;
+}
+#fractal.on { opacity: 1; }
+body.listening .card {
+  background: rgba(10, 40, 26, 0.55);
+  border-color: rgba(255,255,255,0.10);
+}
+.fsbtn {
+  position: fixed; bottom: 14px; right: 14px;
+  background: rgba(255,255,255,0.15); color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 10px; padding: 8px 12px; font-size: 12px;
+  cursor: pointer; display: none; z-index: 5;
+}
+.fsbtn.on { display: block; }
+/* Dialogo primo avvio: riprendi dal giorno */
+#resumeDialog {
+  position: fixed; inset: 0; background: rgba(10, 35, 22, 0.92);
+  display: none; align-items: center; justify-content: center; z-index: 10;
+  padding: 20px;
+}
+#resumeDialog.on { display: flex; }
+.rd-card {
+  background: #14533A; border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 18px; padding: 26px 22px; max-width: 420px; text-align: center;
+}
+.rd-card h2 { font-size: 18px; margin-bottom: 10px; }
+.rd-card p { font-size: 13.5px; line-height: 1.6; opacity: 0.9; margin-bottom: 14px; }
+.rd-card select {
+  font-size: 16px; padding: 8px 14px; border-radius: 10px; border: none;
+  margin-bottom: 14px; color: #14533A; font-weight: 700;
+}
+</style>
+<!--PNEV-PROTEZIONE-BASE-->
+<script>
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  const k = e.key;
+  if (k === 'F12') { e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I','J','C'].includes(k.toUpperCase())) { e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && k.toUpperCase() === 'U') { e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && k.toUpperCase() === 'S') { e.preventDefault(); return; }
+});
+</script>
+</head>
+<body>
+<canvas id="fractal"></canvas>
+<button class="fsbtn" id="fsBtn">⛶ Schermo intero</button>
+
+<div id="resumeDialog">
+  <div class="rd-card">
+    <h2>👋 Benvenuto/a!</h2>
+    <p>Stai <b>iniziando da zero</b> questo percorso di 21 giorni, oppure lo stai
+    <b>già seguendo</b> e vuoi riprendere dal giorno a cui sei arrivato/a?</p>
+    <div>
+      <button class="btn" id="rdNuovo">🌱 Inizio da zero (Giorno 1)</button>
+    </div>
+    <p style="margin-top:14px;margin-bottom:6px">Oppure riprendi dal giorno:</p>
+    <select id="rdGiorno"></select><br>
+    <button class="btn btn-ghost" id="rdRiprendi">▶ Riprendi da qui</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="headset">🎧</div>
+  <h1>MAPS · Ascolto del giorno</h1>
+  <div class="sub" id="seqLabel">Percorso</div>
+
+  <div class="day-label" id="dayLabel">Giorno — di 21</div>
+  <div class="cat" id="catLabel">—</div>
+
+  <div class="dots" id="dots"></div>
+
+  <button class="btn" id="startBtn">▶ Inizia l'ascolto di oggi</button>
+  <button class="btn btn-ghost" id="againBtn" style="display:none">↺ Riascolta</button>
+
+  <audio id="player" preload="none" controlsList="nodownload noplaybackrate" oncontextmenu="return false"></audio>
+  <div id="miniCtrl" style="display:none;margin:16px 0 6px">
+    <button class="btn" id="pauseBtn">⏸ Pausa</button>
+    <div style="font-size:13px;opacity:0.8;margin-top:8px">⏱ <span id="tempoTrascorso">0:00</span></div>
+  </div>
+  <div class="msg" id="msg">Indossa le cuffie e mettiti comodo. L'ascolto dura circa 30 minuti.</div>
+
+  <div class="warn-box" id="warnBox">
+    ⚠️ L'audio sembra essersi interrotto.
+    <button class="btn btn-ghost" id="resumeBtn" style="margin-top:8px;display:block;margin-left:auto;margin-right:auto">▶ Riprendi da dove eri</button>
+  </div>
+
+  <div id="upsellBox">
+    <h3>🎉 Hai completato i 10 giorni di prova!</h3>
+    Hai sentito con le tue orecchie come lavora la stimolazione uditiva.
+    Il percorso completo dura <b>84 giorni</b> e attraversa tutte e quattro le fasi,
+    con i brani calibrati giorno per giorno.
+    <br>
+    <a class="cta" href="https://www.pnev.it/corsi/ascolti/basic/" target="_top">
+      🎧 Scopri il percorso completo
+    </a>
+  </div>
+
+  <div id="completaBox">
+    ✅ Ascolto finito, bravo/a!<br>
+    Ora premi il pulsante <u>COMPLETA LEZIONE</u> qui sotto nella pagina:<br>
+    così domani troverai il prossimo ascolto sbloccato.
+    <span class="freccia">⬇️⬇️⬇️</span>
+  </div>
+
+  <div class="foot">Studio The Organism · Metodo PNEV · pnev.it</div>
+</div>
+
+<script>const R2 = 'https://pub-6779dbf6c3774d10bab0e4d5573d0630.r2.dev/Brani_con_gating/';
+function lista(comp, da, a, pad) {
+const out = [];
+for (let i = da; i <= a; i++) out.push(comp + '_' + (pad ? String(i).padStart(2, '0') : i) + '.flac');
+return out;
+}
+const FILES = {
+basic: [...lista('bach', 1, 22, true), ...lista('mozart', 1, 12, true), ...lista('vivaldi', 1, 12, true)],
+ricarica: [...lista('bach', 1, 10, false), ...lista('mozart', 1, 20, false), ...lista('vivaldi', 1, 12, false)],
+motor: [...lista('bach', 1, 3, false), ...lista('bach', 8, 14, false), ...lista('mozart', 1, 12, false), ...lista('vivaldi', 1, 12, false)],
+focus: [...lista('bach', 1, 11, true), ...lista('mozart', 1, 12, true), ...lista('vivaldi', 1, 12, true)],
+};
+const CARTELLA = { b: 'basic_curva_tomatis', r: 'ricarica_curva_tomatis', m: 'motor_curva_tomatis', f: 'focus_curva_tomatis' };
+const NOME_CAT = { b: 'BASIC', r: 'RICARICA', m: 'MOTOR', f: 'FOCUS' };
+const SEQS = {
+1: 'b b b b b b r b r b r b m b m b f b f b r'.split(' '),
+2: 'm b b b r f r b r b f b f b r b f b f r b'.split(' '),
+3: 'b f r b b f r b m f b b m r b f f r b f b'.split(' '),
+4: 'b f r f r b r f m b r b r f b r r f b r b'.split(' '),
+};
+const PERCORSO = [...SEQS[1], ...SEQS[2], ...SEQS[3], ...SEQS[4]];
+const TOT = PERCORSO.length;
+const KEY = 'maps_gating_basic_v4';
+const qs = new URLSearchParams(location.search);
+function loadAll() {
+try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(ST)); }
+let ST = loadAll();
+if (!ST.done) ST = { done: [], played: { b: [], r: [], m: [], f: [] }, iniziato: false };
+if (!ST.played) ST.played = { b: [], r: [], m: [], f: [] };
+if (!ST.played.b) ST.played.b = [];
+if (!ST.played.r) ST.played.r = [];
+if (!ST.played.m) ST.played.m = [];
+if (!ST.played.f) ST.played.f = [];
+let giorno = null;
+let slugMode = false;
+let demoMode = false;
+try {
+const percorso = window.top.location.pathname.toLowerCase();
+demoMode = percorso.includes('demo');
+const m = percorso.match(/basic[-_]?(\d+)[-_](\d+)/);
+if (m) {
+const fase = parseInt(m[1]), gFase = parseInt(m[2]);
+if (fase >= 1 && fase <= 4 && gFase >= 1 && gFase <= 21) {
+giorno = (fase - 1) * 21 + gFase;
+slugMode = true;
+}
+}
+} catch (e) { /* iframe cross-origin: si prosegue in modalità autonoma */ }
+if (!giorno) {
+giorno = Math.min(ST.done.length + 1, TOT);
+const override = parseInt(qs.get('day'));
+if (override >= 1 && override <= TOT) giorno = override;
+}
+const override = slugMode ? giorno : parseInt(qs.get('day'));
+const $ = id => document.getElementById(id);
+const NOME_FASE = { 1: 'Basic 1', 2: 'Basic 2', 3: 'Basic 3', 4: 'Basic 4' };
+function lettera_fase_corrente(){ return fase; }
+const lettera = PERCORSO[giorno - 1];
+const cartella = CARTELLA[lettera];
+const fase = Math.ceil(giorno / 21);
+const giornoFase = giorno - (fase - 1) * 21;
+$('seqLabel').textContent = demoMode ? 'Stimolazione uditiva · Prova gratuita'
+: 'Stimolazione uditiva · Basic';
+$('dayLabel').textContent = demoMode ? ('Giorno ' + giornoFase + ' di 10')
+: ('Fase ' + fase + ' di 4 · Giorno ' + giornoFase + ' di 21');
+$('catLabel').textContent = NOME_CAT[lettera];
+function renderDots() {
+const box = $('dots'); box.innerHTML = '';
+const base = (fase - 1) * 21;
+const nDots = demoMode ? 10 : 21;
+for (let g = 1; g <= nDots; g++) {
+const glob = base + g;
+const d = document.createElement('div');
+d.className = 'dot' + (ST.done.includes(glob) ? ' done' : '') + (glob === giorno ? ' today' : '');
+d.textContent = g;
+box.appendChild(d);
+}
+}
+renderDots();
+if (ST.done.length >= TOT) {
+$('msg').innerHTML = '<span class="ok">🏆 Percorso completato!</span> Contatta lo studio per il passo successivo.';
+}
+function scegliBrano() {
+const tutti = FILES[lettera];
+if (!ST.played[lettera]) ST.played[lettera] = [];
+let rimasti = tutti.filter(f => !ST.played[lettera].includes(f));
+if (!rimasti.length) { ST.played[lettera] = []; rimasti = tutti.slice(); }
+return rimasti[Math.floor(Math.random() * rimasti.length)];
+}
+const audio = $('player');
+let branoCorrente = null;
+let completatoOggi = ST.done.includes(giorno);
+let ultimaPosizione = 0;
+let stallTimer = null;
+function fmt(sec) {
+const m = Math.floor(sec / 60), s2 = Math.floor(sec % 60);
+return m + ':' + String(s2).padStart(2, '0');
+}
+setInterval(() => {
+const el = $('tempoTrascorso');
+if (el && !audio.paused) el.textContent = fmt(audio.currentTime);
+}, 1000);
+$('pauseBtn').addEventListener('click', () => {
+if (audio.paused) { audio.play(); $('pauseBtn').textContent = '⏸ Pausa'; }
+else { audio.pause(); $('pauseBtn').textContent = '▶ Riprendi'; }
+});
+function avvia() {
+branoCorrente = scegliBrano();
+audio.src = R2 + cartella + '/' + branoCorrente;
+$('miniCtrl').style.display = 'block';
+$('pauseBtn').textContent = '⏸ Pausa';
+audio.play().then(() => {
+$('msg').textContent = 'Ascolto in corso… lascia scorrere fino alla fine.';
+$('startBtn').style.display = 'none';
+sorvegliaStallo();
+}).catch(() => {
+$('msg').textContent = 'Il browser ha bloccato l\'avvio automatico: premi di nuovo il pulsante.';
+$('startBtn').style.display = 'inline-block';
+});
+}
+$('startBtn').addEventListener('click', avvia);
+$('againBtn').addEventListener('click', () => { $('againBtn').style.display = 'none'; avvia(); });
+audio.addEventListener('ended', () => {
+fermaSorveglianza();
+$('miniCtrl').style.display = 'none';
+if (branoCorrente && (!ST.played[lettera] || !ST.played[lettera].includes(branoCorrente))) {
+if (!ST.played[lettera]) ST.played[lettera] = [];
+ST.played[lettera].push(branoCorrente);
+}
+if (!ST.done.includes(giorno)) ST.done.push(giorno);
+save();
+completatoOggi = true;
+renderDots();
+if (demoMode && giornoFase >= 10) {
+$('msg').innerHTML = '<span class="ok">✅ Decimo e ultimo ascolto completato!</span>';
+$('upsellBox').classList.add('on');
+} else if (giornoFase >= 21) {
+$('msg').innerHTML = '<span class="ok">🎉 Complimenti, hai completato ' + NOME_FASE[lettera_fase_corrente()] + '!</span> Un traguardo importante — si riparte con la fase successiva.';
+if (slugMode) $('completaBox').classList.add('on');
+} else {
+$('msg').innerHTML = '<span class="ok">✅ Ascolto di oggi completato!</span> Ci vediamo domani.';
+if (slugMode) $('completaBox').classList.add('on');
+}
+$('againBtn').style.display = 'inline-block';
+});
+function sorvegliaStallo() {
+fermaSorveglianza();
+ultimaPosizione = audio.currentTime;
+stallTimer = setInterval(() => {
+if (audio.paused || audio.ended) { ultimaPosizione = audio.currentTime; return; }
+if (Math.abs(audio.currentTime - ultimaPosizione) < 0.5) {
+$('warnBox').classList.add('on');
+} else {
+$('warnBox').classList.remove('on');
+}
+ultimaPosizione = audio.currentTime;
+}, 15000);
+}
+function fermaSorveglianza() { if (stallTimer) { clearInterval(stallTimer); stallTimer = null; } }
+$('resumeBtn').addEventListener('click', () => {
+const pos = audio.currentTime;
+audio.load();
+audio.currentTime = pos;
+audio.play();
+$('warnBox').classList.remove('on');
+});
+audio.addEventListener('error', () => {
+$('msg').textContent = '⚠️ Problema di connessione col brano. Controlla la rete e riprova.';
+$('startBtn').style.display = 'inline-block';
+$('startBtn').textContent = '▶ Riprova';
+});
+const canvas = $('fractal');
+const ctx2d = canvas.getContext('2d');
+const RES = 240;
+const buf = document.createElement('canvas');
+buf.width = RES; buf.height = RES;
+const bctx = buf.getContext('2d');
+const img = bctx.createImageData(RES, RES);
+let frAnim = null, t0 = null;
+function ridimensiona() {
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', ridimensiona);
+ridimensiona();
+function colore(v) {
+const r = Math.round(10 + 40 * v);
+const g = Math.round(45 + 120 * v);
+const b = Math.round(35 + 75 * v);
+return [r, g, b];
+}
+function disegnaJulia(tempo) {
+const ang = tempo * 2 * Math.PI / 240;
+const cx = -0.745 + 0.055 * Math.cos(ang);
+const cy = 0.186 + 0.055 * Math.sin(ang * 0.7);
+const zoom = 1.55;
+const d = img.data;
+let p = 0;
+for (let y = 0; y < RES; y++) {
+const zy0 = (y / RES - 0.5) * 2 * zoom;
+for (let x = 0; x < RES; x++) {
+let zx = (x / RES - 0.5) * 2 * zoom;
+let zy = zy0, i = 0;
+const MAXI = 34;
+while (zx * zx + zy * zy < 4 && i < MAXI) {
+const nx = zx * zx - zy * zy + cx;
+zy = 2 * zx * zy + cy;
+zx = nx; i++;
+}
+const v = i >= MAXI ? 0 : i / MAXI;
+const [r, g, b] = colore(Math.pow(v, 0.75));
+d[p++] = r; d[p++] = g; d[p++] = b; d[p++] = 255;
+}
+}
+bctx.putImageData(img, 0, 0);
+const cw = canvas.width, ch = canvas.height;
+const lato = Math.max(cw, ch) * 1.5;
+ctx2d.save();
+ctx2d.clearRect(0, 0, cw, ch);
+ctx2d.translate(cw / 2, ch / 2);
+ctx2d.rotate(tempo * 2 * Math.PI / 480);
+ctx2d.imageSmoothingEnabled = true;
+ctx2d.drawImage(buf, -lato / 2, -lato / 2, lato, lato);
+ctx2d.restore();
+}
+function avviaFrattale() {
+canvas.classList.add('on');
+document.body.classList.add('listening');
+$('fsBtn').classList.add('on');
+t0 = performance.now();
+let ultimoFrame = 0;
+function loop(ts) {
+if (ts - ultimoFrame > 83) { disegnaJulia((ts - t0) / 1000); ultimoFrame = ts; }
+frAnim = requestAnimationFrame(loop);
+}
+frAnim = requestAnimationFrame(loop);
+}
+function fermaFrattale() {
+if (frAnim) cancelAnimationFrame(frAnim);
+canvas.classList.remove('on');
+document.body.classList.remove('listening');
+$('fsBtn').classList.remove('on');
+}
+audio.addEventListener('play', () => { if (!frAnim) avviaFrattale(); });
+audio.addEventListener('ended', fermaFrattale);
+$('fsBtn').addEventListener('click', () => {
+if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+else document.exitFullscreen();
+});
+if (!slugMode && !ST.iniziato && ST.done.length === 0 && !override) {
+const sel = $('rdGiorno');
+for (let g = 1; g <= TOT; g++) {
+const o = document.createElement('option');
+o.value = g;
+o.textContent = 'Fase ' + Math.ceil(g / 21) + ' · Giorno ' + (g - (Math.ceil(g / 21) - 1) * 21);
+sel.appendChild(o);
+}
+$('resumeDialog').classList.add('on');
+$('rdNuovo').addEventListener('click', () => {
+ST.iniziato = true; save();
+$('resumeDialog').classList.remove('on');
+});
+$('rdRiprendi').addEventListener('click', () => {
+const da = parseInt(sel.value);
+ST.done = []; for (let g = 1; g < da; g++) ST.done.push(g);
+ST.iniziato = true; save();
+location.reload();
+});
+} else if (!ST.iniziato) { ST.iniziato = true; save(); }
+const modAdmin = qs.get('admin') === '1' || (function(){ try { return window.top.location.search.includes('admin=1'); } catch(e){ return false; } })();
+if (completatoOggi && ST.done.length < 21 && !modAdmin) {
+$('msg').innerHTML = '<span class="ok">✅ Il giorno ' + giorno + ' è già completato.</span> Torna domani per il prossimo ascolto.';
+$('startBtn').style.display = 'none';
+$('againBtn').style.display = 'inline-block';
+} else if (completatoOggi && modAdmin) {
+$('msg').innerHTML = '<span class="ok">✅ Già completato oggi — modalità amministratore: riascolto libero.</span>';
+}</script>
+</body>
+</html>
