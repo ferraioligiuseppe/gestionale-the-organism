@@ -284,7 +284,7 @@ def _dialog_seleziona(conn):
     _corpo_seleziona(conn)
 
 
-def _corpo_seleziona(conn):
+def _corpo_seleziona(conn, ns="default"):
     pazienti = _carica_lista_pazienti(conn)
     if not pazienti:
         st.info("Nessun paziente registrato. Puoi aggiungerne uno qui sotto.")
@@ -298,7 +298,7 @@ def _corpo_seleziona(conn):
     cerca = st.text_input(
         "Cerca",
         placeholder="🔍 Cognome, nome, ID o telefono...",
-        key="paz_attivo_cerca",
+        key=f"paz_attivo_cerca_{ns}",
         label_visibility="collapsed",
     )
 
@@ -316,7 +316,7 @@ def _corpo_seleziona(conn):
 
     ordina_recenti = False
     if not cerca.strip():
-        ordina_recenti = st.checkbox("🕓 Ordina per ultimi registrati", key="paz_attivo_recenti")
+        ordina_recenti = st.checkbox("🕓 Ordina per ultimi registrati", key=f"paz_attivo_recenti_{ns}")
         if ordina_recenti:
             pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
 
@@ -326,7 +326,7 @@ def _corpo_seleziona(conn):
                      expanded=True):
         st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
                    "il paziente viene creato e selezionato subito.")
-        _form_nuovo_paziente(conn, key_suffix="inline")
+        _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
 
     # Tabella ag-grid
     try:
@@ -342,7 +342,7 @@ def _corpo_seleziona(conn):
             f"· {_fmt_dn(p.get('data_nascita'))}"
             for p in pazienti
         ]
-        sel = st.selectbox("Paziente", opts, key="paz_attivo_fb")
+        sel = st.selectbox("Paziente", opts, key=f"paz_attivo_fb_{ns}")
         if st.button("Conferma", type="primary", use_container_width=True):
             try:
                 pid = int(sel.split(" - ", 1)[0])
@@ -398,7 +398,7 @@ def _corpo_seleziona(conn):
         allow_unsafe_jscode=False,
         theme="balham",
         fit_columns_on_grid_load=False,
-        key=f"aggrid_paz_attivo_{cerca}",
+        key=f"aggrid_paz_attivo_{ns}_{cerca}",
     )
 
     selected = grid_response.get("selected_rows", [])
@@ -447,7 +447,7 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
             )
         with c2:
             with st.popover("👤 Seleziona paziente"):
-                _corpo_seleziona(conn)
+                _corpo_seleziona(conn, ns=f"gpa_{_hpa_n}")
     return pid
 
 
@@ -488,7 +488,7 @@ def header_paziente_attivo(conn) -> int | None:
             st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
         with c2:
             with st.popover("👤 Seleziona paziente"):
-                _corpo_seleziona(conn)
+                _corpo_seleziona(conn, ns=f"nopid_{_hpa_n}")
         return None
 
     # Banner paziente attivo
@@ -538,7 +538,7 @@ def header_paziente_attivo(conn) -> int | None:
                 "<style>div[data-testid='stPopoverBody']{max-width:560px}</style>",
                 unsafe_allow_html=True,
             )
-            _corpo_seleziona(conn)
+            _corpo_seleziona(conn, ns=f"hdr_{_hpa_n}")
 
     with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
         c1, c2, c3 = st.columns(3)
