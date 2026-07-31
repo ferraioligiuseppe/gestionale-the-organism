@@ -281,6 +281,10 @@ def _form_nuovo_paziente(conn, key_suffix=None):
 
 @st.dialog("👤 Seleziona paziente", width="large")
 def _dialog_seleziona(conn):
+    _corpo_seleziona(conn)
+
+
+def _corpo_seleziona(conn):
     pazienti = _carica_lista_pazienti(conn)
     if not pazienti:
         st.info("Nessun paziente registrato. Puoi aggiungerne uno qui sotto.")
@@ -533,7 +537,16 @@ def header_paziente_attivo(conn) -> int | None:
         st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
         if st.button("🔄 Cambia paziente", key=_hpa_key,
                       use_container_width=True):
-            _dialog_seleziona(conn)
+            st.session_state["_hpa_mostra_selettore"] = True
+
+    if st.session_state.get("_hpa_mostra_selettore"):
+        with st.container(border=True):
+            c_t, c_x = st.columns([5, 1])
+            c_t.markdown("**👤 Seleziona paziente**")
+            if c_x.button("✕ Chiudi", key=f"hpa_chiudi_sel_{_hpa_n}"):
+                st.session_state["_hpa_mostra_selettore"] = False
+                st.rerun()
+            _corpo_seleziona(conn)
 
     with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
         c1, c2, c3 = st.columns(3)
