@@ -11735,6 +11735,10 @@ def ui_sessione_stimolazione_uditiva_test():
 
 
 def main():
+    # Reset ad ogni caricamento pagina (non deve crescere all'infinito tra
+    # un rerun e l'altro, altrimenti le chiavi dei widget del paziente
+    # attivo cambiano ogni volta e perdono lo stato, es. selezione AgGrid).
+    st.session_state["_hpa_render_n"] = 0
     # Pagina pubblica questionari (senza login)
     if maybe_handle_public_questionario(get_connection):
         return
@@ -11746,6 +11750,15 @@ def main():
             ui_public_lead_page(get_connection)
         except Exception as _e:
             st.error(f"Modulo contatti non disponibile: {_e}")
+        return
+
+    # --- PUBLIC ASCOLTO HOOK (no login) — avviso da LearnPress ---
+    if st.query_params.get('ascolto_hook'):
+        try:
+            from modules.ascolti_maps import ui_public_ascolto_hook
+            ui_public_ascolto_hook(get_connection)
+        except Exception as _e:
+            st.write(f"errore: {_e}")
         return
 
     # --- PUBLIC SIGN PAGE (no login) ---
