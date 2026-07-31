@@ -281,6 +281,10 @@ def _form_nuovo_paziente(conn, key_suffix=None):
 
 @st.dialog("👤 Seleziona paziente", width="large")
 def _dialog_seleziona(conn):
+    _corpo_seleziona(conn)
+
+
+def _corpo_seleziona(conn):
     pazienti = _carica_lista_pazienti(conn)
     if not pazienti:
         st.info("Nessun paziente registrato. Puoi aggiungerne uno qui sotto.")
@@ -442,9 +446,8 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
                 "Selezionane uno per continuare."
             )
         with c2:
-            if st.button("👤 Seleziona paziente", type="primary",
-                          key="gpa_select_inline", use_container_width=True):
-                _dialog_seleziona(conn)
+            with st.popover("👤 Seleziona paziente", use_container_width=True):
+                _corpo_seleziona(conn)
     return pid
 
 
@@ -484,9 +487,8 @@ def header_paziente_attivo(conn) -> int | None:
         with c1:
             st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
         with c2:
-            if st.button("👤 Seleziona paziente", type="primary",
-                          key=f"hpa_select_{_hpa_n}", use_container_width=True):
-                _dialog_seleziona(conn)
+            with st.popover("👤 Seleziona paziente", use_container_width=True):
+                _corpo_seleziona(conn)
         return None
 
     # Banner paziente attivo
@@ -531,9 +533,8 @@ def header_paziente_attivo(conn) -> int | None:
         )
     with c2:
         st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Cambia paziente", key=_hpa_key,
-                      use_container_width=True):
-            _dialog_seleziona(conn)
+        with st.popover("🔄 Cambia paziente", use_container_width=True):
+            _corpo_seleziona(conn)
 
     with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
         c1, c2, c3 = st.columns(3)
