@@ -446,7 +446,7 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
                 "Selezionane uno per continuare."
             )
         with c2:
-            with st.popover("👤 Seleziona paziente", use_container_width=True):
+            with st.popover("👤 Seleziona paziente"):
                 _corpo_seleziona(conn)
     return pid
 
@@ -487,7 +487,7 @@ def header_paziente_attivo(conn) -> int | None:
         with c1:
             st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
         with c2:
-            with st.popover("👤 Seleziona paziente", use_container_width=True):
+            with st.popover("👤 Seleziona paziente"):
                 _corpo_seleziona(conn)
         return None
 
@@ -534,6 +534,10 @@ def header_paziente_attivo(conn) -> int | None:
     with c2:
         st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
         with st.popover("🔄 Cambia paziente", use_container_width=True):
+            st.markdown(
+                "<style>div[data-testid='stPopoverBody']{max-width:560px}</style>",
+                unsafe_allow_html=True,
+            )
             _corpo_seleziona(conn)
 
     with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
