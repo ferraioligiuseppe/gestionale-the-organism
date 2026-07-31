@@ -510,7 +510,7 @@ def header_paziente_attivo(conn) -> int | None:
     # del bottone sempre unica per evitare "duplicate element key".
     _hpa_key = f"hpa_change_{_hpa_n}"
 
-    c1, c2 = st.columns([4, 1])
+    c1, c2 = st.columns([3, 2])
     with c1:
         st.markdown(
             f"""<div style="
