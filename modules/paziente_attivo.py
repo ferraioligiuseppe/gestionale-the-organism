@@ -446,9 +446,8 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
                 "Selezionane uno per continuare."
             )
         with c2:
-            if st.button("👤 Seleziona paziente", type="primary",
-                          key="gpa_select_inline", use_container_width=True):
-                _dialog_seleziona(conn)
+            with st.popover("👤 Seleziona paziente", use_container_width=True):
+                _corpo_seleziona(conn)
     return pid
 
 
@@ -488,9 +487,8 @@ def header_paziente_attivo(conn) -> int | None:
         with c1:
             st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
         with c2:
-            if st.button("👤 Seleziona paziente", type="primary",
-                          key=f"hpa_select_{_hpa_n}", use_container_width=True):
-                _dialog_seleziona(conn)
+            with st.popover("👤 Seleziona paziente", use_container_width=True):
+                _corpo_seleziona(conn)
         return None
 
     # Banner paziente attivo
@@ -535,17 +533,7 @@ def header_paziente_attivo(conn) -> int | None:
         )
     with c2:
         st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Cambia paziente", key=_hpa_key,
-                      use_container_width=True):
-            st.session_state["_hpa_mostra_selettore"] = True
-
-    if st.session_state.get("_hpa_mostra_selettore"):
-        with st.container(border=True):
-            c_t, c_x = st.columns([5, 1])
-            c_t.markdown("**👤 Seleziona paziente**")
-            if c_x.button("✕ Chiudi", key=f"hpa_chiudi_sel_{_hpa_n}"):
-                st.session_state["_hpa_mostra_selettore"] = False
-                st.rerun()
+        with st.popover("🔄 Cambia paziente", use_container_width=True):
             _corpo_seleziona(conn)
 
     with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
