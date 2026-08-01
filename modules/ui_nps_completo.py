@@ -84,6 +84,8 @@ def _salva_nps(conn, paziente_id: int, tipo: str, dati: dict) -> None:
         conn.commit()
         st.success(f"✅ {tipo} salvato.")
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.error(f"Errore salvataggio: {e}")
 
 
@@ -101,7 +103,8 @@ def _carica_nps(conn, paziente_id: int, tipo: str) -> Optional[dict]:
             raw = row[0] if not isinstance(row, dict) else row["dati_json"]
             return json.loads(raw)
     except Exception:
-        pass
+        try: conn.rollback()
+        except Exception: pass
     return None
 
 
