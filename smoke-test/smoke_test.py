@@ -25,16 +25,16 @@ os.makedirs(OUT_DIR, exist_ok=True)
 # coprire altre voci del menu — il testo deve combaciare con quello mostrato
 # nell'interfaccia (emoji comprese).
 SEZIONI_DA_CONTROLLARE = [
-    ("🔬 Valutazione funzionale", "🎧 Bilancio Uditivo"),
-    ("🔬 Valutazione funzionale", "📊 Audiometria Funzionale"),
-    ("🔬 Valutazione funzionale", "🔎 Diagnostica Uditiva"),
-    ("👁️ Lenti a contatto", "Lenti Inverse"),
-    ("👁️ Lenti a contatto", "LAC Ametropie"),
-    ("👁️ Lenti a contatto", "Calcolatore LAC Inversa"),
-    ("👁️ Lenti a contatto", "ESA Ortho-6"),
-    ("🎧 MAPS", "🎧 MAPS"),
-    ("🎧 MAPS", "🧭 Percorsi"),
-    ("🎧 MAPS", "🗂 Programmi"),
+    ("VALUTAZIONE E TRATTAMENTO MULTISENSORIALE", "Bilancio Uditivo"),
+    ("VALUTAZIONE E TRATTAMENTO MULTISENSORIALE", "Audiometria Funzionale"),
+    ("VALUTAZIONE E TRATTAMENTO MULTISENSORIALE", "Diagnostica Uditiva"),
+    ("OCULISTICA · LAC", "Lenti Inverse"),
+    ("OCULISTICA · LAC", "LAC Ametropie"),
+    ("OCULISTICA · LAC", "Calcolatore LAC Inversa"),
+    ("OCULISTICA · LAC", "ESA Ortho-6"),
+    ("VALUTAZIONE E TRATTAMENTO MULTISENSORIALE", "MAPS"),
+    ("VALUTAZIONE E TRATTAMENTO MULTISENSORIALE", "Percorsi"),
+    ("VALUTAZIONE E TRATTAMENTO MULTISENSORIALE", "Programmi"),
 ]
 
 ERRORI_STREAMLIT = [
@@ -84,11 +84,17 @@ def login(page):
     page.wait_for_timeout(4000)
 
 
-def click_nav(page, label):
-    """Clicca un elemento di menu che contiene il testo indicato."""
-    el = page.get_by_text(label, exact=False).first
-    el.click(timeout=10000)
-    page.wait_for_timeout(2500)
+def click_nav(page, label, is_gruppo=False):
+    """Clicca un elemento di menu che contiene il testo indicato.
+    Per i gruppi (es. VALUTAZIONE E TRATTAMENTO MULTISENSORIALE) prova prima
+    la freccina ▶ accanto al testo, poi il testo stesso come fallback."""
+    if is_gruppo:
+        riga = page.locator(f"text={label}").first
+        riga.click(timeout=10000)
+    else:
+        el = page.get_by_text(label, exact=False).first
+        el.click(timeout=10000)
+    page.wait_for_timeout(2000)
 
 
 def main():
@@ -105,10 +111,13 @@ def main():
         ok, motivo = screenshot_error_scan(page, "00_home_dopo_login")
         risultati.append(("Home dopo login", ok, motivo))
 
+        ultimo_gruppo_aperto = None
         for area, sotto in SEZIONI_DA_CONTROLLARE:
             label_completa = f"{area} / {sotto}"
             try:
-                click_nav(page, area)
+                if area != ultimo_gruppo_aperto:
+                    click_nav(page, area, is_gruppo=True)
+                    ultimo_gruppo_aperto = area
                 click_nav(page, sotto)
                 ok, motivo = screenshot_error_scan(page, label_completa)
                 risultati.append((label_completa, ok, motivo))
