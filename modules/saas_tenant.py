@@ -4,23 +4,6 @@
 ║  SAAS TENANT — Architettura Multi-Tenant The Organism Platform      ║
 ║  Meta-DB · Piani abbonamento · Controllo accessi · Onboarding       ║
 ╚══════════════════════════════════════════════════════════════════════╝
-
-ARCHITETTURA:
-  ┌─────────────────────────────────────────────────────┐
-  │  META-DB (Neon centrale)                            │
-  │  · studi         → ogni studio registrato           │
-  │  · abbonamenti   → piano attivo per studio          │
-  │  · moduli        → quali sezioni sono abilitate     │
-  │  · utenti_meta   → login + studio_id               │
-  └────────────────────────┬────────────────────────────┘
-                           │ DATABASE_URL per studio
-             ┌─────────────┼─────────────┐
-             ▼             ▼             ▼
-         Studio A      Studio B      Studio C
-         (Neon DB)     (Neon DB)     (Neon DB)
-         pazienti      pazienti      pazienti
-         sedute        sedute        sedute
-         ...           ...           ...
 """
 from __future__ import annotations
 from typing import Optional
@@ -29,10 +12,6 @@ import json
 import datetime
 import hashlib
 import secrets
-
-# ══════════════════════════════════════════════════════════════════════
-#  PIANI DI ABBONAMENTO
-# ══════════════════════════════════════════════════════════════════════
 
 PIANI: dict[str, dict] = {
     "base": {
@@ -77,16 +56,15 @@ PIANI: dict[str, dict] = {
     },
     "enterprise": {
         "nome":          "Enterprise",
-        "prezzo_mese":   0,   # custom
+        "prezzo_mese":   0,
         "prezzo_anno":   0,
         "max_utenti":    999,
         "max_pazienti":  999999,
-        "moduli":        ["*"],  # tutti i moduli
+        "moduli":        ["*"],
         "descrizione":   "Multi-sede, API, white-label. Prezzo su misura.",
     },
 }
 
-# Mapping modulo → costante sezione (da app_sections.py)
 MODULO_SEZIONE: dict[str, list[str]] = {
     "pazienti":           ["Pazienti"],
     "sedute":             ["Sedute / Terapie"],
@@ -109,30 +87,23 @@ MODULO_SEZIONE: dict[str, list[str]] = {
     "reading":            [" Lettura Avanzata DOM"],
 }
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  SCHEMA META-DB
-# ══════════════════════════════════════════════════════════════════════
-
 SQL_SCHEMA_META = """
--- Tabella studi registrati
 CREATE TABLE IF NOT EXISTS studi (
     id              BIGSERIAL PRIMARY KEY,
-    codice          TEXT UNIQUE NOT NULL,       -- es. "studio_abc123"
+    codice          TEXT UNIQUE NOT NULL,
     nome            TEXT NOT NULL,
     email_admin     TEXT NOT NULL,
     telefono        TEXT,
     indirizzo       TEXT,
     partita_iva     TEXT,
-    db_url          TEXT NOT NULL,             -- DATABASE_URL del DB dello studio
+    db_url          TEXT NOT NULL,
     piano           TEXT NOT NULL DEFAULT 'base',
-    stato           TEXT NOT NULL DEFAULT 'attivo',  -- attivo | sospeso | cancellato
+    stato           TEXT NOT NULL DEFAULT 'attivo',
     created_at      TIMESTAMP DEFAULT NOW(),
     scadenza_piano  DATE,
     note            TEXT
 );
 
--- Abbonamenti
 CREATE TABLE IF NOT EXISTS abbonamenti (
     id              BIGSERIAL PRIMARY KEY,
     studio_id       BIGINT REFERENCES studi(id),
@@ -140,18 +111,17 @@ CREATE TABLE IF NOT EXISTS abbonamenti (
     inizio          DATE NOT NULL,
     fine            DATE,
     importo_mese    NUMERIC(8,2),
-    stato           TEXT DEFAULT 'attivo',   -- attivo | scaduto | cancellato
+    stato           TEXT DEFAULT 'attivo',
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
--- Utenti piattaforma (collegati a uno studio)
 CREATE TABLE IF NOT EXISTS utenti_meta (
     id              BIGSERIAL PRIMARY KEY,
     studio_id       BIGINT REFERENCES studi(id),
     email           TEXT UNIQUE NOT NULL,
     nome            TEXT,
     cognome         TEXT,
-    ruolo           TEXT DEFAULT 'clinico',  -- admin | clinico | segreteria
+    ruolo           TEXT DEFAULT 'clinico',
     password_hash   TEXT NOT NULL,
     salt            TEXT NOT NULL,
     attivo          BOOLEAN DEFAULT TRUE,
@@ -159,32 +129,25 @@ CREATE TABLE IF NOT EXISTS utenti_meta (
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
--- Log accessi
 CREATE TABLE IF NOT EXISTS log_accessi (
     id          BIGSERIAL PRIMARY KEY,
     studio_id   BIGINT,
     utente_id   BIGINT,
-    evento      TEXT,                        -- login | logout | errore
+    evento      TEXT,
     ip          TEXT,
     created_at  TIMESTAMP DEFAULT NOW()
 );
 
--- Indici
 CREATE INDEX IF NOT EXISTS idx_studi_codice ON studi(codice);
 CREATE INDEX IF NOT EXISTS idx_utenti_email ON utenti_meta(email);
 CREATE INDEX IF NOT EXISTS idx_abbonamenti_studio ON abbonamenti(studio_id);
 """
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  FUNZIONI DI ACCESSO TENANT
-# ══════════════════════════════════════════════════════════════════════
-
 def _hash_password(password: str, salt: Optional[str] = None) -> tuple[str, str]:
     if salt is None:
         salt = secrets.token_hex(16)
-    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(),
-                             100_000)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000)
     return h.hex(), salt
 
 
@@ -196,6 +159,8 @@ def inizializza_meta_db(meta_conn) -> None:
         meta_conn.commit()
         st.success("✅ Meta-DB inizializzato.")
     except Exception as e:
+        try: meta_conn.rollback()
+        except Exception: pass
         st.error(f"Errore inizializzazione meta-DB: {e}")
 
 
@@ -203,10 +168,7 @@ def registra_studio(meta_conn, nome: str, email_admin: str,
                     db_url: str, piano: str = "base",
                     telefono: str = "", indirizzo: str = "",
                     partita_iva: str = "") -> Optional[str]:
-    """
-    Registra un nuovo studio e ritorna il codice univoco.
-    Chiamare da pannello admin o da form onboarding.
-    """
+    """Registra un nuovo studio e ritorna il codice univoco."""
     codice = f"studio_{secrets.token_hex(6)}"
     try:
         cur = meta_conn.cursor()
@@ -219,7 +181,6 @@ def registra_studio(meta_conn, nome: str, email_admin: str,
               telefono, indirizzo, partita_iva,
               (datetime.date.today() + datetime.timedelta(days=30)).isoformat()))
         studio_id = cur.fetchone()[0]
-        # Abbonamento iniziale
         cur.execute("""
             INSERT INTO abbonamenti (studio_id, piano, inizio, importo_mese)
             VALUES (%s, %s, %s, %s)
@@ -228,6 +189,8 @@ def registra_studio(meta_conn, nome: str, email_admin: str,
         meta_conn.commit()
         return codice
     except Exception as e:
+        try: meta_conn.rollback()
+        except Exception: pass
         st.error(f"Errore registrazione studio: {e}")
         return None
 
@@ -246,14 +209,14 @@ def crea_utente(meta_conn, studio_id: int, email: str, nome: str,
         meta_conn.commit()
         return True
     except Exception as e:
+        try: meta_conn.rollback()
+        except Exception: pass
         st.error(f"Errore creazione utente: {e}")
         return False
 
 
 def verifica_login(meta_conn, email: str, password: str) -> Optional[dict]:
-    """
-    Verifica credenziali. Ritorna dict con info studio/utente o None.
-    """
+    """Verifica credenziali. Ritorna dict con info studio/utente o None."""
     try:
         cur = meta_conn.cursor()
         cur.execute("""
@@ -286,18 +249,18 @@ def verifica_login(meta_conn, email: str, password: str) -> Optional[dict]:
         if info.get("stato_studio") != "attivo":
             return None
 
-        # Aggiorna ultimo accesso
         cur.execute("UPDATE utenti_meta SET ultimo_accesso=NOW() WHERE id=%s",
                     (info["id"],))
         meta_conn.commit()
         return info
     except Exception as e:
+        try: meta_conn.rollback()
+        except Exception: pass
         st.error(f"Errore login: {e}")
         return None
 
 
 def moduli_attivi(piano: str) -> list[str]:
-    """Ritorna lista dei moduli abilitati per un piano."""
     cfg = PIANI.get(piano, PIANI["base"])
     if cfg["moduli"] == ["*"]:
         return list(MODULO_SEZIONE.keys())
@@ -305,7 +268,6 @@ def moduli_attivi(piano: str) -> list[str]:
 
 
 def sezioni_abilitate(piano: str) -> list[str]:
-    """Ritorna la lista di sezioni (label menu) abilitate per il piano."""
     sezioni: list[str] = []
     for modulo in moduli_attivi(piano):
         sezioni.extend(MODULO_SEZIONE.get(modulo, []))
@@ -317,15 +279,8 @@ def studio_ha_modulo(piano: str, modulo: str) -> bool:
     return modulo in attivi or attivi == ["*"]
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  PANNELLO ADMIN — GESTIONE STUDI E UTENTI
-# ══════════════════════════════════════════════════════════════════════
-
 def render_admin_saas(meta_conn) -> None:
-    """
-    Pannello di amministrazione SaaS.
-    Solo per admin della piattaforma (non per admin dei singoli studi).
-    """
+    """Pannello di amministrazione SaaS."""
     _ensure_saas_tables(meta_conn)
     st.title("⚙️ The Organism Platform — Admin SaaS")
     st.caption("Pannello riservato all'amministratore della piattaforma")
@@ -356,6 +311,8 @@ def render_admin_saas(meta_conn) -> None:
             else:
                 st.info("Nessuno studio registrato.")
         except Exception as e:
+            try: meta_conn.rollback()
+            except Exception: pass
             st.error(f"Errore: {e}")
 
     with tab_crea:
@@ -369,7 +326,6 @@ def render_admin_saas(meta_conn) -> None:
             db_url_s   = st.text_input("DATABASE_URL Neon dello studio *",
                                        type="password")
             piano_s    = st.selectbox("Piano", list(PIANI.keys()))
-            # Password iniziale admin dello studio
             pwd_admin  = st.text_input("Password admin iniziale *", type="password")
             nome_admin = st.text_input("Nome admin")
             cog_admin  = st.text_input("Cognome admin")
@@ -385,11 +341,15 @@ def render_admin_saas(meta_conn) -> None:
                     tel, indirizzo, piva
                 )
                 if codice:
-                    # Recupera studio_id
-                    cur2 = meta_conn.cursor()
-                    cur2.execute("SELECT id FROM studi WHERE codice=%s", (codice,))
-                    sid = cur2.fetchone()
-                    sid = sid[0] if sid else None
+                    try:
+                        cur2 = meta_conn.cursor()
+                        cur2.execute("SELECT id FROM studi WHERE codice=%s", (codice,))
+                        sid = cur2.fetchone()
+                        sid = sid[0] if sid else None
+                    except Exception:
+                        try: meta_conn.rollback()
+                        except Exception: pass
+                        sid = None
                     if sid:
                         ok = crea_utente(meta_conn, sid, email_a,
                                          nome_admin, cog_admin,
@@ -419,13 +379,8 @@ def render_admin_saas(meta_conn) -> None:
             inizializza_meta_db(meta_conn)
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  PANNELLO STUDIO — Gestione utenti del singolo studio
-# ══════════════════════════════════════════════════════════════════════
-
 def _ensure_saas_tables(conn) -> None:
     """Crea le tabelle SaaS nel DB se non esistono. Sicuro da chiamare più volte."""
-    # Prima fai rollback per pulire eventuali transazioni abortite
     try:
         conn.rollback()
     except Exception:
@@ -475,13 +430,12 @@ def _ensure_saas_tables(conn) -> None:
         for sql in tabelle:
             cur.execute(sql)
         conn.commit()
-    except Exception as e:
+    except Exception:
         try:
             conn.rollback()
         except Exception:
             pass
     return
-
 
 
 def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
@@ -510,35 +464,9 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
         st.info("Per cambiare piano o per assistenza: **info@theorganism.it**")
 
     with tab_utenti:
-        # Crea tabella se non esiste — con autocommit esplicito
         try:
-            cur = meta_conn.cursor()
-            cur.execute("ROLLBACK")
-        except Exception:
-            pass
-        try:
-            cur = meta_conn.cursor()
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS utenti_meta (
-                    id            BIGSERIAL PRIMARY KEY,
-                    studio_id     BIGINT DEFAULT 1,
-                    email         TEXT UNIQUE NOT NULL,
-                    nome          TEXT DEFAULT \'\',
-                    cognome       TEXT DEFAULT \'\',
-                    ruolo         TEXT DEFAULT \'clinico\',
-                    password_hash TEXT NOT NULL DEFAULT \'\',
-                    salt          TEXT NOT NULL DEFAULT \'\',
-                    attivo        BOOLEAN DEFAULT TRUE,
-                    ultimo_accesso TIMESTAMP,
-                    created_at    TIMESTAMP DEFAULT NOW()
-                )
-            """)
-            meta_conn.commit()
+            _ensure_saas_tables(meta_conn)
         except Exception as ex_create:
-            try:
-                meta_conn.rollback()
-            except Exception:
-                pass
             st.warning(f"Tabella utenti non ancora disponibile: {ex_create}")
 
         rows = []
@@ -551,6 +479,8 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
             )
             rows = cur.fetchall() or []
         except Exception:
+            try: meta_conn.rollback()
+            except Exception: pass
             rows = []
 
         if rows:
@@ -604,21 +534,10 @@ def render_gestione_studio(meta_conn, studio_id: int, piano: str) -> None:
             st.info("Fai l'upgrade del piano per sbloccarli.")
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  FILTRO MENU IN BASE AL PIANO
-# ══════════════════════════════════════════════════════════════════════
-
 def filtra_sezioni_per_piano(sezioni: list[str], piano: str) -> list[str]:
-    """
-    Dato l'elenco completo delle sezioni del menu e il piano dello studio,
-    ritorna solo le sezioni abilitate.
-
-    Uso in app_menu.py → build_sections():
-        from modules.saas_tenant import filtra_sezioni_per_piano
-        sezioni = filtra_sezioni_per_piano(sezioni, st.session_state.get("piano", "base"))
-    """
+    """Dato l'elenco completo delle sezioni del menu e il piano dello studio,
+    ritorna solo le sezioni abilitate."""
     abilitate = sezioni_abilitate(piano)
-    # Sezioni sempre visibili indipendentemente dal piano
     sempre_visibili = ["Pazienti", "Dashboard incassi",
                        " Privacy & Consensi (PDF)"]
     return [s for s in sezioni
