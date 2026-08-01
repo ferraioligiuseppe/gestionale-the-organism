@@ -2,12 +2,6 @@
 # modules/public_questionnaires.py
 """
 Sistema unificato per questionari pubblici PNEV / The Organism.
-
-Design:
-- Una sola tabella `public_tokens` (sostituisce questionari_links)
-- Postgres-native (%s), retrocompatibile SQLite
-- Estendibile: aggiungere un questionario = aggiungere una chiave in REGISTRY
-- Pagina pubblica: pages/pnev_pubblico.py
 """
 from __future__ import annotations
 
@@ -21,7 +15,6 @@ from typing import Any, Dict, Optional, Tuple
 
 import streamlit as st
 
-# ── CONFIGURAZIONE ────────────────────────────────────────────────────────────
 
 def _db_backend() -> str:
     """Rileva se stiamo usando postgres o sqlite."""
@@ -67,10 +60,6 @@ def _hash_token(token: str) -> str:
     key = _token_secret().encode("utf-8")
     return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
 
-# ── REGISTRY QUESTIONARI ──────────────────────────────────────────────────────
-# Per aggiungere un nuovo questionario: inserisci una chiave qui.
-# "label" = nome leggibile, "page_param" = valore ?q= nel link
-
 REGISTRY: Dict[str, Dict[str, Any]] = {
     "INPPS": {
         "label": "Screening INPPS – Genitori",
@@ -82,12 +71,7 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
         "page_param": "INPPS_ADULTI",
         "descrizione": "Questionario di screening neurosviluppo autocompilato (adulti).",
     },
-    # Aggiungi qui futuri questionari:
-    # "MIOFUNZIONALE": {...},
-    # "SPORT_VISION": {...},
 }
-
-# ── INIT DB ───────────────────────────────────────────────────────────────────
 
 def init_public_tokens_table():
     """Crea la tabella public_tokens se non esiste. Idempotente."""
@@ -135,8 +119,6 @@ def init_public_tokens_table():
         raise e
     finally:
         cur.close()
-
-# ── CREAZIONE TOKEN ───────────────────────────────────────────────────────────
 
 def create_public_token(
     paziente_id: int,
@@ -215,8 +197,6 @@ def build_whatsapp_message(token: str, questionario: str, nome_paziente: str, tt
         f"📞 0815152334"
     )
 
-# ── VALIDAZIONE TOKEN ─────────────────────────────────────────────────────────
-
 def validate_public_token(token: str, questionario: str) -> Optional[Dict]:
     """
     Verifica il token. Restituisce il record se valido, None altrimenti.
@@ -237,7 +217,6 @@ def validate_public_token(token: str, questionario: str) -> Optional[Dict]:
         if not row:
             return None
 
-        # Normalizza a dict
         if hasattr(row, "keys"):
             rec = dict(row)
         else:
@@ -245,11 +224,9 @@ def validate_public_token(token: str, questionario: str) -> Optional[Dict]:
                     "expires_at", "used_at", "meta_json"]
             rec = dict(zip(cols, row))
 
-        # Già usato
         if rec.get("used_at"):
             return None
 
-        # Scaduto
         exp = rec.get("expires_at")
         if exp:
             try:
@@ -265,6 +242,10 @@ def validate_public_token(token: str, questionario: str) -> Optional[Dict]:
                 return None
 
         return rec
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         cur.close()
 
@@ -280,10 +261,12 @@ def mark_token_used(token_id: int):
             (datetime.now(timezone.utc).isoformat(), token_id)
         )
         conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         cur.close()
-
-# ── SALVATAGGIO RISPOSTE ──────────────────────────────────────────────────────
 
 def save_inpps_response(paziente_id: int, inpps_data: dict, inpps_summary: str):
     """
@@ -342,12 +325,9 @@ def save_inpps_response(paziente_id: int, inpps_data: dict, inpps_summary: str):
     finally:
         cur.close()
 
-# ── UI GESTIONALE: GENERA LINK ────────────────────────────────────────────────
-
 def ui_genera_link_pubblico(paz_id: int, nome_paziente: str):
     """
     Widget per il gestionale: genera link pubblici per tutti i questionari del registry.
-    Incollare nella sezione PNEV al posto del vecchio expander "Link INPPS".
     """
     st.markdown("#### 🔗 Link pubblici questionari")
 
