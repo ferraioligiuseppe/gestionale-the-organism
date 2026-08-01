@@ -70,6 +70,8 @@ def _carica(conn, pid):
         if not raw: return {}
         return raw if isinstance(raw, dict) else json.loads(raw)
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         return {}
 
 def _salva(conn, pid, dati):
