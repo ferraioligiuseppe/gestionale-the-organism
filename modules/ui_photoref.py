@@ -48,11 +48,19 @@ def genera_link_cattura_mobile(conn, paziente_id: int, base_url: str, ttl_minute
     now = datetime.datetime.utcnow()
     exp = now + datetime.timedelta(minutes=ttl_minutes)
     cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO photoref_link_token (paziente_id, token_hash, created_at, expires_at) VALUES (%s,%s,%s,%s)",
-        (paziente_id, token_hash, now.isoformat(), exp.isoformat()))
-    conn.commit()
-    return f"{base_url.rstrip('/')}/?photoref_token={token}"
+    try:
+        cur.execute(
+            "INSERT INTO photoref_link_token (paziente_id, token_hash, created_at, expires_at) VALUES (%s,%s,%s,%s)",
+            (paziente_id, token_hash, now.isoformat(), exp.isoformat()))
+        conn.commit()
+        return f"{base_url.rstrip('/')}/?photoref_token={token}"
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def verifica_token_cattura(conn, token: str):
@@ -80,9 +88,17 @@ def verifica_token_cattura(conn, token: str):
 def marca_token_usato(conn, token: str):
     token_hash = hmac.new(_token_secret(), token.encode("utf-8"), hashlib.sha256).hexdigest()
     cur = conn.cursor()
-    cur.execute("UPDATE photoref_link_token SET used_at=%s WHERE token_hash=%s",
-                (datetime.datetime.utcnow().isoformat(), token_hash))
-    conn.commit()
+    try:
+        cur.execute("UPDATE photoref_link_token SET used_at=%s WHERE token_hash=%s",
+                    (datetime.datetime.utcnow().isoformat(), token_hash))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _ensure_table(conn):
@@ -112,12 +128,20 @@ def _ensure_table(conn):
 def _salva(conn, paz_id, data_s, stima_od, stima_os, asimmetria, note, asse_od=0, asse_os=0,
           working_distance_m=1.0, eccentricita_mm=20.0):
     cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO photoref_sessioni (paziente_id, data_sessione, stima_od, stima_os, asimmetria, note,
-                                          asse_od, asse_os, working_distance_m, eccentricita_mm)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-        (paz_id, data_s, stima_od, stima_os, asimmetria, note, asse_od, asse_os, working_distance_m, eccentricita_mm))
-    conn.commit()
+    try:
+        cur.execute(
+            """INSERT INTO photoref_sessioni (paziente_id, data_sessione, stima_od, stima_os, asimmetria, note,
+                                              asse_od, asse_os, working_distance_m, eccentricita_mm)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (paz_id, data_s, stima_od, stima_os, asimmetria, note, asse_od, asse_os, working_distance_m, eccentricita_mm))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _storico(conn, paz_id):
@@ -310,29 +334,23 @@ _CAPTURE_HTML = """
 
 
 def render_capture_mobile(conn, paz_id: int, token: str = None) -> None:
-    """Link che apre la cattura guidata (flash, zoom, crop) in una scheda NUOVA,
-    servita direttamente dal gestionale (Streamlit static serving). Il link è
-    costruito lato browser (JS) per rispettare l'eventuale prefisso di
-    percorso che Streamlit Cloud aggiunge all'URL (es. /~/+/...) — un
-    percorso assoluto fisso lo ignora e apre la pagina sbagliata."""
-    import time
+    """Link che apre la cattura guidata (flash, zoom, crop, installabile come
+    app/PWA) in una scheda NUOVA su pnev.it — stesso schema, già collaudato,
+    di pnev_capture.py: un iframe (o la servitura statica di Streamlit Cloud,
+    dietro proxy con prefisso variabile) perde/nega il permesso fotocamera."""
+    import urllib.parse, time
     st.markdown("### 📸 Photoref AI — Cattura guidata")
     st.caption("Si apre in una scheda separata (necessario per il permesso fotocamera). "
-              "Tieni il telefono a ~40 cm dal viso, ambiente poco illuminato.")
-    v = int(time.time())
-    trigger = f"""
-<button id="pr_open_link" style="padding:12px 20px;border-radius:8px;border:none;background:#2ea44f;color:#fff;font-weight:700;font-size:15px;width:100%;cursor:pointer">
-📸 Apri cattura guidata (scheda nuova)
-</button>
-<script>
-document.getElementById('pr_open_link').onclick = function(){{
-  const base = document.baseURI.split('?')[0].replace(/\\/$/, '');
-  const url = base + '/static/photoref_capture.html?v={v}';
-  window.open(url, '_blank');
-}};
-</script>
-"""
-    components.html(trigger, height=60)
+              "Tieni il telefono a ~40 cm dal viso, ambiente poco illuminato. "
+              "Al primo utilizzo puoi anche installarla come app dal pulsante nella pagina.")
+    q = urllib.parse.urlencode({"v": str(int(time.time()))})
+    url = f"https://www.pnev.it/wp-content/uploads/photoref_capture.html?{q}"
+    st.markdown(
+        f'<a href="{url}" target="_blank" rel="noopener" '
+        'style="display:inline-block;padding:11px 18px;border-radius:8px;'
+        'background:#2ea44f;color:#fff;font-weight:bold;text-decoration:none;'
+        'font-size:15px">📸 Apri cattura guidata (scheda nuova)</a>',
+        unsafe_allow_html=True)
     st.caption("Scatta OD e OS: le 2 foto si scaricano da sole, poi caricale qui sotto per l'analisi.")
 
 
