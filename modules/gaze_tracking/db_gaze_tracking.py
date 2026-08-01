@@ -7,7 +7,8 @@ import pandas as pd
 
 
 def init_gaze_tracking_db(conn) -> None:
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS gaze_sessions (
@@ -92,13 +93,21 @@ def init_gaze_tracking_db(conn) -> None:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_samples_session_id ON gaze_samples(session_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_reports_session_id ON gaze_reports(session_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_gaze_browser_sessions_paziente_id ON gaze_browser_sessions(paziente_id);")
-    conn.commit()
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def save_browser_gaze_session(conn, paziente_id: int, paziente_label: str, payload: dict[str, Any], notes: str = "") -> int:
     metrics = payload.get("metrics") or {}
     timeline = payload.get("timeline") or []
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             INSERT INTO gaze_browser_sessions (
@@ -116,12 +125,20 @@ def save_browser_gaze_session(conn, paziente_id: int, paziente_label: str, paylo
             ),
         )
         sid = cur.fetchone()[0]
-    conn.commit()
-    return int(sid)
+        conn.commit()
+        return int(sid)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def list_browser_gaze_sessions(conn, paziente_id: int, limit: int = 20) -> list[dict[str, Any]]:
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             SELECT id, paziente_id, paziente_label, metrics_json, timeline_json, payload_json, notes, created_at
@@ -133,6 +150,13 @@ def list_browser_gaze_sessions(conn, paziente_id: int, limit: int = 20) -> list[
             (int(paziente_id), int(limit)),
         )
         rows = cur.fetchall() or []
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
     out = []
     for r in rows:
@@ -149,7 +173,8 @@ def list_browser_gaze_sessions(conn, paziente_id: int, limit: int = 20) -> list[
 
 
 def insert_gaze_session(conn, session_data: dict[str, Any]) -> int:
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             INSERT INTO gaze_sessions (
@@ -177,8 +202,15 @@ def insert_gaze_session(conn, session_data: dict[str, Any]) -> int:
             ),
         )
         session_id = cur.fetchone()[0]
-    conn.commit()
-    return int(session_id)
+        conn.commit()
+        return int(session_id)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def insert_gaze_samples_bulk(conn, session_id: int, df: pd.DataFrame) -> int:
@@ -210,7 +242,8 @@ def insert_gaze_samples_bulk(conn, session_id: int, df: pd.DataFrame) -> int:
             )
         )
 
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.executemany(
             """
             INSERT INTO gaze_samples (
@@ -240,8 +273,15 @@ def insert_gaze_samples_bulk(conn, session_id: int, df: pd.DataFrame) -> int:
             """,
             rows,
         )
-    conn.commit()
-    return len(rows)
+        conn.commit()
+        return len(rows)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> None:
@@ -250,7 +290,8 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
     clinical_indexes_json = report_data.get("clinical_indexes", {})
     distance_metrics_json = report_data.get("distance_metrics", {})
 
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             INSERT INTO gaze_reports (
@@ -283,7 +324,14 @@ def upsert_gaze_report(conn, session_id: int, report_data: dict[str, Any]) -> No
                 json.dumps(summary_json, ensure_ascii=False),
             ),
         )
-    conn.commit()
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _safe_num(value):
