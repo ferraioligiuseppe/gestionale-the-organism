@@ -2,14 +2,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
 ║  DOCUMENTI CLINICI — archivio referti del paziente (Mattone 1)        ║
-║                                                                      ║
-║  Carica nel database OVH (tabella dedicata, protetta dallo stesso    ║
-║  isolamento per studio delle cartelle) i documenti del paziente:     ║
-║  PDF e foto/scansioni di esami visivi, funzionali, diagnosi          ║
-║  precedenti. Si rileggono, si scaricano, si eliminano.               ║
-║                                                                      ║
-║  È la base per i mattoni successivi: lettura AI dei documenti,       ║
-║  quadro storico unificato, diagnosi assistita.                       ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
@@ -26,22 +18,30 @@ _MIME_ESTENSIONI = {
 
 def _assicura_tabella(conn):
     cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS documenti_clinici (
-            id BIGSERIAL PRIMARY KEY,
-            paziente_id BIGINT NOT NULL,
-            studio_id INT,
-            tipo TEXT,
-            nome_file TEXT,
-            mime TEXT,
-            dati BYTEA,
-            note TEXT,
-            estratto TEXT,
-            data TIMESTAMP DEFAULT NOW()
-        );
-    """)
-    cur.execute("ALTER TABLE documenti_clinici ADD COLUMN IF NOT EXISTS estratto TEXT;")
-    conn.commit()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS documenti_clinici (
+                id BIGSERIAL PRIMARY KEY,
+                paziente_id BIGINT NOT NULL,
+                studio_id INT,
+                tipo TEXT,
+                nome_file TEXT,
+                mime TEXT,
+                dati BYTEA,
+                note TEXT,
+                estratto TEXT,
+                data TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        cur.execute("ALTER TABLE documenti_clinici ADD COLUMN IF NOT EXISTS estratto TEXT;")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _studio_corrente(conn):
@@ -73,7 +73,6 @@ def render_documenti(conn=None, paz_id=None, paziente=None):
         st.error(f"Impossibile preparare l'archivio: {e}")
         return
 
-    # ── Caricamento ───────────────────────────────────────────────────
     with st.expander("⬆️ Carica un documento", expanded=True):
         with st.form("doc_upload", clear_on_submit=True):
             file = st.file_uploader("File (PDF o foto)",
@@ -155,7 +154,6 @@ def _elenco(conn, paz_id):
                 if st.button("🗑 Elimina", key=f"del_{doc_id}"):
                     _elimina(conn, doc_id)
                     st.rerun()
-            # anteprima immagini
             if mime and mime.startswith("image/"):
                 with st.expander("👁 Anteprima"):
                     try:
@@ -165,7 +163,6 @@ def _elenco(conn, paz_id):
                         st.image(bytes(cur.fetchone()[0]), use_container_width=True)
                     except Exception:
                         st.caption("Anteprima non disponibile.")
-            # analisi AI
             _blocco_ai(conn, doc_id, mime, nome)
         st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
                     unsafe_allow_html=True)
