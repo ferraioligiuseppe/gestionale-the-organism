@@ -1,0 +1,144 @@
+"""
+Smoke test automatico del Gestionale The Organism.
+Apre il gestionale con Playwright, effettua il login, entra in ogni sezione
+elencata sotto e controlla che non compaia un errore Streamlit.
+Salva uno screenshot per sezione + un report.md con l'esito.
+
+Non richiede terminale: viene eseguito da GitHub Actions (tab "Actions"),
+tu lanci il workflow con un click e scarichi i risultati (screenshot + report)
+come "artifact" al termine.
+"""
+import os
+import re
+import sys
+from datetime import datetime
+from playwright.sync_api import sync_playwright
+
+APP_URL = os.environ.get("GESTIONALE_URL", "https://testgestionale.streamlit.app")
+USERNAME = os.environ.get("GESTIONALE_TEST_USER", "")
+PASSWORD = os.environ.get("GESTIONALE_TEST_PASS", "")
+
+OUT_DIR = "smoke-report"
+os.makedirs(OUT_DIR, exist_ok=True)
+
+# Elenco (area, sotto-sezione) da controllare. Aggiungi righe qui se vuoi
+# coprire altre voci del menu — il testo deve combaciare con quello mostrato
+# nell'interfaccia (emoji comprese).
+SEZIONI_DA_CONTROLLARE = [
+    ("🔬 Valutazione funzionale", "🎧 Bilancio Uditivo"),
+    ("🔬 Valutazione funzionale", "📊 Audiometria Funzionale"),
+    ("🔬 Valutazione funzionale", "🔎 Diagnostica Uditiva"),
+    ("👁️ Lenti a contatto", "Lenti Inverse"),
+    ("👁️ Lenti a contatto", "LAC Ametropie"),
+    ("👁️ Lenti a contatto", "Calcolatore LAC Inversa"),
+    ("👁️ Lenti a contatto", "ESA Ortho-6"),
+    ("🎧 MAPS", "🎧 MAPS"),
+    ("🎧 MAPS", "🧭 Percorsi"),
+    ("🎧 MAPS", "🗂 Programmi"),
+]
+
+ERRORI_STREAMLIT = [
+    "This app has encountered an error",
+    "Traceback (most recent call last)",
+    "StreamlitAPIException",
+    "StreamlitDuplicateElementKey",
+    "ModuleNotFoundError",
+    "KeyError",
+    "AttributeError",
+]
+
+
+def screenshot_error_scan(page, label):
+    """Ritorna (ok: bool, motivo: str) e salva screenshot."""
+    safe = re.sub(r"[^a-zA-Z0-9]+", "_", label).strip("_")[:60]
+    path = os.path.join(OUT_DIR, f"{safe}.png")
+    page.screenshot(path=path, full_page=True)
+    testo = page.locator("body").inner_text()
+    for pattern in ERRORI_STREAMLIT:
+        if pattern in testo:
+            return False, pattern
+    return True, ""
+
+
+def login(page):
+    page.goto(APP_URL, timeout=60000)
+    page.wait_for_timeout(3000)
+    # Cerca un campo password (gate di login del gestionale)
+    try:
+        page.wait_for_selector("input[type='password']", timeout=15000)
+    except Exception:
+        return  # forse già loggato o nessun gate di login attivo
+    pw_input = page.locator("input[type='password']").first
+    text_inputs = page.locator("input[type='text']")
+    if text_inputs.count() > 0:
+        text_inputs.first.fill(USERNAME)
+    pw_input.fill(PASSWORD)
+    # Cerca un bottone di invio plausibile
+    for label in ["Entra", "Accedi", "Login", "Invia", "Conferma"]:
+        btn = page.get_by_role("button", name=re.compile(label, re.IGNORECASE))
+        if btn.count() > 0:
+            btn.first.click()
+            break
+    else:
+        page.keyboard.press("Enter")
+    page.wait_for_timeout(4000)
+
+
+def click_nav(page, label):
+    """Clicca un elemento di menu che contiene il testo indicato."""
+    el = page.get_by_text(label, exact=False).first
+    el.click(timeout=10000)
+    page.wait_for_timeout(2500)
+
+
+def main():
+    if not USERNAME or not PASSWORD:
+        print("ATTENZIONE: GESTIONALE_TEST_USER / GESTIONALE_TEST_PASS non impostati nei secrets.")
+        sys.exit(1)
+
+    risultati = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        login(page)
+
+        ok, motivo = screenshot_error_scan(page, "00_home_dopo_login")
+        risultati.append(("Home dopo login", ok, motivo))
+
+        for area, sotto in SEZIONI_DA_CONTROLLARE:
+            label_completa = f"{area} / {sotto}"
+            try:
+                click_nav(page, area)
+                click_nav(page, sotto)
+                ok, motivo = screenshot_error_scan(page, label_completa)
+                risultati.append((label_completa, ok, motivo))
+            except Exception as e:
+                risultati.append((label_completa, False, f"click/navigazione fallita: {e}"))
+                screenshot_error_scan(page, label_completa + "_ERRORE_NAV")
+
+        browser.close()
+
+    # Report leggibile
+    now = datetime.now().strftime("%d/%m/%Y %H:%M")
+    lines = [f"# Smoke test gestionale — {now}", ""]
+    n_ok = sum(1 for _, ok, _ in risultati if ok)
+    n_tot = len(risultati)
+    lines.append(f"**Esito: {n_ok}/{n_tot} sezioni OK**")
+    lines.append("")
+    for label, ok, motivo in risultati:
+        segno = "✅" if ok else "❌"
+        riga = f"- {segno} {label}"
+        if not ok:
+            riga += f" — _{motivo}_"
+        lines.append(riga)
+
+    with open(os.path.join(OUT_DIR, "report.md"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    print("\n".join(lines))
+    if n_ok < n_tot:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
