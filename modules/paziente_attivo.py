@@ -65,6 +65,8 @@ def _carica_paziente_record(conn, paz_id):
         cols = [d[0] for d in cur.description]
         return dict(zip(cols, row))
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         return None
 
 
@@ -102,6 +104,8 @@ def _carica_lista_pazienti(_conn):
                                for c, v in zip(cols, r)})
         return result
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         return []
 
 
