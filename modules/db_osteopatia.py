@@ -60,12 +60,21 @@ def insert_anamnesi(conn, paziente_id: int, payload: Dict[str, Any]) -> int:
 
 def list_anamnesi(conn, paziente_id: int, include_deleted: bool = False) -> List[Dict[str, Any]]:
     where = "WHERE paziente_id = %s"
+    # se la colonna is_deleted esiste, filtriamo (Postgres: la condizione su colonna inesistente darebbe errore)
+    # quindi facciamo una query robusta che tenta prima con is_deleted e, se fallisce, ripiega.
     base_select = """
-    SELECT id, data_anamnesi, motivo, dolore_sede, dolore_intensita, created_at
+    SELECT id, data_anamnesi, tipo_seduta, operatore, dolore_pre, dolore_post, created_at
     FROM osteo_anamnesi
     {where_clause}
     ORDER BY data_anamnesi DESC, id DESC;
     """
+    if "osteo_anamnesi" == "osteo_anamnesi":
+        base_select = """
+        SELECT id, data_anamnesi, motivo, dolore_sede, dolore_intensita, created_at
+        FROM osteo_anamnesi
+        {where_clause}
+        ORDER BY data_anamnesi DESC, id DESC;
+        """
 
     def _run(where_clause: str):
         q = base_select.format(where_clause=where_clause)
@@ -89,9 +98,11 @@ def list_anamnesi(conn, paziente_id: int, include_deleted: bool = False) -> List
     try:
         return _run(where + " AND is_deleted = FALSE")
     except Exception:
-        # fallback per schema vecchio (senza colonna) — la connessione è già
-        # stata ripulita col rollback dentro _run
+        # fallback per schema vecchio (senza colonna); _run ha già fatto
+        # rollback quindi la connessione è pulita per il retry
         return _run(where)
+
+
 
 
 def get_anamnesi(conn, anamnesi_id: int) -> Optional[Dict[str, Any]]:
@@ -167,12 +178,21 @@ def insert_seduta(conn, paziente_id: int, payload: Dict[str, Any]) -> int:
 
 def list_sedute(conn, paziente_id: int, include_deleted: bool = False) -> List[Dict[str, Any]]:
     where = "WHERE paziente_id = %s"
+    # se la colonna is_deleted esiste, filtriamo (Postgres: la condizione su colonna inesistente darebbe errore)
+    # quindi facciamo una query robusta che tenta prima con is_deleted e, se fallisce, ripiega.
     base_select = """
     SELECT id, data_seduta, tipo_seduta, operatore, dolore_pre, dolore_post, created_at
     FROM osteo_seduta
     {where_clause}
     ORDER BY data_seduta DESC, id DESC;
     """
+    if "osteo_seduta" == "osteo_anamnesi":
+        base_select = """
+        SELECT id, data_anamnesi, motivo, dolore_sede, dolore_intensita, created_at
+        FROM osteo_anamnesi
+        {where_clause}
+        ORDER BY data_anamnesi DESC, id DESC;
+        """
 
     def _run(where_clause: str):
         q = base_select.format(where_clause=where_clause)
@@ -192,10 +212,15 @@ def list_sedute(conn, paziente_id: int, include_deleted: bool = False) -> List[D
 
     if include_deleted:
         return _run(where)
+    # prova con filtro is_deleted
     try:
         return _run(where + " AND is_deleted = FALSE")
     except Exception:
+        # fallback per schema vecchio (senza colonna); _run ha già fatto
+        # rollback quindi la connessione è pulita per il retry
         return _run(where)
+
+
 
 
 def get_seduta(conn, seduta_id: int) -> Optional[Dict[str, Any]]:
@@ -243,6 +268,7 @@ def update_anamnesi(conn, anamnesi_id: int, payload: Dict[str, Any], updated_by:
     data = dict(payload)
     data["id"] = anamnesi_id
     data["updated_by"] = updated_by
+    # normalizza json
     data["storia_clinica"] = _json(payload.get("storia_clinica"))
     data["area_neuro_post"] = _json(payload.get("area_neuro_post"))
     data["stile_vita"] = _json(payload.get("stile_vita"))
