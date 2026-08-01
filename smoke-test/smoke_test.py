@@ -62,27 +62,40 @@ def screenshot_error_scan(page, label):
 
 def login(page):
     page.goto(APP_URL, timeout=60000)
+    page.wait_for_load_state("networkidle", timeout=30000)
     page.wait_for_timeout(3000)
     try:
-        page.wait_for_selector("input[type='password']", timeout=15000)
+        page.wait_for_selector("input[type='password']", timeout=20000, state="visible")
     except Exception:
         return True  # forse già loggato o nessun gate di login attivo
-    pw_input = page.locator("input[type='password']").first
+
     text_inputs = page.locator("input[type='text']")
     if text_inputs.count() > 0:
-        text_inputs.first.click()
-        text_inputs.first.fill(USERNAME)
+        campo_user = text_inputs.first
+        campo_user.click()
+        campo_user.wait_for(state="visible", timeout=5000)
+        campo_user.type(USERNAME, delay=50)
+        page.wait_for_timeout(300)
+
+    pw_input = page.locator("input[type='password']").first
     pw_input.click()
-    pw_input.fill(PASSWORD)
+    pw_input.type(PASSWORD, delay=50)
+    page.wait_for_timeout(300)
+
+    # Verifica che i valori siano stati scritti davvero prima di inviare
+    valore_user = text_inputs.first.input_value() if text_inputs.count() > 0 else ""
+    valore_pw = pw_input.input_value()
+    if not valore_pw:
+        return False
+
     for label in ["Entra", "Accedi", "Login", "Invia", "Conferma"]:
         btn = page.get_by_role("button", name=re.compile(label, re.IGNORECASE))
         if btn.count() > 0:
             btn.first.click()
             break
     else:
-        page.keyboard.press("Enter")
+        pw_input.press("Enter")
     page.wait_for_timeout(4000)
-    # Verifica reale: se c'è ancora il campo password, il login NON è riuscito
     ancora_password = page.locator("input[type='password']").count() > 0
     return not ancora_password
 
@@ -113,7 +126,7 @@ def main():
 
         ok, motivo = screenshot_error_scan(page, "00_home_dopo_login")
         if not login_ok:
-            ok, motivo = False, "LOGIN FALLITO: pagina ancora sul form di login dopo il tentativo — controlla i secret GESTIONALE_TEST_USER/PASS"
+            ok, motivo = False, "LOGIN FALLITO: campi username/password non compilati o non inviati — verifica i secret GESTIONALE_TEST_USER/PASS"
         risultati.append(("Home dopo login", ok, motivo))
 
         if not login_ok:
