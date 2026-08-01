@@ -19,7 +19,6 @@ from datetime import datetime
 def _tone_wav_bytes(freq_hz: int, dbfs: float, seconds: float = 0.6, sr: int = 44100) -> bytes:
     import io, wave
     import numpy as _np
-    # dbfs -> amp lineare
     amp = 10 ** (float(dbfs) / 20.0)
     amp = max(0.0, min(0.9, amp))
     t = _np.linspace(0, seconds, int(sr * seconds), endpoint=False)
@@ -41,18 +40,9 @@ def _tone_wav_bytes(freq_hz: int, dbfs: float, seconds: float = 0.6, sr: int = 4
     return buf.getvalue()
 
 
-# ======================================
-# WIZARD CALIBRAZIONE CUFFIE + DEVICE (TEST)
-# ======================================
-# - Device preset: PC 50% / iPad 70%
-# - Fonometro solo dB(A): ok per uso funzionale (non certificato)
-# - Streamlit st.audio non può autoplay: l'utente clicca Play ad ogni step.
-
-
 def _ensure_calibration_tables(conn):
     cur = conn.cursor()
     try:
-        # PostgreSQL
         cur.execute("""
         CREATE TABLE IF NOT EXISTS audio_devices (
             id BIGSERIAL PRIMARY KEY,
@@ -94,9 +84,10 @@ def _ensure_calibration_tables(conn):
         except Exception: pass
         return
     except Exception:
-        # SQLite fallback (se mai usato)
-        pass
+        try: conn.rollback()
+        except Exception: pass
 
+    cur = conn.cursor()
     try:
         cur.execute("""
         CREATE TABLE IF NOT EXISTS audio_devices (
@@ -131,10 +122,13 @@ def _ensure_calibration_tables(conn):
         );
         """)
         conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-
 
 
 def _seed_default_devices_if_empty(conn):
@@ -143,6 +137,8 @@ def _seed_default_devices_if_empty(conn):
         cur.execute("SELECT COUNT(*) FROM audio_devices")
         n = int(cur.fetchone()[0])
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         n = 0
 
     if n > 0:
@@ -155,22 +151,26 @@ def _seed_default_devices_if_empty(conn):
         ("PC Studio (Chrome)", "50%", "Preset PNEV: PC 50% (EQ OFF)"),
         ("iPad Studio (Safari)", "70%", "Preset PNEV: iPad 70% (suono standard)"),
     ]
-    for label, vol, notes in rows:
-        try:
-            cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
-        except Exception:
-            cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (%s,%s,%s,%s)",
-                        (now, label, vol, notes))
-    conn.commit()
-    try: cur.close()
-    except Exception: pass
-
+    try:
+        for label, vol, notes in rows:
+            try:
+                cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+                cur = conn.cursor()
+                cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (%s,%s,%s,%s)",
+                            (now, label, vol, notes))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def ui_calibrazione_cuffie(conn=None):
-    # Tab Fonometro wizard aggiunta all inizio
-    _tab_list = ["Fonometro Wizard", "Wizard classico", "Devices", "Cuffie", "Profili"]
-
     import json
     from datetime import datetime
 
@@ -188,13 +188,15 @@ def ui_calibrazione_cuffie(conn=None):
 
     tab_wiz, tab_device, tab_hp, tab_prof = st.tabs(["🧙 Wizard", "🖥️ Devices", "🎧 Cuffie", "📚 Profili"])
 
-    # ---------- Devices ----------
     with tab_device:
         st.subheader("Devices")
         cur = conn.cursor()
         try:
             cur.execute("SELECT id, label, volume_note, notes, created_at FROM audio_devices ORDER BY created_at DESC")
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            cur = conn.cursor()
             cur.execute("SELECT id, label, volume_note, notes, created_at FROM audio_devices ORDER BY id DESC")
         dev_rows = cur.fetchall() or []
         try: cur.close()
@@ -211,23 +213,34 @@ def ui_calibrazione_cuffie(conn=None):
             if st.button("Salva device", key="save_device"):
                 cur = conn.cursor()
                 try:
-                    cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
-                except Exception:
-                    cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (%s,%s,%s,%s)",
-                                (datetime.now().isoformat(timespec="seconds"), label, vol, notes))
-                conn.commit()
-                try: cur.close()
-                except Exception: pass
+                    try:
+                        cur.execute("INSERT INTO audio_devices (label, volume_note, notes) VALUES (%s,%s,%s)", (label, vol, notes))
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
+                        cur = conn.cursor()
+                        cur.execute("INSERT INTO audio_devices (created_at, label, volume_note, notes) VALUES (%s,%s,%s,%s)",
+                                    (datetime.now().isoformat(timespec="seconds"), label, vol, notes))
+                    conn.commit()
+                except Exception as e:
+                    try: conn.rollback()
+                    except Exception: pass
+                    st.error(f"Errore salvataggio device: {e}")
+                finally:
+                    try: cur.close()
+                    except Exception: pass
                 st.success("Device salvato")
                 st.rerun()
 
-    # ---------- Headphones ----------
     with tab_hp:
         st.subheader("Cuffie")
         cur = conn.cursor()
         try:
             cur.execute("SELECT id, brand, model, hp_type, notes, created_at FROM audio_headphones ORDER BY created_at DESC")
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            cur = conn.cursor()
             cur.execute("SELECT id, brand, model, hp_type, notes, created_at FROM audio_headphones ORDER BY id DESC")
         hp_rows = cur.fetchall() or []
         try: cur.close()
@@ -245,14 +258,23 @@ def ui_calibrazione_cuffie(conn=None):
             if st.button("Salva cuffie", key="save_hp"):
                 cur = conn.cursor()
                 try:
-                    cur.execute("INSERT INTO audio_headphones (brand, model, hp_type, notes) VALUES (%s,%s,%s,%s)",
-                                (brand, model, hp_type, notes))
-                except Exception:
-                    cur.execute("INSERT INTO audio_headphones (created_at, brand, model, hp_type, notes) VALUES (%s,%s,%s,%s,%s)",
-                                (datetime.now().isoformat(timespec="seconds"), brand, model, hp_type, notes))
-                conn.commit()
-                try: cur.close()
-                except Exception: pass
+                    try:
+                        cur.execute("INSERT INTO audio_headphones (brand, model, hp_type, notes) VALUES (%s,%s,%s,%s)",
+                                    (brand, model, hp_type, notes))
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
+                        cur = conn.cursor()
+                        cur.execute("INSERT INTO audio_headphones (created_at, brand, model, hp_type, notes) VALUES (%s,%s,%s,%s,%s)",
+                                    (datetime.now().isoformat(timespec="seconds"), brand, model, hp_type, notes))
+                    conn.commit()
+                except Exception as e:
+                    try: conn.rollback()
+                    except Exception: pass
+                    st.error(f"Errore salvataggio cuffie: {e}")
+                finally:
+                    try: cur.close()
+                    except Exception: pass
                 st.success("Cuffie salvate")
                 st.rerun()
 
@@ -261,6 +283,9 @@ def ui_calibrazione_cuffie(conn=None):
         try:
             cur.execute("SELECT id, label, volume_note FROM audio_devices ORDER BY created_at DESC")
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            cur = conn.cursor()
             cur.execute("SELECT id, label, volume_note FROM audio_devices ORDER BY id DESC")
         rows = cur.fetchall() or []
         try: cur.close()
@@ -278,6 +303,9 @@ def ui_calibrazione_cuffie(conn=None):
         try:
             cur.execute("SELECT id, brand, model, hp_type FROM audio_headphones ORDER BY created_at DESC")
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            cur = conn.cursor()
             cur.execute("SELECT id, brand, model, hp_type FROM audio_headphones ORDER BY id DESC")
         rows = cur.fetchall() or []
         try: cur.close()
@@ -304,6 +332,8 @@ def ui_calibrazione_cuffie(conn=None):
             """)
             rows = cur.fetchall() or []
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
             rows = []
         try: cur.close()
         except Exception: pass
@@ -312,7 +342,6 @@ def ui_calibrazione_cuffie(conn=None):
         else:
             st.info("Nessun profilo calibrazione salvato.")
 
-    # ---------- Wizard ----------
     with tab_wiz:
         st.subheader("🧙 Wizard (automatico)")
         st.info("Per policy browser devi cliccare ▶️ Play su ogni tono. Il wizard avanza automaticamente quando confermi la misura.")
@@ -373,29 +402,42 @@ def ui_calibrazione_cuffie(conn=None):
             if st.button("💾 Salva profilo calibrazione"):
                 cur = conn.cursor()
                 try:
-                    cur.execute("UPDATE audio_calibration_profiles2 SET is_active=FALSE WHERE device_id=%s AND headphones_id=%s",
-                                (int(dev[0]), int(hp[0])))
-                except Exception:
-                    cur.execute("UPDATE audio_calibration_profiles2 SET is_active=0 WHERE device_id=%s AND headphones_id=%s",
-                                (int(dev[0]), int(hp[0])))
+                    try:
+                        cur.execute("UPDATE audio_calibration_profiles2 SET is_active=FALSE WHERE device_id=%s AND headphones_id=%s",
+                                    (int(dev[0]), int(hp[0])))
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
+                        cur = conn.cursor()
+                        cur.execute("UPDATE audio_calibration_profiles2 SET is_active=0 WHERE device_id=%s AND headphones_id=%s",
+                                    (int(dev[0]), int(hp[0])))
 
-                payload = json.dumps(offsets)
-                try:
-                    cur.execute("""
-                        INSERT INTO audio_calibration_profiles2
-                        (device_id, headphones_id, ref_dbfs, weighting, offsets_json, is_active, notes)
-                        VALUES (%s,%s,%s,%s,%s,TRUE,%s)
-                    """, (int(dev[0]), int(hp[0]), float(ref_dbfs), "A", payload, notes))
-                except Exception:
-                    cur.execute("""
-                        INSERT INTO audio_calibration_profiles2
-                        (created_at, device_id, headphones_id, ref_dbfs, weighting, offsets_json, is_active, notes)
-                        VALUES (?,?,?,?,?,?,?,?)
-                    """, (datetime.now().isoformat(timespec="seconds"), int(dev[0]), int(hp[0]),
-                          float(ref_dbfs), "A", payload, 1, notes))
-                conn.commit()
-                try: cur.close()
-                except Exception: pass
+                    payload = json.dumps(offsets)
+                    try:
+                        cur.execute("""
+                            INSERT INTO audio_calibration_profiles2
+                            (device_id, headphones_id, ref_dbfs, weighting, offsets_json, is_active, notes)
+                            VALUES (%s,%s,%s,%s,%s,TRUE,%s)
+                        """, (int(dev[0]), int(hp[0]), float(ref_dbfs), "A", payload, notes))
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
+                        cur = conn.cursor()
+                        cur.execute("""
+                            INSERT INTO audio_calibration_profiles2
+                            (created_at, device_id, headphones_id, ref_dbfs, weighting, offsets_json, is_active, notes)
+                            VALUES (?,?,?,?,?,?,?,?)
+                        """, (datetime.now().isoformat(timespec="seconds"), int(dev[0]), int(hp[0]),
+                              float(ref_dbfs), "A", payload, 1, notes))
+                    conn.commit()
+                except Exception as e:
+                    try: conn.rollback()
+                    except Exception: pass
+                    st.error(f"Errore salvataggio profilo: {e}")
+                    st.stop()
+                finally:
+                    try: cur.close()
+                    except Exception: pass
                 st.success("Profilo salvato ✅")
                 st.session_state.cal_wiz_running = False
                 st.rerun()
@@ -440,42 +482,6 @@ def ui_calibrazione_cuffie(conn=None):
             st.caption("Suggerimento: premi leggermente la cuffia sul coupler per sigillare.")
 
 
-
-
 def ui_calibrazione_cuffie_standalone():
     """Entry point come sezione standalone nel menu."""
     ui_calibrazione_cuffie()
-
-
-def ui_fonometro_wizard():
-    """Wizard completo calibrazione cuffie con fonometro live via microfono."""
-    import streamlit.components.v1 as components
-    import json
-
-    _HTML = """ + repr(HTML_FONOMETRO) + """
-
-    st.subheader("Wizard calibrazione cuffie — fonometro integrato")
-    st.caption(
-        "5 passi guidati: setup → posizione microfono → verifica ambiente → "
-        "misura frequenza per frequenza → salvataggio profilo. "
-        "Usa il microfono del browser come fonometro oppure inserisci manualmente "
-        "i valori letti su app esterna (Decibel X, NIOSH SLM, Sound Meter)."
-    )
-
-    result = components.html(_HTML, height=750, scrolling=True)
-
-    if result:
-        try:
-            data = json.loads(result) if isinstance(result, str) else result
-            if data and data.get("misure"):
-                st.success(
-                    f"Profilo salvato: {data.get('brand','')} {data.get('model','')} "
-                    f"su {data.get('device','')} — "
-                    f"{len(data['misure'])} frequenze misurate"
-                )
-                with st.expander("Dettaglio misure"):
-                    for f, db in data["misure"].items():
-                        off = round(db - (-20), 1)
-                        st.write(f"{int(f):>6} Hz: {db} dB(A)  offset {off:+.1f} dB")
-        except Exception:
-            pass
