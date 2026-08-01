@@ -3,19 +3,6 @@
 modules/ascolti_maps.py
 
 Aderenza agli ascolti MAPS — chi ha fatto la lezione del giorno e chi no.
-
-Come arrivano i dati: un piccolo snippet lato WordPress (vedi
-wp-snippet-traccia-ascolti.php) chiama questo endpoint pubblico ogni volta
-che LearnPress segna una lezione completata per uno studente. Nessuna
-modifica ai player: l'aderenza si registra lato WordPress, che è la fonte
-di verità su chi ha davvero finito la lezione.
-
-Uso doppio, come richiesto:
-- controllo clinico: chi si sta perdendo dei giorni, per intervenire prima
-  che l'abbandono sia già successo
-- marketing/relazione: il paziente sa che qualcuno guarda se ascolta, e lo
-  studio può scrivere "ti sei perso l'ascolto di ieri" — la persona si
-  sente seguita, non solo monitorata
 """
 
 import datetime
@@ -32,33 +19,41 @@ CORSI = {
 
 def _assicura_tabella(conn):
     cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS ascolti_maps (
-            id          BIGSERIAL PRIMARY KEY,
-            studio_id   BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
-            email       TEXT NOT NULL,
-            paziente_id BIGINT,
-            corso       TEXT,
-            giorno      INT,
-            completato_il TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-    """)
-    cur.execute("""CREATE INDEX IF NOT EXISTS ix_ascolti_email
-                   ON ascolti_maps (email, corso, giorno);""")
-    cur.execute("ALTER TABLE ascolti_maps ENABLE ROW LEVEL SECURITY;")
-    cur.execute("ALTER TABLE ascolti_maps FORCE ROW LEVEL SECURITY;")
-    cur.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_policies
-                           WHERE tablename='ascolti_maps' AND policyname='ascolti_maps_studio') THEN
-                CREATE POLICY ascolti_maps_studio ON ascolti_maps
-                    USING      (studio_id = current_setting('app.current_studio', true)::bigint)
-                    WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
-            END IF;
-        END $$;
-    """)
-    conn.commit()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ascolti_maps (
+                id          BIGSERIAL PRIMARY KEY,
+                studio_id   BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+                email       TEXT NOT NULL,
+                paziente_id BIGINT,
+                corso       TEXT,
+                giorno      INT,
+                completato_il TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """)
+        cur.execute("""CREATE INDEX IF NOT EXISTS ix_ascolti_email
+                       ON ascolti_maps (email, corso, giorno);""")
+        cur.execute("ALTER TABLE ascolti_maps ENABLE ROW LEVEL SECURITY;")
+        cur.execute("ALTER TABLE ascolti_maps FORCE ROW LEVEL SECURITY;")
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_policies
+                               WHERE tablename='ascolti_maps' AND policyname='ascolti_maps_studio') THEN
+                    CREATE POLICY ascolti_maps_studio ON ascolti_maps
+                        USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                        WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+                END IF;
+            END $$;
+        """)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _collega_paziente(conn, email):
@@ -68,6 +63,8 @@ def _collega_paziente(conn, email):
         r = cur.fetchone()
         return int(r[0]) if r else None
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         return None
 
 
@@ -109,16 +106,24 @@ def _invia_congratulazioni_email(email, corso, giorno):
 def registra_ascolto(conn, email, corso, giorno):
     """Chiamata dall'endpoint pubblico. Evita doppioni stesso giorno/corso."""
     cur = conn.cursor()
-    cur.execute("""SELECT 1 FROM ascolti_maps
-                   WHERE lower(email)=lower(%s) AND corso=%s AND giorno=%s""",
-                (email, corso, giorno))
-    if cur.fetchone():
-        return False
-    pid = _collega_paziente(conn, email)
-    cur.execute("""INSERT INTO ascolti_maps (email, paziente_id, corso, giorno)
-                   VALUES (%s,%s,%s,%s)""", (email, pid, corso, giorno))
-    conn.commit()
-    return True
+    try:
+        cur.execute("""SELECT 1 FROM ascolti_maps
+                       WHERE lower(email)=lower(%s) AND corso=%s AND giorno=%s""",
+                    (email, corso, giorno))
+        if cur.fetchone():
+            return False
+        pid = _collega_paziente(conn, email)
+        cur.execute("""INSERT INTO ascolti_maps (email, paziente_id, corso, giorno)
+                       VALUES (%s,%s,%s,%s)""", (email, pid, corso, giorno))
+        conn.commit()
+        return True
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def ui_public_ascolto_hook(get_conn):
@@ -157,9 +162,14 @@ def _giorni_da_iscrizione(conn, email, corso):
     """Giorno atteso oggi = giorni trascorsi dal primo ascolto registrato +1
     (approssimazione: senza data di iscrizione LearnPress nel gestionale)."""
     cur = conn.cursor()
-    cur.execute("""SELECT min(completato_il) FROM ascolti_maps
-                   WHERE lower(email)=lower(%s) AND corso=%s""", (email, corso))
-    r = cur.fetchone()
+    try:
+        cur.execute("""SELECT min(completato_il) FROM ascolti_maps
+                       WHERE lower(email)=lower(%s) AND corso=%s""", (email, corso))
+        r = cur.fetchone()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
     if not r or not r[0]:
         return None
     delta = (datetime.datetime.now(r[0].tzinfo) - r[0]).days
@@ -169,15 +179,21 @@ def _giorni_da_iscrizione(conn, email, corso):
 def studenti_da_sollecitare(conn):
     """Chi ha iniziato ma non ha ascoltato oggi (e non ha finito gli 84 giorni)."""
     cur = conn.cursor()
-    cur.execute("""
-        SELECT email, corso, max(giorno) AS ultimo, max(completato_il) AS ultima_data
-        FROM ascolti_maps
-        GROUP BY email, corso
-        HAVING max(giorno) < 84
-    """)
+    try:
+        cur.execute("""
+            SELECT email, corso, max(giorno) AS ultimo, max(completato_il) AS ultima_data
+            FROM ascolti_maps
+            GROUP BY email, corso
+            HAVING max(giorno) < 84
+        """)
+        rows = cur.fetchall()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return []
     out = []
     oggi = datetime.date.today()
-    for r in cur.fetchall():
+    for r in rows:
         email = r[0] if not hasattr(r, "keys") else r["email"]
         corso = r[1] if not hasattr(r, "keys") else r["corso"]
         ultimo = r[2] if not hasattr(r, "keys") else r["ultimo"]
@@ -236,16 +252,22 @@ def render_aderenza_ascolti(conn):
     corso_f = st.selectbox("Corso", ["tutti"] + list(CORSI.keys()),
                            format_func=lambda k: CORSI.get(k, "Tutti i corsi"))
     cur = conn.cursor()
-    if corso_f == "tutti":
-        cur.execute("""SELECT email, corso, max(giorno) AS ultimo, max(completato_il) AS ultima_data,
-                       count(*) AS fatti
-                       FROM ascolti_maps GROUP BY email, corso ORDER BY ultima_data DESC""")
-    else:
-        cur.execute("""SELECT email, corso, max(giorno) AS ultimo, max(completato_il) AS ultima_data,
-                       count(*) AS fatti
-                       FROM ascolti_maps WHERE corso=%s
-                       GROUP BY email, corso ORDER BY ultima_data DESC""", (corso_f,))
-    righe = cur.fetchall()
+    try:
+        if corso_f == "tutti":
+            cur.execute("""SELECT email, corso, max(giorno) AS ultimo, max(completato_il) AS ultima_data,
+                           count(*) AS fatti
+                           FROM ascolti_maps GROUP BY email, corso ORDER BY ultima_data DESC""")
+        else:
+            cur.execute("""SELECT email, corso, max(giorno) AS ultimo, max(completato_il) AS ultima_data,
+                           count(*) AS fatti
+                           FROM ascolti_maps WHERE corso=%s
+                           GROUP BY email, corso ORDER BY ultima_data DESC""", (corso_f,))
+        righe = cur.fetchall()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        st.error(f"Errore lettura: {e}")
+        return
     if not righe:
         st.info("Nessun ascolto ancora registrato.")
         return
