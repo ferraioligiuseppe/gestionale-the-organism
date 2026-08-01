@@ -17,7 +17,6 @@ def list_orl_esami(conn, paziente_id: int, limit: int = 50):
     cur = conn.cursor()
     try:
         if _is_postgres(conn):
-            # NIENTE to_char, NIENTE cast pericolosi: prendo testo e ordino su created_at
             cur.execute(
                 """
                 SELECT
@@ -125,6 +124,10 @@ def upsert_orl_esame(
                     )
         conn.commit()
         return esame_id
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
