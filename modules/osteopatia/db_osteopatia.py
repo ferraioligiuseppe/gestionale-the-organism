@@ -48,11 +48,15 @@ def insert_anamnesi(conn, paziente_id: int, payload: Dict[str, Any]) -> int:
     try:
         cur.execute(q, data)
         anamnesi_id = cur.fetchone()[0]
+        conn.commit()
+        return int(anamnesi_id)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    conn.commit()
-    return int(anamnesi_id)
 
 def list_anamnesi(conn, paziente_id: int, include_deleted: bool = False) -> List[Dict[str, Any]]:
     where = "WHERE paziente_id = %s"
@@ -79,10 +83,14 @@ def list_anamnesi(conn, paziente_id: int, include_deleted: bool = False) -> List
             cur.execute(q, (paziente_id,))
             rows = cur.fetchall()
             cols = [d[0] for d in cur.description]
+            return [_row_to_dict(cols, r) for r in rows]
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            raise
         finally:
             try: cur.close()
             except Exception: pass
-        return [_row_to_dict(cols, r) for r in rows]
 
     if include_deleted:
         return _run(where)
@@ -90,7 +98,8 @@ def list_anamnesi(conn, paziente_id: int, include_deleted: bool = False) -> List
     try:
         return _run(where + " AND is_deleted = FALSE")
     except Exception:
-        # fallback per schema vecchio (senza colonna)
+        # fallback per schema vecchio (senza colonna); _run ha già fatto
+        # rollback quindi la connessione è pulita per il retry
         return _run(where)
 
 
@@ -105,10 +114,14 @@ def get_anamnesi(conn, anamnesi_id: int) -> Optional[Dict[str, Any]]:
         if not row:
             return None
         cols = [d[0] for d in cur.description]
+        return _row_to_dict(cols, row)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    return _row_to_dict(cols, row)
 
 # ---------------------------
 # SEDUTE
@@ -153,11 +166,15 @@ def insert_seduta(conn, paziente_id: int, payload: Dict[str, Any]) -> int:
     try:
         cur.execute(q, data)
         seduta_id = cur.fetchone()[0]
+        conn.commit()
+        return int(seduta_id)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    conn.commit()
-    return int(seduta_id)
 
 def list_sedute(conn, paziente_id: int, include_deleted: bool = False) -> List[Dict[str, Any]]:
     where = "WHERE paziente_id = %s"
@@ -184,10 +201,14 @@ def list_sedute(conn, paziente_id: int, include_deleted: bool = False) -> List[D
             cur.execute(q, (paziente_id,))
             rows = cur.fetchall()
             cols = [d[0] for d in cur.description]
+            return [_row_to_dict(cols, r) for r in rows]
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            raise
         finally:
             try: cur.close()
             except Exception: pass
-        return [_row_to_dict(cols, r) for r in rows]
 
     if include_deleted:
         return _run(where)
@@ -195,7 +216,8 @@ def list_sedute(conn, paziente_id: int, include_deleted: bool = False) -> List[D
     try:
         return _run(where + " AND is_deleted = FALSE")
     except Exception:
-        # fallback per schema vecchio (senza colonna)
+        # fallback per schema vecchio (senza colonna); _run ha già fatto
+        # rollback quindi la connessione è pulita per il retry
         return _run(where)
 
 
@@ -210,10 +232,14 @@ def get_seduta(conn, seduta_id: int) -> Optional[Dict[str, Any]]:
         if not row:
             return None
         cols = [d[0] for d in cur.description]
+        return _row_to_dict(cols, row)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    return _row_to_dict(cols, row)
 
 
 # ---------------------------
@@ -251,10 +277,14 @@ def update_anamnesi(conn, anamnesi_id: int, payload: Dict[str, Any], updated_by:
     cur = conn.cursor()
     try:
         cur.execute(q, data)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    conn.commit()
 
 def soft_delete_anamnesi(conn, anamnesi_id: int, deleted_by: Optional[str] = None) -> None:
     q = """
@@ -265,10 +295,14 @@ def soft_delete_anamnesi(conn, anamnesi_id: int, deleted_by: Optional[str] = Non
     cur = conn.cursor()
     try:
         cur.execute(q, (deleted_by, anamnesi_id))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    conn.commit()
 
 def restore_anamnesi(conn, anamnesi_id: int) -> None:
     q = """
@@ -279,10 +313,14 @@ def restore_anamnesi(conn, anamnesi_id: int) -> None:
     cur = conn.cursor()
     try:
         cur.execute(q, (anamnesi_id,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    conn.commit()
 
 def update_seduta(conn, seduta_id: int, payload: Dict[str, Any], updated_by: Optional[str] = None) -> None:
     q = """
@@ -311,10 +349,14 @@ def update_seduta(conn, seduta_id: int, payload: Dict[str, Any], updated_by: Opt
     cur = conn.cursor()
     try:
         cur.execute(q, data)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    conn.commit()
 
 def soft_delete_seduta(conn, seduta_id: int, deleted_by: Optional[str] = None) -> None:
     q = """
@@ -325,10 +367,14 @@ def soft_delete_seduta(conn, seduta_id: int, deleted_by: Optional[str] = None) -
     cur = conn.cursor()
     try:
         cur.execute(q, (deleted_by, seduta_id))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    conn.commit()
 
 def restore_seduta(conn, seduta_id: int) -> None:
     q = """
@@ -339,7 +385,11 @@ def restore_seduta(conn, seduta_id: int) -> None:
     cur = conn.cursor()
     try:
         cur.execute(q, (seduta_id,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
-    conn.commit()
