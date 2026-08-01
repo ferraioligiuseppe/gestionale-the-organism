@@ -56,6 +56,10 @@ def _ensure_tables(conn):
         );
         """)
         conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         _safe_close(cur)
 
@@ -87,6 +91,10 @@ def _create_session_db(conn, record: dict):
         row = cur.fetchone()
         conn.commit()
         return row[0] if row else None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         _safe_close(cur)
 
@@ -123,6 +131,10 @@ def _load_recent(conn, limit: int = 20):
             (limit,),
         )
         rows = cur.fetchall() or []
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         _safe_close(cur)
 
