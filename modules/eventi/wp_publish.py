@@ -58,6 +58,8 @@ def pubblica_evento(conn, evento: dict, link_pubblico: str) -> tuple[bool, str]:
         conn.commit()
         return True, data.get("link", "")
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         return False, f"Errore di connessione: {e}"
 
 
@@ -78,4 +80,6 @@ def rimuovi_evento(conn, evento: dict) -> tuple[bool, str]:
         conn.commit()
         return True, "Rimosso da pnev.it."
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         return False, f"Errore di connessione: {e}"

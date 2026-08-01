@@ -765,6 +765,8 @@ def _selettore_paziente(conn, key_suffix: str = "") -> Optional[int]:
         rows = cur.fetchall() or []
         cur.close()
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.error(f"Errore caricamento pazienti: {e}")
         return None
 
