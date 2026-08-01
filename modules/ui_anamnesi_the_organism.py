@@ -11,10 +11,6 @@ import datetime
 import streamlit as st
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  UTILITY
-# ══════════════════════════════════════════════════════════════════════
-
 def _salva(conn, paz_id: int, dati: dict) -> None:
     try:
         cur = conn.cursor()
@@ -67,18 +63,18 @@ def _carica(conn, paz_id: int) -> dict:
             return raw
         return json.loads(raw)
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         return {}
 
 
 def _sk(sezione: str, campo: str, paz_id: int) -> str:
-    """Chiave session_state univoca."""
     return f"anam_{paz_id}_{sezione}_{campo}"
 
 
 def _scala(label: str, key: str, default: int = 3,
            min_label: str = "1 Min",
            max_label: str = "5 Max") -> int:
-    """Slider 1-5 con etichette."""
     col1, col2 = st.columns([3, 2])
     with col1:
         st.markdown(f"**{label}**")
@@ -112,10 +108,6 @@ def _campo(label: str, key: str, default: str = "", height: int = None) -> str:
         return st.text_area(label, value=default, key=key, height=height)
     return st.text_input(label, value=default, key=key)
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 1 — GRAVIDANZA
-# ══════════════════════════════════════════════════════════════════════
 
 def _s1_gravidanza(paz_id: int, stored: dict) -> dict:
     st.markdown("### 1. Gravidanza")
@@ -204,10 +196,6 @@ def _s1_gravidanza(paz_id: int, stored: dict) -> dict:
     }
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 2 — PARTO
-# ══════════════════════════════════════════════════════════════════════
-
 def _s2_parto(paz_id: int, stored: dict) -> dict:
     st.markdown("### 2. Parto")
     d = stored.get("parto", {})
@@ -257,10 +245,6 @@ def _s2_parto(paz_id: int, stored: dict) -> dict:
     }
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 3 — PERIODO NEONATALE
-# ══════════════════════════════════════════════════════════════════════
-
 def _s3_neonatale(paz_id: int, stored: dict) -> dict:
     st.markdown("### 3. Periodo Neonatale (0-3 mesi)")
     d = stored.get("neonatale", {})
@@ -293,10 +277,6 @@ def _s3_neonatale(paz_id: int, stored: dict) -> dict:
     return {"neonatale": {"tono": tono, "pianto": pianto,
                           "riflessi": rifl, "note": note}}
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 4 — ALIMENTAZIONE
-# ══════════════════════════════════════════════════════════════════════
 
 def _s4_alimentazione(paz_id: int, stored: dict) -> dict:
     st.markdown("### 4. Alimentazione")
@@ -348,10 +328,6 @@ def _s4_alimentazione(paz_id: int, stored: dict) -> dict:
         }
     }
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 5 — SVILUPPO MOTORIO (TEITELBAUM)
-# ══════════════════════════════════════════════════════════════════════
 
 def _s5_motorio(paz_id: int, stored: dict) -> dict:
     st.markdown("### 5. Sviluppo Motorio — Modello Teitelbaum")
@@ -428,10 +404,6 @@ def _s5_motorio(paz_id: int, stored: dict) -> dict:
     }
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 6 — SVILUPPO SENSORIALE E COMUNICATIVO
-# ══════════════════════════════════════════════════════════════════════
-
 def _s6_sensoriale(paz_id: int, stored: dict) -> dict:
     st.markdown("### 6. Sviluppo Sensoriale e Comunicativo")
     d = stored.get("sensoriale", {})
@@ -477,10 +449,6 @@ def _s6_sensoriale(paz_id: int, stored: dict) -> dict:
         }
     }
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 7 — SEGNALI DI ALLERTA
-# ══════════════════════════════════════════════════════════════════════
 
 def _s7_allerta(paz_id: int, stored: dict) -> dict:
     st.markdown("### 7. Segnali di Allerta")
@@ -528,10 +496,6 @@ def _s7_allerta(paz_id: int, stored: dict) -> dict:
     return {"allerta": {"presenti": presenti, "n_allerta": n, "note": note}}
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 8 — CONTESTO FAMILIARE
-# ══════════════════════════════════════════════════════════════════════
-
 def _s8_famiglia(paz_id: int, stored: dict) -> dict:
     st.markdown("### 8. Contesto Familiare e Anamnesi Familiare")
     d = stored.get("famiglia", {})
@@ -576,10 +540,6 @@ def _s8_famiglia(paz_id: int, stored: dict) -> dict:
     }
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SEZIONE 9 — MOTIVO DELL'INVIO
-# ══════════════════════════════════════════════════════════════════════
-
 def _s9_invio(paz_id: int, stored: dict) -> dict:
     st.markdown("### 9. Motivo dell'Invio / Domanda Clinica")
     d = stored.get("invio", {})
@@ -621,10 +581,6 @@ def _s9_invio(paz_id: int, stored: dict) -> dict:
     }
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  PROFILO DI RISCHIO AUTOMATICO
-# ══════════════════════════════════════════════════════════════════════
-
 def _profilo_rischio(dati: dict) -> None:
     st.markdown("---")
     st.markdown("### Profilo di rischio automatico")
@@ -632,7 +588,6 @@ def _profilo_rischio(dati: dict) -> None:
     score = 0
     flags = []
 
-    # Gravidanza
     g = dati.get("gravidanza", {})
     if g.get("stato_em", 3) <= 2:
         score += 2; flags.append("Stress emotivo materno in gravidanza")
@@ -643,7 +598,6 @@ def _profilo_rischio(dati: dict) -> None:
     if g.get("termine") and "Pre-termine" in g.get("termine", ""):
         score += 2; flags.append("Pre-termine")
 
-    # Parto
     p = dati.get("parto", {})
     try:
         a1 = int(p.get("apgar1", 10) or 10)
@@ -656,7 +610,6 @@ def _profilo_rischio(dati: dict) -> None:
     if len(p.get("complicanze", [])) >= 2:
         score += 1; flags.append("Complicanze al parto")
 
-    # Motorio
     m = dati.get("motorio", {})
     if m.get("gatt_pres") in ["No (saltato)"]:
         score += 2; flags.append("Gattonamento saltato")
@@ -667,18 +620,15 @@ def _profilo_rischio(dati: dict) -> None:
     if m.get("simmetria") in ["Asimmetrica DX", "Asimmetrica SX"]:
         score += 1; flags.append("Asimmetria posturale")
 
-    # Alimentazione
     al = dati.get("alimentazione", {})
     if al.get("selettivita", 1) >= 4:
         score += 1; flags.append("Selettivita' alimentare grave")
 
-    # Segnali allerta
     n_all = dati.get("allerta", {}).get("n_allerta", 0)
     score += n_all
     if n_all > 0:
         flags.append(f"{n_all} segnali di allerta")
 
-    # Risultato
     col1, col2 = st.columns(2)
     with col1:
         if score == 0:
@@ -699,10 +649,6 @@ def _profilo_rischio(dati: dict) -> None:
     return score
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  ENTRY POINT PRINCIPALE
-# ══════════════════════════════════════════════════════════════════════
-
 def render_anamnesi_the_organism(conn, paz_id: int) -> None:
     """Scheda anamnesi completa The Organism — 9 sezioni."""
 
@@ -712,11 +658,9 @@ def render_anamnesi_the_organism(conn, paz_id: int) -> None:
         "Scale visive + Checklist"
     )
 
-    # Carica dati esistenti
     stored_full = _carica(conn, paz_id)
     stored = stored_full.get("anamnesi_the_organism", {})
 
-    # Tab per sezione
     tabs = st.tabs([
         "1. Gravidanza", "2. Parto", "3. Neonatale",
         "4. Alimentazione", "5. Motorio (Teitelbaum)",
