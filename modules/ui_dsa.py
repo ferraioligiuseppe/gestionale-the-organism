@@ -13,10 +13,6 @@ import datetime
 import math
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  UTILITÀ
-# ══════════════════════════════════════════════════════════════════════
-
 def _pct_z(z: float) -> float:
     t = 1 / (1 + 0.2316419 * abs(z))
     poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937
@@ -26,7 +22,6 @@ def _pct_z(z: float) -> float:
 
 
 def _badge_dsa(label: str, valore: str, livello: str) -> None:
-    """livello: ok | border | clin"""
     colori = {"ok": "#2ea44f", "border": "#9a6700", "clin": "#cf222e"}
     c = colori.get(livello, "#444")
     st.markdown(
@@ -68,6 +63,8 @@ def _salva_dsa(conn, paziente_id: int, tipo: str, dati: dict) -> None:
         conn.commit()
         st.success(f"✅ {tipo} salvato.")
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.error(f"Errore salvataggio: {e}")
 
 
@@ -85,14 +82,10 @@ def _carica_dsa(conn, paziente_id: int, tipo: str) -> Optional[dict]:
             raw = row[0] if not isinstance(row, dict) else row["dati_json"]
             return json.loads(raw)
     except Exception:
-        pass
+        try: conn.rollback()
+        except Exception: pass
     return None
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  CMF — Valutazione Competenze Metafonologiche
-#  (Marotta, Ronchetti, Trasciani, Vicari)
-# ══════════════════════════════════════════════════════════════════════
 
 _CMF_PROVE = [
     ("Riconoscimento rime",               "rime",       8),
@@ -106,7 +99,6 @@ _CMF_PROVE = [
     ("Omissione fonema iniziale",         "omiss_fon",  8),
 ]
 
-# Norme CMF per fascia scolastica (media corr., DS) — dati Marotta et al.
 _CMF_NORME: dict[str, dict[str, tuple[float, float]]] = {
     "Scuola d'infanzia (3–5 aa)": {
         "rime":      (5.2, 2.1), "sill_iniz": (4.8, 2.2),
@@ -169,7 +161,6 @@ def render_cmf(conn, paziente_id: int) -> None:
             risultati.append({"prova": nome, "punteggio": v, "pct": pct,
                               "classificazione": cl, "livello": livello})
 
-    # Sintesi
     st.markdown("---")
     st.markdown("#### Profilo CMF")
     deficit = [r for r in risultati if r["livello"] == "clin"]
@@ -193,12 +184,7 @@ def render_cmf(conn, paziente_id: int) -> None:
         })
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  DDE-2 — Batteria per la Dislessia e Disortografia Evolutiva
-# ══════════════════════════════════════════════════════════════════════
-
 _DDE2_PROVE = [
-    # (nome, chiave, usa_tempo, usa_errori)
     ("1. Lettura di parole (LP)",      "lp",  True,  True),
     ("2. Lettura di non-parole (LNP)", "lnp", True,  True),
     ("3. Lettura di un brano (LB)",    "lb",  True,  True),
@@ -208,10 +194,7 @@ _DDE2_PROVE = [
     ("7. Scrittura spontanea (SS)",    "ss",  False, True),
 ]
 
-# Norme DDE-2 per classe (tempo medio prova LP in sec, DS; errori media, DS)
-# Fonte: Sartori, Job, Tressoldi 1995 / Tressoldi & Cornoldi 2000
 _DDE2_NORME_LP: dict[str, tuple[float, float, float, float]] = {
-    # classe: (media_tempo, ds_tempo, media_errori, ds_errori)
     "1ª fine":  (145.0, 60.0,  8.5, 5.2),
     "2ª fine":  (80.0,  35.0,  3.8, 3.0),
     "3ª fine":  (60.0,  25.0,  2.5, 2.2),
@@ -249,7 +232,6 @@ def render_dde2(conn, paziente_id: int) -> None:
                                              step=1, key=f"dde2_{chiave}_e")
                     dati_prove[chiave]["errori"] = int(errori)
 
-            # Classificazione per LP con norme
             if chiave == "lp" and classe in _DDE2_NORME_LP:
                 mt, dst, me, dse = _DDE2_NORME_LP[classe]
                 if dati_prove[chiave].get("tempo", 0) > 0:
@@ -263,7 +245,6 @@ def render_dde2(conn, paziente_id: int) -> None:
                     cl_e, lv_e = _classifica_pct(pct_e)
                     st.caption(f"Accuratezza: {pct_e:.0f}°pct → **{cl_e}**")
 
-    # Sintesi diagnosi
     st.markdown("---")
     st.markdown("#### Interpretazione qualitativa")
     st.caption("⚠️ La diagnosi clinica richiede il confronto con le tavole normative complete del manuale per classe e mese.")
@@ -283,10 +264,6 @@ def render_dde2(conn, paziente_id: int) -> None:
             "data": datetime.date.today().isoformat(),
         })
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  BDE — Batteria per la Diagnosi della Dislessia e Disortografia
-# ══════════════════════════════════════════════════════════════════════
 
 def render_bde(conn, paziente_id: int) -> None:
     st.subheader("📚 BDE — Batteria Diagnosi Dislessia/Disortografia Evolutiva")
@@ -352,13 +329,7 @@ def render_bde(conn, paziente_id: int) -> None:
         })
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  MT / MT Avanzate — Prove di Lettura (Cornoldi & Colpo)
-# ══════════════════════════════════════════════════════════════════════
-
-# Norme MT semplificate (velocità sill/sec, media e DS) per classe
 _MT_NORME_VEL: dict[str, tuple[float, float]] = {
-    # classe: (media_sill_sec, ds)
     "1ª fine":       (1.8, 0.7),
     "2ª inizio":     (2.4, 0.8),
     "2ª fine":       (3.2, 0.9),
@@ -375,7 +346,6 @@ _MT_NORME_VEL: dict[str, tuple[float, float]] = {
     "Liceo 2°-5°":   (7.5, 1.1),
 }
 
-# Norme comprensione: punteggio grezzo medio e DS
 _MT_NORME_COMPR: dict[str, tuple[float, float]] = {
     "1ª fine":     (5.2, 1.8),  "2ª inizio":   (5.5, 1.7),
     "2ª fine":     (6.0, 1.7),  "3ª inizio":   (6.2, 1.7),
@@ -421,7 +391,6 @@ def render_mt(conn, paziente_id: int) -> None:
             classe = st.selectbox("Classe / Periodo",
                                   classi_disponibili, key=f"mt_{nome_test}_cl")
 
-            # Sillabe totali del brano (dipende dal protocollo)
             sillabe_brano = st.number_input("Sillabe totali nel brano",
                                             min_value=1, max_value=2000,
                                             value=300, step=10,
@@ -447,7 +416,6 @@ def render_mt(conn, paziente_id: int) -> None:
                                               value=0, step=1,
                                               key=f"mt_{nome_test}_dom_ok")
 
-            # Calcoli
             vel_sill_sec = round(sillabe_brano / tempo_sec, 2) if tempo_sec > 0 else 0.0
             compr_pct_raw = round(domande_ok / domande_tot * 10, 1) if domande_tot > 0 else 0.0
 
@@ -486,13 +454,7 @@ def render_mt(conn, paziente_id: int) -> None:
                 })
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  AC-MT 3 — Test di Valutazione delle Abilità di Calcolo
-#  (Cornoldi, Lucangeli, Bellina)
-# ══════════════════════════════════════════════════════════════════════
-
 _ACMT_PROVE = [
-    # (nome, chiave, max_punteggio, ha_tempo)
     ("Dettato di numeri",           "dett_num",  20, False),
     ("Discriminazione di quantità", "discr_q",   12, False),
     ("Enumerazione",                "enum",      12, True),
@@ -506,7 +468,6 @@ _ACMT_PROVE = [
 ]
 
 _ACMT_NORME: dict[str, dict[str, tuple[float, float]]] = {
-    # classe: {chiave: (media, ds)}
     "2ª primaria INGRESSO": {
         "dett_num": (16.2, 3.1), "calc_add": (7.1, 2.4),
         "calc_sott": (5.8, 2.6),
@@ -577,7 +538,6 @@ def render_acmt3(conn, paziente_id: int) -> None:
             }
             risultati.append({"prova": nome, "pct": pct, "livello": lv})
 
-    # Sintesi
     st.markdown("---")
     deficit = [r for r in risultati if r["livello"] == "clin"]
     border  = [r for r in risultati if r["livello"] == "border"]
@@ -597,10 +557,6 @@ def render_acmt3(conn, paziente_id: int) -> None:
             "data": datetime.date.today().isoformat(),
         })
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  ENTRY POINT
-# ══════════════════════════════════════════════════════════════════════
 
 def render_dsa(conn, paziente_id: int) -> None:
     """
