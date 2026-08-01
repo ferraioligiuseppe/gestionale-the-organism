@@ -149,6 +149,8 @@ def _salva_test(conn, paziente_id: int, nome_test: str, dati: dict) -> None:
         conn.commit()
         st.success(f"✅ {nome_test} salvato.")
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.error(f"Errore salvataggio: {e}")
 
 
