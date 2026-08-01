@@ -752,6 +752,10 @@ def salva_lente_contatto(conn, payload):
             new_id = int(cur.lastrowid)
         conn.commit()
         return new_id
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
