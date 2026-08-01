@@ -7,9 +7,6 @@ from typing import Dict, List, Tuple
 
 from .db_orl import FREQS_STD
 
-# --- B2 ADDON: read_eq_profile -------------------------------------------------
-import json
-
 def read_eq_profile(conn, eq_profile_id: int):
     """
     Legge un profilo EQ salvato e ritorna:
@@ -51,12 +48,14 @@ def read_eq_profile(conn, eq_profile_id: int):
             cur.close()
         except Exception:
             pass
+
 def _is_postgres(conn) -> bool:
     mod = (getattr(conn.__class__, "__module__", "") or "").lower()
     name = (getattr(conn.__class__, "__name__", "") or "").lower()
     if "sqlite3" in mod or "sqlite" in mod or "sqlite" in name:
         return False
     return True
+
 def save_eq_profile(
     conn,
     paziente_id: int,
@@ -104,6 +103,10 @@ def save_eq_profile(
             pid = int(cur.lastrowid)
         conn.commit()
         return pid
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try: cur.close()
         except Exception: pass
