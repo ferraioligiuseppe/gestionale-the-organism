@@ -485,3 +485,14 @@ def ui_calibrazione_cuffie(conn=None):
 def ui_calibrazione_cuffie_standalone():
     """Entry point come sezione standalone nel menu."""
     ui_calibrazione_cuffie()
+
+
+def ui_fonometro_wizard():
+    """Fonometro con microfono integrato — non ancora implementato in questa
+    versione (il codice precedente referenziava un asset mai definito ed era
+    già inutilizzabile). Usa nel frattempo la tab 'Wizard classico'."""
+    st.info(
+        "Il fonometro con microfono del browser non è ancora disponibile in "
+        "questa versione. Usa la tab **Wizard classico** qui accanto: stessa "
+        "procedura, ma leggi il dB(A) da un fonometro esterno (app o dispositivo)."
+    )
