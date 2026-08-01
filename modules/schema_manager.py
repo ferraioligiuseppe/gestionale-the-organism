@@ -1,15 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 schema_manager.py — Simple, idempotent schema bootstrap for The Organism.
-
-Goal:
-- Avoid deploy-time crashes when a DB is empty/new (TEST/PROD).
-- Keep it simple (no Alembic), Streamlit-friendly.
-- Safe to call multiple times.
-
-Usage (recommended):
-    from schema_manager import ensure_all_schemas
-    ensure_all_schemas(conn, backend="postgres")  # or "sqlite"
 """
 
 from __future__ import annotations
@@ -32,10 +23,9 @@ def ensure_all_schemas(conn, backend: Backend = "postgres") -> None:
     """
     ensure_auth_schema(conn, backend=backend)
     ensure_core_schema(conn, backend=backend)
-    # Placeholders: keep separated so future refactors are easy.
     ensure_vision_schema(conn, backend=backend)
     ensure_osteo_schema(conn, backend=backend)
-    ensure_consensi_costellazioni_schema(conn, backend=backend)  # ← QUESTA
+    ensure_consensi_costellazioni_schema(conn, backend=backend)
     ensure_eventi_schema(conn, backend=backend)
 
 
@@ -81,9 +71,8 @@ def ensure_auth_schema(conn, backend: Backend = "postgres") -> None:
                     meta TEXT
                 );
             """)
-            # Seed roles
             for r in ("admin", "vision", "osteo", "segreteria", "clinico"):
-                cur.execute("INSERT OR IGNORE INTO auth_roles(name) VALUES (?)", (r,))  # SQLite syntax: OK
+                cur.execute("INSERT OR IGNORE INTO auth_roles(name) VALUES (?)", (r,))
         else:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS auth_users (
@@ -127,6 +116,10 @@ def ensure_auth_schema(conn, backend: Backend = "postgres") -> None:
                 ON CONFLICT (name) DO NOTHING;
             """)
         conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try:
             cur.close()
@@ -144,12 +137,10 @@ def ensure_eventi_schema(conn, backend: Backend = "postgres") -> None:
 def ensure_core_schema(conn, backend: Backend = "postgres") -> None:
     """
     Core tables shared by modules: Pazienti, Anamnesi, Sedute, Coupons, Consensi_Privacy, relazioni_cliniche.
-    Keep aligned with app.py init_db, but minimal and idempotent.
     """
     cur = conn.cursor()
     try:
         if backend == "sqlite":
-            # Core
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS Pazienti (
                     ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -245,7 +236,6 @@ def ensure_core_schema(conn, backend: Backend = "postgres") -> None:
                     created_at TEXT NOT NULL
                 );
             """)
-            # Minimal indexes
             try:
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_paziente ON relazioni_cliniche(paziente_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_relazioni_tipo ON relazioni_cliniche(tipo)")
@@ -354,6 +344,10 @@ def ensure_core_schema(conn, backend: Backend = "postgres") -> None:
                 pass
 
         conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
     finally:
         try:
             cur.close()
@@ -362,18 +356,10 @@ def ensure_core_schema(conn, backend: Backend = "postgres") -> None:
 
 
 def ensure_vision_schema(conn, backend: Backend = "postgres") -> None:
-    """
-    Placeholder for Vision Manager tables.
-    Keep it separated so you can progressively migrate vision tables out of app.py.
-    """
-    # NOTE: Many vision tables are created in app.py init_db().
-    # Here we keep a no-op for now (safe).
+    """Placeholder for Vision Manager tables (created in app.py init_db())."""
     return
 
 
 def ensure_osteo_schema(conn, backend: Backend = "postgres") -> None:
-    """
-    Placeholder for Osteopatia tables.
-    Keep it separated so you can progressively migrate osteo tables out of app.py.
-    """
+    """Placeholder for Osteopatia tables (created in app.py init_db())."""
     return
