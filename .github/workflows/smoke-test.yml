@@ -1,1 +1,41 @@
+name: 🧪 Smoke test gestionale
 
+# Si lancia MANUALMENTE da GitHub: Actions -> "Smoke test gestionale" -> Run workflow
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL del gestionale da testare"
+        required: true
+        default: "https://testgestionale.streamlit.app"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Scarico il repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Imposto Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Installo Playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: 🧪 Eseguo lo smoke test
+        env:
+          GESTIONALE_URL: ${{ inputs.url }}
+          GESTIONALE_TEST_USER: ${{ secrets.GESTIONALE_TEST_USER }}
+          GESTIONALE_TEST_PASS: ${{ secrets.GESTIONALE_TEST_PASS }}
+        run: python smoke-test/smoke_test.py
+
+      - name: 📤 Carico screenshot e report come risultato scaricabile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: smoke-report/
