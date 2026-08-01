@@ -60,7 +60,7 @@ def _is_postgres(conn):
         import sys, os
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if root not in sys.path: sys.path.insert(0, root)
-        from app_patched import _DB_BACKEND
+        from modules.app_core import _DB_BACKEND
         return _DB_BACKEND == "postgres"
     except Exception: pass
     return False
@@ -77,7 +77,7 @@ def _get_conn():
         import sys, os
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if root not in sys.path: sys.path.insert(0, root)
-        from app_patched import get_connection; return get_connection()
+        from modules.app_core import get_connection; return get_connection()
     except Exception: pass
     import sqlite3
     conn = sqlite3.connect("organism.db"); conn.row_factory = sqlite3.Row; return conn

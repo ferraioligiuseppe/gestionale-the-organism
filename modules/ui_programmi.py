@@ -79,7 +79,7 @@ def _is_postgres(conn):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if root not in sys.path:
             sys.path.insert(0, root)
-        from app_patched import _DB_BACKEND
+        from modules.app_core import _DB_BACKEND
         return _DB_BACKEND == "postgres"
     except Exception:
         pass
