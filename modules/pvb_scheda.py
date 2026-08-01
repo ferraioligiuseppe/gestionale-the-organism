@@ -4,14 +4,6 @@ modules/pvb_scheda.py
 
 Scheda di registrazione PVB — «Il Primo Vocabolario del Bambino»
 (Caselli, Casadio et al.). Uso interno allo studio.
-
-IMPORTANTE — perché questa è una scheda di REGISTRAZIONE e non il test:
-il PVB è uno strumento pubblicato e protetto da diritto d'autore. Gli item
-(la lista lessicale e quella dei gesti) NON sono riprodotti qui: il test si
-somministra con la propria copia autorizzata, e in questa scheda si
-registrano i punteggi ottenuti e il percentile letto dalle tabelle normative
-del manuale. Così il dato entra nella cartella del paziente, nel Quadro
-storico e nelle relazioni, senza redistribuire lo strumento.
 """
 
 import json
@@ -40,62 +32,94 @@ FORME = {
 
 def _assicura_tabella(conn):
     cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS pvb_schede (
-            id           BIGSERIAL PRIMARY KEY,
-            studio_id    BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
-            paziente_id  BIGINT NOT NULL,
-            data_somm    DATE,
-            forma        TEXT,
-            eta_mesi     INT,
-            punteggi     JSONB,
-            percentili   JSONB,
-            note         TEXT,
-            creato_il    TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-    """)
-    cur.execute("""CREATE INDEX IF NOT EXISTS ix_pvb_paziente
-                   ON pvb_schede (paziente_id, data_somm DESC);""")
-    cur.execute("ALTER TABLE pvb_schede ENABLE ROW LEVEL SECURITY;")
-    cur.execute("ALTER TABLE pvb_schede FORCE ROW LEVEL SECURITY;")
-    cur.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_policies
-                           WHERE tablename='pvb_schede' AND policyname='pvb_schede_studio') THEN
-                CREATE POLICY pvb_schede_studio ON pvb_schede
-                    USING      (studio_id = current_setting('app.current_studio', true)::bigint)
-                    WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
-            END IF;
-        END $$;
-    """)
-    conn.commit()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pvb_schede (
+                id           BIGSERIAL PRIMARY KEY,
+                studio_id    BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+                paziente_id  BIGINT NOT NULL,
+                data_somm    DATE,
+                forma        TEXT,
+                eta_mesi     INT,
+                punteggi     JSONB,
+                percentili   JSONB,
+                note         TEXT,
+                creato_il    TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """)
+        cur.execute("""CREATE INDEX IF NOT EXISTS ix_pvb_paziente
+                       ON pvb_schede (paziente_id, data_somm DESC);""")
+        cur.execute("ALTER TABLE pvb_schede ENABLE ROW LEVEL SECURITY;")
+        cur.execute("ALTER TABLE pvb_schede FORCE ROW LEVEL SECURITY;")
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_policies
+                               WHERE tablename='pvb_schede' AND policyname='pvb_schede_studio') THEN
+                    CREATE POLICY pvb_schede_studio ON pvb_schede
+                        USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                        WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+                END IF;
+            END $$;
+        """)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _salva(conn, paz_id, d):
     cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO pvb_schede (paziente_id, data_somm, forma, eta_mesi,
-                                punteggi, percentili, note)
-        VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id
-    """, (paz_id, d["data_somm"], d["forma"], d["eta_mesi"],
-          json.dumps(d["punteggi"]), json.dumps(d["percentili"]), d["note"]))
-    new_id = cur.fetchone()[0]
-    conn.commit()
-    return new_id
+    try:
+        cur.execute("""
+            INSERT INTO pvb_schede (paziente_id, data_somm, forma, eta_mesi,
+                                    punteggi, percentili, note)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id
+        """, (paz_id, d["data_somm"], d["forma"], d["eta_mesi"],
+              json.dumps(d["punteggi"]), json.dumps(d["percentili"]), d["note"]))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        return new_id
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _storico(conn, paz_id):
     cur = conn.cursor()
-    cur.execute("""SELECT * FROM pvb_schede WHERE paziente_id=%s
-                   ORDER BY data_somm DESC, id DESC LIMIT 30""", (paz_id,))
-    return cur.fetchall()
+    try:
+        cur.execute("""SELECT * FROM pvb_schede WHERE paziente_id=%s
+                       ORDER BY data_somm DESC, id DESC LIMIT 30""", (paz_id,))
+        return cur.fetchall()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _elimina(conn, rid):
     cur = conn.cursor()
-    cur.execute("DELETE FROM pvb_schede WHERE id=%s", (rid,))
-    conn.commit()
+    try:
+        cur.execute("DELETE FROM pvb_schede WHERE id=%s", (rid,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _g(r, k, d=None):
