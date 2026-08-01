@@ -146,27 +146,51 @@ def _ensure_table(conn):
 
 def _salva(conn, paz_id, d):
     cur = conn.cursor()
-    cols = list(d.keys())
-    ph = ",".join(["%s"] * len(cols))
-    cur.execute(
-        f"INSERT INTO oculistica_visite (paziente_id,{','.join(cols)}) VALUES (%s,{ph})",
-        [paz_id] + list(d.values()))
-    conn.commit()
+    try:
+        cols = list(d.keys())
+        ph = ",".join(["%s"] * len(cols))
+        cur.execute(
+            f"INSERT INTO oculistica_visite (paziente_id,{','.join(cols)}) VALUES (%s,{ph})",
+            [paz_id] + list(d.values()))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _aggiorna(conn, vid, d):
     cur = conn.cursor()
-    set_clause = ",".join([f"{k}=%s" for k in d.keys()])
-    cur.execute(f"UPDATE oculistica_visite SET {set_clause} WHERE id=%s", list(d.values()) + [vid])
-    conn.commit()
+    try:
+        set_clause = ",".join([f"{k}=%s" for k in d.keys()])
+        cur.execute(f"UPDATE oculistica_visite SET {set_clause} WHERE id=%s", list(d.values()) + [vid])
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _storico(conn, paz_id):
     cur = conn.cursor()
-    cur.execute("""SELECT id, data_visita, tipo_visita, professionista, ac_cor_od, ac_cor_os
-                   FROM oculistica_visite WHERE paziente_id=%s ORDER BY data_visita DESC, id DESC""",
-                (paz_id,))
-    return cur.fetchall()
+    try:
+        cur.execute("""SELECT id, data_visita, tipo_visita, professionista, ac_cor_od, ac_cor_os
+                       FROM oculistica_visite WHERE paziente_id=%s ORDER BY data_visita DESC, id DESC""",
+                    (paz_id,))
+        return cur.fetchall()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _carica_visita(conn, vid):
