@@ -31,9 +31,6 @@ def _client_ip_user_agent() -> tuple[str, str]:
     Tenta di recuperare IP e User-Agent del client.
     Streamlit non li espone direttamente; usiamo placeholder coerenti.
     """
-    # In Streamlit Cloud il client IP è in headers ma non sempre accessibile.
-    # Per il setting "click in studio" è il dispositivo dello studio,
-    # quindi possiamo loggare un identificativo generico.
     ip = st.session_state.get("_client_ip", "studio_local")
     ua = st.session_state.get("_client_ua", "Streamlit-Studio")
     return ip, ua
@@ -60,27 +57,23 @@ def render_form_firma_click_studio(
 
     voci_def = tpl.get("voci") or []
 
-    # === TESTO INFORMATIVA (espandibile per non saturare la UI) ===
     with st.expander("📜 Leggi il testo completo dell'informativa", expanded=False):
         st.markdown(tpl.get("testo_md", ""))
 
     st.divider()
 
-    # === CHECKBOX VOCI ===
     st.markdown("**Spunta le voci che il paziente accetta:**")
     st.caption(
         "Le voci marcate come *(obbligatoria)* devono essere accettate "
         "perché la firma sia valida."
     )
 
-    # Form per evitare rerun a ogni checkbox
     with st.form(key=f"form_firma_click_{codice}_{paziente_id}"):
         voci_paziente = {}
         for v in sorted(voci_def, key=lambda x: x.get("ordine", 0)):
             cv = v["codice"]
             label_obb = " *(obbligatoria)*" if v.get("obbligatorio") else ""
             label = f"**{cv}** — {v['testo']}{label_obb}"
-            # default: True se obbligatoria (l'operatore deve esplicitamente togliere)
             default_val = bool(v.get("obbligatorio"))
             voci_paziente[cv] = st.checkbox(
                 label,
@@ -108,7 +101,6 @@ def render_form_firma_click_studio(
             type="primary",
             use_container_width=True,
         )
-        # Form_submit_button con un solo "annulla" gestito dal pannello superiore
 
     if confirm:
         _esegui_firma(
@@ -131,7 +123,6 @@ def _esegui_firma(
     ip, ua = _client_ip_user_agent()
 
     try:
-        # 1. Salva firma + voci atomiche (senza PDF blob: lo aggiungiamo dopo)
         if is_renewing:
             ris = services.rinnova_consenso(
                 conn=conn,
@@ -166,9 +157,7 @@ def _esegui_firma(
         st.error(f"Errore durante la firma: {e}")
         return
 
-    # 2. Genera PDF firmato (con timbro che include hash placeholder, poi rigenera con hash reale)
     try:
-        # Prima generazione: senza hash, calcola hash, rigenera con hash
         pdf_temp = genera_pdf_consenso(
             template=tpl,
             modalita_firma="click_studio",
@@ -198,7 +187,6 @@ def _esegui_firma(
             user_agent=ua,
         )
 
-        # 3. Salva PDF blob nel record
         ph = "%s" if services._is_postgres(conn) else "?"
         cur = conn.cursor()
         try:
@@ -216,9 +204,13 @@ def _esegui_firma(
                 )
             )
             conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            raise
         finally:
             try: cur.close()
-            except: pass
+            except Exception: pass
 
     except Exception as e:
         logger.exception("Generazione PDF fallita (firma è comunque salvata)")
@@ -228,7 +220,6 @@ def _esegui_firma(
         )
         pdf_final = None
 
-    # 4. Conferma e download
     st.success(f"✅ Consenso firmato (id firma: {ris['firma_id']})")
 
     if pdf_final:
@@ -240,10 +231,8 @@ def _esegui_firma(
             key=f"dl_just_signed_{ris['firma_id']}",
         )
 
-    # Cleanup state per refresh corretto del pannello
     st.session_state[f"_show_firm_{codice}_{paziente_id}"] = False
     st.session_state[f"_renewing_{codice}_{paziente_id}"] = False
 
-    # Bottone per chiudere e refreshare
     if st.button("Torna al pannello", key=f"back_panel_{ris['firma_id']}"):
         st.rerun()
