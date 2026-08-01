@@ -160,35 +160,43 @@ def salva_incasso(conn, table: str, row_id: int, dati: dict):
         dati.get("inc_listino"), dati.get("inc_sconto_tipo"),
         dati.get("inc_sconto_val"), dati.get("inc_incassato"))
     cur = conn.cursor()
-    cur.execute(
-        f"""
-        UPDATE {table} SET
-            inc_listino     = %s,
-            inc_sconto_tipo = %s,
-            inc_sconto_val  = %s,
-            inc_netto       = %s,
-            inc_incassato   = %s,
-            inc_residuo     = %s,
-            inc_metodo      = %s,
-            inc_stato       = %s,
-            inc_note        = %s
-        WHERE id = %s
-        """,
-        (
-            float(dati.get("inc_listino") or 0.0),
-            dati.get("inc_sconto_tipo") or "Nessuno",
-            float(dati.get("inc_sconto_val") or 0.0),
-            netto,
-            float(dati.get("inc_incassato") or 0.0),
-            residuo,
-            dati.get("inc_metodo") or "—",
-            stato,
-            dati.get("inc_note") or "",
-            row_id,
-        ),
-    )
-    conn.commit()
-    return netto, residuo, stato
+    try:
+        cur.execute(
+            f"""
+            UPDATE {table} SET
+                inc_listino     = %s,
+                inc_sconto_tipo = %s,
+                inc_sconto_val  = %s,
+                inc_netto       = %s,
+                inc_incassato   = %s,
+                inc_residuo     = %s,
+                inc_metodo      = %s,
+                inc_stato       = %s,
+                inc_note        = %s
+            WHERE id = %s
+            """,
+            (
+                float(dati.get("inc_listino") or 0.0),
+                dati.get("inc_sconto_tipo") or "Nessuno",
+                float(dati.get("inc_sconto_val") or 0.0),
+                netto,
+                float(dati.get("inc_incassato") or 0.0),
+                residuo,
+                dati.get("inc_metodo") or "—",
+                stato,
+                dati.get("inc_note") or "",
+                row_id,
+            ),
+        )
+        conn.commit()
+        return netto, residuo, stato
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def riepilogo_incasso(netto, residuo, stato) -> str:
