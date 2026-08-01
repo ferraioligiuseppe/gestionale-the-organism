@@ -5,7 +5,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 def ensure_reading_tables(conn) -> None:
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS reading_stimuli (
@@ -37,11 +38,19 @@ def ensure_reading_tables(conn) -> None:
             );
             """
         )
-    conn.commit()
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def save_stimulus(conn, data: Dict[str, Any]) -> None:
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             INSERT INTO reading_stimuli
@@ -57,19 +66,35 @@ def save_stimulus(conn, data: Dict[str, Any]) -> None:
                 json.dumps(data, ensure_ascii=False),
             ),
         )
-    conn.commit()
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def get_stimuli(conn) -> List[Tuple[int, str]]:
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             "SELECT id, COALESCE(title, 'Stimolo senza titolo') FROM reading_stimuli ORDER BY id DESC"
         )
         return cur.fetchall() or []
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def get_stimulus(conn, stimulus_id: int) -> Optional[Dict[str, Any]]:
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             "SELECT content_json FROM reading_stimuli WHERE id = %s",
             (int(stimulus_id),),
@@ -84,3 +109,10 @@ def get_stimulus(conn, stimulus_id: int) -> Optional[Dict[str, Any]]:
             return json.loads(payload)
         except Exception:
             return None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
