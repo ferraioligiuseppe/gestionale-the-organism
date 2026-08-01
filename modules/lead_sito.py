@@ -296,33 +296,41 @@ def statistiche_imbuto(conn, giorni=90):
     """Numeri dell'imbuto: visite → dati → questionari → pazienti."""
     cur = conn.cursor()
     out = {}
-    cur.execute("""SELECT count(*) FROM lead_visite
-                   WHERE creato_il > now() - (%s || ' days')::interval""", (giorni,))
-    out["visite"] = int(cur.fetchone()[0] or 0)
-    cur.execute("""SELECT count(*) FROM lead_sito
-                   WHERE creato_il > now() - (%s || ' days')::interval""", (giorni,))
-    out["contatti"] = int(cur.fetchone()[0] or 0)
-    cur.execute("""SELECT count(*) FROM lead_sito
-                   WHERE quest_sintesi IS NOT NULL
-                     AND creato_il > now() - (%s || ' days')::interval""", (giorni,))
-    out["questionari"] = int(cur.fetchone()[0] or 0)
-    cur.execute("""SELECT count(*) FROM lead_sito
-                   WHERE paziente_id IS NOT NULL
-                     AND creato_il > now() - (%s || ' days')::interval""", (giorni,))
-    out["pazienti"] = int(cur.fetchone()[0] or 0)
-    cur.execute("""SELECT dominio, count(*) FROM lead_visite
-                   WHERE creato_il > now() - (%s || ' days')::interval
-                   GROUP BY dominio ORDER BY 2 DESC""", (giorni,))
-    out["per_dominio"] = [(r[0] if not hasattr(r, "keys") else r["dominio"],
-                           r[1] if not hasattr(r, "keys") else r["count"])
-                          for r in cur.fetchall()]
-    cur.execute("""SELECT src_gioco, count(*) FROM lead_visite
-                   WHERE creato_il > now() - (%s || ' days')::interval
-                   GROUP BY src_gioco ORDER BY 2 DESC LIMIT 12""", (giorni,))
-    out["per_gioco"] = [(r[0] if not hasattr(r, "keys") else r["src_gioco"],
-                         r[1] if not hasattr(r, "keys") else r["count"])
-                        for r in cur.fetchall()]
-    return out
+    try:
+        cur.execute("""SELECT count(*) FROM lead_visite
+                       WHERE creato_il > now() - (%s || ' days')::interval""", (giorni,))
+        out["visite"] = int(cur.fetchone()[0] or 0)
+        cur.execute("""SELECT count(*) FROM lead_sito
+                       WHERE creato_il > now() - (%s || ' days')::interval""", (giorni,))
+        out["contatti"] = int(cur.fetchone()[0] or 0)
+        cur.execute("""SELECT count(*) FROM lead_sito
+                       WHERE quest_sintesi IS NOT NULL
+                         AND creato_il > now() - (%s || ' days')::interval""", (giorni,))
+        out["questionari"] = int(cur.fetchone()[0] or 0)
+        cur.execute("""SELECT count(*) FROM lead_sito
+                       WHERE paziente_id IS NOT NULL
+                         AND creato_il > now() - (%s || ' days')::interval""", (giorni,))
+        out["pazienti"] = int(cur.fetchone()[0] or 0)
+        cur.execute("""SELECT dominio, count(*) FROM lead_visite
+                       WHERE creato_il > now() - (%s || ' days')::interval
+                       GROUP BY dominio ORDER BY 2 DESC""", (giorni,))
+        out["per_dominio"] = [(r[0] if not hasattr(r, "keys") else r["dominio"],
+                               r[1] if not hasattr(r, "keys") else r["count"])
+                              for r in cur.fetchall()]
+        cur.execute("""SELECT src_gioco, count(*) FROM lead_visite
+                       WHERE creato_il > now() - (%s || ' days')::interval
+                       GROUP BY src_gioco ORDER BY 2 DESC LIMIT 12""", (giorni,))
+        out["per_gioco"] = [(r[0] if not hasattr(r, "keys") else r["src_gioco"],
+                             r[1] if not hasattr(r, "keys") else r["count"])
+                            for r in cur.fetchall()]
+        return out
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def render_statistiche(conn):
@@ -333,6 +341,8 @@ def render_statistiche(conn):
     try:
         s = statistiche_imbuto(conn, giorni)
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.info(f"Statistiche non ancora disponibili ({e}).")
         return
 
