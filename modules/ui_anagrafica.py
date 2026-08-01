@@ -425,6 +425,8 @@ def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi", ordine: str = "Al
         cols = [d[0] for d in cur.description] if cur.description else []
         return [_row_to_plain_dict(r, cols) for r in rows]
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.error(f"Errore lista: {e}")
         return []
 
@@ -441,6 +443,8 @@ def _carica_paziente(_conn, paz_id):
         cols = [d[0] for d in cur.description] if cur.description else []
         return _row_to_plain_dict(row, cols)
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         return None
 
 
@@ -460,6 +464,8 @@ def _carica_ultimo_consenso(_conn, paz_id):
         cols = [d[0] for d in cur.description] if cur.description else []
         return _row_to_plain_dict(row, cols)
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         return None
 
 
@@ -650,6 +656,8 @@ def _archivia(conn, paz_id) -> bool:
         _invalida_cache()
         return True
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.error(f"Errore archiviazione: {e}")
         return False
 
@@ -662,6 +670,8 @@ def _riattiva(conn, paz_id) -> bool:
         _invalida_cache()
         return True
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.error(f"Errore riattivazione: {e}")
         return False
 
