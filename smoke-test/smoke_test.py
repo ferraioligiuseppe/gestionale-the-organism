@@ -63,17 +63,17 @@ def screenshot_error_scan(page, label):
 def login(page):
     page.goto(APP_URL, timeout=60000)
     page.wait_for_timeout(3000)
-    # Cerca un campo password (gate di login del gestionale)
     try:
         page.wait_for_selector("input[type='password']", timeout=15000)
     except Exception:
-        return  # forse già loggato o nessun gate di login attivo
+        return True  # forse già loggato o nessun gate di login attivo
     pw_input = page.locator("input[type='password']").first
     text_inputs = page.locator("input[type='text']")
     if text_inputs.count() > 0:
+        text_inputs.first.click()
         text_inputs.first.fill(USERNAME)
+    pw_input.click()
     pw_input.fill(PASSWORD)
-    # Cerca un bottone di invio plausibile
     for label in ["Entra", "Accedi", "Login", "Invia", "Conferma"]:
         btn = page.get_by_role("button", name=re.compile(label, re.IGNORECASE))
         if btn.count() > 0:
@@ -82,6 +82,9 @@ def login(page):
     else:
         page.keyboard.press("Enter")
     page.wait_for_timeout(4000)
+    # Verifica reale: se c'è ancora il campo password, il login NON è riuscito
+    ancora_password = page.locator("input[type='password']").count() > 0
+    return not ancora_password
 
 
 def click_nav(page, label, is_gruppo=False):
@@ -106,10 +109,18 @@ def main():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 900})
-        login(page)
+        login_ok = login(page)
 
         ok, motivo = screenshot_error_scan(page, "00_home_dopo_login")
+        if not login_ok:
+            ok, motivo = False, "LOGIN FALLITO: pagina ancora sul form di login dopo il tentativo — controlla i secret GESTIONALE_TEST_USER/PASS"
         risultati.append(("Home dopo login", ok, motivo))
+
+        if not login_ok:
+            # Non ha senso proseguire: senza login tutte le sezioni sarebbero un falso fallimento identico
+            browser.close()
+            _scrivi_report(risultati)
+            sys.exit(1)
 
         ultimo_gruppo_aperto = None
         for area, sotto in SEZIONI_DA_CONTROLLARE:
@@ -127,7 +138,10 @@ def main():
 
         browser.close()
 
-    # Report leggibile
+    _scrivi_report(risultati)
+
+
+def _scrivi_report(risultati):
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
     lines = [f"# Smoke test gestionale — {now}", ""]
     n_ok = sum(1 for _, ok, _ in risultati if ok)
