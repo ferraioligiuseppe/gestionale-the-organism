@@ -72,70 +72,78 @@ STATI = ["nuovo", "contattato", "appuntamento fissato", "convertito", "archiviat
 def init_lead_db(conn):
     """Crea le tabelle con RLS multi-studio. Idempotente."""
     cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lead_visite (
-            id          BIGSERIAL PRIMARY KEY,
-            studio_id   BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
-            src_gioco   TEXT,
-            dominio     TEXT,
-            tipo_segnale TEXT,
-            eta         INT,
-            creato_il   TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-    """)
-    cur.execute("ALTER TABLE lead_visite ENABLE ROW LEVEL SECURITY;")
-    cur.execute("ALTER TABLE lead_visite FORCE ROW LEVEL SECURITY;")
-    cur.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_policies
-                           WHERE tablename='lead_visite' AND policyname='lead_visite_studio') THEN
-                CREATE POLICY lead_visite_studio ON lead_visite
-                    USING      (studio_id = current_setting('app.current_studio', true)::bigint)
-                    WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
-            END IF;
-        END $$;
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lead_sito (
-            id             BIGSERIAL PRIMARY KEY,
-            studio_id      BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
-            nome           TEXT,
-            cognome        TEXT,
-            email          TEXT,
-            telefono       TEXT,
-            eta_bambino    TEXT,
-            per_chi        TEXT,
-            src_gioco      TEXT,
-            dominio        TEXT,
-            n_segnali      INT,
-            scostamento    REAL,
-            consenso       BOOLEAN DEFAULT false,
-            quest_tipo     TEXT,
-            quest_json     JSONB,
-            quest_sintesi  TEXT,
-            stato          TEXT DEFAULT 'nuovo',
-            note           TEXT,
-            paziente_id    BIGINT,
-            creato_il      TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-    """)
-    cur.execute("""CREATE INDEX IF NOT EXISTS ix_lead_sito_stato
-                   ON lead_sito (stato, creato_il DESC);""")
-    cur.execute("ALTER TABLE lead_sito ENABLE ROW LEVEL SECURITY;")
-    cur.execute("ALTER TABLE lead_sito FORCE ROW LEVEL SECURITY;")
-    cur.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_policies
-                           WHERE tablename='lead_sito' AND policyname='lead_sito_studio') THEN
-                CREATE POLICY lead_sito_studio ON lead_sito
-                    USING      (studio_id = current_setting('app.current_studio', true)::bigint)
-                    WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
-            END IF;
-        END $$;
-    """)
-    conn.commit()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS lead_visite (
+                id          BIGSERIAL PRIMARY KEY,
+                studio_id   BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+                src_gioco   TEXT,
+                dominio     TEXT,
+                tipo_segnale TEXT,
+                eta         INT,
+                creato_il   TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """)
+        cur.execute("ALTER TABLE lead_visite ENABLE ROW LEVEL SECURITY;")
+        cur.execute("ALTER TABLE lead_visite FORCE ROW LEVEL SECURITY;")
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_policies
+                               WHERE tablename='lead_visite' AND policyname='lead_visite_studio') THEN
+                    CREATE POLICY lead_visite_studio ON lead_visite
+                        USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                        WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+                END IF;
+            END $$;
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS lead_sito (
+                id             BIGSERIAL PRIMARY KEY,
+                studio_id      BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+                nome           TEXT,
+                cognome        TEXT,
+                email          TEXT,
+                telefono       TEXT,
+                eta_bambino    TEXT,
+                per_chi        TEXT,
+                src_gioco      TEXT,
+                dominio        TEXT,
+                n_segnali      INT,
+                scostamento    REAL,
+                consenso       BOOLEAN DEFAULT false,
+                quest_tipo     TEXT,
+                quest_json     JSONB,
+                quest_sintesi  TEXT,
+                stato          TEXT DEFAULT 'nuovo',
+                note           TEXT,
+                paziente_id    BIGINT,
+                creato_il      TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """)
+        cur.execute("""CREATE INDEX IF NOT EXISTS ix_lead_sito_stato
+                       ON lead_sito (stato, creato_il DESC);""")
+        cur.execute("ALTER TABLE lead_sito ENABLE ROW LEVEL SECURITY;")
+        cur.execute("ALTER TABLE lead_sito FORCE ROW LEVEL SECURITY;")
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_policies
+                               WHERE tablename='lead_sito' AND policyname='lead_sito_studio') THEN
+                    CREATE POLICY lead_sito_studio ON lead_sito
+                        USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                        WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+                END IF;
+            END $$;
+        """)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _notifica_nuovo_contatto(dati, dom_label=""):
@@ -166,56 +174,96 @@ def _notifica_nuovo_contatto(dati, dom_label=""):
 
 def salva_lead(conn, dati):
     cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO lead_sito
-            (nome, cognome, email, telefono, eta_bambino, per_chi,
-             src_gioco, dominio, n_segnali, scostamento, consenso)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        RETURNING id
-    """, (dati.get("nome"), dati.get("cognome"), dati.get("email"),
-          dati.get("telefono"), dati.get("eta_bambino"), dati.get("per_chi"),
-          dati.get("src_gioco"), dati.get("dominio"), dati.get("n_segnali"),
-          dati.get("scostamento"), bool(dati.get("consenso"))))
-    new_id = cur.fetchone()[0]
-    conn.commit()
-    return int(new_id)
+    try:
+        cur.execute("""
+            INSERT INTO lead_sito
+                (nome, cognome, email, telefono, eta_bambino, per_chi,
+                 src_gioco, dominio, n_segnali, scostamento, consenso)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
+        """, (dati.get("nome"), dati.get("cognome"), dati.get("email"),
+              dati.get("telefono"), dati.get("eta_bambino"), dati.get("per_chi"),
+              dati.get("src_gioco"), dati.get("dominio"), dati.get("n_segnali"),
+              dati.get("scostamento"), bool(dati.get("consenso"))))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        return int(new_id)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def aggiorna_questionario(conn, lead_id, tipo, q_json, sintesi):
     cur = conn.cursor()
-    cur.execute("""UPDATE lead_sito
-                   SET quest_tipo=%s, quest_json=%s, quest_sintesi=%s
-                   WHERE id=%s""",
-                (tipo, json.dumps(q_json, ensure_ascii=False, default=str),
-                 sintesi, lead_id))
-    conn.commit()
+    try:
+        cur.execute("""UPDATE lead_sito
+                       SET quest_tipo=%s, quest_json=%s, quest_sintesi=%s
+                       WHERE id=%s""",
+                    (tipo, json.dumps(q_json, ensure_ascii=False, default=str),
+                     sintesi, lead_id))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def lista_lead(conn, stato=None, limite=300):
     cur = conn.cursor()
-    if stato and stato != "tutti":
-        cur.execute("""SELECT * FROM lead_sito WHERE stato=%s
-                       ORDER BY creato_il DESC LIMIT %s""", (stato, limite))
-    else:
-        cur.execute("""SELECT * FROM lead_sito
-                       ORDER BY creato_il DESC LIMIT %s""", (limite,))
-    return cur.fetchall()
+    try:
+        if stato and stato != "tutti":
+            cur.execute("""SELECT * FROM lead_sito WHERE stato=%s
+                           ORDER BY creato_il DESC LIMIT %s""", (stato, limite))
+        else:
+            cur.execute("""SELECT * FROM lead_sito
+                           ORDER BY creato_il DESC LIMIT %s""", (limite,))
+        return cur.fetchall()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def aggiorna_stato(conn, lead_id, stato, note=None):
     cur = conn.cursor()
-    if note is None:
-        cur.execute("UPDATE lead_sito SET stato=%s WHERE id=%s", (stato, lead_id))
-    else:
-        cur.execute("UPDATE lead_sito SET stato=%s, note=%s WHERE id=%s",
-                    (stato, note, lead_id))
-    conn.commit()
+    try:
+        if note is None:
+            cur.execute("UPDATE lead_sito SET stato=%s WHERE id=%s", (stato, lead_id))
+        else:
+            cur.execute("UPDATE lead_sito SET stato=%s, note=%s WHERE id=%s",
+                        (stato, note, lead_id))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def elimina_lead(conn, lead_id):
     cur = conn.cursor()
-    cur.execute("DELETE FROM lead_sito WHERE id=%s", (lead_id,))
-    conn.commit()
+    try:
+        cur.execute("DELETE FROM lead_sito WHERE id=%s", (lead_id,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _g(row, chiave, default=None):
@@ -229,15 +277,19 @@ def _g(row, chiave, default=None):
 
 def registra_visita(conn, src, dom, tipo, eta):
     """Traccia l'arrivo sulla pagina (anonimo: nessun dato personale)."""
+    cur = conn.cursor()
     try:
-        cur = conn.cursor()
         cur.execute("""INSERT INTO lead_visite (src_gioco, dominio, tipo_segnale, eta)
                        VALUES (%s,%s,%s,%s)""",
                     (src or None, dom or None, tipo or None,
                      int(eta) if str(eta).isdigit() else None))
         conn.commit()
     except Exception:
-        pass
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def statistiche_imbuto(conn, giorni=90):
@@ -581,15 +633,23 @@ def converti_in_paziente(conn, lead_id, row):
     tel = (_g(row, "telefono", "") or "").strip()
     email = (_g(row, "email", "") or "").strip()
     cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO pazienti (cognome, nome, telefono, email, stato_paziente) "
-        "VALUES (%s,%s,%s,%s,'ATTIVO') RETURNING id",
-        (cognome, nome, tel, email))
-    pid = int(cur.fetchone()[0])
-    cur.execute("UPDATE lead_sito SET paziente_id=%s, stato='convertito' WHERE id=%s",
-                (pid, lead_id))
-    conn.commit()
-    return pid
+    try:
+        cur.execute(
+            "INSERT INTO pazienti (cognome, nome, telefono, email, stato_paziente) "
+            "VALUES (%s,%s,%s,%s,'ATTIVO') RETURNING id",
+            (cognome, nome, tel, email))
+        pid = int(cur.fetchone()[0])
+        cur.execute("UPDATE lead_sito SET paziente_id=%s, stato='convertito' WHERE id=%s",
+                    (pid, lead_id))
+        conn.commit()
+        return pid
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _link_firma_privacy(paziente_id, minore=False):
