@@ -555,6 +555,8 @@ def _salva_nps(conn, paziente_id: int, tipo: str, dati: dict) -> None:
         conn.commit()
         st.success(f"✅ NPS ({tipo}) salvato correttamente.")
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         st.error(f"Errore salvataggio NPS: {e}")
 
 
@@ -744,6 +746,8 @@ def seed_caso_clinico(conn, verbose: bool = True) -> Optional[int]:
         return paziente_id
 
     except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
         if verbose:
             st.error(f"Errore seed caso clinico: {e}")
         return None
