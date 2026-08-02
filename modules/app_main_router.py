@@ -467,6 +467,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📋 Questionari remoti", "🎮 Esercizi Wordwall",
         "🎧 Stimolazione uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
+        "🎧 Audiometria tonale calibrata",
         "🤖 Relazioni cliniche (AI)", "📝 Relazione clinica",
         "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
     }
@@ -881,6 +882,10 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Errore {sotto}: {e_audio}")
         _bottone_prossimo_passo(conn, paz_id, sotto)
         return True
+
+    if sotto == "🎧 Audiometria tonale calibrata":
+        from .ui_audiometria import render_audiometria
+        render_audiometria(conn, paz_id); return True
 
     # ── FORMAZIONE & PROFESSIONISTI ───────────────────────────────────
     if sotto == "🦴 Osteopatia":

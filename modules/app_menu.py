@@ -115,6 +115,7 @@ PNEV_RAMI = {
         "🎧 Stimolazione uditiva",
         "📊 Audiometria funzionale",
         "🎧 Bilancio uditivo",
+        "🎧 Audiometria tonale calibrata",
         "🎧 MAPS",
         "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS",
