@@ -11770,6 +11770,15 @@ def main():
             st.write(f"errore: {_e}")
         return
 
+    # --- PUBLIC QUESTIONARIO HOOK (no login) — Fisher/Potenziale dal sito ---
+    if st.query_params.get('questionario_hook'):
+        try:
+            from modules.questionario_pubblico import ui_public_questionario_hook
+            ui_public_questionario_hook(get_connection)
+        except Exception as _e:
+            st.write(f"errore: {_e}")
+        return
+
     # --- PUBLIC SIGN PAGE (no login) ---
     if st.query_params.get('sign'):
         ui_public_sign_page()

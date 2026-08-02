@@ -586,6 +586,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "📝 Consensi ascolti MAPS":
         from .consenso_ascolti import render_consensi_ascolti
         render_consensi_ascolti(conn); return True
+    if sotto == "📋 Questionari dal sito":
+        from .questionario_pubblico import render_questionari_pubblici
+        render_questionari_pubblici(conn); return True
     if sotto == "📅 Sedute / Terapie":
         from .sections.ui_cliniche import render_sedute_section
         render_sedute_section(); return True
@@ -985,6 +988,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📝 Consensi ascolti MAPS":
             from .consenso_ascolti import render_consensi_ascolti
             render_consensi_ascolti(conn); return
+        if sotto == "📋 Questionari dal sito":
+            from .questionario_pubblico import render_questionari_pubblici
+            render_questionari_pubblici(conn); return
         if sotto == "📅 Sedute / Terapie":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
