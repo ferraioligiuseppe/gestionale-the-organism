@@ -160,6 +160,8 @@ SOTTOSEZIONI = {
         "📄 Modulistica / Schede da stampare",
         "🎟️ Coupon OF / SDS",
         "📨 Contatti dal sito",
+        "🎧 Aderenza ascolti MAPS",
+        "📝 Consensi ascolti MAPS",
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",
         "📥 Import pazienti",
