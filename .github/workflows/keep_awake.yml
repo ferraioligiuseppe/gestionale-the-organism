@@ -1,0 +1,15 @@
+name: Keep gestionale awake
+
+on:
+  schedule:
+    - cron: "*/12 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping produzione (main)
+        run: curl -s -o /dev/null -w "main: %{http_code}\n" https://gestionale-the-organism.streamlit.app/ || true
+      - name: Ping test
+        run: curl -s -o /dev/null -w "test: %{http_code}\n" https://testgestionale.streamlit.app/ || true
