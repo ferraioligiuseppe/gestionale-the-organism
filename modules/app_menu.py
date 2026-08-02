@@ -162,6 +162,7 @@ SOTTOSEZIONI = {
         "📨 Contatti dal sito",
         "🎧 Aderenza ascolti MAPS",
         "📝 Consensi ascolti MAPS",
+        "📋 Questionari dal sito",
         "📅 Sedute / Terapie",
         "🔒 Privacy & Consensi",
         "📥 Import pazienti",
