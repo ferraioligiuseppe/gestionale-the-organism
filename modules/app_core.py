@@ -11788,6 +11788,15 @@ def main():
             st.write(f"errore: {_e}")
         return
 
+    # --- PUBLIC ESAME AUDIOMETRIA HOOK (no login) — invio automatico dal sito ---
+    if st.query_params.get('esame_audiometria_hook'):
+        try:
+            from modules.db_audiometria import ui_public_esame_hook
+            ui_public_esame_hook(get_connection)
+        except Exception as _e:
+            st.write(f"errore: {_e}")
+        return
+
     # --- PUBLIC SIGN PAGE (no login) ---
     if st.query_params.get('sign'):
         ui_public_sign_page()

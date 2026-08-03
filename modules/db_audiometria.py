@@ -124,3 +124,51 @@ def elimina_esame(conn, esame_id):
     finally:
         try: cur.close()
         except Exception: pass
+
+
+TOKEN_SEGRETO_ESAME = "pnev_esame_audiometria_2026"
+
+
+def _collega_paziente(conn, email):
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM pazienti WHERE lower(email)=lower(%s) LIMIT 1", (email,))
+        r = cur.fetchone()
+        return int(r[0]) if r else None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
+
+
+def ui_public_esame_hook(get_conn):
+    """Endpoint pubblico: ?esame_audiometria_hook=1&token=...&nome=...&email=...&dati=<json-urlencoded>"""
+    qs = st.query_params
+    def p(k, d=""):
+        v = qs.get(k, d)
+        return (v[0] if isinstance(v, list) and v else v) or d
+
+    if p("token") != TOKEN_SEGRETO_ESAME:
+        st.write("no")
+        return
+    email = p("email").strip()
+    dati_raw = p("dati")
+    if not email or not dati_raw:
+        st.write("no")
+        return
+    conn = get_conn()
+    try:
+        dati = json.loads(dati_raw)
+    except Exception:
+        st.write("errore: dati non validi")
+        return
+    try:
+        assicura_tabella(conn)
+        pid = _collega_paziente(conn, email)
+        if not pid:
+            st.write("errore: paziente non trovato in anagrafica (email non corrispondente)")
+            return
+        salva_esame(conn, pid, dati)
+        st.write("ok")
+    except Exception as e:
+        st.write(f"errore: {e}")
