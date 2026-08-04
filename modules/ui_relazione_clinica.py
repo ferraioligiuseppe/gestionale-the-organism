@@ -769,6 +769,61 @@ Con stima,
 """ + _firma(prof,spec)
 
 
+def _salva_relazione(conn, paz_id, tipo, testo):
+    """Salva la relazione generata/inviata nello storico del paziente."""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS relazioni_cliniche ("
+            "id SERIAL PRIMARY KEY, paziente_id INTEGER NOT NULL, tipo TEXT, "
+            "testo TEXT, creato TIMESTAMP DEFAULT NOW())"
+        )
+        cur.execute(
+            "INSERT INTO relazioni_cliniche (paziente_id, tipo, testo) VALUES (%s,%s,%s)",
+            (paz_id, tipo, testo)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.error(f"Errore salvataggio relazione: {e}")
+        return False
+
+
+def _carica_storico_relazioni(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS relazioni_cliniche ("
+            "id SERIAL PRIMARY KEY, paziente_id INTEGER NOT NULL, tipo TEXT, "
+            "testo TEXT, creato TIMESTAMP DEFAULT NOW())"
+        )
+        cur.execute(
+            "SELECT id, tipo, testo, creato FROM relazioni_cliniche "
+            "WHERE paziente_id=%s ORDER BY creato DESC", (paz_id,)
+        )
+        rows = cur.fetchall() or []
+        conn.commit()
+        out = []
+        for r in rows:
+            if isinstance(r, dict):
+                out.append({"id": r.get("id"), "tipo": r.get("tipo"),
+                            "testo": r.get("testo"), "creato": r.get("creato")})
+            else:
+                out.append({"id": r[0], "tipo": r[1], "testo": r[2], "creato": r[3]})
+        return out
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.caption(f"Storico non disponibile: {e}")
+        return []
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  PDF
 # ══════════════════════════════════════════════════════════════════════
@@ -964,3 +1019,16 @@ def render_relazione_clinica(conn):
         titolo_doc = tipo.replace("🧠","").replace("🔄","").replace("🏫","").replace("🏥","").replace("🏃","").replace("👨‍👩‍👧","").strip().upper()
         suffix = tipo.split()[1].lower() if len(tipo.split())>1 else "relazione"
         _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, paz_id, suffix, timbro_bytes)
+        if st.button("💾 Salva questa relazione nello storico", key=f"rel_salva_{paz_id}_{tipo}"):
+            if _salva_relazione(conn, paz_id, tipo, testo):
+                st.success("Relazione salvata nello storico del paziente.")
+
+    with st.expander("🗂 Storico relazioni di questo paziente"):
+        storico = _carica_storico_relazioni(conn, paz_id)
+        if not storico:
+            st.caption("Nessuna relazione salvata per questo paziente.")
+        for r in storico:
+            data_r = r["creato"].strftime("%d/%m/%Y %H:%M") if hasattr(r["creato"], "strftime") else str(r["creato"] or "")
+            st.markdown(f"**{r['tipo']}** — {data_r}")
+            st.text_area("", value=r["testo"] or "", height=150, key=f"rel_stor_{r['id']}", disabled=True, label_visibility="collapsed")
+            st.markdown("---")
