@@ -76,7 +76,7 @@ def _carica_dati(conn, paz_id):
                 dati["inpp_note"] = row.get("note_finali") or ""
             else:
                 dati["inpp_riepilogo"] = row[0] or {}
-                dati["inpp_note"] = row[2] or ""
+                dati["inpp_note"] = row[1] or ""
         cur.execute(
             "SELECT approccio, step, nome, stato FROM terapia_programma "
             "WHERE paziente_id=%s ORDER BY approccio, step, creato", (paz_id,))
@@ -148,6 +148,54 @@ def _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val
     sez_g  = visiva.get("sez_g",{})
     diag   = sez_g.get("diag","") or ""
 
+    # Prova a far scrivere all'AI le sezioni cliniche sui dati REALI
+    # (stessa logica già usata per la relazione Sensori-motoria).
+    ai_sez = _ai_corpo_sensori(dati, fascia, note)
+
+    inpp_riep = dati.get("inpp_riepilogo") or {}
+    inpp_note = (dati.get("inpp_note") or "").strip()
+    dump_inpp = _dump_riepilogo_inpp(inpp_riep)
+
+    if ai_sez:
+        sez_profilo = ai_sez.get("PROFILO SENSORI-MOTORIO") or ""
+        sez_riflessi = ai_sez.get("RIFLESSI PRIMITIVI") or ""
+        sez_motricita = ai_sez.get("MOTRICITÀ E PRASSIE") or ""
+        sez_oro = ai_sez.get("AREA ORO-MIOFUNZIONALE") or ""
+        sez_visiva_ai = ai_sez.get("VALUTAZIONE VISUO-PERCETTIVA") or ""
+        sez_proposta = ai_sez.get("PROPOSTA TERAPEUTICA") or ""
+        blocco_profilo = sez_profilo or (pnev if pnev else
+            "Maturazione disomogenea tra linguaggio, sensorialità, motricità e regolazione.")
+        blocco_sensorialita = "\n\n".join(x for x in [sez_motricita, sez_oro] if x) or \
+            ("Modulazione sensoriale in fase di maturazione con possibili difficoltà di soglia "
+             "(iper/iporeattività) in uno o più canali (tattile, propriocettivo, vestibolare, "
+             "uditivo, visivo). Coordinazione motoria e prassie da valutare in relazione al "
+             "profilo evolutivo.")
+        blocco_riflessi = ("\n\nRIFLESSI PRIMITIVI (dati della valutazione INPP)\n"
+                           + (dump_inpp + "\n\n" if dump_inpp else "")
+                           + (sez_riflessi or inpp_note or
+                              "Valutazione INPP non ancora eseguita.")) if (sez_riflessi or dump_inpp or inpp_note) else ""
+        blocco_indicazioni = (sez_proposta + "\n\n" if sez_proposta else "") + _testo_progetto_terapia(dati)
+        blocco_visiva = ("Diagnosi visiva: " + diag + "\n\n" if diag else "") + \
+            (sez_visiva_ai or "Valutazione optometrico-comportamentale in corso/completata.")
+    else:
+        blocco_profilo = pnev if pnev else \
+            "Maturazione disomogenea tra linguaggio, sensorialità, motricità e regolazione."
+        blocco_sensorialita = (
+            "Modulazione sensoriale in fase di maturazione con possibili difficoltà di soglia "
+            "(iper/iporeattività) in uno o più canali (tattile, propriocettivo, vestibolare, "
+            "uditivo, visivo). Coordinazione motoria e prassie da valutare in relazione al "
+            "profilo evolutivo.")
+        blocco_riflessi = ("\n\nRIFLESSI PRIMITIVI (dati della valutazione INPP)\n"
+                           + (dump_inpp + "\n\n" if dump_inpp else "")
+                           + (inpp_note or "Valutazione INPP non ancora eseguita.")) \
+                          if (dump_inpp or inpp_note) else ""
+        blocco_indicazioni = _testo_progetto_terapia(dati)
+        _dv = _dump_dati_visiva(dati)
+        blocco_visiva = ("Diagnosi visiva: " + diag + "\n\n" if diag else "") + \
+            (_dv if _dv else "Valutazione optometrico-comportamentale in corso/completata.")
+        if (note or "").strip():
+            blocco_profilo = note.strip() + "\n\n" + blocco_profilo
+
     return _intestazione(prof,spec) + f"""RELAZIONE NEUROEVOLUTIVA INTEGRATA ({fascia})
 
 DATI ANAGRAFICI
@@ -168,7 +216,7 @@ neuropsicologo, optometrista comportamentale, logopedista,
 terapista miofunzionale, psicomotricista, osteopata, fisioterapista.
 
 PROFILO INTEGRATO
-{pnev if pnev else "Maturazione disomogenea tra linguaggio, sensorialità, motricità e regolazione."}
+{blocco_profilo}
 
 LINGUAGGIO E COMUNICAZIONE
 Fragilità espressive e/o recettive con variabilità nella comprensione di consegne
@@ -176,12 +224,11 @@ complesse. Il profilo linguistico risulta condizionato dalla qualità dell'integ
 neuro-funzionale e dalla capacità di regolazione attentiva e sensoriale.
 
 SENSORIALITÀ E MOTRICITÀ
-Modulazione sensoriale in fase di maturazione con possibili difficoltà di soglia
-(iper/iporeattività) in uno o più canali (tattile, propriocettivo, vestibolare, uditivo,
-visivo). Coordinazione motoria e prassie da valutare in relazione al profilo evolutivo.
+{blocco_sensorialita}
+{blocco_riflessi}
 
 VALUTAZIONE VISUO-PERCETTIVA
-{("Diagnosi visiva: " + diag) if diag else "Valutazione optometrico-comportamentale in corso/completata."}
+{blocco_visiva}
 
 REGOLAZIONE E FUNZIONI ESECUTIVE
 Variabilità nella qualità attentiva con fluttuazioni legate al livello di attivazione
@@ -201,9 +248,7 @@ NOTE CLINICHE
 {note or "___________________________"}
 
 INDICAZIONI
-Si ritiene indicata la continuazione/avvio del percorso terapeutico integrato PNEV
-con frequenza di 2 sedute/settimana, home program strutturato (80 min/die),
-e rivalutazione dopo il primo step di 10 settimane.
+{blocco_indicazioni}
 """ + _firma(prof,spec)
 
 
@@ -371,49 +416,139 @@ Rimango a disposizione per qualsiasi informazione.
 """ + _firma(prof,spec)
 
 
+def _dump_riepilogo_inpp(inpp_riep):
+    """Stampa leggibile del riepilogo INPP (punteggi per area). Se un'area
+    non è stata eseguita (massimo assente o 0) lo dichiara esplicitamente,
+    invece di mostrare 0% — che si confonderebbe con un risultato negativo."""
+    if not inpp_riep or not isinstance(inpp_riep, dict):
+        return ""
+    righe = []
+    for chiave, val in inpp_riep.items():
+        if not isinstance(val, dict):
+            if val not in (None, "", 0):
+                righe.append(f"- {str(chiave).replace('_',' ').strip().upper()}: {val}")
+            continue
+        etichetta = (val.get("label") or str(chiave).replace("_", " ").strip()).upper()
+        ottenuto = val.get("ottenuto", val.get("punteggio", val.get("score")))
+        massimo = val.get("massimo", val.get("totale", val.get("max")))
+        perc = val.get("perc", val.get("percentuale", val.get("pct")))
+        if not massimo:
+            righe.append(f"- {etichetta}: non eseguito in questa valutazione")
+        elif ottenuto is not None:
+            pct_txt = f" — {perc:.1f}%" if isinstance(perc, (int, float)) else ""
+            righe.append(f"- {etichetta}: {ottenuto}/{massimo}{pct_txt}")
+    return "\n".join(righe)
+
+
+def _dump_dati_visiva(dati):
+    """Riassunto testuale dei dati reali della valutazione visuo-percettiva
+    (refrazione, oculomotricità, binoculare, accomodazione), riusando lo
+    stesso formatter della schermata di Valutazione visuo-percettiva."""
+    visiva = dati.get("visita_visiva", {}) or dati.get("visiva", {}) or {}
+    if not visiva:
+        return ""
+    try:
+        from .ui_valutazione_visuo_percettiva import _testo_solo_optometrico
+        return (_testo_solo_optometrico(visiva) or "").strip()
+    except Exception:
+        return ""
+
+
+_ULTIMO_ERRORE_AI = ""  # letto dalla UI dopo la generazione, per avvisare il clinico
+
+
 def _ai_corpo_sensori(dati, fascia, note):
     """Prova a far scrivere all'AI le 4 sezioni cliniche sui dati REALI del
-    paziente (questionario/anamnesi PNEV + valutazione INPP). Ritorna None
-    se l'AI non è configurata o non ci sono dati da cui partire (in quel
-    caso il chiamante usa il testo fisso di riserva)."""
+    paziente (questionario/anamnesi PNEV + valutazione INPP + valutazione
+    visuo-percettiva). Ritorna None se l'AI non è configurata o non ci sono
+    dati da cui partire (in quel caso il chiamante usa il testo fisso di
+    riserva). In caso di None, `_ULTIMO_ERRORE_AI` (modulo) contiene il motivo,
+    così la UI può avvisare il clinico invece di stampare testo generico in
+    silenzio."""
+    global _ULTIMO_ERRORE_AI
+    _ULTIMO_ERRORE_AI = ""
     pnev = (dati.get("pnev_summary") or "").strip()
     inpp_riep = dati.get("inpp_riepilogo") or {}
     inpp_note = (dati.get("inpp_note") or "").strip()
-    if not pnev and not inpp_riep and not inpp_note:
+    visiva_txt = _dump_dati_visiva(dati)
+    if not pnev and not inpp_riep and not inpp_note and not visiva_txt \
+       and not (dati.get("logopedia") or "").strip() \
+       and not (dati.get("oculistica") or "").strip() \
+       and not (dati.get("osteopatia") or "").strip():
+        _ULTIMO_ERRORE_AI = ("Nessun dato clinico trovato (anamnesi/PNEV, INPP, valutazione "
+                              "visiva, logopedia, oculistica, osteopatia): l'AI non ha materiale "
+                              "su cui scrivere, uso il testo fisso di riserva.")
         return None
     try:
         from .ai_estrazione import genera_testo, ai_disponibile
     except Exception:
+        _ULTIMO_ERRORE_AI = "Modulo AI non disponibile nell'app."
         return None
     if not ai_disponibile():
+        _ULTIMO_ERRORE_AI = ("Assistente AI non configurato (manca la chiave nei Secrets sotto "
+                              "[ai]): uso il testo fisso di riserva, non le tue note/dati reali.")
         return None
 
     blocco = []
     if pnev:
         blocco.append("QUESTIONARIO / ANAMNESI PNEV:\n" + pnev)
     if inpp_riep:
-        blocco.append("RIEPILOGO VALUTAZIONE INPP (riflessi primitivi):\n"
-                      + json.dumps(inpp_riep, ensure_ascii=False, indent=1))
+        blocco.append("RIEPILOGO VALUTAZIONE INPP (riflessi primitivi) — punteggi ottenuto/massimo "
+                      "per area; se un'area è segnata «non eseguita» NON descriverla come deficitaria, "
+                      "ometti semplicemente quell'area dal commento clinico:\n"
+                      + (_dump_riepilogo_inpp(inpp_riep) or json.dumps(inpp_riep, ensure_ascii=False, indent=1)))
     if inpp_note:
         blocco.append("NOTE FINALI VALUTAZIONE INPP:\n" + inpp_note)
+    if visiva_txt:
+        blocco.append("VALUTAZIONE VISUO-PERCETTIVA (dati reali della visita — refrazione, "
+                      "oculomotricità, binoculare, accomodazione):\n" + visiva_txt)
     if note:
         blocco.append("NOTE CLINICHE DEL CLINICO PER QUESTA RELAZIONE:\n" + note)
+    if (dati.get("logopedia") or "").strip():
+        blocco.append("VALUTAZIONE LOGOPEDICA / TNPEE (dati reali):\n" + dati["logopedia"].strip())
+    if (dati.get("oculistica") or "").strip():
+        blocco.append("VALUTAZIONE OCULISTICA (dati reali):\n" + dati["oculistica"].strip())
+    if (dati.get("osteopatia") or "").strip():
+        blocco.append("VALUTAZIONE OSTEOPATICA (dati reali):\n" + dati["osteopatia"].strip())
 
     sistema = (
         "Sei un neuropsicologo dello Studio The Organism che scrive relazioni "
         "secondo il Metodo PNEV. Scrivi in italiano, registro clinico, terza "
         "persona. NON inventare dati: usa SOLO le informazioni fornite. Se un "
         "aspetto non è documentato, scrivi che è «da approfondire» invece di "
-        "inventare."
+        "inventare.\n\n"
+        "REGOLA CRITICA DI COERENZA — leggila con attenzione:\n"
+        "Se in un blocco dati compare una valutazione di un altro specialista (logopedia/"
+        "TNPEE, oculistica, osteopatia), USALA per arricchire le sezioni pertinenti "
+        "(LINGUAGGIO per logopedia, VALUTAZIONE VISUO-PERCETTIVA/PROFILO per oculistica, "
+        "MOTRICITÀ E PRASSIE per osteopatia) — non ignorarla e non limitarti a INPP e "
+        "visiva se ci sono altri dati disponibili.\n"
+        "Ogni area della valutazione INPP elencata sotto ha un punteggio REALE "
+        "(ottenuto/massimo): non descrivere MAI un punteggio basso o pari a "
+        "zero come «non osservato», «non valutato» o «dato mancante» — quella "
+        "dicitura vale SOLO per le aree esplicitamente segnate «non eseguita "
+        "in questa valutazione». Un punteggio 0/16 è un risultato vero (il "
+        "test è stato eseguito), non un'assenza di dati.\n"
+        "Inoltre, nei test di prestazione/abilità (funzionalità cerebellare, "
+        "test oculo-motori, test visuo-percettivi, coordinazione grosso-motoria "
+        "ed equilibrio, disdiadococinesia) un punteggio percentuale ALTO indica "
+        "una prestazione ADEGUATA (nella norma) e uno BASSO una prestazione "
+        "DEFICITARIA; nei «riflessi dello sviluppo» (riflessi primitivi) vale "
+        "l'opposto: un punteggio ALTO indica MAGGIORE presenza di riflessi non "
+        "integrati (quindi più problematico) e uno BASSO una migliore "
+        "integrazione. Applica questa lettura in modo COERENTE in tutto il "
+        "testo: non descrivere lo stesso punteggio come adeguato in un "
+        "paragrafo e come deficitario in un altro."
     )
     richiesta = (
         f"Scrivi il corpo di una RELAZIONE SENSORI-MOTORIA (fascia età {fascia}) "
-        "per il/la paziente, con ESATTAMENTE queste 5 sezioni (solo il testo, "
+        "per il/la paziente, con ESATTAMENTE queste 6 sezioni (solo il testo, "
         "senza titoli aggiuntivi, un paragrafo per sezione):\n\n"
         "###PROFILO SENSORI-MOTORIO\n"
         "###RIFLESSI PRIMITIVI\n"
         "###MOTRICITÀ E PRASSIE\n"
         "###AREA ORO-MIOFUNZIONALE\n"
+        "###VALUTAZIONE VISUO-PERCETTIVA\n"
         "###PROPOSTA TERAPEUTICA\n\n"
         "Nella sezione RIFLESSI PRIMITIVI, oltre al punteggio, spiega in modo "
         "concreto cosa comporta la presenza dei riflessi non integrati emersi "
@@ -423,6 +558,24 @@ def _ai_corpo_sensori(dati, fascia, note):
         "specifico quando possibile (es. ATNR/coordinazione bilaterale e "
         "scrittura, Moro/reattività emotiva e ansia, STNL/postura seduta e "
         "attenzione in classe).\n\n"
+        "Nella sezione AREA ORO-MIOFUNZIONALE: se non sono forniti dati reali su questa "
+        "area (nessuna valutazione oro-facciale/miofunzionale nei dati forniti), scrivi "
+        "SOLO che l'area non è stata valutata in questa occasione e che una valutazione "
+        "specifica (masticazione, deglutizione, respirazione, tono orale) è consigliata "
+        "per completare il quadro. NON descrivere possibili conseguenze funzionali "
+        "(comunicazione, fonazione, deglutizione, ecc.) per un'area non testata: "
+        "sarebbe un'ipotesi non supportata da alcun dato — si può parlare di impatto "
+        "funzionale SOLO quando è stato davvero rilevato un problema in quell'area.\n\n"
+        "Nella sezione VALUTAZIONE VISUO-PERCETTIVA, se sono forniti dati reali della "
+        "visita (refrazione, oculomotricità, DEM/Groffman, binoculare, accomodazione), "
+        "collega OGNI dato anomalo al suo significato funzionale concreto — sul modello: "
+        "«un DEM di tipo II/disfunzione oculomotoria comporta difficoltà a copiare dalla "
+        "lavagna, perdita del segno in lettura, uso del dito per seguire il rigo»; «una "
+        "insufficienza di convergenza (PPC ridotto) comporta mal di testa, visione doppia "
+        "o sfuocata da vicino, evitamento della lettura»; «un'eteroforia scompensata "
+        "comporta affaticamento, sfregamento degli occhi, avvicinamento eccessivo al "
+        "testo». NON inventare valori non forniti: se un dato non è presente, ometti "
+        "quella frase invece di scriverla con segnaposto.\n\n"
         "Nella sezione PROPOSTA TERAPEUTICA, sulla base di quanto emerso dalla "
         "valutazione (non testo generico), indica: quali approcci del Metodo "
         "PNEV sono più indicati (tra: terapia visiva, integrazione riflessi "
@@ -437,11 +590,13 @@ def _ai_corpo_sensori(dati, fascia, note):
     )
     testo = genera_testo(richiesta, sistema=sistema)
     if not testo or testo.startswith("⚠️"):
+        _ULTIMO_ERRORE_AI = (testo or "Nessuna risposta dall'AI.") + \
+            " — uso il testo fisso di riserva, non le tue note/dati reali."
         return None
 
     sezioni = {"PROFILO SENSORI-MOTORIO": "", "RIFLESSI PRIMITIVI": "",
                "MOTRICITÀ E PRASSIE": "", "AREA ORO-MIOFUNZIONALE": "",
-               "PROPOSTA TERAPEUTICA": ""}
+               "VALUTAZIONE VISUO-PERCETTIVA": "", "PROPOSTA TERAPEUTICA": ""}
     corrente = None
     for riga in testo.split("\n"):
         r = riga.strip()
@@ -453,6 +608,7 @@ def _ai_corpo_sensori(dati, fascia, note):
         if corrente:
             sezioni[corrente] = (sezioni[corrente] + "\n" + riga).strip()
     if not any(sezioni.values()):
+        _ULTIMO_ERRORE_AI = "L'AI ha risposto ma senza sezioni riconoscibili — uso il testo fisso di riserva."
         return None
     return sezioni
 
@@ -505,6 +661,8 @@ def _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val):
                   if "6-10" in fascia or "10+" in fascia
                   else "Da valutare in relazione allo sviluppo del linguaggio.")
         sez_proposta = ""
+        if (note or "").strip():
+            sez_profilo = note.strip() + "\n\n" + sez_profilo
 
     return _intestazione(prof,spec) + f"""RELAZIONE SENSORI-MOTORIA E NEURO-PSICO-MOTORIA ({fascia})
 
@@ -611,24 +769,84 @@ Con stima,
 """ + _firma(prof,spec)
 
 
+def _salva_relazione(conn, paz_id, tipo, testo):
+    """Salva la relazione generata/inviata nello storico del paziente."""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS relazioni_cliniche ("
+            "id SERIAL PRIMARY KEY, paziente_id INTEGER NOT NULL, tipo TEXT, "
+            "testo TEXT, creato TIMESTAMP DEFAULT NOW())"
+        )
+        cur.execute(
+            "INSERT INTO relazioni_cliniche (paziente_id, tipo, testo) VALUES (%s,%s,%s)",
+            (paz_id, tipo, testo)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.error(f"Errore salvataggio relazione: {e}")
+        return False
+
+
+def _carica_storico_relazioni(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS relazioni_cliniche ("
+            "id SERIAL PRIMARY KEY, paziente_id INTEGER NOT NULL, tipo TEXT, "
+            "testo TEXT, creato TIMESTAMP DEFAULT NOW())"
+        )
+        cur.execute(
+            "SELECT id, tipo, testo, creato FROM relazioni_cliniche "
+            "WHERE paziente_id=%s ORDER BY creato DESC", (paz_id,)
+        )
+        rows = cur.fetchall() or []
+        conn.commit()
+        out = []
+        for r in rows:
+            if isinstance(r, dict):
+                out.append({"id": r.get("id"), "tipo": r.get("tipo"),
+                            "testo": r.get("testo"), "creato": r.get("creato")})
+            else:
+                out.append({"id": r[0], "tipo": r[1], "testo": r[2], "creato": r[3]})
+        return out
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.caption(f"Storico non disponibile: {e}")
+        return []
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  PDF
 # ══════════════════════════════════════════════════════════════════════
 
-def _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, pid, suffix):
+def _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, pid, suffix, timbro_bytes=None):
     try:
         from modules.pdf_templates import genera_carta_intestata
         pdf_bytes = genera_carta_intestata(
             professionista=prof, titolo=spec,
             paziente=paz_str, data=data_str,
             titolo_doc=titolo_doc, corpo_testo=testo,
+            timbro_bytes=timbro_bytes,
         )
+        # La chiave include un hash del testo: se modifichi il riquadro,
+        # il pulsante viene ricreato e il PDF scaricato è sempre quello aggiornato
+        # (altrimenti il browser può riofferire il download generato prima della modifica).
+        hash_testo = abs(hash(testo)) % 100000
         st.download_button(
             "📥 Scarica PDF",
             data=pdf_bytes,
             file_name=f"relazione_{suffix}_{paz_str.split()[0]}_{data_str.replace('/','-')}.pdf",
             mime="application/pdf",
-            key=f"dl_{suffix}_{pid}"
+            key=f"dl_{suffix}_{pid}_{hash_testo}"
         )
     except Exception as e:
         st.error(f"Errore PDF: {e}")
@@ -660,10 +878,26 @@ def render_relazione_clinica(conn):
     def _get_id(r): return r["id"] if isinstance(r,dict) else r[0]
     def _get_dn(r): return r.get("Data_Nascita","") if isinstance(r,dict) else (r[3] if len(r)>3 else "")
 
+    # Segue il paziente attivo globale (header in alto): non resta fermo
+    # sull'ultima scelta fatta qui se nel frattempo se n'è scelto un altro.
+    try:
+        from .paziente_attivo import paziente_attivo_record
+        _attivo = paziente_attivo_record() or {}
+        _attivo_id = _attivo.get("id") or _attivo.get("ID")
+    except Exception:
+        _attivo_id = None
+    if _attivo_id is not None and st.session_state.get("rel_paz_seguito") != _attivo_id:
+        for i, r in enumerate(pazienti):
+            if _get_id(r) == _attivo_id:
+                st.session_state["rel_paz"] = r
+                st.session_state["rel_paz_seguito"] = _attivo_id
+                break
+
     c1,c2,c3 = st.columns([2,1,1])
     with c1:
         sel = st.selectbox("Paziente", pazienti, format_func=_label, key="rel_paz")
     paz_id = _get_id(sel)
+    st.session_state["rel_paz_seguito"] = paz_id
     paz_label = _label(sel)
     dn = _get_dn(sel)
     dn_fmt = _fmt_dn(dn)
@@ -693,10 +927,18 @@ def render_relazione_clinica(conn):
     col1,col2,col3 = st.columns(3)
     col1.metric("Anamnesi", "✅" if dati.get("anamnesi") else "❌")
     col2.metric("Val. visiva", "✅" if dati.get("visiva") else "❌")
-    col3.metric("PNEV", "✅" if dati.get("pnev_summary") else "❌")
+    col3.metric("PNEV", "✅" if (dati.get("pnev_summary") or dati.get("inpp_riepilogo")
+                                 or dati.get("inpp_note")) else "❌")
 
     prof = _get_prof()
     spec = _get_spec()
+
+    try:
+        from .timbri import render_gestione_timbro, carica_timbro, _username_corrente
+        render_gestione_timbro(conn)
+        timbro_bytes = carica_timbro(conn, _username_corrente())
+    except Exception:
+        timbro_bytes = None
 
     st.markdown("---")
 
@@ -739,6 +981,8 @@ def render_relazione_clinica(conn):
     if st.button("📋 Genera relazione", key=f"rel_gen_{paz_id}", type="primary"):
         if "Neuroevolutiva" in tipo:
             testo = _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val)
+            if _ULTIMO_ERRORE_AI:
+                st.warning("⚠️ Relazione generata SENZA l'AI (testo generico di riserva): " + _ULTIMO_ERRORE_AI)
         elif "Follow-up" in tipo:
             testo = _tpl_followup(dati, prof, spec, fascia, note, biblio, scuola,
                                    locals().get("periodo",""),
@@ -753,6 +997,8 @@ def render_relazione_clinica(conn):
                               locals().get("diagnosi_ip",""))
         elif "Sensori" in tipo:
             testo = _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val)
+            if _ULTIMO_ERRORE_AI:
+                st.warning("⚠️ Relazione generata SENZA l'AI (testo generico di riserva): " + _ULTIMO_ERRORE_AI)
         elif "genitori" in tipo.lower():
             testo = _tpl_genitori(dati, prof, spec, note,
                                    locals().get("progressi_g",""),
@@ -772,4 +1018,17 @@ def render_relazione_clinica(conn):
     if testo:
         titolo_doc = tipo.replace("🧠","").replace("🔄","").replace("🏫","").replace("🏥","").replace("🏃","").replace("👨‍👩‍👧","").strip().upper()
         suffix = tipo.split()[1].lower() if len(tipo.split())>1 else "relazione"
-        _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, paz_id, suffix)
+        _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, paz_id, suffix, timbro_bytes)
+        if st.button("💾 Salva questa relazione nello storico", key=f"rel_salva_{paz_id}_{tipo}"):
+            if _salva_relazione(conn, paz_id, tipo, testo):
+                st.success("Relazione salvata nello storico del paziente.")
+
+    with st.expander("🗂 Storico relazioni di questo paziente"):
+        storico = _carica_storico_relazioni(conn, paz_id)
+        if not storico:
+            st.caption("Nessuna relazione salvata per questo paziente.")
+        for r in storico:
+            data_r = r["creato"].strftime("%d/%m/%Y %H:%M") if hasattr(r["creato"], "strftime") else str(r["creato"] or "")
+            st.markdown(f"**{r['tipo']}** — {data_r}")
+            st.text_area("", value=r["testo"] or "", height=150, key=f"rel_stor_{r['id']}", disabled=True, label_visibility="collapsed")
+            st.markdown("---")
