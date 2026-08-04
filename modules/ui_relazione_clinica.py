@@ -193,6 +193,8 @@ def _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val
         _dv = _dump_dati_visiva(dati)
         blocco_visiva = ("Diagnosi visiva: " + diag + "\n\n" if diag else "") + \
             (_dv if _dv else "Valutazione optometrico-comportamentale in corso/completata.")
+        if (note or "").strip():
+            blocco_profilo = note.strip() + "\n\n" + blocco_profilo
 
     return _intestazione(prof,spec) + f"""RELAZIONE NEUROEVOLUTIVA INTEGRATA ({fascia})
 
@@ -452,23 +454,39 @@ def _dump_dati_visiva(dati):
         return ""
 
 
+_ULTIMO_ERRORE_AI = ""  # letto dalla UI dopo la generazione, per avvisare il clinico
+
+
 def _ai_corpo_sensori(dati, fascia, note):
     """Prova a far scrivere all'AI le 4 sezioni cliniche sui dati REALI del
     paziente (questionario/anamnesi PNEV + valutazione INPP + valutazione
     visuo-percettiva). Ritorna None se l'AI non è configurata o non ci sono
     dati da cui partire (in quel caso il chiamante usa il testo fisso di
-    riserva)."""
+    riserva). In caso di None, `_ULTIMO_ERRORE_AI` (modulo) contiene il motivo,
+    così la UI può avvisare il clinico invece di stampare testo generico in
+    silenzio."""
+    global _ULTIMO_ERRORE_AI
+    _ULTIMO_ERRORE_AI = ""
     pnev = (dati.get("pnev_summary") or "").strip()
     inpp_riep = dati.get("inpp_riepilogo") or {}
     inpp_note = (dati.get("inpp_note") or "").strip()
     visiva_txt = _dump_dati_visiva(dati)
-    if not pnev and not inpp_riep and not inpp_note and not visiva_txt:
+    if not pnev and not inpp_riep and not inpp_note and not visiva_txt \
+       and not (dati.get("logopedia") or "").strip() \
+       and not (dati.get("oculistica") or "").strip() \
+       and not (dati.get("osteopatia") or "").strip():
+        _ULTIMO_ERRORE_AI = ("Nessun dato clinico trovato (anamnesi/PNEV, INPP, valutazione "
+                              "visiva, logopedia, oculistica, osteopatia): l'AI non ha materiale "
+                              "su cui scrivere, uso il testo fisso di riserva.")
         return None
     try:
         from .ai_estrazione import genera_testo, ai_disponibile
     except Exception:
+        _ULTIMO_ERRORE_AI = "Modulo AI non disponibile nell'app."
         return None
     if not ai_disponibile():
+        _ULTIMO_ERRORE_AI = ("Assistente AI non configurato (manca la chiave nei Secrets sotto "
+                              "[ai]): uso il testo fisso di riserva, non le tue note/dati reali.")
         return None
 
     blocco = []
@@ -486,6 +504,12 @@ def _ai_corpo_sensori(dati, fascia, note):
                       "oculomotricità, binoculare, accomodazione):\n" + visiva_txt)
     if note:
         blocco.append("NOTE CLINICHE DEL CLINICO PER QUESTA RELAZIONE:\n" + note)
+    if (dati.get("logopedia") or "").strip():
+        blocco.append("VALUTAZIONE LOGOPEDICA / TNPEE (dati reali):\n" + dati["logopedia"].strip())
+    if (dati.get("oculistica") or "").strip():
+        blocco.append("VALUTAZIONE OCULISTICA (dati reali):\n" + dati["oculistica"].strip())
+    if (dati.get("osteopatia") or "").strip():
+        blocco.append("VALUTAZIONE OSTEOPATICA (dati reali):\n" + dati["osteopatia"].strip())
 
     sistema = (
         "Sei un neuropsicologo dello Studio The Organism che scrive relazioni "
@@ -494,6 +518,11 @@ def _ai_corpo_sensori(dati, fascia, note):
         "aspetto non è documentato, scrivi che è «da approfondire» invece di "
         "inventare.\n\n"
         "REGOLA CRITICA DI COERENZA — leggila con attenzione:\n"
+        "Se in un blocco dati compare una valutazione di un altro specialista (logopedia/"
+        "TNPEE, oculistica, osteopatia), USALA per arricchire le sezioni pertinenti "
+        "(LINGUAGGIO per logopedia, VALUTAZIONE VISUO-PERCETTIVA/PROFILO per oculistica, "
+        "MOTRICITÀ E PRASSIE per osteopatia) — non ignorarla e non limitarti a INPP e "
+        "visiva se ci sono altri dati disponibili.\n"
         "Ogni area della valutazione INPP elencata sotto ha un punteggio REALE "
         "(ottenuto/massimo): non descrivere MAI un punteggio basso o pari a "
         "zero come «non osservato», «non valutato» o «dato mancante» — quella "
@@ -561,6 +590,8 @@ def _ai_corpo_sensori(dati, fascia, note):
     )
     testo = genera_testo(richiesta, sistema=sistema)
     if not testo or testo.startswith("⚠️"):
+        _ULTIMO_ERRORE_AI = (testo or "Nessuna risposta dall'AI.") + \
+            " — uso il testo fisso di riserva, non le tue note/dati reali."
         return None
 
     sezioni = {"PROFILO SENSORI-MOTORIO": "", "RIFLESSI PRIMITIVI": "",
@@ -577,6 +608,7 @@ def _ai_corpo_sensori(dati, fascia, note):
         if corrente:
             sezioni[corrente] = (sezioni[corrente] + "\n" + riga).strip()
     if not any(sezioni.values()):
+        _ULTIMO_ERRORE_AI = "L'AI ha risposto ma senza sezioni riconoscibili — uso il testo fisso di riserva."
         return None
     return sezioni
 
@@ -629,6 +661,8 @@ def _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val):
                   if "6-10" in fascia or "10+" in fascia
                   else "Da valutare in relazione allo sviluppo del linguaggio.")
         sez_proposta = ""
+        if (note or "").strip():
+            sez_profilo = note.strip() + "\n\n" + sez_profilo
 
     return _intestazione(prof,spec) + f"""RELAZIONE SENSORI-MOTORIA E NEURO-PSICO-MOTORIA ({fascia})
 
@@ -888,6 +922,8 @@ def render_relazione_clinica(conn):
     if st.button("📋 Genera relazione", key=f"rel_gen_{paz_id}", type="primary"):
         if "Neuroevolutiva" in tipo:
             testo = _tpl_neuroevolutiva(dati, prof, spec, fascia, note, biblio, scuola, data_val)
+            if _ULTIMO_ERRORE_AI:
+                st.warning("⚠️ Relazione generata SENZA l'AI (testo generico di riserva): " + _ULTIMO_ERRORE_AI)
         elif "Follow-up" in tipo:
             testo = _tpl_followup(dati, prof, spec, fascia, note, biblio, scuola,
                                    locals().get("periodo",""),
@@ -902,6 +938,8 @@ def render_relazione_clinica(conn):
                               locals().get("diagnosi_ip",""))
         elif "Sensori" in tipo:
             testo = _tpl_sensori(dati, prof, spec, fascia, note, biblio, scuola, data_val)
+            if _ULTIMO_ERRORE_AI:
+                st.warning("⚠️ Relazione generata SENZA l'AI (testo generico di riserva): " + _ULTIMO_ERRORE_AI)
         elif "genitori" in tipo.lower():
             testo = _tpl_genitori(dati, prof, spec, note,
                                    locals().get("progressi_g",""),
