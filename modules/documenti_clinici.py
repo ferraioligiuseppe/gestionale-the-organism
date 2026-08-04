@@ -73,25 +73,32 @@ def render_documenti(conn=None, paz_id=None, paziente=None):
         st.error(f"Impossibile preparare l'archivio: {e}")
         return
 
-    with st.expander("⬆️ Carica un documento", expanded=True):
+    with st.expander("⬆️ Carica documenti", expanded=True):
         with st.form("doc_upload", clear_on_submit=True):
-            file = st.file_uploader("File (PDF o foto)",
-                                    type=["pdf", "jpg", "jpeg", "png", "webp", "heic"])
+            files = st.file_uploader("File (PDF o foto) — puoi selezionarne più di uno insieme",
+                                     type=["pdf", "jpg", "jpeg", "png", "webp", "heic"],
+                                     accept_multiple_files=True)
             c1, c2 = st.columns(2)
             with c1:
-                tipo = st.selectbox("Tipo di documento", TIPI)
+                tipo = st.selectbox("Tipo di documento (si applica a tutti i file scelti)", TIPI)
             with c2:
-                note = st.text_input("Note (facoltative)")
+                note = st.text_input("Note (facoltative, si applicano a tutti)")
             inviato = st.form_submit_button("💾 Salva nel database", type="primary")
             if inviato:
-                if not file:
-                    st.warning("Scegli prima un file.")
+                if not files:
+                    st.warning("Scegli prima almeno un file.")
                 else:
-                    if _salva_documento(conn, paz_id, tipo, file, note):
-                        st.success(f"Documento «{file.name}» salvato.")
-                        st.rerun()
-                    else:
-                        st.error("Salvataggio non riuscito.")
+                    ok, ko = 0, []
+                    for file in files:
+                        if _salva_documento(conn, paz_id, tipo, file, note):
+                            ok += 1
+                        else:
+                            ko.append(file.name)
+                    if ok:
+                        st.success(f"{ok} documento/i salvato/i.")
+                    if ko:
+                        st.error("Non salvati: " + ", ".join(ko))
+                    st.rerun()
 
     st.markdown("---")
     st.markdown("#### Documenti in archivio")
