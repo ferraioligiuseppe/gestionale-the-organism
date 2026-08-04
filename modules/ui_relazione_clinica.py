@@ -782,12 +782,16 @@ def _pdf(testo, paz_str, data_str, prof, spec, titolo_doc, pid, suffix, timbro_b
             titolo_doc=titolo_doc, corpo_testo=testo,
             timbro_bytes=timbro_bytes,
         )
+        # La chiave include un hash del testo: se modifichi il riquadro,
+        # il pulsante viene ricreato e il PDF scaricato è sempre quello aggiornato
+        # (altrimenti il browser può riofferire il download generato prima della modifica).
+        hash_testo = abs(hash(testo)) % 100000
         st.download_button(
             "📥 Scarica PDF",
             data=pdf_bytes,
             file_name=f"relazione_{suffix}_{paz_str.split()[0]}_{data_str.replace('/','-')}.pdf",
             mime="application/pdf",
-            key=f"dl_{suffix}_{pid}"
+            key=f"dl_{suffix}_{pid}_{hash_testo}"
         )
     except Exception as e:
         st.error(f"Errore PDF: {e}")
