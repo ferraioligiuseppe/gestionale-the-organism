@@ -1725,11 +1725,39 @@ def login(get_conn) -> bool:
                         _roles0 = _get_roles_for_user(_conn0, _uid)
                     except Exception:
                         _roles0 = []
+                    # Carica display_name e profilo_json da DB (stessa logica del
+                    # login pieno) — senza questo, il nome del professionista
+                    # tornava sempre vuoto ("admin" nei documenti) a ogni
+                    # ripristino di sessione via token.
+                    _display_name0 = ""
+                    _profilo0 = {}
+                    try:
+                        _dn_cur0 = _conn0.cursor()
+                        _dn_cur0.execute(
+                            "SELECT display_name, profilo_json FROM auth_users WHERE id=%s",
+                            (_uid,))
+                        _dn_row0 = _dn_cur0.fetchone()
+                        if _dn_row0:
+                            if isinstance(_dn_row0, dict):
+                                _display_name0 = _dn_row0.get("display_name","") or ""
+                                _raw_profilo0  = _dn_row0.get("profilo_json") or {}
+                            else:
+                                _display_name0 = _dn_row0[0] or ""
+                                _raw_profilo0  = _dn_row0[1] or {}
+                            import json as _json0
+                            _profilo0 = _raw_profilo0 if isinstance(_raw_profilo0,dict) else _json0.loads(_raw_profilo0 or "{}")
+                            if not _display_name0 and _profilo0.get("display_name"):
+                                _display_name0 = _profilo0["display_name"]
+                    except Exception:
+                        pass
                     st.session_state["user"] = {
                         "id": _uid, "username": _uname0, "email": _email0,
                         "roles": _roles0, "must_change_password": False,
-                        "display_name": "", "specializzazioni": "", "titolo": "",
-                        "nome": "", "profilo": {},
+                        "display_name": _display_name0,
+                        "specializzazioni": _profilo0.get("specializzazioni",""),
+                        "titolo": _profilo0.get("titolo",""),
+                        "nome": _profilo0.get("nome",""),
+                        "profilo": _profilo0,
                     }
                     try:
                         from modules.ui_intestazione_studio import get_intestazione_studio
