@@ -361,7 +361,8 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
                    ("ocul_k1_os_mm",7.80),("ocul_k1_os_d",round(CK_kera/7.80,2)),
                    ("ocul_k2_os_mm",7.80),("ocul_k2_os_d",round(CK_kera/7.80,2))]:
         if _k not in st.session_state:
-            st.session_state[_k] = float(_dv.get(_k.replace("ocul_",""), v) or v) if _dv.get(_k.replace("ocul_","")) is not None else v
+            _raw = _dv.get(_k.replace("ocul_",""))
+            st.session_state[_k] = float(_raw) if _raw is not None else _v
 
     st.markdown("**Cheratometria** _(fuori dal modulo — mm e D si aggiornano a vicenda)_")
     _k1od_r,_k1od_D = _kera_sync("ocul_k1_od_mm","ocul_k1_od_d")
