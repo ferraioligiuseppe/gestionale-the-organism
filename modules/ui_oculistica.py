@@ -364,21 +364,25 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
             _raw = _dv.get(_k.replace("ocul_",""))
             st.session_state[_k] = float(_raw) if _raw is not None else _v
 
-    st.markdown("**Cheratometria** _(fuori dal modulo — mm e D si aggiornano a vicenda)_")
-    _k1od_r,_k1od_D = _kera_sync("ocul_k1_od_mm","ocul_k1_od_d")
-    _k2od_r,_k2od_D = _kera_sync("ocul_k2_od_mm","ocul_k2_od_d")
-    _k1os_r,_k1os_D = _kera_sync("ocul_k1_os_mm","ocul_k1_os_d")
-    _k2os_r,_k2os_D = _kera_sync("ocul_k2_os_mm","ocul_k2_os_d")
-    kc1, kc2, kc3, kc4 = st.columns(4)
-    with kc1: st.number_input("OD K1 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k1_od_mm", on_change=_k1od_r)
-    with kc2: st.number_input("OD K1 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k1_od_d", on_change=_k1od_D)
-    with kc3: st.number_input("OD K2 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k2_od_mm", on_change=_k2od_r)
-    with kc4: st.number_input("OD K2 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k2_od_d", on_change=_k2od_D)
-    kc5, kc6, kc7, kc8 = st.columns(4)
-    with kc5: st.number_input("OS K1 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k1_os_mm", on_change=_k1os_r)
-    with kc6: st.number_input("OS K1 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k1_os_d", on_change=_k1os_D)
-    with kc7: st.number_input("OS K2 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k2_os_mm", on_change=_k2os_r)
-    with kc8: st.number_input("OS K2 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k2_os_d", on_change=_k2os_D)
+    @st.fragment
+    def _cheratometria_fragment():
+        st.markdown("**Cheratometria** _(fuori dal modulo — mm e D si aggiornano a vicenda)_")
+        _k1od_r,_k1od_D = _kera_sync("ocul_k1_od_mm","ocul_k1_od_d")
+        _k2od_r,_k2od_D = _kera_sync("ocul_k2_od_mm","ocul_k2_od_d")
+        _k1os_r,_k1os_D = _kera_sync("ocul_k1_os_mm","ocul_k1_os_d")
+        _k2os_r,_k2os_D = _kera_sync("ocul_k2_os_mm","ocul_k2_os_d")
+        kc1, kc2, kc3, kc4 = st.columns(4)
+        with kc1: st.number_input("OD K1 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k1_od_mm", on_change=_k1od_r)
+        with kc2: st.number_input("OD K1 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k1_od_d", on_change=_k1od_D)
+        with kc3: st.number_input("OD K2 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k2_od_mm", on_change=_k2od_r)
+        with kc4: st.number_input("OD K2 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k2_od_d", on_change=_k2od_D)
+        kc5, kc6, kc7, kc8 = st.columns(4)
+        with kc5: st.number_input("OS K1 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k1_os_mm", on_change=_k1os_r)
+        with kc6: st.number_input("OS K1 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k1_os_d", on_change=_k1os_D)
+        with kc7: st.number_input("OS K2 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k2_os_mm", on_change=_k2os_r)
+        with kc8: st.number_input("OS K2 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k2_os_d", on_change=_k2os_D)
+
+    _cheratometria_fragment()
 
     form_key = f"ocul_edit_{edit_id}" if edit_id else f"ocul_nuova_{paz_id}"
     with st.form(form_key):
