@@ -344,6 +344,41 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
             st.session_state.pop("ocul_edit_id", None)
             st.rerun()
 
+    # ── Cheratometria: fuori dal form, per aggiornamento mm ⇄ D live ──────
+    CK_kera = 337.5
+    def _kera_sync(key_mm, key_D):
+        def _from_mm():
+            v = st.session_state.get(key_mm, 0)
+            if v and v > 0:
+                st.session_state[key_D] = round(CK_kera / v, 2)
+        def _from_D():
+            v = st.session_state.get(key_D, 0)
+            if v and v > 0:
+                st.session_state[key_mm] = round(CK_kera / v, 2)
+        return _from_mm, _from_D
+    for _k, _v in [("ocul_k1_od_mm",7.80),("ocul_k1_od_d",round(CK_kera/7.80,2)),
+                   ("ocul_k2_od_mm",7.80),("ocul_k2_od_d",round(CK_kera/7.80,2)),
+                   ("ocul_k1_os_mm",7.80),("ocul_k1_os_d",round(CK_kera/7.80,2)),
+                   ("ocul_k2_os_mm",7.80),("ocul_k2_os_d",round(CK_kera/7.80,2))]:
+        if _k not in st.session_state:
+            st.session_state[_k] = float(_dv.get(_k.replace("ocul_",""), v) or v) if _dv.get(_k.replace("ocul_","")) is not None else v
+
+    st.markdown("**Cheratometria** _(fuori dal modulo — mm e D si aggiornano a vicenda)_")
+    _k1od_r,_k1od_D = _kera_sync("ocul_k1_od_mm","ocul_k1_od_d")
+    _k2od_r,_k2od_D = _kera_sync("ocul_k2_od_mm","ocul_k2_od_d")
+    _k1os_r,_k1os_D = _kera_sync("ocul_k1_os_mm","ocul_k1_os_d")
+    _k2os_r,_k2os_D = _kera_sync("ocul_k2_os_mm","ocul_k2_os_d")
+    kc1, kc2, kc3, kc4 = st.columns(4)
+    with kc1: st.number_input("OD K1 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k1_od_mm", on_change=_k1od_r)
+    with kc2: st.number_input("OD K1 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k1_od_d", on_change=_k1od_D)
+    with kc3: st.number_input("OD K2 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k2_od_mm", on_change=_k2od_r)
+    with kc4: st.number_input("OD K2 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k2_od_d", on_change=_k2od_D)
+    kc5, kc6, kc7, kc8 = st.columns(4)
+    with kc5: st.number_input("OS K1 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k1_os_mm", on_change=_k1os_r)
+    with kc6: st.number_input("OS K1 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k1_os_d", on_change=_k1os_D)
+    with kc7: st.number_input("OS K2 (mm)", 6.0, 9.5, step=0.01, format="%.2f", key="ocul_k2_os_mm", on_change=_k2os_r)
+    with kc8: st.number_input("OS K2 (D)", 35.0, 50.0, step=0.25, format="%.2f", key="ocul_k2_os_d", on_change=_k2os_D)
+
     form_key = f"ocul_edit_{edit_id}" if edit_id else f"ocul_nuova_{paz_id}"
     with st.form(form_key):
         st.markdown("**Modifica visita oculistica**" if edit_id else "**Nuova visita oculistica**")
@@ -441,17 +476,14 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
         add_fin_os = c7.number_input("OS Add. vicino (D)", 0.0, 6.0, float(_dv.get("add_fin_os",0.0) or 0.0), 0.25, key="ocul_add_fin_os")
         note_prescrizione = st.text_input("Note prescrizione (es. add. vicino, prismi)", _dv.get("note_prescrizione","") or "", key="ocul_note_prescr")
 
-        st.markdown("**Cheratometria**")
-        c1, c2, c3, c4 = st.columns(4)
-        k1_od_mm = c1.number_input("OD K1 (mm)", 6.0, 9.5, float(_dv.get("k1_od_mm",7.80) or 7.80), 0.01, key="ocul_k1_od_mm")
-        k1_od_d = c2.number_input("OD K1 (D)", 35.0, 50.0, float(_dv.get("k1_od_d",43.0) or 43.0), 0.25, key="ocul_k1_od_d")
-        k2_od_mm = c3.number_input("OD K2 (mm)", 6.0, 9.5, float(_dv.get("k2_od_mm",7.80) or 7.80), 0.01, key="ocul_k2_od_mm")
-        k2_od_d = c4.number_input("OD K2 (D)", 35.0, 50.0, float(_dv.get("k2_od_d",43.0) or 43.0), 0.25, key="ocul_k2_od_d")
-        c1, c2, c3, c4 = st.columns(4)
-        k1_os_mm = c1.number_input("OS K1 (mm)", 6.0, 9.5, float(_dv.get("k1_os_mm",7.80) or 7.80), 0.01, key="ocul_k1_os_mm")
-        k1_os_d = c2.number_input("OS K1 (D)", 35.0, 50.0, float(_dv.get("k1_os_d",43.0) or 43.0), 0.25, key="ocul_k1_os_d")
-        k2_os_mm = c3.number_input("OS K2 (mm)", 6.0, 9.5, float(_dv.get("k2_os_mm",7.80) or 7.80), 0.01, key="ocul_k2_os_mm")
-        k2_os_d = c4.number_input("OS K2 (D)", 35.0, 50.0, float(_dv.get("k2_os_d",43.0) or 43.0), 0.25, key="ocul_k2_os_d")
+        k1_od_mm = st.session_state.get("ocul_k1_od_mm", 7.80)
+        k1_od_d = st.session_state.get("ocul_k1_od_d", 43.0)
+        k2_od_mm = st.session_state.get("ocul_k2_od_mm", 7.80)
+        k2_od_d = st.session_state.get("ocul_k2_od_d", 43.0)
+        k1_os_mm = st.session_state.get("ocul_k1_os_mm", 7.80)
+        k1_os_d = st.session_state.get("ocul_k1_os_d", 43.0)
+        k2_os_mm = st.session_state.get("ocul_k2_os_mm", 7.80)
+        k2_os_d = st.session_state.get("ocul_k2_os_d", 43.0)
 
         st.markdown("**Tonometria e spessore corneale (CCT)**")
         c1, c2 = st.columns(2)
