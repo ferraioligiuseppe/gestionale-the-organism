@@ -11780,6 +11780,15 @@ def main():
             st.error(f"Modulo contatti non disponibile: {_e}")
         return
 
+    # --- PUBLIC MAPS DONE PING (no login) — fine livello dal player MAPS ---
+    if st.query_params.get('maps_done'):
+        try:
+            from modules.lead_sito import ui_public_maps_done
+            ui_public_maps_done(get_connection)
+        except Exception:
+            pass
+        return
+
     # --- PUBLIC ASCOLTO HOOK (no login) — avviso da LearnPress ---
     if st.query_params.get('ascolto_hook'):
         try:

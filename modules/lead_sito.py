@@ -374,6 +374,43 @@ def render_statistiche(conn):
               "statistiche web. Nessun dato personale in questa tabella.")
 
 
+def _notifica_maps_completato(livello, nome, extra=""):
+    """Avvisa per email che un paziente ha completato un livello MAPS.
+    Silenzioso se lo SMTP non è configurato."""
+    try:
+        from modules.ui_questionari import _invia_email
+        dest = (st.secrets.get("smtp", {}).get("NOTIFICA_A")
+                or st.secrets.get("smtp", {}).get("USERNAME"))
+        if not dest:
+            return
+        corpo = (
+            f"Un paziente ha completato il livello MAPS: {livello}\n\n"
+            f"Nome/riferimento: {nome or '—'}\n"
+            f"{extra}\n\n"
+            f"Nessuna azione necessaria: è solo una notifica di avanzamento."
+        )
+        _invia_email(dest, f"PNEV — MAPS completato: {livello} ({nome or '—'})", corpo)
+    except Exception:
+        pass
+
+
+# ══════════════════════════════════════ ping pubblico (no login) — fine livello MAPS
+def ui_public_maps_done(get_conn):
+    """Endpoint silenzioso: il player MAPS lo richiama a fine ultimo giorno
+    di un livello (?maps_done=1&livello=basic&nome=...). Non mostra nulla
+    di significativo: manda solo la notifica email e un pixel 1x1."""
+    qp = st.query_params
+    livello = qp.get("livello", "—")
+    nome = qp.get("nome", "")
+    extra = f"Sequenza/giorno: {qp.get('seq','—')}" if qp.get("seq") else ""
+    _notifica_maps_completato(livello, nome, extra)
+    st.set_page_config(page_title="ok")
+    st.markdown(
+        "<div style='font-family:sans-serif;color:#999;font-size:12px;padding:20px'>ok</div>",
+        unsafe_allow_html=True)
+    st.stop()
+
+
 # ══════════════════════════════════════════════════ pagina pubblica
 def ui_public_lead_page(get_conn):
     """Pagina pubblica (no login): modulo contatti + questionario di screening."""
