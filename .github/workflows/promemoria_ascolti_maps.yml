@@ -16,11 +16,6 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Invia promemoria ascolti MAPS
         env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          EMAIL_STUDIO: ${{ secrets.EMAIL_STUDIO }}
           STREAMLIT_SECRETS: ${{ secrets.STREAMLIT_SECRETS }}
+          EMAIL_STUDIO: info@pnev.it
         run: python scripts/promemoria_ascolti_maps.py
