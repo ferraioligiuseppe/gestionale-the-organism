@@ -1,0 +1,26 @@
+name: Promemoria ascolti MAPS
+
+on:
+  schedule:
+    - cron: "0 9 * * *"   # ogni giorno alle 09:00 UTC (11:00 in Italia)
+  workflow_dispatch: {}
+
+jobs:
+  promemoria:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Invia promemoria ascolti MAPS
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          EMAIL_STUDIO: ${{ secrets.EMAIL_STUDIO }}
+          STREAMLIT_SECRETS: ${{ secrets.STREAMLIT_SECRETS }}
+        run: python scripts/promemoria_ascolti_maps.py
