@@ -11789,6 +11789,24 @@ def main():
             pass
         return
 
+    # --- PUBLIC SCREENING UDITIVO (no login) — esito questionario dal sito ---
+    if st.query_params.get('screening_hook'):
+        try:
+            from modules.screening_uditivo import ui_public_screening_hook
+            ui_public_screening_hook(get_connection)
+        except Exception:
+            pass
+        return
+
+    # --- PUBLIC SCREENING CUFFIE (no login) — esito calibrazione dal sito ---
+    if st.query_params.get('cuffie_hook'):
+        try:
+            from modules.cuffie_uditivo import ui_public_cuffie_hook
+            ui_public_cuffie_hook(get_connection)
+        except Exception:
+            pass
+        return
+
     # --- PUBLIC ASCOLTO HOOK (no login) — avviso da LearnPress ---
     if st.query_params.get('ascolto_hook'):
         try:
