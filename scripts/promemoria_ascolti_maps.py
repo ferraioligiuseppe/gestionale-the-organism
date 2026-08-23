@@ -7,14 +7,21 @@ ascoltato oggi, e un riepilogo allo studio. Da eseguire una volta al giorno,
 in tarda mattinata (es. 11:00), via GitHub Actions — stesso meccanismo di
 scripts/sync_pnev.py.
 
-Secrets necessari (gli stessi già usati dal gestionale):
-  DB_* (connessione PostgreSQL OVH) + smtp.* per l'invio email,
-  più EMAIL_STUDIO per il riepilogo a Giuseppe.
+Secret necessario: STREAMLIT_SECRETS (lo stesso già usato dall'app e da
+sync_pnev.py) — contiene DB e SMTP in formato TOML. Viene scritto in
+.streamlit/secrets.toml prima di importare l'app, così get_connection()
+lo trova esattamente come in produzione.
 """
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+_secrets_toml = os.environ.get("STREAMLIT_SECRETS", "")
+if _secrets_toml:
+    os.makedirs(".streamlit", exist_ok=True)
+    with open(".streamlit/secrets.toml", "w") as f:
+        f.write(_secrets_toml)
 
 from modules.app_core import get_connection  # riusa la connessione già configurata
 from modules.ascolti_maps import invia_promemoria_giornalieri
