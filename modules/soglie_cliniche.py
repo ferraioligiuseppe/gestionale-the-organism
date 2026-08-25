@@ -41,10 +41,10 @@ DOMINI = {
     "bilaterale":   ("Integrazione destra/sinistra",
                      "Coordinazione fra i due lati del corpo e schema corporeo: "
                      "area centrale per i riflessi primitivi."),
-    "sensomotoria": ("Integrazione sensoriale / disprassia",
+    "sensomotoria": ("Integrazione sensoriale",
                      "Errori che si ripetono o peggiorano su più giochi diversi, "
-                     "a prescindere dal dominio cognitivo specifico: possibile difficoltà "
-                     "a integrare le informazioni sensoriali nella pianificazione del gesto."),
+                     "a prescindere dal dominio cognitivo specifico: possibile deficit "
+                     "di integrazione sensoriale nella pianificazione del gesto."),
 }
 
 # Fasce d'età: i centri sono tarati sulla fascia media (7-9 anni).
