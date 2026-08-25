@@ -75,6 +75,10 @@ CREATE POLICY contattologia_ordini_studio ON contattologia_ordini
 
 def crea_schema(conn) -> None:
     """Idempotente: si può richiamare a ogni avvio."""
+    try:
+        conn.rollback()  # la connessione è condivisa: pulisce transazioni
+    except Exception:      # lasciate aperte/abortite da un modulo precedente
+        pass
     cur = conn.cursor()
     cur.execute(DDL)
     try:
