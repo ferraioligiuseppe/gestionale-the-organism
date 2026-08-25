@@ -101,7 +101,10 @@
     setTimeout(altezza, 900);
     setTimeout(altezza, 1800);
     setTimeout(altezza, 3000);
-    setInterval(altezza, 2000);
+    /* niente controllo periodico: un giro continuo, anche innocuo, può
+       incrociare un cambio di layout dell'host (es. comparsa/scomparsa
+       della barra di scorrimento) e rientrare in loop. L'altezza si
+       ricalcola solo sugli eventi reali: avvio, cambi nel modulo, salvataggi. */
   }
   if (document.readyState === "complete" || document.readyState === "interactive") avvia();
   else document.addEventListener("DOMContentLoaded", avvia);
