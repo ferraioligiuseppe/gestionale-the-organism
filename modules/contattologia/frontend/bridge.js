@@ -37,8 +37,9 @@
         var d = document.documentElement, b = document.body;
         v = Math.max(d.scrollHeight, d.offsetHeight, b ? b.scrollHeight : 0);
       }
-      v = Math.ceil(v) + 8;
-      if (Math.abs(v - ultimaAltezza) < 24) return;   /* evita oscillazioni/ping continuo */
+      v = Math.ceil(v) + 60;   /* margine generoso: meglio un filo di spazio in più che un taglio */
+      if (v < ultimaAltezza) return;   /* non si restringe mai: evita tagli e vibrazioni */
+      if (v - ultimaAltezza < 24) return;   /* evita un ping continuo per differenze minime */
       ultimaAltezza = v;
       verso("streamlit:setFrameHeight", { height: v });
     }, 250);
@@ -97,16 +98,10 @@
     pronto();
     altezza();
     setTimeout(altezza, 300);
-    setTimeout(altezza, 1200);
-    if (window.ResizeObserver) {
-      /* si osserva solo per catturare cambi di layout non coperti dall'evento
-         rgp:change (es. font caricati in ritardo); niente osservazione
-         continua sul body, che rifà i calcoli ad ogni interazione (hover,
-         digitazione) ed è la causa dello sfarfallio durante lo scroll. */
-      setInterval(altezza, 2000);
-    } else {
-      setInterval(altezza, 2000);
-    }
+    setTimeout(altezza, 900);
+    setTimeout(altezza, 1800);
+    setTimeout(altezza, 3000);
+    setInterval(altezza, 2000);
   }
   if (document.readyState === "complete" || document.readyState === "interactive") avvia();
   else document.addEventListener("DOMContentLoaded", avvia);
