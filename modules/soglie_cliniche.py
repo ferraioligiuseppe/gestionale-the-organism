@@ -41,6 +41,10 @@ DOMINI = {
     "bilaterale":   ("Integrazione destra/sinistra",
                      "Coordinazione fra i due lati del corpo e schema corporeo: "
                      "area centrale per i riflessi primitivi."),
+    "sensomotoria": ("Integrazione sensoriale / disprassia",
+                     "Errori che si ripetono o peggiorano su più giochi diversi, "
+                     "a prescindere dal dominio cognitivo specifico: possibile difficoltà "
+                     "a integrare le informazioni sensoriali nella pianificazione del gesto."),
 }
 
 # Fasce d'età: i centri sono tarati sulla fascia media (7-9 anni).
@@ -119,6 +123,7 @@ VICINI = [
     ("occhiomano", "oculomotor"), ("occhiomano", "bilaterale"),
     ("oculomotor", "bilaterale"), ("linguaggio", "uditivo"),
     ("attenzione", "inibizione"), ("memoria", "flessibilita"),
+    ("sensomotoria", "occhiomano"), ("sensomotoria", "bilaterale"),
 ]
 
 MIN_GIOCHI_DIVERSI = 2     # giochi diversi dello stesso dominio → segnale
@@ -163,6 +168,18 @@ def _numero(testo, preferisci_pct=False):
         return None
 
 
+# Ogni gioco ha almeno una metrica "errori" generica: qui viene riletta una
+# seconda volta, sempre, per il dominio trasversale sensomotorio — non
+# sostituisce il giudizio specifico del gioco (es. inibizione, memoria),
+# lo affianca. Centro/banda volutamente larghi: serve a cogliere una deriva
+# che si ripete su più giochi, non a segnalare un singolo brutto risultato.
+_ERRORE_GENERICO = (
+    ["errori", "errore medio", "tocchi a vuoto", "uscite dal percorso",
+     "agganci persi", "errori di inibizione"],
+    "basso", 10, 10, True,
+)
+
+
 def valuta_partita(slug, metriche, eta=None):
     """metriche: lista di dict {etichetta, valore, sotto}.
     Ritorna {dominio: scostamento} per quella partita."""
@@ -190,6 +207,25 @@ def valuta_partita(slug, metriche, eta=None):
         dev = (c - val) / b if verso == "alto" else (val - c) / b
         if dom not in out or dev > out[dom]:
             out[dom] = round(dev, 2)
+
+    trova, verso, centro, banda, pct = _ERRORE_GENERICO
+    for m in metriche:
+        et = str(m.get("etichetta", "")).lower()
+        if not any(k in et for k in trova):
+            continue
+        val = _numero(m.get("valore"), pct)
+        if val is None and pct:
+            val = _numero(m.get("sotto"), True)
+        if val is None:
+            continue
+        c = centro / k_centro
+        b = banda * k_banda
+        if not b:
+            continue
+        dev = (val - c) / b
+        if "sensomotoria" not in out or dev > out["sensomotoria"]:
+            out["sensomotoria"] = round(dev, 2)
+        break
     return out
 
 
