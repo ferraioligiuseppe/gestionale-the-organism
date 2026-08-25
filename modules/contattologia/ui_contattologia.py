@@ -13,6 +13,7 @@ movimento di cursore.
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +72,23 @@ def pagina(conn, studio_id: int, paziente_id: int | None = None,
                         st.session_state["lac_record"] = db.leggi_progetto(
                             conn, studio_id, r["rec_id"])
                         st.rerun()
+
+    # ------------------------------------------------------ importa dal sito
+    with st.expander("Importa dal sito", expanded=False):
+        st.caption("Il file scaricato con \"Scarica per il gestionale\" dalla versione su pnev.it.")
+        caricato = st.file_uploader("Progetto (.json)", type="json", key="lac_import")
+        if caricato is not None:
+            try:
+                dati = json.load(caricato)
+                record = dati.get("record") if isinstance(dati, dict) and "record" in dati else dati
+                if not isinstance(record, dict) or not record.get("id"):
+                    st.error("File non riconosciuto: non contiene un progetto valido.")
+                else:
+                    db.salva_progetto(conn, studio_id, paziente_id, record)
+                    st.success(f"Importato: {record.get('etichetta', 'senza nome')} — "
+                               f"assegnalo al paziente giusto se necessario.")
+            except Exception as e:                                # noqa: BLE001
+                st.error(f"Importazione non riuscita: {e}")
 
     # ---------------------------------------------------------------- modulo
     evento = _modulo(record=st.session_state.get("lac_record"), key="lac")
