@@ -38,10 +38,10 @@
         v = Math.max(d.scrollHeight, d.offsetHeight, b ? b.scrollHeight : 0);
       }
       v = Math.ceil(v) + 8;
-      if (Math.abs(v - ultimaAltezza) < 16) return;   /* evita oscillazioni/ping continuo */
+      if (Math.abs(v - ultimaAltezza) < 24) return;   /* evita oscillazioni/ping continuo */
       ultimaAltezza = v;
       verso("streamlit:setFrameHeight", { height: v });
-    }, 120);
+    }, 250);
   }
 
   function restituisci(valore) {
@@ -99,8 +99,11 @@
     setTimeout(altezza, 300);
     setTimeout(altezza, 1200);
     if (window.ResizeObserver) {
-      try { new ResizeObserver(function () { altezza(); }).observe(document.body); }
-      catch (err) { setInterval(altezza, 2000); }
+      /* si osserva solo per catturare cambi di layout non coperti dall'evento
+         rgp:change (es. font caricati in ritardo); niente osservazione
+         continua sul body, che rifà i calcoli ad ogni interazione (hover,
+         digitazione) ed è la causa dello sfarfallio durante lo scroll. */
+      setInterval(altezza, 2000);
     } else {
       setInterval(altezza, 2000);
     }
