@@ -178,7 +178,7 @@ SOTTOSEZIONI = {
     ],
     AREA_OCULISTICA: [
         "👁️ Oculistica",
-        "👁️ Lenti a contatto",
+        "👁️ Contattologia",
     ],
     AREA_ORTOTTICA: [
         "🚧 Ortottica (in arrivo)",

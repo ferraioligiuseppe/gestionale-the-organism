@@ -855,9 +855,32 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             st.error(f"Modulo Oculistica non disponibile: {e}")
         return True
-    if sotto == "👁️ Lenti a contatto":
-        from .ui_lenti_contatto import ui_lenti_contatto
-        ui_lenti_contatto(); return True
+    if sotto == "👁️ Contattologia":
+        try:
+            from .contattologia import inizializza, pagina
+            inizializza(conn)
+        except Exception as e:
+            st.error(f"Errore inizializzazione modulo Contattologia: {e}")
+            return True
+        _paz_id = st.session_state.get("paziente_attivo_id")
+        _paz_label = ""
+        if _paz_id:
+            try:
+                cur2 = conn.cursor()
+                cur2.execute("SELECT Cognome, Nome FROM Pazienti WHERE id=%s", (_paz_id,))
+                r = cur2.fetchone()
+                if r:
+                    c, n = (r.get("Cognome"), r.get("Nome")) if isinstance(r, dict) else (r[0], r[1])
+                    _paz_label = f"{c} {n}".strip()
+            except Exception:
+                pass
+        pagina(
+            conn,
+            studio_id=st.session_state.get("studio_id", 1),
+            paziente_id=_paz_id,
+            paziente_label=_paz_label,
+        )
+        return True
 
     # ── AUDIO (MAPS & diagnostica uditiva) ────────────────────────────
     _audio_map = {
