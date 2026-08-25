@@ -75,15 +75,15 @@ CREATE POLICY contattologia_ordini_studio ON contattologia_ordini
 
 def crea_schema(conn) -> None:
     """Idempotente: si può richiamare a ogni avvio."""
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    cur.execute(DDL)
+    try:
+        cur.execute(RLS)
+    except Exception:
+        # in ambienti senza app.studio_id le policy si applicano a mano
+        conn.rollback()
+        cur = conn.cursor()
         cur.execute(DDL)
-        try:
-            cur.execute(RLS)
-        except Exception:
-            # in ambienti senza app.studio_id le policy si applicano a mano
-            conn.rollback()
-            with conn.cursor() as c2:
-                c2.execute(DDL)
     conn.commit()
 
 
@@ -118,13 +118,13 @@ def salva_progetto(conn, studio_id: int, paziente_id: int | None,
             aggiornato_il = now()
         RETURNING id;
     """
-    with conn.cursor() as cur:
-        cur.execute(sql, (
-            studio_id, paziente_id, record["id"], occhi,
-            record.get("geo"), record.get("sintesi"), record.get("etichetta"),
-            json.dumps(record, ensure_ascii=False),
-        ))
-        new_id = cur.fetchone()[0]
+    cur = conn.cursor()
+    cur.execute(sql, (
+        studio_id, paziente_id, record["id"], occhi,
+        record.get("geo"), record.get("sintesi"), record.get("etichetta"),
+        json.dumps(record, ensure_ascii=False),
+    ))
+    new_id = cur.fetchone()[0]
     conn.commit()
     return new_id
 
@@ -139,10 +139,10 @@ def elenco_progetti(conn, studio_id: int, paziente_id: int | None = None,
          ORDER BY aggiornato_il DESC
          LIMIT %s;
     """
-    with conn.cursor() as cur:
-        cur.execute(sql, (studio_id, paziente_id, paziente_id, limite))
-        colonne = [d[0] for d in cur.description]
-        return [dict(zip(colonne, r)) for r in cur.fetchall()]
+    cur = conn.cursor()
+    cur.execute(sql, (studio_id, paziente_id, paziente_id, limite))
+    colonne = [d[0] for d in cur.description]
+    return [dict(zip(colonne, r)) for r in cur.fetchall()]
 
 
 def leggi_progetto(conn, studio_id: int, rec_id: str) -> dict[str, Any] | None:
@@ -150,9 +150,9 @@ def leggi_progetto(conn, studio_id: int, rec_id: str) -> dict[str, Any] | None:
         SELECT progetto FROM contattologia_progetti
          WHERE studio_id = %s AND rec_id = %s;
     """
-    with conn.cursor() as cur:
-        cur.execute(sql, (studio_id, rec_id))
-        riga = cur.fetchone()
+    cur = conn.cursor()
+    cur.execute(sql, (studio_id, rec_id))
+    riga = cur.fetchone()
     if not riga:
         return None
     dato = riga[0]
@@ -160,11 +160,11 @@ def leggi_progetto(conn, studio_id: int, rec_id: str) -> dict[str, Any] | None:
 
 
 def elimina_progetto(conn, studio_id: int, rec_id: str) -> bool:
-    with conn.cursor() as cur:
-        cur.execute(
-            "DELETE FROM contattologia_progetti WHERE studio_id = %s AND rec_id = %s;",
-            (studio_id, rec_id))
-        tolte = cur.rowcount
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM contattologia_progetti WHERE studio_id = %s AND rec_id = %s;",
+        (studio_id, rec_id))
+    tolte = cur.rowcount
     conn.commit()
     return tolte > 0
 
@@ -186,10 +186,10 @@ def salva_ordine(conn, studio_id: int, paziente_id: int | None,
             %s, %s, %s, %s)
         RETURNING id;
     """
-    with conn.cursor() as cur:
-        cur.execute(sql, (studio_id, studio_id, rec_id,
-                          paziente_id, numero, nome_file, pdf))
-        new_id = cur.fetchone()[0]
+    cur = conn.cursor()
+    cur.execute(sql, (studio_id, studio_id, rec_id,
+                      paziente_id, numero, nome_file, pdf))
+    new_id = cur.fetchone()[0]
     conn.commit()
     return new_id
 
@@ -204,18 +204,18 @@ def elenco_ordini(conn, studio_id: int, paziente_id: int | None = None,
          ORDER BY creato_il DESC
          LIMIT %s;
     """
-    with conn.cursor() as cur:
-        cur.execute(sql, (studio_id, paziente_id, paziente_id, limite))
-        colonne = [d[0] for d in cur.description]
-        return [dict(zip(colonne, r)) for r in cur.fetchall()]
+    cur = conn.cursor()
+    cur.execute(sql, (studio_id, paziente_id, paziente_id, limite))
+    colonne = [d[0] for d in cur.description]
+    return [dict(zip(colonne, r)) for r in cur.fetchall()]
 
 
 def leggi_ordine(conn, studio_id: int, ordine_id: int) -> tuple[str, bytes] | None:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT nome_file, pdf FROM contattologia_ordini WHERE studio_id = %s AND id = %s;",
-            (studio_id, ordine_id))
-        riga = cur.fetchone()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT nome_file, pdf FROM contattologia_ordini WHERE studio_id = %s AND id = %s;",
+        (studio_id, ordine_id))
+    riga = cur.fetchone()
     if not riga:
         return None
     return riga[0], bytes(riga[1])
