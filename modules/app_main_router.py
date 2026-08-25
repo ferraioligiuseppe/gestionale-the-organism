@@ -1160,9 +1160,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "👁️ Eye tracking":
             from .sections.ui_cliniche import render_gaze_section
             render_gaze_section(); return
-        if sotto == "👁️ Lenti a contatto":
-            from .ui_lenti_contatto import ui_lenti_contatto
-            ui_lenti_contatto(); return
 
     # ── AREA TEST NEUROEVOLUTIVI ──────────────────────────────────────
     elif area == AREA_TEST_NEUROEVOL:
@@ -1261,9 +1258,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 from .pnev_gamecenter.ui_gamecenter import ui_gamecenter
                 ui_gamecenter(conn=conn, paziente_id=_pid, paziente_nome=_nome)
             return
-        if sotto == "👁️ Lenti a contatto":
-            from .ui_lenti_contatto import ui_lenti_contatto
-            ui_lenti_contatto(); return
         if sotto == "🦴 Osteopatia":
             from .sections.ui_cliniche import render_osteopatia_section
             render_osteopatia_section(); return
