@@ -28,15 +28,20 @@
     verso("streamlit:componentReady", { apiVersion: 1 });
   }
 
+  var _timerAltezza = null;
   function altezza(h) {
-    if (!h) {
-      var d = document.documentElement, b = document.body;
-      h = Math.max(d.scrollHeight, d.offsetHeight, b ? b.scrollHeight : 0);
-    }
-    h = Math.ceil(h) + 8;
-    if (Math.abs(h - ultimaAltezza) < 6) return;   /* evita un ping continuo */
-    ultimaAltezza = h;
-    verso("streamlit:setFrameHeight", { height: h });
+    clearTimeout(_timerAltezza);
+    _timerAltezza = setTimeout(function () {
+      var v = h;
+      if (!v) {
+        var d = document.documentElement, b = document.body;
+        v = Math.max(d.scrollHeight, d.offsetHeight, b ? b.scrollHeight : 0);
+      }
+      v = Math.ceil(v) + 8;
+      if (Math.abs(v - ultimaAltezza) < 16) return;   /* evita oscillazioni/ping continuo */
+      ultimaAltezza = v;
+      verso("streamlit:setFrameHeight", { height: v });
+    }, 120);
   }
 
   function restituisci(valore) {
@@ -95,9 +100,9 @@
     setTimeout(altezza, 1200);
     if (window.ResizeObserver) {
       try { new ResizeObserver(function () { altezza(); }).observe(document.body); }
-      catch (err) { setInterval(altezza, 1500); }
+      catch (err) { setInterval(altezza, 2000); }
     } else {
-      setInterval(altezza, 1500);
+      setInterval(altezza, 2000);
     }
   }
   if (document.readyState === "complete" || document.readyState === "interactive") avvia();
