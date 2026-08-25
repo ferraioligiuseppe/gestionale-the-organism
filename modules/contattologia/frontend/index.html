@@ -607,21 +607,25 @@ def render_progettista_rgp():
     verso("streamlit:componentReady", { apiVersion: 1 });
   }
 
-  var _timerAltezza = null;
+  var _timerAltezza = null, _candidata = null;
+  function _leggiAltezza() {
+    var d = document.documentElement, b = document.body;
+    return Math.ceil(Math.max(d.scrollHeight, d.offsetHeight, b ? b.scrollHeight : 0)) + 20;
+  }
   function altezza(h) {
     clearTimeout(_timerAltezza);
     _timerAltezza = setTimeout(function () {
-      var v = h;
-      if (!v) {
-        var d = document.documentElement, b = document.body;
-        v = Math.max(d.scrollHeight, d.offsetHeight, b ? b.scrollHeight : 0);
-      }
-      v = Math.ceil(v) + 60;   /* margine generoso: meglio un filo di spazio in più che un taglio */
-      if (v < ultimaAltezza) return;   /* non si restringe mai: evita tagli e vibrazioni */
-      if (v - ultimaAltezza < 24) return;   /* evita un ping continuo per differenze minime */
-      ultimaAltezza = v;
-      verso("streamlit:setFrameHeight", { height: v });
-    }, 250);
+      var v = h || _leggiAltezza();
+      if (Math.abs(v - ultimaAltezza) < 16) return;   /* differenza minima: ignora */
+      /* si invia solo se il valore resta uguale a una seconda lettura: una
+         singola fluttuazione transitoria (hover, focus) non fa vibrare nulla */
+      _candidata = v;
+      setTimeout(function () {
+        if (_leggiAltezza() !== _candidata && !h) return;
+        ultimaAltezza = _candidata;
+        verso("streamlit:setFrameHeight", { height: _candidata });
+      }, 200);
+    }, 200);
   }
 
   function restituisci(valore) {
@@ -680,10 +684,12 @@ def render_progettista_rgp():
     setTimeout(altezza, 900);
     setTimeout(altezza, 1800);
     setTimeout(altezza, 3000);
-    /* niente osservatore continuo né controllo periodico: incrociavano i
-       cambi di layout dell'host (es. comparsa/scomparsa di una barra di
-       scorrimento) e rientravano in loop, causando la vibrazione in fondo
-       alla pagina. L'altezza si ricalcola solo su eventi reali. */
+    /* niente osservatore continuo: incrociava i cambi di layout dell'host
+       (es. comparsa/scomparsa di una barra di scorrimento) e rientrava in
+       loop, causando la vibrazione in fondo alla pagina. Un controllo
+       leggero ogni 4s recupera cambi non coperti dagli eventi espliciti,
+       senza il ping continuo di prima. */
+    setInterval(altezza, 4000);
   }
   if (document.readyState === "complete" || document.readyState === "interactive") avvia();
   else document.addEventListener("DOMContentLoaded", avvia);
