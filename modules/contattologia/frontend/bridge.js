@@ -1,0 +1,105 @@
+/*! Ponte fra il Progetto multicurva RGP e Streamlit.
+    Progettato da Dott. Giuseppe Ferraioli — www.pnev.it
+    © 2026 Giuseppe Ferraioli. Tutti i diritti riservati.
+
+    Protocollo dei componenti Streamlit, implementato a mano: nessuna
+    dipendenza npm, nessun build step. Il componente:
+      · dichiara di essere pronto            → streamlit:componentReady
+      · comunica quanto è alto               → streamlit:setFrameHeight
+      · restituisce un valore SOLO su azione → streamlit:setComponentValue
+    L'ultimo punto è quello che conta: setComponentValue fa rieseguire lo
+    script Streamlit, quindi non va chiamato a ogni ricalcolo del modulo
+    ma solo quando l'utente salva o genera un ordine.                     */
+(function () {
+  "use strict";
+
+  var PRONTO = false;
+  var ultimaAltezza = 0;
+
+  function verso(tipo, extra) {
+    var msg = { isStreamlitMessage: true, type: tipo };
+    for (var k in extra) msg[k] = extra[k];
+    window.parent.postMessage(msg, "*");
+  }
+
+  function pronto() {
+    if (PRONTO) return;
+    PRONTO = true;
+    verso("streamlit:componentReady", { apiVersion: 1 });
+  }
+
+  function altezza(h) {
+    if (!h) {
+      var d = document.documentElement, b = document.body;
+      h = Math.max(d.scrollHeight, d.offsetHeight, b ? b.scrollHeight : 0);
+    }
+    h = Math.ceil(h) + 8;
+    if (Math.abs(h - ultimaAltezza) < 6) return;   /* evita un ping continuo */
+    ultimaAltezza = h;
+    verso("streamlit:setFrameHeight", { height: h });
+  }
+
+  function restituisci(valore) {
+    verso("streamlit:setComponentValue", { value: valore, dataType: "json" });
+  }
+
+  /* ---- dal modulo verso Streamlit -------------------------------------- */
+  var contatore = 0;
+  window.addEventListener("rgp", function (e) {
+    var d = e.detail || {};
+    if (d.type === "rgp:change") { altezza(); return; }   /* mai un valore: riavvierebbe lo script */
+    if (d.type === "rgp:save" || d.type === "rgp:order") {
+      contatore += 1;
+      restituisci({
+        type: d.type,
+        stamp: String(contatore) + "-" + (d.record && d.record.id ? d.record.id : ""),
+        record: d.record || null,
+        filename: d.filename || null,
+        pdfBase64: d.pdfBase64 || null,
+        payload: d.payload || null
+      });
+    }
+  });
+
+  /* ---- da Streamlit verso il modulo ------------------------------------ */
+  var ultimoRecordId = null;
+  window.addEventListener("message", function (e) {
+    var d = e.data || {};
+    if (d.type !== "streamlit:render") return;
+    var args = d.args || {};
+
+    if (args.altezza) altezza(args.altezza);
+
+    /* tema: il modulo ha già il suo interruttore, qui si allinea a Streamlit */
+    if (d.theme && d.theme.base) {
+      try {
+        document.documentElement.setAttribute(
+          "data-theme", d.theme.base === "dark" ? "dark" : "light");
+      } catch (err) { /* il modulo resta sul tema di sistema */ }
+    }
+
+    /* riapertura di un progetto letto da PostgreSQL */
+    var r = args.record;
+    if (r && r.id && r.id !== ultimoRecordId && window.RGP && window.RGP.loadRecord) {
+      ultimoRecordId = r.id;
+      try { window.RGP.loadRecord(r); } catch (err) { console.error("riapertura fallita", err); }
+    }
+    setTimeout(altezza, 60);
+  });
+
+  /* ---- avvio ----------------------------------------------------------- */
+  function avvia() {
+    pronto();
+    altezza();
+    setTimeout(altezza, 300);
+    setTimeout(altezza, 1200);
+    if (window.ResizeObserver) {
+      try { new ResizeObserver(function () { altezza(); }).observe(document.body); }
+      catch (err) { setInterval(altezza, 1500); }
+    } else {
+      setInterval(altezza, 1500);
+    }
+  }
+  if (document.readyState === "complete" || document.readyState === "interactive") avvia();
+  else document.addEventListener("DOMContentLoaded", avvia);
+})();
