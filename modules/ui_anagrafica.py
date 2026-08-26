@@ -1526,6 +1526,7 @@ def render_anagrafica(conn) -> None:
     with h2:
         if st.button("➕ Nuovo paziente", type="primary",
                        key="btn_nuovo", use_container_width=True):
+            st.session_state.pop("ana_apri_paziente", None)
             st.session_state["ana_apri_nuovo"] = True
     with h3:
         if st.button("📥 Esporta Excel", key="btn_export",
