@@ -63,7 +63,8 @@ def _invia_email(to: str, subject: str, body: str) -> None:
 
 _Q_LABELS = {
     "ANAMNESI_PNEV":   "📋 Anamnesi PNEV (Gravidanza · Sviluppo · Familiarità)",
-    "INPPS":           "📋 INPP-R Screening (Sally Goddard Blythe)",
+    "INPPS":           "📋 Questionario Neurosviluppo INPP – Bambini",
+    "INPPS_ADULTI":    "📋 Questionario Neurosviluppo INPP – Adulti",
     "MELILLO_BAMBINI": "🧒 Melillo Bambini (Genitori)",
     "MELILLO_ADULTI":  "🧠 Melillo Adulti (Paziente)",
     "FISHER":          "👂 Fisher Auditivo",
