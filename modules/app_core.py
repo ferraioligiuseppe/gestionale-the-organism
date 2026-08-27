@@ -961,6 +961,153 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
     return result, summary
 
 
+def _inpps_adulti_cutoff() -> int:
+    """Cut-off operativo (screening) per INPP-R adulti. Configurabile via Secrets: [pnev] INPPS_ADULTI_CUTOFF=12"""
+    try:
+        return int(st.secrets.get("pnev", {}).get("INPPS_ADULTI_CUTOFF", 12))
+    except Exception:
+        return 12
+
+
+def inpps_adulti_collect_ui(prefix: str, existing: dict | None = None):
+    """
+    INPP-R Screening Adulti -> dict scalabile + summary.
+    existing: dict precedente (pnev_json["questionari"]["inpps_screening_adulti"]) o None.
+    """
+    existing = existing or {}
+    st.markdown("### INPP-R – Screening riflessi primitivi (Adulti)\n\n*Questionario INPP, adattato per l'età adulta*")
+    st.caption(
+        "Fonte: **INPP — Institute for Neuro-Physiological Psychology** (Chester, UK), "
+        "questionario di screening per adulti. Strumento di screening: segnala la possibilità "
+        "di un'immaturità neuromotoria residua, non sostituisce la valutazione clinica diretta."
+    )
+
+    free = existing.get("free_text", {}) or {}
+    with st.expander("Informazioni cliniche generali", expanded=True):
+        diagnosi = st.text_area(
+            "Ha ricevuto qualche diagnosi (dislessia, disprassia, disturbo da deficit di attenzione, "
+            "iperattività, agorafobia, crisi di panico o altro)? In caso affermativo, specificare.",
+            value=str(free.get("diagnosi", "")), key=f"{prefix}_diagnosi")
+        farmaci = st.text_area(
+            "Assume qualche farmaco attualmente? (elencare eventualmente tutti, con relativi dosaggi "
+            "e data di inizio di assunzione)",
+            value=str(free.get("farmaci", "")), key=f"{prefix}_farmaci")
+        sintomi = st.text_area(
+            "Sintomi o difficoltà principali",
+            value=str(free.get("sintomi", "")), key=f"{prefix}_sintomi")
+        psichiatrica = st.text_area(
+            "Ha ricevuto qualche diagnosi o terapia psichiatrica? In caso affermativo, specificare.",
+            value=str(free.get("psichiatrica", "")), key=f"{prefix}_psichiatrica")
+        altro_medico = st.text_area(
+            "Altre informazioni rilevanti rispetto alla propria condizione medica",
+            value=str(free.get("altro_medico", "")), key=f"{prefix}_altro_medico")
+
+    storia_items = [
+        ("A01", "C'è qualche caso di difficoltà simili fra i genitori o le loro famiglie?"),
+        ("A02", "È stato/a concepito/a con fecondazione assistita (FIVET)?"),
+        ("A03", "Durante la gravidanza c'è stato qualche problema medico? (pressione alta, nausea eccessiva, rischio di aborto, infezioni virali, stress emotivo importante)"),
+        ("A04", "Ha fumato la madre durante la gravidanza?"),
+        ("A05", "Ha bevuto alcol la madre durante la gravidanza?"),
+        ("A06", "Ha sofferto la madre di un'importante infezione virale durante le prime 13 settimane di gravidanza?"),
+        ("A07", "Ha sofferto la madre di stress emotivo importante tra le 25 e 27 settimane?"),
+        ("A08", "Il parto è stato pre-termine o post-termine?"),
+        ("A09", "È stata la nascita particolarmente difficoltosa o anomala in qualche senso? (parto indotto, troppo lungo, troppo veloce, forcipe, ventosa, cesareo)"),
+        ("A10", "Era particolarmente piccolo/a per l'età gestazionale al momento del parto?"),
+        ("A11", "C'era qualcosa di inusuale alla nascita? (problemi craniali, colorito bluastro, itterizia, crosta lattea, terapia intensiva)"),
+        ("A12", "Durante le prime 13 settimane di vita ha avuto difficoltà di suzione, alimentazione o rigurgito?"),
+        ("A13", "Durante i primi 6 mesi, è stato un bambino/a particolarmente tranquillo/a, anche troppo?"),
+        ("A14", "Fra i 6 e i 18 mesi, era particolarmente agitato/a, dormiva poco e piangeva molto?"),
+        ("A15", "Si dondolava così forte da muovere il lettino o il passeggino, o si colpiva la testa con oggetti solidi?"),
+        ("A16", "Ha imparato a camminare troppo presto (prima dei 10 mesi) o in ritardo (dopo i 16 mesi)?"),
+        ("A17", "Ha saltato le fasi di striscio e gattonamento (saltellava sul sedere, rotolava, si è alzato in piedi direttamente)?"),
+        ("A18", "Ha imparato a parlare in ritardo (frasi di 3 parole dopo i 2 anni)?"),
+        ("A19", "Nei primi 18 mesi ha avuto febbre molto alta e/o convulsioni?"),
+        ("A20", "C'è stato qualche segno di eczema, asma o allergia? Reazione a un vaccino?"),
+        ("A21", "Ha avuto difficoltà a imparare a vestirsi da solo/a?"),
+        ("A22", "Ha continuato a succhiarsi il pollice fino ai 5 anni o oltre?"),
+        ("A23", "Ha continuato a bagnare il letto (anche solo ogni tanto) sopra i 5 anni?"),
+        ("A24", "Ha sofferto di mal d'auto?"),
+        ("A25", "Nei primi due anni di scuola, ha avuto problemi a imparare a leggere o scrivere (anche in corsivo)?"),
+        ("A26", "Ha fatto più fatica a leggere l'ora da un orologio analogico rispetto a quelli digitali?"),
+        ("A27", "Ha avuto difficoltà a imparare ad andare in bicicletta con due ruote?"),
+        ("A28", "Nei primi 8 anni di vita, ci sono state febbri molto alte, delirio o crisi convulsive?"),
+        ("A29", "È stato/a un bambino/a con frequenti malattie alle alte vie respiratorie (otite, bronchite, sinusite)?"),
+        ("A30", "Ha avuto difficoltà a imparare a prendere una palla al volo, fare capriole, salire la corda, saltare il \"cavallo\" o stare in equilibrio?"),
+        ("A31", "Faceva fatica a stare fermo/a seduto/a (\"formiche nei pantaloni\") ed era ripreso/a spesso dagli insegnanti?"),
+        ("A32", "Fa molti errori quando copia un testo da un libro?"),
+        ("A33", "Quando scriveva a scuola, gli/le capitava di \"girare\" le lettere o saltare lettere/parole?"),
+    ]
+    adulta_items = [
+        ("B01", "Se c'è un rumore o movimento inaspettato, si spaventa in modo esagerato?"),
+        ("B02", "Ha paura degli spazi aperti, attacchi di panico, ansia esagerata?"),
+        ("B03", "Questi sintomi peggiorano in un luogo o momento specifico?"),
+        ("B04", "Le capita di percepire il movimento di oggetti che in realtà sono fermi? (alberi, palazzi, ecc.)"),
+        ("B05", "Le capita di vedere sfuocato o percepire altre alterazioni visive?"),
+        ("B06", "Ha nausea frequentemente?"),
+        ("B07", "Ha spesso nausea mentre è coricato/a sul letto?"),
+        ("B08", "Considera di avere uno scarso senso dell'equilibrio?"),
+        ("B09", "Pensa di essere molto scoordinato/a ogni tanto?"),
+        ("B10", "Soffre o ha sofferto di emicrania?"),
+        ("B11", "È molto sensibile alle luci brillanti? (es. luci delle discoteche)"),
+        ("B12", "Direbbe di essere particolarmente sensibile ai suoni rispetto alle altre persone?"),
+        ("B13", "Fa fatica con destra e sinistra quando deve dare indicazioni?"),
+        ("B14", "Quando scrive qualcosa di lungo/complesso, le capita di iniziare a fare errori (ordine di lettere/parole, ortografia) che di solito non farebbe?"),
+        ("B15", "Le capita, quando è molto stanco/a, di sapere cosa vuole dire ma non riuscire a parlare correttamente?"),
+        ("B16", "Le capita, quando è molto stanco/a, di diventare goffo/a e scoordinato/a e colpirsi con oggetti?"),
+    ]
+
+    st.caption("Spunta le voci affermative.")
+    checked = {}
+    with st.expander("Prima parte – Storia dello sviluppo (retrospettiva)", expanded=True):
+        for code, label in storia_items:
+            checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+    with st.expander("Seconda parte – Età adulta", expanded=True):
+        for code, label in adulta_items:
+            checked[code] = st.checkbox(label, value=bool(existing.get("items", {}).get(code, False)), key=f"{prefix}_{code}")
+
+    n_storia = sum(1 for k, v in checked.items() if k.startswith("A") and v)
+    n_adulta = sum(1 for k, v in checked.items() if k.startswith("B") and v)
+    totale = n_storia + n_adulta
+    cutoff = _inpps_adulti_cutoff()
+    flag = totale >= cutoff
+
+    result = {
+        "version": "inpps03it_adulti",
+        "mode": "adulti",
+        "date": date.today().isoformat(),
+        "positivi": {"storia_sviluppo": int(n_storia), "eta_adulta": int(n_adulta)},
+        "items": {k: bool(v) for k, v in checked.items()},
+        "free_text": {
+            "diagnosi": (diagnosi or "").strip(),
+            "farmaci": (farmaci or "").strip(),
+            "sintomi": (sintomi or "").strip(),
+            "psichiatrica": (psichiatrica or "").strip(),
+            "altro_medico": (altro_medico or "").strip(),
+        },
+        "screening": {
+            "cutoff": int(cutoff),
+            "totale_positivi": int(totale),
+            "flag_possibile_immaturita_neuromotoria": bool(flag),
+            "nota": "Criterio operativo di screening (protocollo PNEV / INPP-R adulti). Richiede conferma clinica diretta.",
+        },
+    }
+
+    if flag:
+        st.warning(
+            f"⚠️ Screening INPP-R Adulti: {totale} positivi (cut-off ≥ {cutoff}) → possibile immaturità neuromotoria residua. "
+            "Richiede conferma con valutazione clinica diretta."
+        )
+    else:
+        st.success(f"✅ Screening INPP-R Adulti: {totale} positivi (cut-off ≥ {cutoff}) → nessun alert da screening.")
+
+    summary = (
+        f"INPP-R (adulti): Storia sviluppo {n_storia} • Età adulta {n_adulta} "
+        f"(Totale {totale}, cut-off ≥ {cutoff})"
+    )
+    summary += " → possibile immaturità neuromotoria residua (screening)." if flag else "."
+    return result, summary
+
+
 from datetime import date, datetime
 from typing import Optional, Dict
 
@@ -5660,12 +5807,23 @@ def ui_anamnesi():
         )
 
     with tab_inpps:
-        _inpps_existing_new = (
-            pnev_data_new.get("questionari", {}) or {}
-        ).get("inpps_screening_genitori") if isinstance(pnev_data_new, dict) else None
-        inpps_data_new, inpps_summary_new = inpps_collect_ui(
-            prefix="inpps_new", existing=_inpps_existing_new
-        )
+        _inpps_modo_new = st.radio("Chi compila", ["Bambini (genitori)", "Adulti"], horizontal=True, key="inpps_modo_new")
+        if _inpps_modo_new == "Adulti":
+            _inpps_existing_new = (
+                pnev_data_new.get("questionari", {}) or {}
+            ).get("inpps_screening_adulti") if isinstance(pnev_data_new, dict) else None
+            inpps_data_new, inpps_summary_new = inpps_adulti_collect_ui(
+                prefix="inpps_adulti_new", existing=_inpps_existing_new
+            )
+            _inpps_chiave_new = "inpps_screening_adulti"
+        else:
+            _inpps_existing_new = (
+                pnev_data_new.get("questionari", {}) or {}
+            ).get("inpps_screening_genitori") if isinstance(pnev_data_new, dict) else None
+            inpps_data_new, inpps_summary_new = inpps_collect_ui(
+                prefix="inpps_new", existing=_inpps_existing_new
+            )
+            _inpps_chiave_new = "inpps_screening_genitori"
 
     with tab_quest:
         _q_key_new = f"questionari_new_{paz_id}"
@@ -5753,7 +5911,7 @@ def ui_anamnesi():
         # merge dati nel pnev_json
         try:
             pnev_data_new.setdefault("questionari", {})
-            pnev_data_new["questionari"]["inpps_screening_genitori"] = inpps_data_new
+            pnev_data_new["questionari"][_inpps_chiave_new] = inpps_data_new
         except Exception:
             pass
         # merge INPP neuromotorio
@@ -5924,12 +6082,23 @@ def ui_anamnesi():
         )
 
     with tab_inpps_m:
-        inpps_existing_m = (
-            pnev_data_m.get("questionari", {}) or {}
-        ).get("inpps_screening_genitori") if isinstance(pnev_data_m, dict) else None
-        inpps_data_m, inpps_summary_m2 = inpps_collect_ui(
-            prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m
-        )
+        _inpps_modo_m = st.radio("Chi compila", ["Bambini (genitori)", "Adulti"], horizontal=True, key=f"inpps_modo_edit_{an_id}")
+        if _inpps_modo_m == "Adulti":
+            inpps_existing_m = (
+                pnev_data_m.get("questionari", {}) or {}
+            ).get("inpps_screening_adulti") if isinstance(pnev_data_m, dict) else None
+            inpps_data_m, inpps_summary_m2 = inpps_adulti_collect_ui(
+                prefix=f"inpps_adulti_edit_{an_id}", existing=inpps_existing_m
+            )
+            _inpps_chiave_m = "inpps_screening_adulti"
+        else:
+            inpps_existing_m = (
+                pnev_data_m.get("questionari", {}) or {}
+            ).get("inpps_screening_genitori") if isinstance(pnev_data_m, dict) else None
+            inpps_data_m, inpps_summary_m2 = inpps_collect_ui(
+                prefix=f"inpps_edit_{an_id}", existing=inpps_existing_m
+            )
+            _inpps_chiave_m = "inpps_screening_genitori"
 
     with tab_quest_m:
         _q_key_m = f"questionari_edit_{an_id}"
@@ -6045,7 +6214,7 @@ def ui_anamnesi():
         # merge dati
         try:
             pnev_data_m.setdefault("questionari", {})
-            pnev_data_m["questionari"]["inpps_screening_genitori"] = inpps_data_m
+            pnev_data_m["questionari"][_inpps_chiave_m] = inpps_data_m
         except Exception:
             pass
         try:
