@@ -14,19 +14,7 @@ from datetime import timedelta, timezone
 
 import streamlit as st
 from modules.app_menu import build_sections
-try:
-    from modules.ui_diagnostica_uditiva import ui_diagnostica_uditiva as _ui_diag_uditiva
-except Exception:
-    _ui_diag_uditiva = None
 from modules.app_main_router import dispatch_main_section
-from modules.ui_lenti_contatto import ui_lenti_contatto
-from modules.ui_esami_strumentali import ui_esami_strumentali
-from modules.ui_bilancio_uditivo import ui_bilancio_uditivo
-from modules.ui_audiometria_funzionale import ui_audiometria_funzionale
-try:
-    from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie_standalone as _ui_calib_cuffie_ext
-except Exception:
-    _ui_calib_cuffie_ext = None
 from modules.app_sections import (
     SECTION_DASHBOARD,
     SECTION_PAZIENTI,
@@ -517,6 +505,7 @@ def mark_token_used(cur, link_id: int):
 
 # Questionari supportati via link pubblico
 _QUESTIONARI_PUBBLICI = {
+    "ANAMNESI_PNEV":   "Anamnesi PNEV (Gravidanza, Sviluppo, Familiarità)",
     "INPPS":           "Questionario Neurosviluppo INPP – Bambini",
     "INPPS_ADULTI":    "Questionario Neurosviluppo INPP – Adulti",
     "MELILLO_ADULTI":  "Questionario Melillo – Stile Cognitivo (Adulti)",
@@ -569,7 +558,7 @@ def maybe_handle_public_questionario(get_conn) -> bool:
             q_data, q_summary = inpps_collect_ui(prefix="pub_inpps", existing=None)
             submitted = st.form_submit_button("📤 INVIA QUESTIONARIO")
         chiave_json = "inpps_screening_genitori"
-        motivo_label = "INPPS (genitori)"
+        motivo_label = "INPP-R (genitori)"
 
     elif q == "INPPS_ADULTI":
         with st.form("public_q_form"):
@@ -577,6 +566,27 @@ def maybe_handle_public_questionario(get_conn) -> bool:
             submitted = st.form_submit_button("📤 INVIA QUESTIONARIO")
         chiave_json = "inpps_screening_adulti"
         motivo_label = "INPP-R (adulti)"
+
+    elif q == "ANAMNESI_PNEV":
+        try:
+            from modules.pnev.ui_anamnesi_pnev import anamnesi_pnev_collect_ui
+        except Exception as _imp_err:
+            st.error(f"Modulo anamnesi non disponibile: {_imp_err}")
+            return True
+        _pub_key = f"pub_q_{t[:16]}"
+        if _pub_key not in st.session_state:
+            st.session_state[_pub_key] = {}
+        try:
+            q_data, q_summary = anamnesi_pnev_collect_ui(
+                prefix="pub_anampnev", existing=st.session_state[_pub_key])
+            st.session_state[_pub_key] = q_data
+        except Exception as _render_err:
+            st.error(f"Errore rendering anamnesi: {_render_err}")
+            return True
+        chiave_json = "anamnesi_pnev"
+        motivo_label = "Anamnesi PNEV (online)"
+        st.markdown("---")
+        submitted = st.button("📤 INVIA QUESTIONARIO", type="primary")
 
     elif q in ("MELILLO_ADULTI", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI", "VISIONE_ADULTI"):
         try:
@@ -751,7 +761,15 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
     existing: dict precedente (pnev_json["questionari"]["inpps_screening_genitori"]) o None.
     """
     existing = existing or {}
-    st.markdown("### INPPS – Screening (Genitori)")
+    st.markdown("### INPP-R – Screening riflessi primitivi\n\n*Questionario di Sally Goddard Blythe (INPP, Chester)*")
+    st.caption(
+        "Fonte: **INPP — Institute for Neuro-Physiological Psychology** (Chester, UK), "
+        "questionario di screening di **Sally Goddard Blythe**. "
+        "Riferimento: Goddard Blythe S., *Attention, Balance and Coordination: "
+        "The A.B.C. of Learning Success*, Wiley-Blackwell. "
+        "Strumento di screening: segnala la possibilità di un'immaturità neuromotoria, "
+        "non sostituisce la valutazione clinica diretta."
+    )
 
     # --- Prima parte: Neurologica (1-29) ---
     neuro_items = [
@@ -928,20 +946,20 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
         "cutoff": int(cutoff),
         "totale_positivi": int(totale),
         "flag_possibile_immaturita_neuromotoria": bool(flag),
-        "nota": "Criterio operativo di screening (protocollo PNEV/INPPS). Richiede conferma clinica diretta.",
+        "nota": "Criterio operativo di screening (protocollo PNEV / INPP-R). Richiede conferma clinica diretta.",
     }
 
     # Semaforo in UI
     if flag:
         st.warning(
-            f"⚠️ Screening INPPS: {totale} positivi (cut-off ≥ {cutoff}) → possibile immaturità neuromotoria. "
+            f"⚠️ Screening INPP-R: {totale} positivi (cut-off ≥ {cutoff}) → possibile immaturità neuromotoria. "
             "Richiede conferma con valutazione clinica diretta."
         )
     else:
-        st.success(f"✅ Screening INPPS: {totale} positivi (cut-off ≥ {cutoff}) → nessun alert da screening.")
+        st.success(f"✅ Screening INPP-R: {totale} positivi (cut-off ≥ {cutoff}) → nessun alert da screening.")
 
     summary = (
-        f"INPPS genitori: Neurologica/Scuola {n_neuro} • Nutrizione {nutr_count} • Udito {n_udito} "
+        f"INPP-R (genitori): Neurologica/Scuola {n_neuro} • Nutrizione {nutr_count} • Udito {n_udito} "
         f"(Totale {totale}, cut-off ≥ {cutoff})"
     )
     if flag:
@@ -1797,12 +1815,110 @@ def _ensure_first_admin(conn) -> bool:
         st.rerun()
     return False
 
+def _session_token_secret() -> bytes:
+    key = _token_secret() or "pnev-fallback-session-secret"
+    return key.encode("utf-8") if isinstance(key, str) else key
+
+
+def _make_session_token(user_id: int, studio_id: int, days: int = 30) -> str:
+    """Token firmato (HMAC) per il login persistente via URL: sopravvive ai
+    riavvii del processo Streamlit (session_state si azzera, il token no)."""
+    exp = int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
+    payload = f"{user_id}.{studio_id}.{exp}"
+    sig = hmac.new(_session_token_secret(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def _check_session_token(token: str):
+    """Ritorna (user_id, studio_id) se il token è valido e non scaduto, altrimenti None."""
+    try:
+        uid_s, sid_s, exp_s, sig = token.split(".")
+        payload = f"{uid_s}.{sid_s}.{exp_s}"
+        expected = hmac.new(_session_token_secret(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            return None
+        if int(exp_s) < int(datetime.now(timezone.utc).timestamp()):
+            return None
+        return int(uid_s), int(sid_s)
+    except Exception:
+        return None
+
+
 def login(get_conn) -> bool:
     """Login su DB con ruoli."""
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
     if "user" not in st.session_state:
         st.session_state["user"] = None
+
+    # Login persistente: se la sessione Streamlit è stata azzerata (riavvio del
+    # processo per inattività/risorse) ma il browser ha ancora in URL un token
+    # valido, rientra da solo senza richiedere username/password.
+    if not st.session_state["logged_in"]:
+        _tok = st.query_params.get("auth_tok", "")
+        if isinstance(_tok, list):
+            _tok = _tok[0] if _tok else ""
+        if _tok:
+            _chk = _check_session_token(_tok)
+            if _chk:
+                _uid, _sid = _chk
+                try:
+                    _conn0 = get_conn()
+                    _cur0 = _conn0.cursor()
+                    _cur0.execute(
+                        "SELECT id, username, email, is_active FROM auth_users WHERE id=%s",
+                        (_uid,))
+                    _row0 = _cur0.fetchone()
+                except Exception:
+                    _row0 = None
+                if _row0 and (_row0[3] if not isinstance(_row0, dict) else _row0.get("is_active")):
+                    _uname0 = _row0[1] if not isinstance(_row0, dict) else _row0.get("username")
+                    _email0 = _row0[2] if not isinstance(_row0, dict) else _row0.get("email")
+                    st.session_state["logged_in"] = True
+                    st.session_state["studio_id"] = _sid
+                    try:
+                        _roles0 = _get_roles_for_user(_conn0, _uid)
+                    except Exception:
+                        _roles0 = []
+                    # Carica display_name e profilo_json da DB (stessa logica del
+                    # login pieno) — senza questo, il nome del professionista
+                    # tornava sempre vuoto ("admin" nei documenti) a ogni
+                    # ripristino di sessione via token.
+                    _display_name0 = ""
+                    _profilo0 = {}
+                    try:
+                        _dn_cur0 = _conn0.cursor()
+                        _dn_cur0.execute(
+                            "SELECT display_name, profilo_json FROM auth_users WHERE id=%s",
+                            (_uid,))
+                        _dn_row0 = _dn_cur0.fetchone()
+                        if _dn_row0:
+                            if isinstance(_dn_row0, dict):
+                                _display_name0 = _dn_row0.get("display_name","") or ""
+                                _raw_profilo0  = _dn_row0.get("profilo_json") or {}
+                            else:
+                                _display_name0 = _dn_row0[0] or ""
+                                _raw_profilo0  = _dn_row0[1] or {}
+                            import json as _json0
+                            _profilo0 = _raw_profilo0 if isinstance(_raw_profilo0,dict) else _json0.loads(_raw_profilo0 or "{}")
+                            if not _display_name0 and _profilo0.get("display_name"):
+                                _display_name0 = _profilo0["display_name"]
+                    except Exception:
+                        pass
+                    st.session_state["user"] = {
+                        "id": _uid, "username": _uname0, "email": _email0,
+                        "roles": _roles0, "must_change_password": False,
+                        "display_name": _display_name0,
+                        "specializzazioni": _profilo0.get("specializzazioni",""),
+                        "titolo": _profilo0.get("titolo",""),
+                        "nome": _profilo0.get("nome",""),
+                        "profilo": _profilo0,
+                    }
+                    try:
+                        from modules.ui_intestazione_studio import get_intestazione_studio
+                        st.session_state["intestazione_studio"] = get_intestazione_studio(_conn0, _sid)
+                    except Exception:
+                        pass
 
     if st.session_state["logged_in"] and st.session_state["user"]:
         u = st.session_state["user"]
@@ -1811,6 +1927,10 @@ def login(get_conn) -> bool:
         if st.sidebar.button("Logout"):
             st.session_state["logged_in"] = False
             st.session_state["user"] = None
+            try:
+                del st.query_params["auth_tok"]
+            except Exception:
+                pass
             st.rerun()
         return True
 
@@ -1860,6 +1980,10 @@ def login(get_conn) -> bool:
             except Exception:
                 pass
             st.warning("✅ Accesso di emergenza attivo (break-glass). Disattivalo nei Secrets dopo aver sistemato gli utenti.")
+            try:
+                st.query_params["auth_tok"] = _make_session_token(0, 1)
+            except Exception:
+                pass
             st.rerun()
             return True  # breakglass: st.rerun() dovrebbe interrompere, ma per sicurezza
         row = _get_user_by_username(conn, username.strip().lower())
@@ -1939,6 +2063,10 @@ def login(get_conn) -> bool:
             "profilo": _profilo,
         }
         st.success("Accesso effettuato.")
+        try:
+            st.query_params["auth_tok"] = _make_session_token(int(user_id), int(st.session_state.get("studio_id", 1)))
+        except Exception:
+            pass
         st.rerun()
 
     return False
@@ -5575,8 +5703,8 @@ def ui_anamnesi():
 
     options = [_paz_label_an(p) for p in pazienti]
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    paz_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -6253,8 +6381,8 @@ def ui_valutazioni_visive():
 
     options = [_paz_label_vis(p) for p in pazienti]
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    paz_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -7359,8 +7487,8 @@ def ui_sedute():
 
     options = [_paz_label_sed(p) for p in pazienti]
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    paz_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -7536,10 +7664,18 @@ def ui_coupons():
     # ════════════════════════════════════════════════════════════════
     st.markdown("### 🔎 Tutti i coupon")
     try:
+        cur.execute("ALTER TABLE Coupons ADD COLUMN IF NOT EXISTS Luogo_Utilizzo TEXT")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    try:
         cur.execute(
             """
             SELECT c.id, c.Tipo_Coupon, c.Codice_Coupon, c.Data_Assegnazione,
-                   c.Note, c.Utilizzato,
+                   c.Note, c.Utilizzato, c.Luogo_Utilizzo,
                    p.Cognome, p.Nome
             FROM Coupons c
             LEFT JOIN Pazienti p ON p.id = c.paziente_id
@@ -7605,6 +7741,7 @@ def ui_coupons():
             "Codice": codice or "—",
             "Data": data_it or "—",
             "Stato": "✅ Usato" if usato else "🟡 Non usato",
+            "Dove": _g(c, "Luogo_Utilizzo") or "",
             "Note": _g(c, "Note") or "",
         })
 
@@ -7618,6 +7755,46 @@ def ui_coupons():
     else:
         st.caption("Nessun coupon corrisponde ai filtri.")
 
+    # ── Modifica stato/luogo di un coupon (anche senza paziente attivo) ──
+    with st.expander("✏️ Segna un coupon come usato e dove (ottica / convenzione)"):
+        if not tutti:
+            st.caption("Nessun coupon registrato.")
+        else:
+            def _coup_lbl(c):
+                nm = f"{(_g(c,'Cognome') or '').strip()} {(_g(c,'Nome') or '').strip()}".strip() or "—"
+                cod = _g(c, "Codice_Coupon") or "(senza codice)"
+                stt = "✅" if bool(_g(c, "Utilizzato")) else "🟡"
+                return f"{stt} {cod} · {_g(c,'Tipo_Coupon') or ''} · {nm}"
+            mapppa = {_coup_lbl(c): c for c in tutti}
+            scelto = st.selectbox("Coupon", list(mapppa.keys()), key="coup_edit_sel")
+            c_sel = mapppa.get(scelto)
+            if c_sel:
+                cid = _g(c_sel, "id")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    nuovo_usato = st.checkbox("✅ Utilizzato",
+                                              value=bool(_g(c_sel, "Utilizzato")),
+                                              key=f"coup_ed_usato_{cid}")
+                with col_b:
+                    luogo = st.text_input("Dove è stato usato (ottica / convenzione)",
+                                          value=_g(c_sel, "Luogo_Utilizzo") or "",
+                                          key=f"coup_ed_luogo_{cid}",
+                                          placeholder="es. Ottica Rossi · Convenzione X")
+                if st.button("💾 Salva stato coupon", type="primary", key=f"coup_ed_save_{cid}"):
+                    try:
+                        cur.execute(
+                            "UPDATE Coupons SET Utilizzato = %s, Luogo_Utilizzo = %s WHERE id = %s",
+                            (1 if nuovo_usato else 0, luogo.strip() or None, cid))
+                        conn.commit()
+                        st.success("Coupon aggiornato.")
+                        st.rerun()
+                    except Exception as e:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+                        st.error(f"Aggiornamento non riuscito: {e}")
+
     st.markdown("---")
 
     # Creazione rapida anagrafica direttamente dalla schermata coupon,
@@ -7627,8 +7804,8 @@ def ui_coupons():
         _form_nuovo_paziente(conn)
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    paz_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -8066,8 +8243,8 @@ def ui_gaze_tracking_section():
     conn = get_connection()
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo, paziente_attivo_record
-    paziente_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo, paziente_attivo_record
+    paziente_id = header_paziente_attivo(conn)
     if not paziente_id:
         return
     _rec = paziente_attivo_record() or {}
@@ -8132,8 +8309,8 @@ def ui_osteopatia_section():
         _form_nuovo_paziente(conn)
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo, paziente_attivo_record
-    paziente_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo, paziente_attivo_record
+    paziente_id = header_paziente_attivo(conn)
     if not paziente_id:
         return
     _rec = paziente_attivo_record() or {}
@@ -8204,8 +8381,8 @@ def ui_dashboard_evolutiva():
     sel = None  # Disabilitato: paziente attivo da session_state
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    paziente_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    paziente_id = header_paziente_attivo(conn)
     if not paziente_id:
         return
     # === fine fix ===
@@ -9071,8 +9248,8 @@ def ui_privacy_pdf():
         pass
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    pid = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    pid = header_paziente_attivo(conn)
     if not pid:
         return
     # === fine fix ===
@@ -10248,8 +10425,8 @@ def ui_audiogramma_test():
 
     sel = None  # Disabilitato
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    paz_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -11174,8 +11351,8 @@ def ui_esami_orl_tonali_test():
 
     sel = None  # Disabilitato
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    paz_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -11302,8 +11479,8 @@ def ui_eq_stimolazione_uditiva_test():
 
     sel = None  # Disabilitato
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo
-    paz_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
     if not paz_id:
         return
     # === fine fix ===
@@ -11764,8 +11941,93 @@ def ui_sessione_stimolazione_uditiva_test():
 
 
 def main():
+    # Reset ad ogni caricamento pagina (non deve crescere all'infinito tra
+    # un rerun e l'altro, altrimenti le chiavi dei widget del paziente
+    # attivo cambiano ogni volta e perdono lo stato, es. selezione AgGrid).
+    st.session_state["_hpa_render_n"] = 0
     # Pagina pubblica questionari (senza login)
     if maybe_handle_public_questionario(get_connection):
+        return
+
+    # --- PUBLIC LEAD PAGE (no login) — contatti dal sito pnev.it ---
+    if st.query_params.get('lead'):
+        try:
+            from modules.lead_sito import ui_public_lead_page
+            ui_public_lead_page(get_connection)
+        except Exception as _e:
+            st.error(f"Modulo contatti non disponibile: {_e}")
+        return
+
+    # --- PUBLIC MAPS DONE PING (no login) — fine livello dal player MAPS ---
+    if st.query_params.get('maps_done'):
+        try:
+            from modules.lead_sito import ui_public_maps_done
+            ui_public_maps_done(get_connection)
+        except Exception:
+            pass
+        return
+
+    # --- PUBLIC SCREENING UDITIVO (no login) — esito questionario dal sito ---
+    if st.query_params.get('screening_hook'):
+        try:
+            from modules.screening_uditivo import ui_public_screening_hook
+            ui_public_screening_hook(get_connection)
+        except Exception:
+            pass
+        return
+
+    # --- PUBLIC SCREENING CUFFIE (no login) — esito calibrazione dal sito ---
+    if st.query_params.get('cuffie_hook'):
+        try:
+            from modules.cuffie_uditivo import ui_public_cuffie_hook
+            ui_public_cuffie_hook(get_connection)
+        except Exception:
+            pass
+        return
+
+    # --- PUBLIC ASCOLTO HOOK (no login) — avviso da LearnPress ---
+    if st.query_params.get('ascolto_hook'):
+        try:
+            from modules.ascolti_maps import ui_public_ascolto_hook
+            ui_public_ascolto_hook(get_connection)
+        except Exception as _e:
+            st.write(f"errore: {_e}")
+        return
+
+    # --- PUBLIC CONSENSO ASCOLTI HOOK (no login) — dal sito pnev.it ---
+    if st.query_params.get('consenso_hook'):
+        try:
+            from modules.consenso_ascolti import ui_public_consenso_hook
+            ui_public_consenso_hook(get_connection)
+        except Exception as _e:
+            st.write(f"errore: {_e}")
+        return
+
+    # --- PUBLIC QUESTIONARIO HOOK (no login) — Fisher/Potenziale dal sito ---
+    if st.query_params.get('questionario_hook'):
+        try:
+            from modules.questionario_pubblico import ui_public_questionario_hook
+            ui_public_questionario_hook(get_connection)
+        except Exception as _e:
+            st.write(f"errore: {_e}")
+        return
+
+    # --- PUBLIC CALIBRAZIONE CUFFIE HOOK (no login) — libreria condivisa ---
+    if st.query_params.get('calibrazione_hook'):
+        try:
+            from modules.calibrazioni_condivise import ui_public_calibrazione_hook
+            ui_public_calibrazione_hook(get_connection)
+        except Exception as _e:
+            st.write(f"errore: {_e}")
+        return
+
+    # --- PUBLIC ESAME AUDIOMETRIA HOOK (no login) — invio automatico dal sito ---
+    if st.query_params.get('esame_audiometria_hook'):
+        try:
+            from modules.db_audiometria import ui_public_esame_hook
+            ui_public_esame_hook(get_connection)
+        except Exception as _e:
+            st.write(f"errore: {_e}")
         return
 
     # --- PUBLIC SIGN PAGE (no login) ---
@@ -11778,8 +12040,13 @@ def main():
     if isinstance(photoref_token, list):
         photoref_token = photoref_token[0] if photoref_token else ''
     if photoref_token:
-        from modules.photoref_ai.ui_photoref import ui_photoref
-        ui_photoref(conn=get_connection())
+        from modules.photoref_ai.ui_photoref import render_capture_mobile, verifica_token_cattura
+        _conn = get_connection()
+        _pid = verifica_token_cattura(_conn, photoref_token)
+        if not _pid:
+            st.error("Link scaduto o già utilizzato. Chiedi un nuovo link dallo studio.")
+            return
+        render_capture_mobile(_conn, _pid, photoref_token)
         return
 
     _sidebar_db_indicator()
@@ -11789,18 +12056,24 @@ def main():
     # crashare l'avvio (altrimenti l'app entra in loop di riavvio). Se init_db
     # fallisce, puliamo la transazione e proseguiamo: le tabelle base esistono
     # già in produzione, le migrazioni si ritentano al prossimo avvio.
-    try:
-        init_db()
-    except Exception as _e_init:
+    #
+    # VELOCITÀ: init_db() fa una serie di CREATE/ALTER TABLE (controlli DDL)
+    # — inutile ripeterli a ogni singolo clic sulla sidebar (ogni clic fa
+    # ripartire l'intero script). Lo eseguiamo una sola volta per sessione.
+    if not st.session_state.get("_db_initialized"):
         try:
-            get_connection().rollback()
-        except Exception:
-            pass
-        try:
-            st.warning("⚠️ Inizializzazione database saltata (verrà ritentata). "
-                       "L'app prosegue normalmente.")
-        except Exception:
-            pass
+            init_db()
+            st.session_state["_db_initialized"] = True
+        except Exception as _e_init:
+            try:
+                get_connection().rollback()
+            except Exception:
+                pass
+            try:
+                st.warning("⚠️ Inizializzazione database saltata (verrà ritentata). "
+                           "L'app prosegue normalmente.")
+            except Exception:
+                pass
 
     # login obbligatorio
     if not login(get_connection):
@@ -11847,8 +12120,8 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
     sel = None  # Disabilitato
 
     # === FIX paziente attivo globale ===
-    from modules.paziente_attivo import get_paziente_attivo, paziente_attivo_record
-    paziente_id = get_paziente_attivo(conn)
+    from modules.paziente_attivo import header_paziente_attivo, paziente_attivo_record
+    paziente_id = header_paziente_attivo(conn)
     if not paziente_id:
         return
     _rec = paziente_attivo_record() or {}
@@ -11918,7 +12191,7 @@ def ui_relazioni_cliniche(templates_dir="templates", output_base="output"):
                     tot = scr.get("totale_positivi")
                     cutoff = scr.get("cutoff", 7)
                     flag = bool(scr.get("flag_possibile_immaturita_neuromotoria"))
-                    txt = f"Screening INPPS (genitori): totale positivi {tot} (cut-off ≥ {cutoff}). "
+                    txt = f"Screening INPP-R (genitori): totale positivi {tot} (cut-off ≥ {cutoff}). "
                     if flag:
                         txt += "Indicativo di possibile immaturità neuromotoria (screening) – raccomandata conferma clinica diretta."
                     else:
