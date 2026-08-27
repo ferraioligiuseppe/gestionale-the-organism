@@ -506,7 +506,8 @@ def mark_token_used(cur, link_id: int):
 # Questionari supportati via link pubblico
 _QUESTIONARI_PUBBLICI = {
     "ANAMNESI_PNEV":   "Anamnesi PNEV (Gravidanza, Sviluppo, Familiarità)",
-    "INPPS":           "Questionario INPP-R – Screening (Genitori)",
+    "INPPS":           "Questionario Neurosviluppo INPP – Bambini",
+    "INPPS_ADULTI":    "Questionario Neurosviluppo INPP – Adulti",
     "MELILLO_ADULTI":  "Questionario Melillo – Stile Cognitivo (Adulti)",
     "MELILLO_BAMBINI": "Questionario Melillo – Checklist Bambini",
     "FISHER":          "Questionario Fisher – Problemi Uditivi (Bambini)",
@@ -558,6 +559,13 @@ def maybe_handle_public_questionario(get_conn) -> bool:
             submitted = st.form_submit_button("📤 INVIA QUESTIONARIO")
         chiave_json = "inpps_screening_genitori"
         motivo_label = "INPP-R (genitori)"
+
+    elif q == "INPPS_ADULTI":
+        with st.form("public_q_form"):
+            q_data, q_summary = inpps_adulti_collect_ui(prefix="pub_inpps_adulti", existing=None)
+            submitted = st.form_submit_button("📤 INVIA QUESTIONARIO")
+        chiave_json = "inpps_screening_adulti"
+        motivo_label = "INPP-R (adulti)"
 
     elif q == "ANAMNESI_PNEV":
         try:
@@ -5712,7 +5720,8 @@ def ui_anamnesi():
             _base = _public_base_url()
 
             _ql_configs = [
-                ("INPPS",           "📋 INPP-R Screening (Sally Goddard Blythe)",         "gen_link_inpps"),
+                ("INPPS",           "📋 Questionario Neurosviluppo INPP – Bambini", "gen_link_inpps"),
+                ("INPPS_ADULTI",    "📋 Questionario Neurosviluppo INPP – Adulti",  "gen_link_inpps_ad"),
                 ("MELILLO_BAMBINI", "🧒 Melillo Bambini (Genitori)",          "gen_link_melb"),
                 ("MELILLO_ADULTI",  "🧠 Melillo Adulti (Paziente)",           "gen_link_mela"),
                 ("FISHER",          "👂 Fisher Auditivo (Genitori/Paziente)", "gen_link_fish"),
@@ -5773,7 +5782,7 @@ def ui_anamnesi():
     tab_cat, tab_pnev_cl, tab_inpps, tab_quest = st.tabs([
         "📋 Anamnesi Catagnini (0–2 anni)",
         "🧠 Valutazione PNEV clinica",
-        "📊 Questionario INPP-R",
+        "📊 Questionario Neurosviluppo INPP",
         "📝 Questionari PNEV",
     ])
 
@@ -6051,7 +6060,7 @@ def ui_anamnesi():
     tab_cat_m, tab_pnev_m, tab_inpps_m, tab_quest_m = st.tabs([
         "📋 Anamnesi Catagnini (0–2 anni)",
         "🧠 Valutazione PNEV clinica",
-        "📊 Questionario INPP-R",
+        "📊 Questionario Neurosviluppo INPP",
         "📝 Questionari PNEV",
     ])
 
