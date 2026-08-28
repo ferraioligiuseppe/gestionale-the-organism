@@ -1,0 +1,313 @@
+# -*- coding: utf-8 -*-
+"""
+modules/sportivi.py
+
+Integrazione di PNEV Sport Vision nel gestionale The Organism.
+
+PNEV Sport Vision e' un'app separata su pnev.it (12 moduli di allenamento
+visivo-sportivo). I dati restano nel browser del terapista e vengono
+esportati a fine giornata come archivio JSON. Questo modulo:
+
+  1) collega un codice paziente (pseudonimo, usato nell'app) al paziente
+     vero della cartella clinica;
+  2) importa l'archivio JSON esportato dall'app, evitando duplicati;
+  3) mostra lo storico delle sedute per paziente, modulo per modulo.
+
+Aggancio nel router (vedi INTEGRAZIONE_PNEV.py):
+    from modules.sportivi import render_sportivi
+    render_sportivi(paziente_id, paziente_nome)
+"""
+
+import json
+from datetime import datetime
+
+import streamlit as st
+
+try:
+    from zoneinfo import ZoneInfo
+    _TZ = ZoneInfo("Europe/Rome")
+except Exception:
+    _TZ = None
+
+try:
+    from modules.app_core import get_connection
+except Exception:
+    get_connection = None
+
+SPORT_BASE_URL = "https://www.pnev.it/wp-content/uploads/giochi/sport"
+
+MODULI = {
+    "rotatore":      {"nome": "Rotatore",                 "cat": "Fissazione / lettura rapida"},
+    "anaglifo":      {"nome": "Anaglifo",                 "cat": "Vergenza / soppressione"},
+    "facilita":      {"nome": "Facilità",                 "cat": "Saccadi / accomodazione"},
+    "reazione":      {"nome": "Tempo di reazione",        "cat": "Tempo di reazione"},
+    "periferica":    {"nome": "Visione periferica",       "cat": "Campo utile"},
+    "anticipazione": {"nome": "Timing di anticipazione",  "cat": "Timing"},
+    "memoria":       {"nome": "Memoria e sequenze",       "cat": "Memoria di lavoro"},
+    "mano":          {"nome": "Velocità della mano",      "cat": "Latenza / esecuzione"},
+    "sequenza":      {"nome": "Tachistoscopio a sequenze","cat": "Percezione rapida"},
+    "segnali":       {"nome": "Segnali",                  "cat": "Metronomo / comandi sonori"},
+    "tabelle":       {"nome": "Tabelle",                  "cat": "Hart Chart / saccadi / slap-tap"},
+    "procedure":     {"nome": "Procedure",                "cat": "Registro del lavoro sul corpo"},
+}
+ORDINE = ["rotatore", "anaglifo", "facilita", "reazione", "periferica",
+          "anticipazione", "memoria", "mano", "sequenza", "segnali",
+          "tabelle", "procedure"]
+
+
+# ---------------------------------------------------------------- DB
+def _init_db(conn):
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sv_codici (
+                id          BIGSERIAL PRIMARY KEY,
+                studio_id   BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+                codice      TEXT NOT NULL,
+                paziente_id BIGINT,
+                creato_il   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (studio_id, codice)
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sv_sessioni (
+                id           BIGSERIAL PRIMARY KEY,
+                studio_id    BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+                sessione_id  TEXT NOT NULL,
+                paziente_id  BIGINT,
+                codice       TEXT,
+                modulo       TEXT,
+                quando       TIMESTAMPTZ,
+                durata_sec   INT,
+                prove        INT,
+                indici       JSONB,
+                parametri    JSONB,
+                calibrazione JSONB,
+                raw          JSONB,
+                creato_il    TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (studio_id, sessione_id)
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS ix_sv_sessioni_paziente ON sv_sessioni (paziente_id, quando DESC);")
+        for tbl, pol in (("sv_codici", "sv_codici_studio"), ("sv_sessioni", "sv_sessioni_studio")):
+            cur.execute(f"ALTER TABLE {tbl} ENABLE ROW LEVEL SECURITY;")
+            cur.execute(f"ALTER TABLE {tbl} FORCE ROW LEVEL SECURITY;")
+            cur.execute(f"""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = '{tbl}' AND policyname = '{pol}') THEN
+                        CREATE POLICY {pol} ON {tbl}
+                            USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                            WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+                    END IF;
+                END $$;
+            """)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _get_codice(conn, paziente_id):
+    cur = conn.cursor()
+    cur.execute("SELECT codice FROM sv_codici WHERE paziente_id = %s LIMIT 1", (paziente_id,))
+    r = cur.fetchone()
+    return r[0] if r else None
+
+
+def _set_codice(conn, paziente_id, codice):
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id FROM sv_codici WHERE codice = %s", (codice,))
+        existing = cur.fetchone()
+        if existing:
+            cur.execute("UPDATE sv_codici SET paziente_id = %s WHERE codice = %s", (paziente_id, codice))
+        else:
+            cur.execute("INSERT INTO sv_codici (codice, paziente_id) VALUES (%s, %s)", (codice, paziente_id))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+
+
+def _paziente_per_codice(conn, codice):
+    cur = conn.cursor()
+    cur.execute("SELECT paziente_id FROM sv_codici WHERE codice = %s", (codice,))
+    r = cur.fetchone()
+    return int(r[0]) if r and r[0] is not None else None
+
+
+def _importa_record(conn, rec):
+    """Inserisce un record dell'archivio JSON. Ritorna True se nuovo, False se duplicato."""
+    sess_id = str(rec.get("id") or "")
+    if not sess_id:
+        return False
+    codice = rec.get("codice")
+    paziente_id = _paziente_per_codice(conn, codice) if codice else None
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO sv_sessioni
+                (sessione_id, paziente_id, codice, modulo, quando, durata_sec, prove,
+                 indici, parametri, calibrazione, raw)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (studio_id, sessione_id) DO NOTHING
+            RETURNING id
+        """, (
+            sess_id, paziente_id, codice, rec.get("modulo"), rec.get("quando"),
+            rec.get("durataSec"), rec.get("prove"),
+            json.dumps(rec.get("indici") or {}, ensure_ascii=False),
+            json.dumps(rec.get("parametri") or {}, ensure_ascii=False),
+            json.dumps(rec.get("calibrazione")) if rec.get("calibrazione") is not None else None,
+            json.dumps(rec, ensure_ascii=False),
+        ))
+        row = cur.fetchone()
+        conn.commit()
+        return row is not None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+
+
+def _lista_sessioni(conn, paziente_id, limite=300):
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, modulo, quando, durata_sec, prove, indici, parametri
+        FROM sv_sessioni WHERE paziente_id = %s ORDER BY quando DESC LIMIT %s
+    """, (paziente_id, limite))
+    return cur.fetchall()
+
+
+def _fmt_data(dt):
+    if dt is None:
+        return ""
+    try:
+        if isinstance(dt, str):
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        if _TZ is not None and dt.tzinfo is not None:
+            dt = dt.astimezone(_TZ)
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return str(dt)
+
+
+# ---------------------------------------------------------------- UI
+def _sez_codice(conn, paziente_id, paziente_nome):
+    st.write("PNEV Sport Vision non usa il nome del paziente: usa un **codice** che si "
+             "digita nella targhetta in alto a destra di ogni modulo. Qui lo colleghi al paziente vero.")
+    attuale = _get_codice(conn, paziente_id) or ""
+    codice = st.text_input("Codice paziente (Sport Vision)", value=attuale, key="sv_codice_input",
+                            placeholder="es. AB12CD").strip().upper()
+    if st.button("🔗 Collega questo codice al paziente", disabled=not codice):
+        try:
+            _set_codice(conn, paziente_id, codice)
+            st.success(f"Codice **{codice}** collegato a {paziente_nome or 'questo paziente'}.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Errore: {e}")
+    if attuale:
+        st.caption(f"Codice attualmente collegato: **{attuale}**")
+
+
+def _sez_apri(conn, paziente_id):
+    codice = _get_codice(conn, paziente_id)
+    if not codice:
+        st.info("Collega prima un codice paziente (tab **Codice paziente**).")
+        return
+    suffix = f"?codice={codice}"
+    st.link_button("▶️ Apri PNEV Sport Vision (indice)", f"{SPORT_BASE_URL}/sport.html{suffix}",
+                    use_container_width=True)
+    st.caption("Il codice è già in coda al link: comparirà da solo nella targhetta.")
+    st.markdown("**Moduli**")
+    cols = st.columns(3)
+    for i, slug in enumerate(ORDINE):
+        info = MODULI[slug]
+        with cols[i % 3]:
+            try:
+                st.link_button(info["nome"], f"{SPORT_BASE_URL}/{slug}.html{suffix}", use_container_width=True)
+            except Exception:
+                st.markdown(f"- [{info['nome']}]({SPORT_BASE_URL}/{slug}.html{suffix})")
+            st.caption(info["cat"])
+
+
+def _sez_importa(conn):
+    st.write("Carica qui l'archivio JSON esportato da **Andamento → Esporta** dentro Sport Vision. "
+             "Le sedute vengono assegnate al paziente in base al codice, se già collegato; "
+             "altrimenti resteranno da assegnare finché non colleghi quel codice.")
+    up = st.file_uploader("Archivio JSON", type=["json"], key="sv_upload")
+    if up is not None:
+        try:
+            dati = json.loads(up.read().decode("utf-8"))
+            righe = dati if isinstance(dati, list) else [dati]
+        except Exception as e:
+            st.error(f"File non leggibile: {e}")
+            return
+        if st.button("📥 Importa", type="primary"):
+            nuove, dupl = 0, 0
+            for rec in righe:
+                try:
+                    if _importa_record(conn, rec):
+                        nuove += 1
+                    else:
+                        dupl += 1
+                except Exception as e:
+                    st.error(f"Errore su un record: {e}")
+                    break
+            st.success(f"{nuove} sedute nuove importate, {dupl} già presenti.")
+
+
+def _sez_storico(conn, paziente_id):
+    if not paziente_id:
+        st.info("Seleziona un paziente per vedere lo storico.")
+        return
+    righe = _lista_sessioni(conn, int(paziente_id))
+    if not righe:
+        st.info("Ancora nessuna seduta Sport Vision per questo paziente. Importa l'archivio nella tab dedicata.")
+        return
+    st.caption(f"{len(righe)} sedute")
+    for r in righe:
+        rid, modulo, quando, durata, prove, indici, parametri = r
+        nome_mod = MODULI.get(modulo, {}).get("nome", modulo)
+        with st.expander(f"{_fmt_data(quando)} — {nome_mod}" + (f" · {prove} prove" if prove else "")):
+            if durata:
+                st.caption(f"Durata: {durata // 60}′{durata % 60:02d}″")
+            if isinstance(indici, dict) and indici:
+                st.table([{"Indice": k, "Valore": v} for k, v in indici.items()])
+            if isinstance(parametri, dict) and parametri:
+                st.caption("Parametri: " + ", ".join(f"{k}={v}" for k, v in parametri.items()))
+
+
+def render_sportivi(paziente_id=None, paziente_nome=None):
+    st.header("🏃 PNEV Sport Vision")
+
+    if get_connection is None:
+        st.error("Connessione al database non disponibile.")
+        return
+    conn = get_connection()
+
+    try:
+        _init_db(conn)
+    except Exception as e:
+        st.warning(f"Inizializzazione tabelle Sport Vision: {e}")
+
+    if paziente_id is None:
+        st.info("Seleziona un paziente dalla cartella per collegare un codice e vedere lo storico.")
+        return
+
+    st.caption(f"Paziente: {paziente_nome or ''} (id {int(paziente_id)})")
+    t_codice, t_apri, t_importa, t_storico = st.tabs(
+        ["🔗 Codice paziente", "▶️ Apri un modulo", "📥 Importa archivio", "🕓 Storico"])
+    with t_codice:
+        _sez_codice(conn, paziente_id, paziente_nome)
+    with t_apri:
+        _sez_apri(conn, paziente_id)
+    with t_importa:
+        _sez_importa(conn)
+    with t_storico:
+        _sez_storico(conn, paziente_id)

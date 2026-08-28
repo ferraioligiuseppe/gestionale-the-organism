@@ -127,6 +127,7 @@ PNEV_RAMI = {
     "🎮 PNEV Games": [
         "🎮 Esercizi Wordwall",
         "🕹️ PNEV Game Center",
+        "🏃 PNEV Sport Vision",
     ],
 }
 

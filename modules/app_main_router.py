@@ -464,7 +464,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "👁️ Eye tracking",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🖥️ Somministrazione test",
-        "📋 Questionari remoti", "🎮 Esercizi Wordwall",
+        "📋 Questionari remoti", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
         "🎧 Stimolazione uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
         "🎧 Audiometria tonale calibrata",
@@ -642,6 +642,15 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
             from .pnev_gamecenter.ui_gamecenter import ui_gamecenter
             ui_gamecenter(conn=conn, paziente_id=_pid, paziente_nome=_nome)
+        return True
+    if sotto == "🏃 PNEV Sport Vision":
+        from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
+        _pid = header_paziente_attivo(conn)
+        if _pid:
+            _rec = paziente_attivo_record() or {}
+            _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
+            from .sportivi import render_sportivi
+            render_sportivi(paziente_id=_pid, paziente_nome=_nome)
         return True
 
     # ── VALUTAZIONE FUNZIONALE ────────────────────────────────────────
