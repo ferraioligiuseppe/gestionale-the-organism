@@ -648,9 +648,12 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         _pid = header_paziente_attivo(conn)
         if _pid:
             _rec = paziente_attivo_record() or {}
-            _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
+            _cognome = _rec.get('cognome') or _rec.get('Cognome') or ''
+            _nomep = _rec.get('nome') or _rec.get('Nome') or ''
+            _dn = _rec.get('data_nascita') or _rec.get('Data_Nascita')
+            _nome = f"{_cognome} {_nomep}".strip()
             from .sportivi import render_sportivi
-            render_sportivi(paziente_id=_pid, paziente_nome=_nome)
+            render_sportivi(paziente_id=_pid, paziente_nome=_nome, cognome=_cognome, nome=_nomep, data_nascita=_dn)
         return True
 
     # ── VALUTAZIONE FUNZIONALE ────────────────────────────────────────

@@ -197,22 +197,66 @@ def _fmt_data(dt):
         return str(dt)
 
 
-# ---------------------------------------------------------------- UI
-def _sez_codice(conn, paziente_id, paziente_nome):
-    st.write("PNEV Sport Vision non usa il nome del paziente: usa un **codice** che si "
-             "digita nella targhetta in alto a destra di ogni modulo. Qui lo colleghi al paziente vero.")
-    attuale = _get_codice(conn, paziente_id) or ""
-    codice = st.text_input("Codice paziente (Sport Vision)", value=attuale, key="sv_codice_input",
-                            placeholder="es. AB12CD").strip().upper()
-    if st.button("🔗 Collega questo codice al paziente", disabled=not codice):
+def _genera_codice(cognome, nome, data_nascita):
+    """Codice deterministico: 2 lettere cognome + 2 lettere nome + ddmmyy nascita."""
+    import re as _re
+    c = _re.sub(r"[^A-Za-zÀ-ÿ]", "", (cognome or "")).upper()[:2] or "XX"
+    n = _re.sub(r"[^A-Za-zÀ-ÿ]", "", (nome or "")).upper()[:2] or "XX"
+    dd = ""
+    if data_nascita:
         try:
-            _set_codice(conn, paziente_id, codice)
-            st.success(f"Codice **{codice}** collegato a {paziente_nome or 'questo paziente'}.")
+            d = data_nascita
+            if isinstance(d, str):
+                d = datetime.fromisoformat(d[:10])
+            dd = d.strftime("%d%m%y")
+        except Exception:
+            dd = ""
+    return f"{c}{n}{dd}" or None
+
+
+def _codice_univoco(conn, base):
+    """Se il codice base è già usato da un altro paziente, aggiunge un suffisso numerico."""
+    cur = conn.cursor()
+    candidato = base
+    i = 1
+    while True:
+        cur.execute("SELECT paziente_id FROM sv_codici WHERE codice = %s", (candidato,))
+        r = cur.fetchone()
+        if not r:
+            return candidato
+        i += 1
+        candidato = f"{base}{i}"
+
+
+# ---------------------------------------------------------------- UI
+def _sez_codice(conn, paziente_id, paziente_nome, cognome=None, nome=None, data_nascita=None):
+    st.write("PNEV Sport Vision non usa il nome del paziente: usa un **codice** che si "
+             "digita nella targhetta in alto a destra di ogni modulo. Viene generato in automatico "
+             "e resta salvato qui, così non si perde.")
+    attuale = _get_codice(conn, paziente_id)
+    if not attuale:
+        base = _genera_codice(cognome, nome, data_nascita)
+        if base:
+            attuale = _codice_univoco(conn, base)
+            try:
+                _set_codice(conn, paziente_id, attuale)
+            except Exception as e:
+                st.error(f"Errore nella generazione del codice: {e}")
+                attuale = None
+    if attuale:
+        st.text_input("Codice paziente (Sport Vision)", value=attuale, key="sv_codice_ro", disabled=True)
+        st.caption(f"Codice collegato a {paziente_nome or 'questo paziente'}: **{attuale}** — usalo nella targhetta dell'app.")
+    st.divider()
+    st.caption("Serve un codice diverso? Puoi impostarlo manualmente qui sotto.")
+    manuale = st.text_input("Codice manuale (opzionale)", value="", key="sv_codice_input",
+                             placeholder="es. AB12CD").strip().upper()
+    if st.button("🔗 Collega questo codice al paziente", disabled=not manuale):
+        try:
+            _set_codice(conn, paziente_id, manuale)
+            st.success(f"Codice **{manuale}** collegato a {paziente_nome or 'questo paziente'}.")
             st.rerun()
         except Exception as e:
             st.error(f"Errore: {e}")
-    if attuale:
-        st.caption(f"Codice attualmente collegato: **{attuale}**")
 
 
 def _sez_apri(conn, paziente_id):
@@ -283,7 +327,7 @@ def _sez_storico(conn, paziente_id):
                 st.caption("Parametri: " + ", ".join(f"{k}={v}" for k, v in parametri.items()))
 
 
-def render_sportivi(paziente_id=None, paziente_nome=None):
+def render_sportivi(paziente_id=None, paziente_nome=None, cognome=None, nome=None, data_nascita=None):
     st.header("🏃 PNEV Sport Vision")
 
     if get_connection is None:
@@ -304,7 +348,7 @@ def render_sportivi(paziente_id=None, paziente_nome=None):
     t_codice, t_apri, t_importa, t_storico = st.tabs(
         ["🔗 Codice paziente", "▶️ Apri un modulo", "📥 Importa archivio", "🕓 Storico"])
     with t_codice:
-        _sez_codice(conn, paziente_id, paziente_nome)
+        _sez_codice(conn, paziente_id, paziente_nome, cognome, nome, data_nascita)
     with t_apri:
         _sez_apri(conn, paziente_id)
     with t_importa:
