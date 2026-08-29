@@ -337,6 +337,8 @@ def _init_kit_db(conn):
                 nome        TEXT,
                 cognome     TEXT,
                 indirizzo   TEXT,
+                email       TEXT,
+                telefono    TEXT,
                 data_nascita DATE,
                 codice      TEXT,
                 spedito     BOOLEAN DEFAULT false,
@@ -365,7 +367,7 @@ def _init_kit_db(conn):
         except Exception: pass
 
 
-def _notifica_kit_richiesto(nome, cognome, indirizzo, codice):
+def _notifica_kit_richiesto(nome, cognome, indirizzo, codice, email=None, telefono=None):
     try:
         from modules.ui_questionari import _invia_email
         import streamlit as _st
@@ -374,8 +376,8 @@ def _notifica_kit_richiesto(nome, cognome, indirizzo, codice):
         if not dest:
             return
         corpo = (f"Nuova richiesta kit anaglifico da PNEV Sport Vision\n\n"
-                 f"Nome: {cognome} {nome}\nIndirizzo: {indirizzo}\nCodice generato: {codice}\n\n"
-                 f"Lo trovi nel gestionale in PNEV Sport Vision.")
+                 f"Nome: {cognome} {nome}\nIndirizzo: {indirizzo}\nEmail: {email or '—'}\nCellulare: {telefono or '—'}\n"
+                 f"Codice generato: {codice}\n\nLo trovi nel gestionale in PNEV Sport Vision.")
         _invia_email(dest, f"PNEV Sport Vision — richiesta kit: {cognome} {nome}", corpo)
     except Exception:
         pass
@@ -411,31 +413,48 @@ def ui_public_kit_sportivo(get_conn):
         nome = c1.text_input("Nome *")
         cognome = c2.text_input("Cognome *")
         indirizzo = st.text_input("Indirizzo di spedizione *", placeholder="Via, civico, città, CAP")
+        c3, c4 = st.columns(2)
+        email = c3.text_input("Email *")
+        telefono = c4.text_input("Cellulare *")
         data_nascita = st.date_input("Data di nascita *", value=None,
                                       min_value=datetime(1930, 1, 1), max_value=datetime.now())
+        consenso = st.checkbox(
+            "Ho letto l'informativa privacy e acconsento al trattamento dei dati "
+            "per la spedizione del kit e per essere ricontattato/a. *")
+        st.caption("I dati sono trattati dallo Studio The Organism ai soli fini della "
+                   "spedizione del kit e del ricontatto (GDPR art. 6.1.a). Puoi chiederne "
+                   "la cancellazione in qualsiasi momento.")
         inviato = st.form_submit_button("Genera il mio codice →", type="primary", use_container_width=True)
 
     if inviato:
-        manca = [l for l, v in [("Nome", nome), ("Cognome", cognome), ("Indirizzo", indirizzo)]
+        manca = [l for l, v in [("Nome", nome), ("Cognome", cognome), ("Indirizzo", indirizzo),
+                                 ("Email", email), ("Cellulare", telefono)]
                  if not (v or "").strip()]
         if not data_nascita:
             manca.append("Data di nascita")
         if manca:
             st.error("Campi obbligatori mancanti: " + ", ".join(manca))
             return
+        if "@" not in email or "." not in email.split("@")[-1]:
+            st.error("L'indirizzo email non sembra valido.")
+            return
+        if not consenso:
+            st.error("Serve il consenso al trattamento dei dati per procedere.")
+            return
         try:
             base = _genera_codice(cognome, nome, data_nascita.isoformat())
             codice = _codice_univoco(conn, base)
             cur = conn.cursor()
-            cur.execute("""INSERT INTO sv_kit_richieste (nome, cognome, indirizzo, data_nascita, codice)
-                           VALUES (%s,%s,%s,%s,%s)""",
-                        (nome.strip(), cognome.strip(), indirizzo.strip(), data_nascita.isoformat(), codice))
+            cur.execute("""INSERT INTO sv_kit_richieste (nome, cognome, indirizzo, email, telefono, data_nascita, codice)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                        (nome.strip(), cognome.strip(), indirizzo.strip(), email.strip() or None,
+                         telefono.strip() or None, data_nascita.isoformat(), codice))
             conn.commit()
             _set_codice(conn, None, codice)  # registra il codice anche in sv_codici, senza paziente ancora
         except Exception as e:
             st.error(f"Errore: {e}")
             return
-        _notifica_kit_richiesto(nome.strip(), cognome.strip(), indirizzo.strip(), codice)
+        _notifica_kit_richiesto(nome.strip(), cognome.strip(), indirizzo.strip(), codice, email.strip(), telefono.strip())
         st.session_state["_kit_codice"] = codice
         st.rerun()
 
@@ -443,9 +462,9 @@ def ui_public_kit_sportivo(get_conn):
 def _lista_richieste_kit(conn, solo_da_spedire=False):
     cur = conn.cursor()
     if solo_da_spedire:
-        cur.execute("SELECT id, nome, cognome, indirizzo, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste WHERE spedito = false ORDER BY creato_il DESC")
+        cur.execute("SELECT id, nome, cognome, indirizzo, email, telefono, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste WHERE spedito = false ORDER BY creato_il DESC")
     else:
-        cur.execute("SELECT id, nome, cognome, indirizzo, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste ORDER BY creato_il DESC LIMIT 300")
+        cur.execute("SELECT id, nome, cognome, indirizzo, email, telefono, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste ORDER BY creato_il DESC LIMIT 300")
     return cur.fetchall()
 
 
@@ -467,9 +486,10 @@ def _sez_richieste_kit(conn):
         st.info("Nessuna richiesta.")
         return
     st.caption(f"{len(righe)} richieste")
-    for rid, nome, cognome, indirizzo, dn, codice, spedito, creato in righe:
+    for rid, nome, cognome, indirizzo, email, telefono, dn, codice, spedito, creato in righe:
         with st.expander(f"{'✅' if spedito else '📦'} {cognome} {nome} — {codice}"):
             st.markdown(f"**Indirizzo:** {indirizzo}")
+            st.markdown(f"**Email:** {email or '—'} · **Cellulare:** {telefono or '—'}")
             st.markdown(f"**Data di nascita:** {_fmt_data(dn)}")
             st.markdown(f"**Richiesto il:** {_fmt_data(creato)}")
             if not spedito:
