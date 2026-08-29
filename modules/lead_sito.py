@@ -404,7 +404,6 @@ def ui_public_maps_done(get_conn):
     nome = qp.get("nome", "")
     extra = f"Sequenza/giorno: {qp.get('seq','—')}" if qp.get("seq") else ""
     _notifica_maps_completato(livello, nome, extra)
-    st.set_page_config(page_title="ok")
     st.markdown(
         "<div style='font-family:sans-serif;color:#999;font-size:12px;padding:20px'>ok</div>",
         unsafe_allow_html=True)
@@ -722,6 +721,86 @@ def _canali_invio(url, nome=""):
 
 
 # ══════════════════════════════════════════════ lista nel gestionale
+def ui_public_richiesta_sale(get_conn):
+    """Pagina pubblica (no login): richiesta informazioni Stanza del Sale
+    (haloterapia). Semplice modulo di contatto, nessun questionario."""
+    st.markdown("""<style>
+      #MainMenu, footer, header {visibility:hidden}
+      .block-container{max-width:600px;padding-top:2rem}
+    </style>""", unsafe_allow_html=True)
+
+    st.markdown(
+        '<div style="border-left:5px solid #1D6B44;background:#F2F8F4;'
+        'padding:18px 22px;border-radius:12px;margin-bottom:22px">'
+        '<div style="font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;'
+        'color:#4b7a60;font-weight:700">Studio The Organism · Stanza del Sale</div>'
+        '<div style="font-size:1.4rem;font-weight:800;color:#14502F;margin-top:4px">'
+        'Richiedi informazioni o prenota una seduta</div></div>', unsafe_allow_html=True)
+
+    conn = get_conn()
+    try:
+        init_lead_db(conn)
+    except Exception as e:
+        st.error(f"Servizio momentaneamente non disponibile ({e}).")
+        return
+
+    if st.session_state.get("_sale_inviato"):
+        st.success("Richiesta ricevuta, grazie! Ti ricontattiamo a breve per fissare la seduta.")
+        return
+
+    with st.form("form_sale"):
+        c1, c2 = st.columns(2)
+        nome = c1.text_input("Nome *")
+        cognome = c2.text_input("Cognome *")
+        c3, c4 = st.columns(2)
+        email = c3.text_input("Email *")
+        telefono = c4.text_input("Cellulare *")
+        interesse = st.selectbox("Cosa ti interessa?",
+                                  ["Informazioni generali", "Prenotare una seduta singola",
+                                   "Un pacchetto di più sedute", "Offerta in corso"])
+        note = st.text_area("Note (facoltativo)", height=80,
+                             placeholder="Es. per un bambino, per allergie/asma, orari preferiti...")
+        consenso = st.checkbox(
+            "Ho letto l'informativa privacy e acconsento al trattamento dei "
+            "dati per essere ricontattato/a. *")
+        st.caption("I dati sono trattati dallo Studio The Organism ai soli fini "
+                  "del ricontatto (GDPR art. 6.1.a). Puoi chiederne la "
+                  "cancellazione in qualsiasi momento.")
+        inviato = st.form_submit_button("Invia richiesta →", type="primary",
+                                        use_container_width=True)
+
+    if inviato:
+        manca = [l for l, v in [("Nome", nome), ("Cognome", cognome),
+                                 ("Email", email), ("Cellulare", telefono)]
+                 if not (v or "").strip()]
+        if manca:
+            st.error("Campi obbligatori mancanti: " + ", ".join(manca))
+        elif "@" not in email or "." not in email.split("@")[-1]:
+            st.error("L'indirizzo email non sembra valido.")
+        elif not consenso:
+            st.error("Serve il consenso al trattamento dei dati per procedere.")
+        else:
+            try:
+                new_id = salva_lead(conn, {
+                    "nome": nome.strip(), "cognome": cognome.strip(),
+                    "email": email.strip(), "telefono": telefono.strip(),
+                    "eta_bambino": "", "per_chi": f"Stanza del Sale — {interesse}",
+                    "src_gioco": "stanza_sale", "dominio": "", "consenso": True,
+                })
+                if (note or "").strip():
+                    aggiorna_stato(conn, new_id, "nuovo", note.strip())
+                _notifica_nuovo_contatto({
+                    "nome": nome.strip(), "cognome": cognome.strip(),
+                    "email": email.strip(), "telefono": telefono.strip(),
+                    "per_chi": f"Stanza del Sale — {interesse}", "eta_bambino": "",
+                    "src_gioco": "stanza_sale",
+                }, "Stanza del Sale")
+                st.session_state["_sale_inviato"] = True
+                st.rerun()
+            except Exception as e:
+                st.error(f"Non è stato possibile salvare: {e}")
+
+
 def render_contatti_sito(conn):
     st.subheader("📨 Contatti dal sito")
     st.caption("Persone che hanno lasciato i dati dopo i giochi su pnev.it. "

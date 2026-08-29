@@ -11976,6 +11976,15 @@ def main():
             st.error(f"Modulo non disponibile: {_e}")
         return
 
+    # --- PUBLIC STANZA DEL SALE (no login) — richiesta info dal sito ---
+    if st.query_params.get('sale_hook'):
+        try:
+            from modules.lead_sito import ui_public_richiesta_sale
+            ui_public_richiesta_sale(get_connection)
+        except Exception as _e:
+            st.error(f"Modulo non disponibile: {_e}")
+        return
+
     # --- PUBLIC MAPS DONE PING (no login) — fine livello dal player MAPS ---
     if st.query_params.get('maps_done'):
         try:
