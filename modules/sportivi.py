@@ -327,6 +327,157 @@ def _sez_storico(conn, paziente_id):
                 st.caption("Parametri: " + ", ".join(f"{k}={v}" for k, v in parametri.items()))
 
 
+def _init_kit_db(conn):
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sv_kit_richieste (
+                id          BIGSERIAL PRIMARY KEY,
+                studio_id   BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+                nome        TEXT,
+                cognome     TEXT,
+                indirizzo   TEXT,
+                data_nascita DATE,
+                codice      TEXT,
+                spedito     BOOLEAN DEFAULT false,
+                creato_il   TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """)
+        cur.execute("ALTER TABLE sv_kit_richieste ENABLE ROW LEVEL SECURITY;")
+        cur.execute("ALTER TABLE sv_kit_richieste FORCE ROW LEVEL SECURITY;")
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'sv_kit_richieste' AND policyname = 'sv_kit_richieste_studio') THEN
+                    CREATE POLICY sv_kit_richieste_studio ON sv_kit_richieste
+                        USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                        WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+                END IF;
+            END $$;
+        """)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _notifica_kit_richiesto(nome, cognome, indirizzo, codice):
+    try:
+        from modules.ui_questionari import _invia_email
+        import streamlit as _st
+        dest = (_st.secrets.get("smtp", {}).get("NOTIFICA_A")
+                or _st.secrets.get("smtp", {}).get("USERNAME"))
+        if not dest:
+            return
+        corpo = (f"Nuova richiesta kit anaglifico da PNEV Sport Vision\n\n"
+                 f"Nome: {cognome} {nome}\nIndirizzo: {indirizzo}\nCodice generato: {codice}\n\n"
+                 f"Lo trovi nel gestionale in PNEV Sport Vision.")
+        _invia_email(dest, f"PNEV Sport Vision — richiesta kit: {cognome} {nome}", corpo)
+    except Exception:
+        pass
+
+
+def ui_public_kit_sportivo(get_conn):
+    """Pagina pubblica (no login): richiesta kit anaglifico + generazione codice.
+    Pensata per essere incorporata via iframe in inizia.html su pnev.it."""
+    conn = get_conn()
+    try:
+        _init_kit_db(conn)
+    except Exception as e:
+        st.error(f"Servizio non disponibile: {e}")
+        return
+
+    st.markdown("""<style>
+      #MainMenu, footer, header {visibility:hidden}
+      .block-container{max-width:520px;padding-top:1.2rem}
+    </style>""", unsafe_allow_html=True)
+
+    codice_generato = st.session_state.get("_kit_codice")
+    if codice_generato:
+        st.success(f"Fatto! Il tuo codice è **{codice_generato}** — usalo per iniziare il tuo programma.")
+        st.link_button("Vai al mio programma →",
+                        f"{SPORT_BASE_URL}/programma.html?codice={codice_generato}",
+                        use_container_width=True)
+        return
+
+    st.markdown("#### Richiedi il tuo kit anaglifico gratuito")
+    st.caption("Ti mandiamo gli occhialini rosso/ciano e generiamo il tuo codice personale per iniziare il programma.")
+    with st.form("form_kit_sportivo"):
+        c1, c2 = st.columns(2)
+        nome = c1.text_input("Nome *")
+        cognome = c2.text_input("Cognome *")
+        indirizzo = st.text_input("Indirizzo di spedizione *", placeholder="Via, civico, città, CAP")
+        data_nascita = st.date_input("Data di nascita *", value=None,
+                                      min_value=datetime(1930, 1, 1), max_value=datetime.now())
+        inviato = st.form_submit_button("Genera il mio codice →", type="primary", use_container_width=True)
+
+    if inviato:
+        manca = [l for l, v in [("Nome", nome), ("Cognome", cognome), ("Indirizzo", indirizzo)]
+                 if not (v or "").strip()]
+        if not data_nascita:
+            manca.append("Data di nascita")
+        if manca:
+            st.error("Campi obbligatori mancanti: " + ", ".join(manca))
+            return
+        try:
+            base = _genera_codice(cognome, nome, data_nascita.isoformat())
+            codice = _codice_univoco(conn, base)
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO sv_kit_richieste (nome, cognome, indirizzo, data_nascita, codice)
+                           VALUES (%s,%s,%s,%s,%s)""",
+                        (nome.strip(), cognome.strip(), indirizzo.strip(), data_nascita.isoformat(), codice))
+            conn.commit()
+            _set_codice(conn, None, codice)  # registra il codice anche in sv_codici, senza paziente ancora
+        except Exception as e:
+            st.error(f"Errore: {e}")
+            return
+        _notifica_kit_richiesto(nome.strip(), cognome.strip(), indirizzo.strip(), codice)
+        st.session_state["_kit_codice"] = codice
+        st.rerun()
+
+
+def _lista_richieste_kit(conn, solo_da_spedire=False):
+    cur = conn.cursor()
+    if solo_da_spedire:
+        cur.execute("SELECT id, nome, cognome, indirizzo, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste WHERE spedito = false ORDER BY creato_il DESC")
+    else:
+        cur.execute("SELECT id, nome, cognome, indirizzo, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste ORDER BY creato_il DESC LIMIT 300")
+    return cur.fetchall()
+
+
+def _segna_spedito(conn, rid):
+    cur = conn.cursor()
+    cur.execute("UPDATE sv_kit_richieste SET spedito = true WHERE id = %s", (rid,))
+    conn.commit()
+
+
+def _sez_richieste_kit(conn):
+    try:
+        _init_kit_db(conn)
+    except Exception as e:
+        st.error(f"Tabella richieste non disponibile: {e}")
+        return
+    solo = st.checkbox("Mostra solo da spedire", value=True, key="sv_kit_solo")
+    righe = _lista_richieste_kit(conn, solo)
+    if not righe:
+        st.info("Nessuna richiesta.")
+        return
+    st.caption(f"{len(righe)} richieste")
+    for rid, nome, cognome, indirizzo, dn, codice, spedito, creato in righe:
+        with st.expander(f"{'✅' if spedito else '📦'} {cognome} {nome} — {codice}"):
+            st.markdown(f"**Indirizzo:** {indirizzo}")
+            st.markdown(f"**Data di nascita:** {_fmt_data(dn)}")
+            st.markdown(f"**Richiesto il:** {_fmt_data(creato)}")
+            if not spedito:
+                if st.button("📮 Segna come spedito", key=f"sv_kit_sp_{rid}"):
+                    _segna_spedito(conn, rid)
+                    st.rerun()
+
+
 def render_sportivi(paziente_id=None, paziente_nome=None, cognome=None, nome=None, data_nascita=None):
     st.header("🏃 PNEV Sport Vision")
 
@@ -345,8 +496,8 @@ def render_sportivi(paziente_id=None, paziente_nome=None, cognome=None, nome=Non
         return
 
     st.caption(f"Paziente: {paziente_nome or ''} (id {int(paziente_id)})")
-    t_codice, t_apri, t_importa, t_storico = st.tabs(
-        ["🔗 Codice paziente", "▶️ Apri un modulo", "📥 Importa archivio", "🕓 Storico"])
+    t_codice, t_apri, t_importa, t_storico, t_kit = st.tabs(
+        ["🔗 Codice paziente", "▶️ Apri un modulo", "📥 Importa archivio", "🕓 Storico", "📦 Richieste kit"])
     with t_codice:
         _sez_codice(conn, paziente_id, paziente_nome, cognome, nome, data_nascita)
     with t_apri:
@@ -355,3 +506,5 @@ def render_sportivi(paziente_id=None, paziente_nome=None, cognome=None, nome=Non
         _sez_importa(conn)
     with t_storico:
         _sez_storico(conn, paziente_id)
+    with t_kit:
+        _sez_richieste_kit(conn)

@@ -11958,6 +11958,15 @@ def main():
             st.error(f"Modulo contatti non disponibile: {_e}")
         return
 
+    # --- PUBLIC KIT SPORT VISION (no login) — richiesta occhiali + codice dal sito ---
+    if st.query_params.get('kit_sportivo'):
+        try:
+            from modules.sportivi import ui_public_kit_sportivo
+            ui_public_kit_sportivo(get_connection)
+        except Exception as _e:
+            st.error(f"Modulo non disponibile: {_e}")
+        return
+
     # --- PUBLIC MAPS DONE PING (no login) — fine livello dal player MAPS ---
     if st.query_params.get('maps_done'):
         try:
