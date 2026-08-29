@@ -383,6 +383,17 @@ def _notifica_kit_richiesto(nome, cognome, indirizzo, codice, email=None, telefo
         pass
 
 
+def _email_ha_gia_richiesto(conn, email):
+    if not email:
+        return False
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM sv_kit_richieste WHERE lower(email) = lower(%s) LIMIT 1", (email,))
+    return cur.fetchone() is not None
+
+
+IBAN_THE_ORGANISM = "IT54G0503476480000000002141"
+
+
 def ui_public_kit_sportivo(get_conn):
     """Pagina pubblica (no login): richiesta kit anaglifico + generazione codice.
     Pensata per essere incorporata via iframe in inizia.html su pnev.it."""
@@ -407,7 +418,19 @@ def ui_public_kit_sportivo(get_conn):
         return
 
     st.markdown("#### Richiedi il tuo kit anaglifico gratuito")
-    st.caption("Ti mandiamo gli occhialini rosso/ciano e generiamo il tuo codice personale per iniziare il programma.")
+    st.caption("Un kit gratuito a persona. Ti mandiamo gli occhialini rosso/ciano e generiamo il tuo codice personale per iniziare il programma.")
+
+    email_check = st.text_input("La tua email (per controllare se hai già ricevuto un kit)", key="sv_kit_email_check")
+    gia_richiesto = _email_ha_gia_richiesto(conn, email_check) if email_check.strip() else False
+
+    if gia_richiesto:
+        st.warning("Con questa email hai già ricevuto un kit gratuito. Un secondo kit è disponibile con "
+                   "un'offerta libera (minimo 4€) come contributo all'associazione **The Organism** — "
+                   "ci aiuta a fare del bene a chi ne ha davvero bisogno.")
+        st.markdown(f"**IBAN The Organism:** `{IBAN_THE_ORGANISM}`")
+        st.caption("Causale: nome e cognome + \"kit Sport Vision\". Dopo il versamento, scrivici e ti sblocchiamo il secondo kit.")
+        return
+
     with st.form("form_kit_sportivo"):
         c1, c2 = st.columns(2)
         nome = c1.text_input("Nome *")
