@@ -105,6 +105,9 @@ def init_lead_db(conn):
                 cognome        TEXT,
                 email          TEXT,
                 telefono       TEXT,
+                codice_fiscale TEXT,
+                verificato     BOOLEAN DEFAULT false,
+                token_verifica TEXT,
                 eta_bambino    TEXT,
                 per_chi        TEXT,
                 src_gioco      TEXT,
@@ -123,6 +126,9 @@ def init_lead_db(conn):
         """)
         cur.execute("""CREATE INDEX IF NOT EXISTS ix_lead_sito_stato
                        ON lead_sito (stato, creato_il DESC);""")
+        cur.execute("ALTER TABLE lead_sito ADD COLUMN IF NOT EXISTS codice_fiscale TEXT;")
+        cur.execute("ALTER TABLE lead_sito ADD COLUMN IF NOT EXISTS verificato BOOLEAN DEFAULT false;")
+        cur.execute("ALTER TABLE lead_sito ADD COLUMN IF NOT EXISTS token_verifica TEXT;")
         cur.execute("ALTER TABLE lead_sito ENABLE ROW LEVEL SECURITY;")
         cur.execute("ALTER TABLE lead_sito FORCE ROW LEVEL SECURITY;")
         cur.execute("""
@@ -721,6 +727,43 @@ def _canali_invio(url, nome=""):
 
 
 # ══════════════════════════════════════════════ lista nel gestionale
+def _cf_valido(cf):
+    """Controllo formale del codice fiscale italiano (formato + carattere di controllo)."""
+    import re as _re
+    cf = (cf or "").strip().upper()
+    if not _re.match(r"^[A-Z]{6}\d{2}[A-EHLMPRST]\d{2}[A-Z]\d{3}[A-Z]$", cf):
+        return False
+    dispari = {
+        '0': 1, '1': 0, '2': 5, '3': 7, '4': 9, '5': 13, '6': 15, '7': 17, '8': 19, '9': 21,
+        'A': 1, 'B': 0, 'C': 5, 'D': 7, 'E': 9, 'F': 13, 'G': 15, 'H': 17, 'I': 19, 'J': 21,
+        'K': 2, 'L': 4, 'M': 18, 'N': 20, 'O': 11, 'P': 3, 'Q': 6, 'R': 8, 'S': 12, 'T': 14,
+        'U': 16, 'V': 10, 'W': 22, 'X': 25, 'Y': 24, 'Z': 23,
+    }
+    pari = {
+        '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+        'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8, 'J': 9,
+        'K': 10, 'L': 11, 'M': 12, 'N': 13, 'O': 14, 'P': 15, 'Q': 16, 'R': 17, 'S': 18,
+        'T': 19, 'U': 20, 'V': 21, 'W': 22, 'X': 23, 'Y': 24, 'Z': 25,
+    }
+    tot = 0
+    for i, ch in enumerate(cf[:15]):
+        tot += dispari[ch] if i % 2 == 0 else pari[ch]
+    attesa = chr(ord('A') + tot % 26)
+    return cf[15] == attesa
+
+
+def _invia_email_conferma_sale(email, nome, token):
+    try:
+        from modules.ui_questionari import _invia_email
+        link = f"https://gestionale-the-organism.streamlit.app/?sale_conferma={token}"
+        corpo = (f"Ciao {nome},\n\nPer confermare la richiesta di informazioni sulla Stanza del Sale, "
+                 f"clicca su questo link:\n\n{link}\n\n"
+                 f"Se non hai richiesto tu, ignora questa email.")
+        _invia_email(email, "Stanza del Sale — confermi la richiesta?", corpo)
+    except Exception:
+        pass
+
+
 def ui_public_richiesta_sale(get_conn):
     """Pagina pubblica (no login): richiesta informazioni Stanza del Sale
     (haloterapia). Semplice modulo di contatto, nessun questionario."""
@@ -748,6 +791,12 @@ def ui_public_richiesta_sale(get_conn):
         st.success("Richiesta ricevuta, grazie! Ti ricontattiamo a breve per fissare la seduta.")
         return
 
+    if st.session_state.get("_sale_email_inviata"):
+        st.success("Ti abbiamo mandato un'email di conferma. Apri la posta e clicca sul link: "
+                   "confermiamo così la richiesta ed evitiamo richieste false.")
+        st.caption("Non arriva? Controlla anche lo spam.")
+        return
+
     with st.form("form_sale"):
         c1, c2 = st.columns(2)
         nome = c1.text_input("Nome *")
@@ -755,6 +804,7 @@ def ui_public_richiesta_sale(get_conn):
         c3, c4 = st.columns(2)
         email = c3.text_input("Email *")
         telefono = c4.text_input("Cellulare *")
+        codice_fiscale = st.text_input("Codice fiscale *").strip().upper()
         interesse = st.selectbox("Cosa ti interessa?",
                                   ["Informazioni generali", "Prenotare una seduta singola",
                                    "Un pacchetto di più sedute", "Offerta in corso"])
@@ -771,34 +821,69 @@ def ui_public_richiesta_sale(get_conn):
 
     if inviato:
         manca = [l for l, v in [("Nome", nome), ("Cognome", cognome),
-                                 ("Email", email), ("Cellulare", telefono)]
+                                 ("Email", email), ("Cellulare", telefono),
+                                 ("Codice fiscale", codice_fiscale)]
                  if not (v or "").strip()]
         if manca:
             st.error("Campi obbligatori mancanti: " + ", ".join(manca))
         elif "@" not in email or "." not in email.split("@")[-1]:
             st.error("L'indirizzo email non sembra valido.")
+        elif len(codice_fiscale) != 16 or not _cf_valido(codice_fiscale):
+            st.error("Il codice fiscale non è valido: controlla di averlo scritto correttamente.")
         elif not consenso:
             st.error("Serve il consenso al trattamento dei dati per procedere.")
         else:
             try:
+                import secrets as _secrets
+                token = _secrets.token_urlsafe(24)
                 new_id = salva_lead(conn, {
                     "nome": nome.strip(), "cognome": cognome.strip(),
                     "email": email.strip(), "telefono": telefono.strip(),
                     "eta_bambino": "", "per_chi": f"Stanza del Sale — {interesse}",
                     "src_gioco": "stanza_sale", "dominio": "", "consenso": True,
                 })
+                cur = conn.cursor()
+                cur.execute("UPDATE lead_sito SET codice_fiscale=%s, token_verifica=%s WHERE id=%s",
+                            (codice_fiscale, token, new_id))
+                conn.commit()
                 if (note or "").strip():
                     aggiorna_stato(conn, new_id, "nuovo", note.strip())
-                _notifica_nuovo_contatto({
-                    "nome": nome.strip(), "cognome": cognome.strip(),
-                    "email": email.strip(), "telefono": telefono.strip(),
-                    "per_chi": f"Stanza del Sale — {interesse}", "eta_bambino": "",
-                    "src_gioco": "stanza_sale",
-                }, "Stanza del Sale")
-                st.session_state["_sale_inviato"] = True
+                _invia_email_conferma_sale(email.strip(), nome.strip(), token)
+                st.session_state["_sale_email_inviata"] = True
                 st.rerun()
             except Exception as e:
                 st.error(f"Non è stato possibile salvare: {e}")
+
+
+def ui_public_richiesta_sale_conferma(get_conn):
+    """Pagina pubblica (no login): conferma via link email la richiesta Stanza del Sale."""
+    conn = get_conn()
+    try:
+        init_lead_db(conn)
+    except Exception as e:
+        st.error(f"Servizio non disponibile: {e}")
+        return
+    st.markdown("""<style>
+      #MainMenu, footer, header {visibility:hidden}
+      .block-container{max-width:520px;padding-top:2rem}
+    </style>""", unsafe_allow_html=True)
+
+    token = st.query_params.get("sale_conferma", "")
+    cur = conn.cursor()
+    cur.execute("SELECT id, nome, cognome, email, telefono, per_chi, verificato FROM lead_sito WHERE token_verifica = %s LIMIT 1", (token,))
+    r = cur.fetchone()
+    if not r:
+        st.error("Link non valido o già usato.")
+        return
+    lid, nome, cognome, email, telefono, per_chi, verificato = r
+    if not verificato:
+        cur.execute("UPDATE lead_sito SET verificato = true WHERE id = %s", (lid,))
+        conn.commit()
+        _notifica_nuovo_contatto({
+            "nome": nome, "cognome": cognome, "email": email, "telefono": telefono,
+            "per_chi": per_chi, "eta_bambino": "", "src_gioco": "stanza_sale",
+        }, "Stanza del Sale")
+    st.success("Email confermata! Grazie: ti ricontattiamo a breve per fissare la seduta.")
 
 
 def render_contatti_sito(conn):
