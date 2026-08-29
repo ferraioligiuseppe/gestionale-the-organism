@@ -339,8 +339,11 @@ def _init_kit_db(conn):
                 indirizzo   TEXT,
                 email       TEXT,
                 telefono    TEXT,
+                codice_fiscale TEXT,
                 data_nascita DATE,
                 codice      TEXT,
+                verificato  BOOLEAN DEFAULT false,
+                token_verifica TEXT,
                 spedito     BOOLEAN DEFAULT false,
                 creato_il   TIMESTAMPTZ NOT NULL DEFAULT now()
             );
@@ -375,10 +378,22 @@ def _notifica_kit_richiesto(nome, cognome, indirizzo, codice, email=None, telefo
                 or _st.secrets.get("smtp", {}).get("USERNAME"))
         if not dest:
             return
-        corpo = (f"Nuova richiesta kit anaglifico da PNEV Sport Vision\n\n"
+        corpo = (f"Nuova richiesta kit anaglifico da PNEV Sport Vision (email verificata)\n\n"
                  f"Nome: {cognome} {nome}\nIndirizzo: {indirizzo}\nEmail: {email or '—'}\nCellulare: {telefono or '—'}\n"
                  f"Codice generato: {codice}\n\nLo trovi nel gestionale in PNEV Sport Vision.")
         _invia_email(dest, f"PNEV Sport Vision — richiesta kit: {cognome} {nome}", corpo)
+    except Exception:
+        pass
+
+
+def _invia_email_conferma(email, nome, token):
+    try:
+        from modules.ui_questionari import _invia_email
+        link = f"https://gestionale-the-organism.streamlit.app/?kit_conferma={token}"
+        corpo = (f"Ciao {nome},\n\nPer confermare la richiesta del kit anaglifico gratuito PNEV Sport Vision, "
+                 f"clicca su questo link:\n\n{link}\n\n"
+                 f"Se non hai richiesto tu questo kit, ignora questa email.")
+        _invia_email(email, "PNEV Sport Vision — confermi la richiesta del tuo kit?", corpo)
     except Exception:
         pass
 
@@ -387,11 +402,36 @@ def _email_ha_gia_richiesto(conn, email):
     if not email:
         return False
     cur = conn.cursor()
-    cur.execute("SELECT id FROM sv_kit_richieste WHERE lower(email) = lower(%s) LIMIT 1", (email,))
+    cur.execute("SELECT id FROM sv_kit_richieste WHERE lower(email) = lower(%s) AND verificato = true LIMIT 1", (email,))
     return cur.fetchone() is not None
 
 
 IBAN_THE_ORGANISM = "IT54G0503476480000000002141"
+
+
+def _cf_valido(cf):
+    """Controllo formale del codice fiscale italiano (formato + carattere di controllo)."""
+    import re as _re
+    cf = (cf or "").strip().upper()
+    if not _re.match(r"^[A-Z]{6}\d{2}[A-EHLMPRST]\d{2}[A-Z]\d{3}[A-Z]$", cf):
+        return False
+    dispari = {
+        '0': 1, '1': 0, '2': 5, '3': 7, '4': 9, '5': 13, '6': 15, '7': 17, '8': 19, '9': 21,
+        'A': 1, 'B': 0, 'C': 5, 'D': 7, 'E': 9, 'F': 13, 'G': 15, 'H': 17, 'I': 19, 'J': 21,
+        'K': 2, 'L': 4, 'M': 18, 'N': 20, 'O': 11, 'P': 3, 'Q': 6, 'R': 8, 'S': 12, 'T': 14,
+        'U': 16, 'V': 10, 'W': 22, 'X': 25, 'Y': 24, 'Z': 23,
+    }
+    pari = {
+        '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+        'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5, 'G': 6, 'H': 7, 'I': 8, 'J': 9,
+        'K': 10, 'L': 11, 'M': 12, 'N': 13, 'O': 14, 'P': 15, 'Q': 16, 'R': 17, 'S': 18,
+        'T': 19, 'U': 20, 'V': 21, 'W': 22, 'X': 23, 'Y': 24, 'Z': 25,
+    }
+    tot = 0
+    for i, ch in enumerate(cf[:15]):
+        tot += dispari[ch] if i % 2 == 0 else pari[ch]
+    attesa = chr(ord('A') + tot % 26)
+    return cf[15] == attesa
 
 
 def ui_public_kit_sportivo(get_conn):
@@ -417,6 +457,12 @@ def ui_public_kit_sportivo(get_conn):
                         use_container_width=True)
         return
 
+    if st.session_state.get("_kit_email_inviata"):
+        st.success("Ti abbiamo mandato un'email di conferma. Apri la posta e clicca sul link: "
+                   "il tuo codice comparirà subito dopo.")
+        st.caption("Non arriva? Controlla anche lo spam.")
+        return
+
     st.markdown("#### Richiedi il tuo kit anaglifico gratuito")
     st.caption("Un kit gratuito a persona. Ti mandiamo gli occhialini rosso/ciano e generiamo il tuo codice personale per iniziare il programma.")
 
@@ -439,6 +485,7 @@ def ui_public_kit_sportivo(get_conn):
         c3, c4 = st.columns(2)
         email = c3.text_input("Email *")
         telefono = c4.text_input("Cellulare *")
+        codice_fiscale = st.text_input("Codice fiscale *").strip().upper()
         data_nascita = st.date_input("Data di nascita *", value=None,
                                       min_value=datetime(1930, 1, 1), max_value=datetime.now())
         consenso = st.checkbox(
@@ -447,11 +494,11 @@ def ui_public_kit_sportivo(get_conn):
         st.caption("I dati sono trattati dallo Studio The Organism ai soli fini della "
                    "spedizione del kit e del ricontatto (GDPR art. 6.1.a). Puoi chiederne "
                    "la cancellazione in qualsiasi momento.")
-        inviato = st.form_submit_button("Genera il mio codice →", type="primary", use_container_width=True)
+        inviato = st.form_submit_button("Invia richiesta →", type="primary", use_container_width=True)
 
     if inviato:
         manca = [l for l, v in [("Nome", nome), ("Cognome", cognome), ("Indirizzo", indirizzo),
-                                 ("Email", email), ("Cellulare", telefono)]
+                                 ("Email", email), ("Cellulare", telefono), ("Codice fiscale", codice_fiscale)]
                  if not (v or "").strip()]
         if not data_nascita:
             manca.append("Data di nascita")
@@ -461,33 +508,85 @@ def ui_public_kit_sportivo(get_conn):
         if "@" not in email or "." not in email.split("@")[-1]:
             st.error("L'indirizzo email non sembra valido.")
             return
+        if len(codice_fiscale) != 16:
+            st.error("Il codice fiscale deve avere 16 caratteri.")
+            return
+        if not _cf_valido(codice_fiscale):
+            st.error("Il codice fiscale non è valido: controlla di averlo scritto correttamente.")
+            return
         if not consenso:
             st.error("Serve il consenso al trattamento dei dati per procedere.")
             return
         try:
-            base = _genera_codice(cognome, nome, data_nascita.isoformat())
-            codice = _codice_univoco(conn, base)
+            import secrets as _secrets
+            token = _secrets.token_urlsafe(24)
             cur = conn.cursor()
-            cur.execute("""INSERT INTO sv_kit_richieste (nome, cognome, indirizzo, email, telefono, data_nascita, codice)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-                        (nome.strip(), cognome.strip(), indirizzo.strip(), email.strip() or None,
-                         telefono.strip() or None, data_nascita.isoformat(), codice))
+            cur.execute("""INSERT INTO sv_kit_richieste (nome, cognome, indirizzo, email, telefono, codice_fiscale, data_nascita, token_verifica)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (nome.strip(), cognome.strip(), indirizzo.strip(), email.strip(),
+                         telefono.strip(), codice_fiscale, data_nascita.isoformat(), token))
             conn.commit()
-            _set_codice(conn, None, codice)  # registra il codice anche in sv_codici, senza paziente ancora
         except Exception as e:
             st.error(f"Errore: {e}")
             return
-        _notifica_kit_richiesto(nome.strip(), cognome.strip(), indirizzo.strip(), codice, email.strip(), telefono.strip())
-        st.session_state["_kit_codice"] = codice
+        _invia_email_conferma(email.strip(), nome.strip(), token)
+        st.session_state["_kit_email_inviata"] = True
         st.rerun()
+
+
+def ui_public_kit_conferma(get_conn):
+    """Pagina pubblica (no login): conferma la richiesta via link email e genera il codice."""
+    conn = get_conn()
+    try:
+        _init_kit_db(conn)
+    except Exception as e:
+        st.error(f"Servizio non disponibile: {e}")
+        return
+    st.markdown("""<style>
+      #MainMenu, footer, header {visibility:hidden}
+      .block-container{max-width:520px;padding-top:1.2rem}
+    </style>""", unsafe_allow_html=True)
+
+    token = st.query_params.get("kit_conferma", "")
+    cur = conn.cursor()
+    cur.execute("""SELECT id, nome, cognome, indirizzo, email, telefono, codice_fiscale, data_nascita, codice, verificato
+                   FROM sv_kit_richieste WHERE token_verifica = %s LIMIT 1""", (token,))
+    r = cur.fetchone()
+    if not r:
+        st.error("Link non valido o già usato.")
+        return
+    rid, nome, cognome, indirizzo, email, telefono, cf, dn, codice_esistente, verificato = r
+
+    if verificato and codice_esistente:
+        st.success(f"Email già confermata. Il tuo codice è **{codice_esistente}**.")
+        st.link_button("Vai al mio programma →",
+                        f"{SPORT_BASE_URL}/programma.html?codice={codice_esistente}",
+                        use_container_width=True)
+        return
+
+    try:
+        base = _genera_codice(cognome, nome, dn.isoformat() if hasattr(dn, "isoformat") else str(dn))
+        codice = _codice_univoco(conn, base)
+        cur.execute("UPDATE sv_kit_richieste SET verificato = true, codice = %s WHERE id = %s", (codice, rid))
+        conn.commit()
+        _set_codice(conn, None, codice)
+    except Exception as e:
+        st.error(f"Errore nella conferma: {e}")
+        return
+
+    _notifica_kit_richiesto(nome, cognome, indirizzo, codice, email, telefono)
+    st.success(f"Email confermata! Il tuo codice è **{codice}** — usalo per iniziare il tuo programma.")
+    st.link_button("Vai al mio programma →",
+                    f"{SPORT_BASE_URL}/programma.html?codice={codice}",
+                    use_container_width=True)
 
 
 def _lista_richieste_kit(conn, solo_da_spedire=False):
     cur = conn.cursor()
     if solo_da_spedire:
-        cur.execute("SELECT id, nome, cognome, indirizzo, email, telefono, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste WHERE spedito = false ORDER BY creato_il DESC")
+        cur.execute("SELECT id, nome, cognome, indirizzo, email, telefono, codice_fiscale, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste WHERE spedito = false AND verificato = true ORDER BY creato_il DESC")
     else:
-        cur.execute("SELECT id, nome, cognome, indirizzo, email, telefono, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste ORDER BY creato_il DESC LIMIT 300")
+        cur.execute("SELECT id, nome, cognome, indirizzo, email, telefono, codice_fiscale, data_nascita, codice, spedito, creato_il FROM sv_kit_richieste WHERE verificato = true ORDER BY creato_il DESC LIMIT 300")
     return cur.fetchall()
 
 
@@ -509,10 +608,11 @@ def _sez_richieste_kit(conn):
         st.info("Nessuna richiesta.")
         return
     st.caption(f"{len(righe)} richieste")
-    for rid, nome, cognome, indirizzo, email, telefono, dn, codice, spedito, creato in righe:
+    for rid, nome, cognome, indirizzo, email, telefono, cf, dn, codice, spedito, creato in righe:
         with st.expander(f"{'✅' if spedito else '📦'} {cognome} {nome} — {codice}"):
             st.markdown(f"**Indirizzo:** {indirizzo}")
             st.markdown(f"**Email:** {email or '—'} · **Cellulare:** {telefono or '—'}")
+            st.markdown(f"**Codice fiscale:** {cf or '—'}")
             st.markdown(f"**Data di nascita:** {_fmt_data(dn)}")
             st.markdown(f"**Richiesto il:** {_fmt_data(creato)}")
             if not spedito:
