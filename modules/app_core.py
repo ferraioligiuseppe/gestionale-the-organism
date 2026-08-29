@@ -11967,6 +11967,15 @@ def main():
             st.error(f"Modulo non disponibile: {_e}")
         return
 
+    # --- PUBLIC KIT SPORT VISION — conferma email (no login) ---
+    if st.query_params.get('kit_conferma'):
+        try:
+            from modules.sportivi import ui_public_kit_conferma
+            ui_public_kit_conferma(get_connection)
+        except Exception as _e:
+            st.error(f"Modulo non disponibile: {_e}")
+        return
+
     # --- PUBLIC MAPS DONE PING (no login) — fine livello dal player MAPS ---
     if st.query_params.get('maps_done'):
         try:
