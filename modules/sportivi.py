@@ -436,7 +436,7 @@ def _cf_valido(cf):
 
 def ui_public_kit_sportivo(get_conn):
     """Pagina pubblica (no login): richiesta kit anaglifico + generazione codice.
-    Pensata per essere incorporata via iframe in inizia.html su pnev.it."""
+    Aperta come link diretto (non iframe) da inizia.html su pnev.it."""
     conn = get_conn()
     try:
         _init_kit_db(conn)
