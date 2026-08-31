@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-pnev_pubblico.py — MILESTONE 3
-App Streamlit PUBBLICA per il percorso MAPS-CLEAR (pnev.it).
+pnev_pubblico.py — MILESTONE 3 + iscrizioni evento a slot
+App Streamlit PUBBLICA per il percorso MAPS-CLEAR (pnev.it) e per le
+iscrizioni pubbliche agli eventi (es. screening scolastico a fasce orarie).
 
-Nessun login del gestionale: il paziente arriva qui dal file HTML su pnev.it
-tramite parametri URL (pattern degli screening tools) oppure dal suo magic link.
+Nessun login del gestionale: il paziente/genitore arriva qui dal file HTML
+su pnev.it tramite parametri URL, oppure dal suo magic link.
 
 Flussi (query params):
   ?azione=registra&nome=..&email=..&eta=..&mano=..&q1=..&...&q12=..
@@ -18,11 +19,14 @@ Flussi (query params):
         → salva orecchio dominante → dashboard
   ?t=TOKEN&azione=post&q1=..&...&q12=..
         → salva questionario finale → dashboard con report
+  ?azione=iscrizione_evento&slug=SLUG
+        → pagina pubblica di iscrizione a un evento (con scelta fascia
+          oraria se l'evento la prevede) → crea l'iscrizione + l'evento
+          sul Google Calendar dello studio
 
 Deploy: seconda app su Streamlit Cloud, stesso repo, main file = pnev_pubblico.py,
-secrets: DATABASE_URL (stessa stringa del gestionale).
-NOTA MILESTONE 4: l'invio email del magic link via SendGrid sostituirà la
-visualizzazione a schermo del link.
+secrets: DATABASE_URL (stessa stringa del gestionale), più — per le iscrizioni
+evento — GOOGLE_SERVICE_ACCOUNT_JSON e GOOGLE_CALENDAR_ID.
 """
 
 import os
@@ -245,6 +249,153 @@ def azione_post(conn, utente_id):
 
 
 # ═══════════════════════════════════════════════════════════════
+# ISCRIZIONE PUBBLICA A EVENTI (con fasce orarie + Google Calendar)
+# ═══════════════════════════════════════════════════════════════
+
+def azione_iscrizione_evento(conn):
+    from modules.eventi import db_eventi as dbev
+    from modules.eventi.slots import (
+        ensure_slot_schema, slot_con_disponibilita, assegna_slot, salva_gcal_event_id,
+    )
+    from modules.eventi.google_calendar import crea_evento_calendario
+
+    slug = qp("slug")
+    if not slug:
+        st.error("Link non valido: evento non specificato.")
+        st.stop()
+
+    try:
+        ensure_slot_schema(conn)
+    except Exception:
+        pass
+
+    ev = dbev.get_evento_by_slug(conn, slug)
+    if not ev or not ev.get("attivo"):
+        st.error("Evento non trovato o non più disponibile.")
+        st.stop()
+    if not ev.get("iscrizioni_aperte"):
+        st.warning("Le iscrizioni a questo evento sono chiuse.")
+        st.stop()
+
+    st.title(f"📋 {ev['titolo']}")
+    data_str = ev["data_ora"].strftime("%d/%m/%Y") if ev.get("data_ora") else ""
+    riga_meta = " · ".join(x for x in [ev.get("sede"), data_str] if x)
+    if riga_meta:
+        st.caption(f"📍 {riga_meta}")
+    if ev.get("descrizione"):
+        st.write(ev["descrizione"])
+
+    st.divider()
+
+    slot_scelto = None
+    if ev.get("slot_abilitati"):
+        st.markdown("### 🕐 Scegli l'orario")
+        slots = slot_con_disponibilita(conn, ev)
+        liberi = [s for s in slots if s["liberi"] > 0]
+        if not liberi:
+            st.warning(
+                "Tutti gli orari sono al momento occupati. "
+                "Scrivici a info@theorganism.com per essere messo in lista d'attesa."
+            )
+            st.stop()
+        opzioni = {s["orario"].strftime("%H:%M"): s["orario"] for s in liberi}
+        scelta_lbl = st.radio(
+            "Orari disponibili", options=list(opzioni.keys()), horizontal=True,
+        )
+        slot_scelto = opzioni[scelta_lbl]
+    else:
+        if ev.get("data_ora"):
+            st.info(f"Orario: **{ev['data_ora'].strftime('%H:%M')}**")
+
+    st.markdown("### 👦 Dati del bambino/a")
+    c1, c2 = st.columns(2)
+    nome_b = c1.text_input("Nome bambino/a *")
+    cognome_b = c2.text_input("Cognome bambino/a *")
+    c3, c4 = st.columns(2)
+    scuola = c3.text_input("Scuola")
+    classe = c4.text_input("Classe")
+
+    st.markdown("### 👤 Dati del genitore/tutore")
+    c5, c6 = st.columns(2)
+    nome_g = c5.text_input("Nome genitore *")
+    cognome_g = c6.text_input("Cognome genitore *")
+    c7, c8 = st.columns(2)
+    email = c7.text_input("Email *")
+    telefono = c8.text_input("Telefono *")
+
+    st.markdown("### 🔒 Consensi")
+    cons_privacy = st.checkbox(
+        "Acconsento al trattamento dei dati personali del minore per le finalità dello "
+        "screening scolastico, secondo l'informativa privacy dello Studio The Organism. *"
+    )
+    cons_contatto = st.checkbox(
+        "Acconsento a essere ricontattato/a per comunicare l'esito e un eventuale approfondimento."
+    )
+
+    if st.button("✅ Confirma iscrizione", type="primary", use_container_width=True):
+        obbligatori = [nome_b, cognome_b, nome_g, cognome_g, email, telefono]
+        if not all((v or "").strip() for v in obbligatori):
+            st.error("Compila tutti i campi obbligatori (*).")
+            st.stop()
+        if "@" not in (email or ""):
+            st.error("Email non valida.")
+            st.stop()
+        if not cons_privacy:
+            st.error("Il consenso privacy è obbligatorio.")
+            st.stop()
+        if ev.get("slot_abilitati") and not slot_scelto:
+            st.error("Seleziona un orario.")
+            st.stop()
+
+        # Ricontrollo disponibilità (anti doppia prenotazione last-minute)
+        if slot_scelto:
+            from modules.eventi.slots import posti_occupati_slot
+            occ = posti_occupati_slot(conn, ev["id"], slot_scelto)
+            if occ >= int(ev.get("slot_posti") or 1):
+                st.error("Questo orario è appena stato prenotato da un'altra persona. Ricarica la pagina e scegline un altro.")
+                st.stop()
+
+        try:
+            iscr = dbev.crea_iscrizione(
+                conn, ev["id"],
+                nome=nome_g, cognome=cognome_g, email=email, telefono=telefono,
+                note=f"Bambino/a: {cognome_b.strip()} {nome_b.strip()} · Scuola: {scuola or '—'} {classe or ''}".strip(),
+                consenso_privacy=cons_privacy, consenso_marketing=cons_contatto,
+                sorgente="web_slot",
+            )
+
+            if slot_scelto:
+                assegna_slot(conn, iscr["id"], slot_scelto)
+
+            orario_evento = slot_scelto or ev["data_ora"]
+            durata = ev.get("slot_durata_minuti") if slot_scelto else (ev.get("durata_minuti") or 15)
+            titolo_cal = f"Screening — {cognome_b.strip()} {nome_b.strip()}"
+            gcal_id = None
+            if orario_evento:
+                gcal_id = crea_evento_calendario(
+                    titolo=titolo_cal,
+                    inizio=orario_evento,
+                    durata_minuti=int(durata or 15),
+                    descrizione=(
+                        f"Genitore: {cognome_g.strip()} {nome_g.strip()} · Tel: {telefono} · Email: {email}\n"
+                        f"Scuola: {scuola or '—'} {classe or ''}"
+                    ),
+                )
+            if gcal_id:
+                salva_gcal_event_id(conn, iscr["id"], gcal_id)
+
+            st.success("🎉 Iscrizione confermata!")
+            if slot_scelto:
+                st.markdown(f"**Il tuo appuntamento:** {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}")
+            st.info("Se hai domande scrivi a info@theorganism.com.")
+            st.stop()
+        except ValueError as e:
+            st.error(str(e))
+        except Exception as e:
+            st.error(f"Errore durante l'iscrizione: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
 # DASHBOARD
 # ═══════════════════════════════════════════════════════════════
 
@@ -337,6 +488,11 @@ def main():
 
     conn = get_connection()
     try:
+        # 0. Iscrizione pubblica a evento (non richiede token né login)
+        if azione == "iscrizione_evento":
+            azione_iscrizione_evento(conn)
+            return
+
         # 1. Registrazione (non richiede token)
         if azione == "registra":
             azione_registra(conn)
