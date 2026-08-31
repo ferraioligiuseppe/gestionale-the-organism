@@ -33,6 +33,10 @@ API pubbliche:
     # --- Helper ---
     genera_slug(titolo, data_ora)     → slug url-safe univoco
 
+Fasce orarie (slot): vedi modules/eventi/slots.py — colonne slot_* su
+ev_eventi e slot_orario/gcal_event_id su ev_iscrizioni, aggiunte da
+ensure_slot_schema() in modo idempotente (non richiesto qui per il CRUD base).
+
 Convenzioni rispettate:
 - placeholder %s su Postgres / ? su SQLite (auto-detect)
 - timestamp con zoneinfo Europe/Rome
@@ -45,7 +49,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time as dtime
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
@@ -141,10 +145,20 @@ def crea_evento(
     attivo: bool = True,
     iscrizioni_aperte: bool = True,
     note_interne: Optional[str] = None,
+    slot_abilitati: bool = False,
+    slot_durata_minuti: Optional[int] = None,
+    slot_ora_inizio: Optional[dtime] = None,
+    slot_ora_fine: Optional[dtime] = None,
+    slot_posti: Optional[int] = None,
 ) -> dict:
     """
     Crea un nuovo evento. Restituisce il dict completo del record creato.
     Se slug non viene passato, viene generato da titolo + data_ora.
+
+    Fasce orarie: se slot_abilitati=True, l'evento genera automaticamente
+    slot da slot_ora_inizio a slot_ora_fine ogni slot_durata_minuti, con
+    slot_posti posti ciascuno (vedi modules/eventi/slots.py). Richiede che
+    ensure_slot_schema(conn) sia già stata chiamata almeno una volta.
     """
     if tipo not in TIPI_VALIDI:
         raise ValueError(f"Tipo non valido: {tipo}. Validi: {TIPI_VALIDI}")
@@ -163,11 +177,13 @@ def crea_evento(
             INSERT INTO ev_eventi (
                 slug, titolo, tipo, data_ora, durata_minuti, sede,
                 descrizione, posti_max, prezzo, fb_event_url, immagine_url,
-                conduttore, attivo, iscrizioni_aperte, note_interne
+                conduttore, attivo, iscrizioni_aperte, note_interne,
+                slot_abilitati, slot_durata_minuti, slot_ora_inizio, slot_ora_fine, slot_posti
             ) VALUES (
                 {ph}, {ph}, {ph}, {ph}, {ph}, {ph},
                 {ph}, {ph}, {ph}, {ph}, {ph},
-                {ph}, {ph}, {ph}, {ph}
+                {ph}, {ph}, {ph}, {ph},
+                {ph}, {ph}, {ph}, {ph}, {ph}
             )
             RETURNING id;
         """
@@ -175,6 +191,7 @@ def crea_evento(
             slug, titolo.strip(), tipo, data_ora, durata_minuti, sede,
             descrizione, posti_max, prezzo, fb_event_url, immagine_url,
             conduttore, attivo, iscrizioni_aperte, note_interne,
+            slot_abilitati, slot_durata_minuti, slot_ora_inizio, slot_ora_fine, slot_posti,
         ))
         new_id = cur.fetchone()[0]
         conn.commit()
@@ -277,6 +294,7 @@ _CAMPI_AGGIORNABILI = {
     "titolo", "tipo", "data_ora", "durata_minuti", "sede", "descrizione",
     "posti_max", "prezzo", "fb_event_url", "immagine_url", "conduttore",
     "attivo", "iscrizioni_aperte", "note_interne", "slug",
+    "slot_abilitati", "slot_durata_minuti", "slot_ora_inizio", "slot_ora_fine", "slot_posti",
 }
 
 
@@ -492,6 +510,12 @@ def crea_iscrizione(
     Lo stato viene calcolato automaticamente:
     - 'confermata' se ci sono posti disponibili (o posti_max è NULL)
     - 'lista_attesa' se l'evento è sold out
+
+    Nota sugli eventi a fasce orarie (slot_abilitati=True): la capacità è
+    gestita per singolo slot da modules/eventi/slots.py, non da posti_max
+    dell'evento — lascia posti_max NULL (illimitati) su questi eventi e fai
+    il controllo di disponibilità dello slot PRIMA di chiamare questa
+    funzione (vedi apps/pnev_pubblico.py, azione_iscrizione_evento).
 
     Args:
         forza_stato: se passato, ignora il calcolo automatico (es. registrazione admin)
