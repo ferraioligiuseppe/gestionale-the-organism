@@ -5,8 +5,9 @@
 ║                                                                      ║
 ║  Strada 1 ("a vista"): mostra i Google Calendar dei professionisti   ║
 ║  sovrapposti e colorati. Gli appuntamenti si creano/spostano dentro  ║
-║  Google Calendar; qui li vedi tutti insieme. I promemoria email li   ║
-║  manda Google in automatico.                                         ║
+║  Google Calendar (o dal modulo "Nuovo appuntamento" qui sotto); qui  ║
+║  li vedi tutti insieme. I promemoria email li manda Google in        ║
+║  automatico.                                                          ║
 ║                                                                      ║
 ║  PER AGGIUNGERE UN PROFESSIONISTA: aggiungi una riga a PROFESSIONISTI ║
 ║  con nome, cal_id (l'ID calendario preso da Google) e un colore.     ║
@@ -132,8 +133,8 @@ def render_agenda(conn=None, is_admin: bool = False):
                             from .paziente_attivo import set_paziente_attivo
                             from .app_menu import AREA_PAZIENTI
                             set_paziente_attivo(conn, int(paz["id"]))
-                            st.session_state["nav_area"] = AREA_PAZIENTI
-                            st.session_state[f"nav_sotto_{AREA_PAZIENTI}"] = "🏠 Dashboard"
+                            st.session_state["goto_area"] = AREA_PAZIENTI
+                            st.session_state["goto_sotto"] = "🏠 Dashboard"
                             st.rerun()
                         except Exception as _e:
                             st.error(f"Impossibile aprire la visita: {_e}")
@@ -152,6 +153,50 @@ def render_agenda(conn=None, is_admin: bool = False):
                 st.write(f"• {er['nome']}: {er['motivo']}")
     else:
         st.info("Nessun appuntamento nel periodo selezionato.")
+
+    st.markdown("---")
+
+    # ── ➕ Nuovo appuntamento (creato direttamente sul calendario) ──────
+    st.markdown("### ➕ Nuovo appuntamento")
+    with st.form("nuovo_appuntamento_agenda"):
+        c1, c2 = st.columns(2)
+        with c1:
+            prof = st.selectbox(
+                "Professionista", options=attivi,
+                format_func=lambda p: p["nome"] + (f" · {p['ruolo']}" if p.get("ruolo") else ""),
+            )
+            data_app = st.date_input("Data", value=_dt.date.today(), format="DD/MM/YYYY", key="nuovo_app_data")
+        with c2:
+            ora_app = st.time_input("Ora", value=_dt.time(9, 0), key="nuovo_app_ora")
+            durata_app = st.number_input("Durata (minuti)", min_value=5, max_value=240, value=30, step=5)
+        titolo_app = st.text_input("Titolo", placeholder="Cognome Nome — tipo visita")
+        note_app = st.text_area("Note (opzionale)", height=70)
+        if st.form_submit_button("📅 Crea appuntamento", type="primary"):
+            if not titolo_app.strip():
+                st.error("Il titolo è obbligatorio (usa Cognome Nome per collegarlo al paziente).")
+            else:
+                try:
+                    from modules.eventi.google_calendar import crea_evento_calendario
+                    inizio = _dt.datetime.combine(data_app, ora_app)
+                    gcal_id = crea_evento_calendario(
+                        titolo=titolo_app.strip(),
+                        inizio=inizio,
+                        durata_minuti=int(durata_app),
+                        descrizione=note_app.strip(),
+                        calendar_id=prof["cal_id"],
+                    )
+                    if gcal_id:
+                        st.success(f"✅ Appuntamento creato sul calendario di {prof['nome']}")
+                        st.rerun()
+                    else:
+                        st.error("Creazione non riuscita: controlla che il calendario sia condiviso con l'account di servizio (vedi nota sotto).")
+                except Exception as e:
+                    st.error(f"Errore: {e}")
+    st.caption(
+        "Per creare appuntamenti da qui, ogni calendario dei professionisti deve essere "
+        "condiviso con l'account di servizio (lo stesso già usato per gli eventi pubblici), "
+        "permesso «Apportare modifiche agli eventi»."
+    )
 
     st.markdown("---")
 
@@ -183,19 +228,19 @@ def render_agenda(conn=None, is_admin: bool = False):
     )
 
     st.caption(
-        "Gli appuntamenti si creano e si modificano in Google Calendar "
-        "(da telefono o computer); qui li vedi tutti insieme. I promemoria "
-        "email li invia Google in automatico."
+        "Gli appuntamenti creati qui sopra o direttamente in Google Calendar "
+        "appaiono automaticamente in questa vista. I promemoria email li "
+        "invia Google in automatico."
     )
 
     # ── Apri / modifica in Google Calendar ────────────────────────────
-    st.markdown("#### ✏️ Crea o modifica un appuntamento")
+    st.markdown("#### ✏️ Modifica un appuntamento esistente")
     st.link_button(
         "📅 Apri Google Calendar (tutti)",
         "https://calendar.google.com/calendar/r",
         use_container_width=False,
     )
-    st.caption("Apre Google Calendar in una nuova scheda: lì aggiungi o sposti gli appuntamenti.")
+    st.caption("Apre Google Calendar in una nuova scheda: lì modifichi o sposti gli appuntamenti esistenti.")
 
     with st.expander("Apri l'agenda di un singolo professionista"):
         for p in attivi:
