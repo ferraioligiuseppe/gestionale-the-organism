@@ -454,9 +454,9 @@ def _render_tab_azioni(conn, ev: dict):
         slot_abilitati = st.checkbox("Abilita fasce orarie per questo evento", value=bool(ev.get("slot_abilitati")))
         cs1, cs2, cs3, cs4 = st.columns(4)
         with cs1:
-            slot_ora_inizio = st.time_input("Dalle", value=ev.get("slot_ora_inizio") or time(9, 0))
+            slot_ora_inizio = st.time_input("Fascia 1 — Dalle", value=ev.get("slot_ora_inizio") or time(9, 0))
         with cs2:
-            slot_ora_fine = st.time_input("Alle", value=ev.get("slot_ora_fine") or time(13, 0))
+            slot_ora_fine = st.time_input("Fascia 1 — Alle", value=ev.get("slot_ora_fine") or time(13, 0))
         with cs3:
             slot_durata_minuti = st.number_input(
                 "Durata slot (min)", min_value=5, max_value=120,
@@ -467,6 +467,12 @@ def _render_tab_azioni(conn, ev: dict):
                 "Posti per slot", min_value=1, max_value=20,
                 value=int(ev.get("slot_posti") or 1),
             )
+        st.caption("Seconda fascia (opzionale) — es. pomeriggio 16:00-18:00. Lascia vuoto/uguale se non serve.")
+        cs5, cs6 = st.columns(2)
+        with cs5:
+            slot_ora_inizio_2 = st.time_input("Fascia 2 — Dalle", value=ev.get("slot_ora_inizio_2") or time(0, 0), key=f"s2i_{ev['id']}")
+        with cs6:
+            slot_ora_fine_2 = st.time_input("Fascia 2 — Alle", value=ev.get("slot_ora_fine_2") or time(0, 0), key=f"s2f_{ev['id']}")
 
         if st.form_submit_button("💾 Salva modifiche", type="primary"):
             try:
@@ -488,6 +494,8 @@ def _render_tab_azioni(conn, ev: dict):
                     slot_durata_minuti=slot_durata_minuti,
                     slot_ora_inizio=slot_ora_inizio,
                     slot_ora_fine=slot_ora_fine,
+                    slot_ora_inizio_2=slot_ora_inizio_2 if slot_ora_inizio_2 != time(0, 0) else None,
+                    slot_ora_fine_2=slot_ora_fine_2 if slot_ora_fine_2 != time(0, 0) else None,
                     slot_posti=slot_posti,
                 )
                 st.success("✅ Evento aggiornato")
@@ -789,13 +797,19 @@ def _render_form_crea_evento(conn):
         slot_abilitati = st.checkbox("Abilita fasce orarie per questo evento", value=False)
         cs1, cs2, cs3, cs4 = st.columns(4)
         with cs1:
-            slot_ora_inizio = st.time_input("Dalle", value=time(9, 0))
+            slot_ora_inizio = st.time_input("Fascia 1 — Dalle", value=time(9, 0))
         with cs2:
-            slot_ora_fine = st.time_input("Alle", value=time(13, 0))
+            slot_ora_fine = st.time_input("Fascia 1 — Alle", value=time(13, 0))
         with cs3:
             slot_durata_minuti = st.number_input("Durata slot (min)", min_value=5, max_value=120, value=15)
         with cs4:
             slot_posti = st.number_input("Posti per slot", min_value=1, max_value=20, value=1)
+        st.caption("Seconda fascia (opzionale) — es. pomeriggio 16:00-18:00. Lascia le 00:00 se non serve.")
+        cs5, cs6 = st.columns(2)
+        with cs5:
+            slot_ora_inizio_2 = st.time_input("Fascia 2 — Dalle", value=time(0, 0))
+        with cs6:
+            slot_ora_fine_2 = st.time_input("Fascia 2 — Alle", value=time(0, 0))
 
         if st.form_submit_button("🆕 Crea evento", type="primary"):
             if not titolo or not titolo.strip():
@@ -822,6 +836,8 @@ def _render_form_crea_evento(conn):
                     slot_durata_minuti=slot_durata_minuti,
                     slot_ora_inizio=slot_ora_inizio,
                     slot_ora_fine=slot_ora_fine,
+                    slot_ora_inizio_2=slot_ora_inizio_2 if slot_ora_inizio_2 != time(0, 0) else None,
+                    slot_ora_fine_2=slot_ora_fine_2 if slot_ora_fine_2 != time(0, 0) else None,
                     slot_posti=slot_posti,
                 )
                 st.success(f"✅ Evento creato — id #{nuovo['id']}, slug: `{nuovo['slug']}`")

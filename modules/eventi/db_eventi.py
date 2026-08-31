@@ -149,6 +149,8 @@ def crea_evento(
     slot_durata_minuti: Optional[int] = None,
     slot_ora_inizio: Optional[dtime] = None,
     slot_ora_fine: Optional[dtime] = None,
+    slot_ora_inizio_2: Optional[dtime] = None,
+    slot_ora_fine_2: Optional[dtime] = None,
     slot_posti: Optional[int] = None,
 ) -> dict:
     """
@@ -178,12 +180,14 @@ def crea_evento(
                 slug, titolo, tipo, data_ora, durata_minuti, sede,
                 descrizione, posti_max, prezzo, fb_event_url, immagine_url,
                 conduttore, attivo, iscrizioni_aperte, note_interne,
-                slot_abilitati, slot_durata_minuti, slot_ora_inizio, slot_ora_fine, slot_posti
+                slot_abilitati, slot_durata_minuti, slot_ora_inizio, slot_ora_fine,
+                slot_ora_inizio_2, slot_ora_fine_2, slot_posti
             ) VALUES (
                 {ph}, {ph}, {ph}, {ph}, {ph}, {ph},
                 {ph}, {ph}, {ph}, {ph}, {ph},
                 {ph}, {ph}, {ph}, {ph},
-                {ph}, {ph}, {ph}, {ph}, {ph}
+                {ph}, {ph}, {ph}, {ph},
+                {ph}, {ph}, {ph}
             )
             RETURNING id;
         """
@@ -191,7 +195,8 @@ def crea_evento(
             slug, titolo.strip(), tipo, data_ora, durata_minuti, sede,
             descrizione, posti_max, prezzo, fb_event_url, immagine_url,
             conduttore, attivo, iscrizioni_aperte, note_interne,
-            slot_abilitati, slot_durata_minuti, slot_ora_inizio, slot_ora_fine, slot_posti,
+            slot_abilitati, slot_durata_minuti, slot_ora_inizio, slot_ora_fine,
+            slot_ora_inizio_2, slot_ora_fine_2, slot_posti,
         ))
         new_id = cur.fetchone()[0]
         conn.commit()
@@ -294,7 +299,8 @@ _CAMPI_AGGIORNABILI = {
     "titolo", "tipo", "data_ora", "durata_minuti", "sede", "descrizione",
     "posti_max", "prezzo", "fb_event_url", "immagine_url", "conduttore",
     "attivo", "iscrizioni_aperte", "note_interne", "slug",
-    "slot_abilitati", "slot_durata_minuti", "slot_ora_inizio", "slot_ora_fine", "slot_posti",
+    "slot_abilitati", "slot_durata_minuti", "slot_ora_inizio", "slot_ora_fine",
+    "slot_ora_inizio_2", "slot_ora_fine_2", "slot_posti",
 }
 
 
