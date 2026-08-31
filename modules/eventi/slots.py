@@ -19,6 +19,8 @@ def ensure_slot_schema(conn) -> None:
                 ADD COLUMN IF NOT EXISTS slot_durata_minuti INTEGER,
                 ADD COLUMN IF NOT EXISTS slot_ora_inizio TIME,
                 ADD COLUMN IF NOT EXISTS slot_ora_fine TIME,
+                ADD COLUMN IF NOT EXISTS slot_ora_inizio_2 TIME,
+                ADD COLUMN IF NOT EXISTS slot_ora_fine_2 TIME,
                 ADD COLUMN IF NOT EXISTS slot_posti INTEGER DEFAULT 1;
         """)
         cur.execute("""
@@ -45,24 +47,28 @@ def _placeholder(conn) -> str:
 
 
 def genera_slot(ev: dict) -> list[datetime]:
-    """Genera la lista di orari per un evento a slot (stesso giorno di ev['data_ora'])."""
+    """Genera la lista di orari per un evento a slot (stesso giorno di ev['data_ora']).
+    Supporta una seconda fascia opzionale (slot_ora_inizio_2/slot_ora_fine_2),
+    es. mattina 9-12 e pomeriggio 16-18 nello stesso giorno."""
     if not ev.get("slot_abilitati"):
         return []
     data_ora = ev["data_ora"]
     giorno = data_ora.date() if hasattr(data_ora, "date") else data_ora
-    ora_i: dtime = ev["slot_ora_inizio"]
-    ora_f: dtime = ev["slot_ora_fine"]
-    if not ora_i or not ora_f:
-        return []
     durata = int(ev.get("slot_durata_minuti") or 15)
 
-    cur_dt = datetime.combine(giorno, ora_i)
-    fine_dt = datetime.combine(giorno, ora_f)
+    def _blocco(ora_i, ora_f):
+        if not ora_i or not ora_f:
+            return []
+        cur_dt = datetime.combine(giorno, ora_i)
+        fine_dt = datetime.combine(giorno, ora_f)
+        out = []
+        while cur_dt < fine_dt:
+            out.append(cur_dt)
+            cur_dt += timedelta(minutes=durata)
+        return out
 
-    slots = []
-    while cur_dt < fine_dt:
-        slots.append(cur_dt)
-        cur_dt += timedelta(minutes=durata)
+    slots = _blocco(ev.get("slot_ora_inizio"), ev.get("slot_ora_fine"))
+    slots += _blocco(ev.get("slot_ora_inizio_2"), ev.get("slot_ora_fine_2"))
     return slots
 
 
