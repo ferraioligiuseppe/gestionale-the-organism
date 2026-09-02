@@ -147,12 +147,31 @@ def _eta(dn_str):
     except Exception:
         return None
 
+def _lista_professionisti(conn):
+    """Query auth_users con cache di sessione (5 min): evita di rifare la
+    stessa query a ogni rerun/cambio scheda, causa principale della lentezza."""
+    import time
+    cache = st.session_state.get("_vvp_prof_cache")
+    if cache and time.time() - cache["ts"] < 300:
+        return cache["rows"]
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, username, display_name, profilo_json "
+            "FROM auth_users WHERE is_active=TRUE ORDER BY username"
+        )
+        rows = cur.fetchall() or []
+    except Exception:
+        rows = []
+    st.session_state["_vvp_prof_cache"] = {"ts": time.time(), "rows": rows}
+    return rows
+
 
 # ══════════════════════════════════════════════════════════════════════
 #  INTESTAZIONE VISITA
 # ══════════════════════════════════════════════════════════════════════
 
-def _intestazione(pid, paziente, stored):
+def _intestazione(conn, pid, paziente, stored):
     s = lambda c: _sk("int", c, pid)
     d = stored.get("intestazione", {})
 
@@ -180,13 +199,8 @@ def _intestazione(pid, paziente, stored):
     # Selettore professionista dal DB
     st.markdown("**Professionista che esegue la valutazione:**")
     try:
-        cur_p = conn.cursor()
-        cur_p.execute(
-            "SELECT id, username, display_name, profilo_json "
-            "FROM auth_users WHERE is_active=TRUE ORDER BY username"
-        )
-        utenti_db = cur_p.fetchall() or []
-        
+        utenti_db = _lista_professionisti(conn)
+
         def _build_prof_option(u):
             if isinstance(u, dict):
                 dn = u.get("display_name","") or ""
@@ -1251,12 +1265,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
 
     # ── Selettore professionista in cima ─────────────────────────────
     try:
-        cur_p = conn.cursor()
-        cur_p.execute(
-            "SELECT id, username, display_name, profilo_json "
-            "FROM auth_users WHERE is_active=TRUE ORDER BY username"
-        )
-        utenti_db = cur_p.fetchall() or []
+        utenti_db = _lista_professionisti(conn)
 
         def _parse_prof_row(u):
             if isinstance(u, dict):
@@ -1326,87 +1335,79 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         _prof_spec = _titolo_prof()
 
     st.markdown("---")
+    SEZ_LABELS = [
+        "Intestazione", "👁️ Anamnesi", "A. Stato refrattivo", "B. Equilibrio binoculare",
+        "C. Accomodazione", "D. Oculomotricita", "E. Esame obiettivo",
+        "F. Profilo funzionale", "G. Prescrizione", "H. Sports Vision",
+        "🖥️ Test online", "💶 Incasso",
+    ]
+    tab_key = f"vvp_sezione_{paz_id}"
+    if tab_key not in st.session_state or st.session_state[tab_key] not in SEZ_LABELS:
+        st.session_state[tab_key] = SEZ_LABELS[0]
     st.markdown("""<style>
-        div[data-baseweb="tab-list"]{
-            overflow-x: auto !important;
-            flex-wrap: nowrap !important;
-            scrollbar-width: thin;
-        }
-        div[data-baseweb="tab-list"]::-webkit-scrollbar{ height:8px; }
-        div[data-baseweb="tab-list"]::-webkit-scrollbar-thumb{
-            background:#bbb; border-radius:4px;
-        }
-        div[data-baseweb="tab-list"] button[data-baseweb="tab"]{
-            flex: 0 0 auto !important;
+        div[role="radiogroup"]{ flex-wrap: wrap !important; gap: 4px !important; }
+        div[role="radiogroup"] label{
+            background: var(--color-background-secondary);
+            border: 1px solid var(--color-border-tertiary);
+            border-radius: 8px; padding: 4px 10px !important; margin: 0 !important;
         }
     </style>""", unsafe_allow_html=True)
-    tabs = st.tabs([
-        "Intestazione",
-        "👁️ Anamnesi",
-        "A. Stato refrattivo",
-        "B. Equilibrio binoculare",
-        "C. Accomodazione",
-        "D. Oculomotricita",
-        "E. Esame obiettivo",
-        "F. Profilo funzionale",
-        "G. Prescrizione",
-        "H. Sports Vision",
-        "🖥️ Test online",
-        "💶 Incasso",
-    ])
+    sezione = st.radio("Sezione", SEZ_LABELS, key=tab_key, horizontal=True,
+                       label_visibility="collapsed")
+    st.markdown("---")
 
-    with tabs[0]:
-        dati.update(_intestazione(paz_id, paziente, stored))
+    if sezione == "Intestazione":
+        dati.update(_intestazione(conn, paz_id, paziente, stored))
         if st.button("Salva intestazione", key=f"sv_int_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[1]:
+    elif sezione == "👁️ Anamnesi":
         try:
             from modules.ui_anamnesi_visiva import render_anamnesi_visiva
             render_anamnesi_visiva(conn, paz_id)
         except Exception as e:
             st.error(f"Anamnesi visiva non disponibile: {e}")
 
-    with tabs[2]:
+    elif sezione == "A. Stato refrattivo":
         dati.update(_sez_a(paz_id, stored))
         if st.button("Salva sezione A", key=f"sv_a_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[3]:
+    elif sezione == "B. Equilibrio binoculare":
         dati.update(_sez_b(paz_id, stored))
         if st.button("Salva sezione B", key=f"sv_b_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[4]:
+    elif sezione == "C. Accomodazione":
         dati.update(_sez_c(paz_id, stored))
         if st.button("Salva sezione C", key=f"sv_c_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[5]:
+    elif sezione == "D. Oculomotricita":
         dati.update(_sez_d(paz_id, stored, paziente))
         if st.button("Salva sezione D", key=f"sv_d_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[6]:
+    elif sezione == "E. Esame obiettivo":
         dati.update(_sez_e(paz_id, stored))
         if st.button("Salva sezione E", key=f"sv_e_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[7]:
+    elif sezione == "F. Profilo funzionale":
         dati.update(_sez_f(paz_id, dati))
 
-    with tabs[8]:
+    elif sezione == "G. Prescrizione":
         extra = _sez_g(conn, paz_id, dati, paziente)
         dati.update(extra)
         if st.button("Salva diagnosi e piano", key=f"sv_g_{paz_id}", type="primary"):
             _salva(conn, paz_id, dati)
 
-    with tabs[9]:
+    elif sezione == "H. Sports Vision":
         dati.update(_sez_h(paz_id, stored))
         if st.button("Salva note Sports Vision", key=f"sv_h_{paz_id}"):
             _salva(conn, paz_id, dati)
 
-    with tabs[10]:
+    elif sezione == "🖥️ Test online":
         st.markdown("#### 🖥️ Esami visuo-percettivi online")
         st.caption("Eseguibili direttamente da qui, senza uscire dalla valutazione.")
         with st.expander("🔢 DEM"):
@@ -1434,7 +1435,7 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
         except Exception as e:
             st.error(f"Photoref AI non disponibile: {e}")
 
-    with tabs[11]:
+    elif sezione == "💶 Incasso":
         st.markdown("#### 💶 Incasso visita")
         try:
             from modules.incasso import campi_incasso, salva_incasso, riepilogo_incasso, ensure_incasso_columns
