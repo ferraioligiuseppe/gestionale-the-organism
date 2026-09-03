@@ -128,7 +128,16 @@ def _draw_justified(c, line, x0, yt, font, size, max_w):
         return
     words_w = sum(c.stringWidth(w, font, size) for w in words)
     gaps = len(words) - 1
+    normal_space = c.stringWidth(" ", font, size)
+    riempimento = words_w / max_w if max_w else 1
+    # Riga troppo corta rispetto alla colonna (es. ultima parola andata a capo
+    # da sola su poche parole): giustificarla creerebbe spazi enormi. Sotto
+    # l'85% di riempimento la disegniamo normale, senza allargare gli spazi.
+    if riempimento < 0.85:
+        c.drawString(x0, yt, line)
+        return
     extra = (max_w - words_w) / gaps
+    extra = min(extra, normal_space * 2.5)  # tetto: mai più di 2.5x lo spazio normale
     x = x0
     for w in words:
         c.drawString(x, yt, w)
