@@ -414,7 +414,12 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
         "automaticamente tutti i questionari compilati."
     )
     if st.button("→ Vai a Relazioni Cliniche", key=f"goto_relazioni_{paziente_id}"):
-        st.session_state["go_section"] = "️ Relazioni cliniche"
+        try:
+            from modules.app_menu import AREA_REPORT_AI
+        except Exception:
+            AREA_REPORT_AI = "🤖 Report & AI"
+        st.session_state["nav_area"] = AREA_REPORT_AI
+        st.session_state[f"nav_sotto_{AREA_REPORT_AI}"] = "🤖 Relazioni cliniche (AI)"
         st.rerun()
 
 
