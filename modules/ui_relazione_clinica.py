@@ -780,9 +780,16 @@ def _salva_relazione(conn, paz_id, tipo, testo):
         )
         cur.execute("ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS testo TEXT")
         cur.execute("ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS creato TIMESTAMP DEFAULT NOW()")
+        cur.execute("ALTER TABLE relazioni_cliniche ALTER COLUMN titolo DROP NOT NULL")
+        for _col in ("data_relazione", "docx_path", "pdf_path", "note", "stato",
+                     "contenuto_json", "pdf_bytes", "professionista", "fonte_dati"):
+            try:
+                cur.execute(f"ALTER TABLE relazioni_cliniche ALTER COLUMN {_col} DROP NOT NULL")
+            except Exception:
+                pass
         cur.execute(
-            "INSERT INTO relazioni_cliniche (paziente_id, tipo, testo) VALUES (%s,%s,%s)",
-            (paz_id, tipo, testo)
+            "INSERT INTO relazioni_cliniche (paziente_id, tipo, titolo, testo) VALUES (%s,%s,%s,%s)",
+            (paz_id, tipo, tipo, testo)
         )
         conn.commit()
         return True
