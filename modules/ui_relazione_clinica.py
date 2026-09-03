@@ -780,16 +780,15 @@ def _salva_relazione(conn, paz_id, tipo, testo):
         )
         cur.execute("ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS testo TEXT")
         cur.execute("ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS creato TIMESTAMP DEFAULT NOW()")
-        cur.execute("ALTER TABLE relazioni_cliniche ALTER COLUMN titolo DROP NOT NULL")
-        for _col in ("data_relazione", "docx_path", "pdf_path", "note", "stato",
-                     "contenuto_json", "pdf_bytes", "professionista", "fonte_dati"):
-            try:
-                cur.execute(f"ALTER TABLE relazioni_cliniche ALTER COLUMN {_col} DROP NOT NULL")
-            except Exception:
-                pass
+        # Non ci fidiamo più di ALTER ... DROP NOT NULL (falliva in silenzio su
+        # data_relazione): forniamo direttamente un valore reale per ogni
+        # colonna NOT NULL nota di questa tabella condivisa.
+        oggi = __import__("datetime").date.today().isoformat()
         cur.execute(
-            "INSERT INTO relazioni_cliniche (paziente_id, tipo, titolo, testo) VALUES (%s,%s,%s,%s)",
-            (paz_id, tipo, tipo, testo)
+            "INSERT INTO relazioni_cliniche "
+            "(paziente_id, tipo, titolo, testo, data_relazione, docx_path, pdf_path) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (paz_id, tipo, tipo, testo, oggi, "", "")
         )
         conn.commit()
         return True
