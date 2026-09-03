@@ -349,8 +349,8 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
         with st.expander("📋 INPP-R — Screening (compilato dai genitori)", expanded=True):
             screening = inpps.get("screening", {})
             positivi  = inpps.get("positivi", {})
-            score     = inpps.get("score", 0)
-            soglia    = inpps.get("soglia", 7)
+            score     = screening.get("totale_positivi", 0)
+            soglia    = screening.get("cutoff", 7)
 
             col1, col2 = st.columns(2)
             col1.metric("Score totale", score)
