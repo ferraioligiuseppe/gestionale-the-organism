@@ -778,6 +778,8 @@ def _salva_relazione(conn, paz_id, tipo, testo):
             "id SERIAL PRIMARY KEY, paziente_id INTEGER NOT NULL, tipo TEXT, "
             "testo TEXT, creato TIMESTAMP DEFAULT NOW())"
         )
+        cur.execute("ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS testo TEXT")
+        cur.execute("ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS creato TIMESTAMP DEFAULT NOW()")
         cur.execute(
             "INSERT INTO relazioni_cliniche (paziente_id, tipo, testo) VALUES (%s,%s,%s)",
             (paz_id, tipo, testo)
@@ -801,6 +803,8 @@ def _carica_storico_relazioni(conn, paz_id):
             "id SERIAL PRIMARY KEY, paziente_id INTEGER NOT NULL, tipo TEXT, "
             "testo TEXT, creato TIMESTAMP DEFAULT NOW())"
         )
+        cur.execute("ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS testo TEXT")
+        cur.execute("ALTER TABLE relazioni_cliniche ADD COLUMN IF NOT EXISTS creato TIMESTAMP DEFAULT NOW()")
         cur.execute(
             "SELECT id, tipo, testo, creato FROM relazioni_cliniche "
             "WHERE paziente_id=%s ORDER BY creato DESC", (paz_id,)
