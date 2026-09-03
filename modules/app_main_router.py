@@ -410,7 +410,7 @@ _PROSSIMO_PASSO = {
         _AREA_PNEV_SEQ, "🎧 Stimolazione uditiva",
         "▶ Passo successivo: Valutazione uditiva"),
     "🎧 Stimolazione uditiva": (
-        _AREA_PNEV_SEQ, "📝 Diagnosi assistita",
+        "👥 Pazienti", "📝 Diagnosi assistita",
         "▶ Passo successivo: Diagnosi"),
 }
 
