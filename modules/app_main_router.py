@@ -465,8 +465,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
-        "🎧 Stimolazione uditiva", "🎧 MAPS", "🗂 Programmi MAPS",
+        "🎧 Stimolazione uditiva", "🎧 MAPS", "🗂 Programmi MAPS", "🎧 MAPS-CLEAR in studio",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
+        "🎧 MAPS-CLEAR in studio",
         "🎧 Audiometria tonale calibrata",
         "🤖 Relazioni cliniche (AI)", "📝 Relazione clinica",
         "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
@@ -617,6 +618,20 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             render_pnev_pubblico_admin(conn)
         except Exception as e:
             st.error(f"Modulo MAPS-CLEAR pubblico non disponibile: {e}")
+        return True
+
+    if sotto == "🎧 MAPS-CLEAR in studio":
+        try:
+            from modules.pnev_pubblico.ui_studio_session import render_maps_clear_studio
+            cur2 = conn.cursor()
+            cur2.execute("SELECT * FROM Pazienti WHERE id=%s", (paz_id,))
+            paz_rec = cur2.fetchone()
+            if paz_rec and not isinstance(paz_rec, dict):
+                cols = [d[0] for d in cur2.description]
+                paz_rec = dict(zip(cols, paz_rec))
+            render_maps_clear_studio(conn, paz_id, paz_rec or {})
+        except Exception as e:
+            st.error(f"Modulo MAPS-CLEAR in studio non disponibile: {e}")
         return True
 
     # ── INVII AL PAZIENTE ─────────────────────────────────────────────
