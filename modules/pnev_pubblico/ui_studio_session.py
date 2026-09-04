@@ -49,9 +49,6 @@ def render_maps_clear_studio(conn, paz_id, paziente):
     st.link_button("🔗 Apri la sessione a schermo intero (nuova scheda)", url, type="primary")
     st.caption("Consigliato per lo studio: apri a schermo intero, così i controlli audio sono grandi.")
 
-    with st.expander("Anteprima qui sotto (più piccola)", expanded=False):
-        components.iframe(url, height=850, scrolling=True)
-
     st.divider()
     st.markdown("**📋 Sessioni già registrate per questo paziente**")
     sessioni = db.get_sessioni(conn, utente_id)
