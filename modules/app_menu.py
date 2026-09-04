@@ -120,6 +120,7 @@ PNEV_RAMI = {
         "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS",
         "🎧 MAPS-CLEAR pubblico",
+        "🎧 MAPS-CLEAR in studio",
         "🎧 Libreria calibrazioni cuffie",
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
