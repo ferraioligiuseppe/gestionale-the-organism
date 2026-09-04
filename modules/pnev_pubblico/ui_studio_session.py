@@ -62,3 +62,32 @@ def render_maps_clear_studio(conn, paz_id, paziente):
             _, g, data_s, modalita, delay, orec, fpre, fpost, comfort, beneficio, note, _ = s
             st.write(f"Giorno {g} — {data_s:%d/%m/%Y %H:%M} — {modalita or '—'} "
                      f"— fluenza {fpre}→{fpost}")
+
+    st.divider()
+    st.markdown("**✍️ Registra una sessione fatta in studio**")
+    st.caption("Per sedute svolte in autonomia con lo strumento Potential/Focus/Precision, "
+               "senza passare dal sito — resta comunque tracciata qui e su MAPS-CLEAR pubblico.")
+    giorni_fatti = {s[1] for s in sessioni}
+    giorno_default = min((g for g in range(1, 8) if g not in giorni_fatti), default=1)
+    with st.form("form_sessione_studio"):
+        c1, c2, c3 = st.columns(3)
+        giorno = c1.number_input("Giorno del percorso", min_value=1, max_value=7, value=giorno_default)
+        modalita = c2.selectbox("Modalità", ["potential", "focus", "motor", "ricarica", "growth", "libero"])
+        orecchio = c3.selectbox("Orecchio dominante usato", ["R", "L", "—"], index=2)
+        c4, c5 = st.columns(2)
+        fluency_pre = c4.slider("Fluenza prima (1-10)", 1, 10, 5)
+        fluency_post = c5.slider("Fluenza dopo (1-10)", 1, 10, 5)
+        c6, c7 = st.columns(2)
+        comfort = c6.slider("Comfort (1-10)", 1, 10, 7)
+        beneficio = c7.slider("Beneficio percepito (1-10)", 1, 10, 6)
+        note = st.text_area("Note della seduta", placeholder="Es: seduta in studio con Potential, buona tenuta")
+        if st.form_submit_button("💾 Salva sessione in studio", type="primary"):
+            db.salva_sessione(
+                conn, utente_id, giorno=int(giorno), modalita=modalita,
+                delay_ms=None, orecchio=None if orecchio == "—" else orecchio,
+                fluency_pre=int(fluency_pre), fluency_post=int(fluency_post),
+                comfort=int(comfort), beneficio=int(beneficio),
+                note=(note or "") + " [seduta in studio]",
+            )
+            st.success(f"Sessione del giorno {giorno} salvata ✅ — visibile anche su MAPS-CLEAR pubblico.")
+            st.rerun()
