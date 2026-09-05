@@ -7,6 +7,8 @@ import streamlit as st
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from .trascrizione_audio import trascrivi_audio, trascrizione_disponibile
+
 TZ = ZoneInfo("Europe/Rome")
 
 TIPI_VOCE = {
@@ -53,6 +55,22 @@ CREATE INDEX IF NOT EXISTS idx_diario_paziente
 CREATE UNIQUE INDEX IF NOT EXISTS idx_diario_origine
     ON diario_clinico (studio_id, modulo_origine, riferimento_id)
     WHERE modulo_origine IS NOT NULL AND riferimento_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS diario_clinico_audio (
+    id          BIGSERIAL PRIMARY KEY,
+    studio_id   BIGINT      NOT NULL,
+    voce_id     BIGINT      NOT NULL REFERENCES diario_clinico(id) ON DELETE CASCADE,
+    ordine      INT         NOT NULL,
+    speaker     TEXT        NOT NULL,
+    mime        TEXT        NOT NULL DEFAULT 'audio/wav',
+    dati        BYTEA       NOT NULL,
+    trascritto  TEXT,
+    creato_il   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_diario_audio_speaker CHECK (speaker IN ('professionista', 'paziente'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_diario_audio_voce
+    ON diario_clinico_audio (voce_id, ordine);
 """
 
 RLS = """
@@ -60,6 +78,13 @@ ALTER TABLE diario_clinico ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS pol_diario_tenant ON diario_clinico;
 CREATE POLICY pol_diario_tenant ON diario_clinico
+    USING (studio_id = current_setting('app.studio_id')::BIGINT)
+    WITH CHECK (studio_id = current_setting('app.studio_id')::BIGINT);
+
+ALTER TABLE diario_clinico_audio ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS pol_diario_audio_tenant ON diario_clinico_audio;
+CREATE POLICY pol_diario_audio_tenant ON diario_clinico_audio
     USING (studio_id = current_setting('app.studio_id')::BIGINT)
     WITH CHECK (studio_id = current_setting('app.studio_id')::BIGINT);
 """
@@ -115,6 +140,34 @@ def registra_voce_diario(conn, studio_id, paziente_id, tipo_voce, modulo_origine
     row = cur.fetchone()
     conn.commit()
     return row[0] if row else None
+
+
+def salva_clip_audio(conn, studio_id, voce_id, ordine, speaker, mime, dati, trascritto=None):
+    sql = """
+        INSERT INTO diario_clinico_audio
+            (studio_id, voce_id, ordine, speaker, mime, dati, trascritto)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING id;
+    """
+    cur = conn.cursor()
+    cur.execute(sql, (studio_id, voce_id, ordine, speaker, mime, dati, trascritto))
+    nuovo_id = cur.fetchone()[0]
+    conn.commit()
+    return nuovo_id
+
+
+def lista_clip_audio(conn, studio_id, voce_id):
+    sql = """
+        SELECT id, ordine, speaker, mime, dati, trascritto, creato_il
+          FROM diario_clinico_audio
+         WHERE studio_id = %s AND voce_id = %s
+         ORDER BY ordine ASC;
+    """
+    cur = conn.cursor()
+    cur.execute(sql, (studio_id, voce_id))
+    righe = cur.fetchall()
+    chiavi = ["id", "ordine", "speaker", "mime", "dati", "trascritto", "creato_il"]
+    return [dict(zip(chiavi, r)) for r in righe]
 
 
 def aggiungi_nota(conn, studio_id, paziente_id, tipo_voce, testo, titolo=None,
@@ -219,10 +272,73 @@ def conteggio_per_tipo(conn, studio_id, paziente_id):
 # ---------------------------------------------------------------------------
 # UI
 # ---------------------------------------------------------------------------
+def _render_registratore_seduta(conn, studio_id, paz_id):
+    chiave_turni = f"diario_turni_{paz_id}"
+    if chiave_turni not in st.session_state:
+        st.session_state[chiave_turni] = []
+    turni = st.session_state[chiave_turni]
+
+    with st.expander("🎙️ Registra la seduta (professionista / paziente)", expanded=bool(turni)):
+        if not trascrizione_disponibile():
+            st.warning("Trascrizione automatica non configurata (manca chiave AI nei Secrets). "
+                       "Puoi comunque registrare: l'audio verrà salvato senza testo.")
+
+        speaker = st.radio("Chi sta parlando in questo turno?",
+                          ["professionista", "paziente"],
+                          format_func=lambda s: "🧑‍⚕️ Professionista" if s == "professionista" else "🧒 Paziente",
+                          horizontal=True, key=f"diario_speaker_{paz_id}")
+
+        audio_val = st.audio_input("Registra questo turno", key=f"diario_rec_{paz_id}_{len(turni)}")
+        if audio_val is not None:
+            dati = audio_val.getvalue()
+            mime = audio_val.type or "audio/wav"
+            with st.spinner("Trascrizione in corso..."):
+                testo = trascrivi_audio(dati, mime) if trascrizione_disponibile() else ""
+            turni.append({"speaker": speaker, "mime": mime, "dati": dati, "testo": testo})
+            st.rerun()
+
+        if turni:
+            st.divider()
+            st.caption(f"{len(turni)} turno/i registrato/i in questa sessione:")
+            for i, t in enumerate(turni):
+                etichetta = "🧑‍⚕️ Professionista" if t["speaker"] == "professionista" else "🧒 Paziente"
+                st.markdown(f"**{i+1}. {etichetta}**")
+                st.audio(t["dati"], format=t["mime"])
+                if t["testo"].startswith("⚠️"):
+                    st.caption(t["testo"])
+                elif t["testo"]:
+                    st.write(t["testo"])
+                else:
+                    st.caption("(nessuna trascrizione)")
+
+            c1, c2, c3 = st.columns([1, 1, 2])
+            if c1.button("↩️ Rimuovi ultimo turno", key=f"diario_rec_undo_{paz_id}"):
+                turni.pop()
+                st.rerun()
+            if c2.button("🗑️ Scarta tutto", key=f"diario_rec_clear_{paz_id}"):
+                st.session_state[chiave_turni] = []
+                st.rerun()
+            if c3.button("✅ Salva seduta nel diario", type="primary", key=f"diario_rec_save_{paz_id}"):
+                transcript = "\n\n".join(
+                    f"[{'Professionista' if t['speaker']=='professionista' else 'Paziente'}] {t['testo']}"
+                    for t in turni if t["testo"] and not t["testo"].startswith("⚠️")
+                )
+                autore = st.session_state.get("utente_nome") or st.session_state.get("username")
+                nuovo_id = aggiungi_nota(conn, studio_id, paz_id, "seduta",
+                                        transcript or "(seduta registrata senza trascrizione)",
+                                        titolo="Seduta registrata", autore=autore)
+                for i, t in enumerate(turni):
+                    salva_clip_audio(conn, studio_id, nuovo_id, i, t["speaker"], t["mime"],
+                                    t["dati"], t["testo"] or None)
+                st.session_state[chiave_turni] = []
+                st.success("Seduta salvata nel diario.")
+                st.rerun()
+
+
 def render_diario(conn, paz_id=None, paziente=None):
     st.header("🗓️ Diario clinico")
     st.caption("Timeline del percorso del paziente: voci generate automaticamente "
-               "dai moduli e note scritte liberamente.")
+               "dai moduli, note scritte liberamente e registrazioni di seduta.")
 
     if not paz_id:
         st.info("Seleziona un paziente per vedere o scrivere sul suo diario.")
@@ -236,7 +352,9 @@ def render_diario(conn, paz_id=None, paziente=None):
 
     studio_id = st.session_state.get("studio_id", 1)
 
-    with st.expander("✏️ Aggiungi voce manuale", expanded=False):
+    _render_registratore_seduta(conn, studio_id, paz_id)
+
+    with st.expander("✏️ Aggiungi voce manuale (testo)", expanded=False):
         with st.form("form_nuova_voce_diario", clear_on_submit=True):
             c1, c2 = st.columns([1, 2])
             tipo = c1.selectbox("Tipo", list(TIPI_VOCE.keys()),
@@ -284,6 +402,13 @@ def render_diario(conn, paz_id=None, paziente=None):
                 st.markdown(f"**{v['riassunto']}**")
             if v["testo"]:
                 st.write(v["testo"])
+            clip = lista_clip_audio(conn, studio_id, v["id"])
+            if clip:
+                st.markdown("**🎙️ Registrazione seduta:**")
+                etichette = {"professionista": "🧑‍⚕️ Professionista", "paziente": "🧒 Paziente"}
+                for c in clip:
+                    st.caption(etichette.get(c["speaker"], c["speaker"]))
+                    st.audio(bytes(c["dati"]), format=c["mime"])
             if not v["visibile_in_referto"]:
                 st.caption("🚫 non incluso nel referto")
 
