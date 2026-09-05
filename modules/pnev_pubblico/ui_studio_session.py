@@ -43,11 +43,18 @@ def render_maps_clear_studio(conn, paz_id, paziente):
         utente_id = utente[0]
 
     token = db.crea_magic_link(conn, utente_id)
-    base = st.secrets.get("APP_URL_PUBBLICO", APP_URL_PUBBLICO_DEFAULT).rstrip("/")
-    url = f"{base}/?t={token}"
+    # Il vero lettore audio (MAPS-CLEAR-v2) vive su pnev.it, non nel gestionale:
+    # qui generavamo solo il link alla dashboard dei progressi, che è vuota
+    # finché non si fa almeno una sessione — per questo "non partiva" nulla.
+    base_player = st.secrets.get("MAPS_CLEAR_PLAYER_URL",
+                                  "https://www.pnev.it/wp-content/uploads/balbuzie/MAPS-CLEAR-v2-obf.html").rstrip("/")
+    base_dash = st.secrets.get("APP_URL_PUBBLICO", APP_URL_PUBBLICO_DEFAULT).rstrip("/")
+    url_player = f"{base_player}?t={token}"
+    url_dash = f"{base_dash}/?t={token}"
 
-    st.link_button("🔗 Apri la sessione a schermo intero (nuova scheda)", url, type="primary")
-    st.caption("Consigliato per lo studio: apri a schermo intero, così i controlli audio sono grandi.")
+    st.link_button("🎧 Avvia la sessione audio (nuova scheda)", url_player, type="primary")
+    st.caption("Apre il vero percorso guidato con l'audio — quello che il paziente sente anche da casa su pnev.it.")
+    st.link_button("📊 Vedi la dashboard progressi", url_dash)
 
     st.divider()
     st.markdown("**📋 Sessioni già registrate per questo paziente**")
