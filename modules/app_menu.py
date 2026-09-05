@@ -156,6 +156,7 @@ SOTTOSEZIONI = {
         "🏠 Dashboard",
         "👤 Anagrafica pazienti",
         "📎 Documenti clinici",
+        "🗓️ Diario clinico",
         "🧩 Quadro storico",
         "💡 Assistente PNEV",
         "📈 Esiti / Follow-up",

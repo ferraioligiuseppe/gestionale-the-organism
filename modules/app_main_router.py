@@ -450,7 +450,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
 
     VOCI_CON_PAZIENTE = {
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
-        "📎 Documenti clinici", "🧩 Quadro storico", "💡 Assistente PNEV",
+        "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "🔬 PNEV", "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
@@ -499,6 +499,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore anagrafica: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "🗓️ Diario clinico":
+        try:
+            from .diario_clinico import render_diario
+            render_diario(conn, paz_id=paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore diario clinico: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
