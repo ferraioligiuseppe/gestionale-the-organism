@@ -47,7 +47,7 @@ def render_maps_clear_studio(conn, paz_id, paziente):
     # qui generavamo solo il link alla dashboard dei progressi, che è vuota
     # finché non si fa almeno una sessione — per questo "non partiva" nulla.
     base_player = st.secrets.get("MAPS_CLEAR_PLAYER_URL",
-                                  "https://www.pnev.it/wp-content/uploads/balbuzie/MAPS-CLEAR-v2-obf.html").rstrip("/")
+                                  "https://www.pnev.it/wp-content/uploads/balbuzie/MAPS-CLEAR-v2.html").rstrip("/")
     base_dash = st.secrets.get("APP_URL_PUBBLICO", APP_URL_PUBBLICO_DEFAULT).rstrip("/")
     url_player = f"{base_player}?t={token}"
     url_dash = f"{base_dash}/?t={token}"
