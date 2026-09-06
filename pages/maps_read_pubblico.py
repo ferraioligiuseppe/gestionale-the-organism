@@ -81,6 +81,7 @@ with st.form("form_maps_read_pubblico"):
     facilita = st.selectbox("Facilità percepita rispetto a prima", opz_facilita,
                              index=opz_facilita.index(_def_fac) if _def_fac in opz_facilita else 2)
     note = st.text_area("Note (facoltativo)", value=_q("note", ""))
+    audio_file = st.audio_input("🎙️ Se hai registrato la lettura, caricala qui (facoltativo)")
     submitted = st.form_submit_button("📤 INVIA AL GESTIONALE", type="primary", use_container_width=True)
 
 if submitted:
@@ -88,12 +89,17 @@ if submitted:
         st.error("Indica quale condizione visiva è stata provata.")
     else:
         try:
+            audio_url = None
+            if audio_file is not None:
+                from modules.dropbox_upload import upload_audio_bytes
+                path = f"/maps-read/{utente_id}/giorno{int(giorno)}_{condizione.strip()[:20]}.wav"
+                audio_url = upload_audio_bytes(audio_file.getvalue(), path)
             db.salva_sessione_read(
                 conn, utente_id, giorno=int(giorno), contenuto=contenuto,
                 condizione=condizione.strip(), testo_usato=testo_usato.strip(),
                 comfort_pre=int(comfort_pre), fatica_pre=int(fatica_pre),
                 comfort_post=int(comfort_post), fatica_post=int(fatica_post),
-                facilita=facilita, note=note.strip(),
+                facilita=facilita, note=note.strip(), audio_url=audio_url,
             )
             st.session_state.mr_inviato = True
             st.rerun()
