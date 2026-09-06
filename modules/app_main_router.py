@@ -644,6 +644,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             st.error(f"Modulo MAPS-CLEAR in studio non disponibile: {e}")
         return True
+    if sotto == "🔤 MAPS-Read":
+        try:
+            from modules.pnev_pubblico.ui_maps_read_studio import render_maps_read_studio
+            render_maps_read_studio(conn, paz_id, None)
+        except Exception as e:
+            st.error(f"Modulo MAPS-Read non disponibile: {e}")
+        return True
 
     # ── INVII AL PAZIENTE ─────────────────────────────────────────────
     if sotto == "📋 Questionari remoti":
