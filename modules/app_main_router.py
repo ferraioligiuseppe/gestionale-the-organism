@@ -463,6 +463,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🥁 PNEV Metronomo",
         "👁️ Eye tracking",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
+        "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
         "🎧 Stimolazione uditiva", "🎧 MAPS", "🗂 Programmi MAPS", "🎧 MAPS-CLEAR in studio",
@@ -765,6 +766,17 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore modulo Logopedia: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "🤸 Psicomotricità funzionale":
+        try:
+            from .ui_psicomotricita_funzionale import render_psicomotricita_funzionale
+            render_psicomotricita_funzionale(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Psicomotricità funzionale: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         _assistente_coda(conn, paz_id)

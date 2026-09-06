@@ -186,11 +186,12 @@ SOTTOSEZIONI = {
     AREA_ORTOTTICA: [
         "🚧 Ortottica (in arrivo)",
     ],
-    AREA_TNPEE: [
-        "🗣️ Logopedia / SMOF",
-    ],
     AREA_OSTEOPATIA: [
         "🦴 Osteopatia",
+    ],
+    AREA_TNPEE: [
+        "🗣️ Logopedia / SMOF",
+        "🤸 Psicomotricità funzionale",
     ],
     AREA_ACADEMY: [
         "📅 Eventi e iscrizioni",
