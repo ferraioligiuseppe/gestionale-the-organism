@@ -56,9 +56,15 @@ def render_maps_read_studio(conn, paz_id, paziente):
         st.info("Nessuna sessione ancora salvata (da casa o in studio).")
     else:
         for s in sessioni:
-            _, g, data_s, contenuto, condizione, testo_usato, cpre, fpre, cpost, fpost, facilita, note = s
-            st.write(f"Giorno {g} — {data_s:%d/%m/%Y %H:%M} — **{condizione}** "
-                     f"— comfort {cpre}→{cpost} · fatica {fpre}→{fpost} · {facilita or '—'}")
+            _, g, data_s, contenuto, condizione, testo_usato, cpre, fpre, cpost, fpost, facilita, note, audio_url = s
+            riga = (f"Giorno {g} — {data_s:%d/%m/%Y %H:%M} — **{condizione}** "
+                    f"— comfort {cpre}→{cpost} · fatica {fpre}→{fpost} · {facilita or '—'}")
+            if audio_url:
+                cA, cB = st.columns([5, 1])
+                cA.write(riga)
+                cB.markdown(f"[🔊 Ascolta]({audio_url})")
+            else:
+                st.write(riga)
 
     st.divider()
     st.markdown("**✍️ Registra una sessione fatta in studio (o riportata dal genitore)**")
@@ -79,16 +85,22 @@ def render_maps_read_studio(conn, paz_id, paziente):
         facilita = st.selectbox("Facilità percepita rispetto a prima", 
                                  ["Molto più difficile", "Un po' più difficile", "Uguale", "Un po' più facile", "Molto più facile"], index=2)
         note = st.text_area("Note della seduta")
+        audio_file = st.audio_input("🎙️ Registra la lettura (facoltativo, va sul gestionale)")
         if st.form_submit_button("💾 Salva sessione", type="primary"):
             if not condizione.strip():
                 st.error("Indica quale condizione visiva è stata provata.")
             else:
+                audio_url = None
+                if audio_file is not None:
+                    from modules.dropbox_upload import upload_audio_bytes
+                    path = f"/maps-read/{utente_id}/giorno{int(giorno)}_{condizione.strip()[:20]}.wav"
+                    audio_url = upload_audio_bytes(audio_file.getvalue(), path)
                 db.salva_sessione_read(
                     conn, utente_id, giorno=int(giorno), contenuto=contenuto,
                     condizione=condizione.strip(), testo_usato=(testo_usato or "").strip(),
                     comfort_pre=int(comfort_pre), fatica_pre=int(fatica_pre),
                     comfort_post=int(comfort_post), fatica_post=int(fatica_post),
-                    facilita=facilita, note=(note or "").strip(),
+                    facilita=facilita, note=(note or "").strip(), audio_url=audio_url,
                 )
-                st.success(f"Sessione del giorno {giorno} salvata ✅")
+                st.success(f"Sessione del giorno {giorno} salvata ✅" + (" (audio caricato)" if audio_url else ""))
                 st.rerun()

@@ -497,10 +497,12 @@ def init_maps_read_db(conn):
                 fatica_post     INTEGER,
                 facilita        TEXT,
                 note            TEXT,
+                audio_url       TEXT,
                 creato_il       TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (utente_id, giorno, condizione)
             );
         """)
+        cur.execute("ALTER TABLE pnev_pubblico_maps_read_sessioni ADD COLUMN IF NOT EXISTS audio_url TEXT;")
         cur.execute("""
             CREATE INDEX IF NOT EXISTS ix_pnev_pubblico_maps_read_utente
             ON pnev_pubblico_maps_read_sessioni (utente_id, giorno);
@@ -534,15 +536,15 @@ def init_maps_read_db(conn):
 
 def salva_sessione_read(conn, utente_id, giorno, contenuto, condizione, testo_usato,
                          comfort_pre, fatica_pre, comfort_post, fatica_post,
-                         facilita, note=None):
+                         facilita, note=None, audio_url=None):
     """Salva (o sovrascrive) una sessione MAPS-Read per una data condizione visiva."""
     cur = conn.cursor()
     try:
         cur.execute("""
             INSERT INTO pnev_pubblico_maps_read_sessioni
                 (utente_id, giorno, contenuto, condizione, testo_usato,
-                 comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note, audio_url)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (utente_id, giorno, condizione) DO UPDATE
                 SET contenuto = EXCLUDED.contenuto,
                     testo_usato = EXCLUDED.testo_usato,
@@ -552,9 +554,10 @@ def salva_sessione_read(conn, utente_id, giorno, contenuto, condizione, testo_us
                     fatica_post = EXCLUDED.fatica_post,
                     facilita = EXCLUDED.facilita,
                     note = EXCLUDED.note,
+                    audio_url = COALESCE(EXCLUDED.audio_url, pnev_pubblico_maps_read_sessioni.audio_url),
                     data_sessione = now()
         """, (utente_id, giorno, contenuto, condizione, testo_usato,
-              comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note))
+              comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note, audio_url))
         conn.commit()
     except Exception:
         try: conn.rollback()
@@ -571,7 +574,7 @@ def get_sessioni_read(conn, utente_id):
     try:
         cur.execute("""
             SELECT id, giorno, data_sessione, contenuto, condizione, testo_usato,
-                   comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note
+                   comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note, audio_url
             FROM pnev_pubblico_maps_read_sessioni
             WHERE utente_id = %s
             ORDER BY data_sessione DESC
