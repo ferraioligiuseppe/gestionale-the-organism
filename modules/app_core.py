@@ -417,7 +417,7 @@ def _ai_enabled() -> bool:
     """AI abilitata se [ai] ENABLED=true nei Secrets,
     indipendentemente da APP_MODE."""
     try:
-        a = st.secrets.get("ai", {})
+        a = _secrets_get_root("ai", {})
         return bool(a.get("ENABLED", False))
     except Exception:
         return False
@@ -436,7 +436,7 @@ APP_MODE = _secrets_get_root("APP_MODE", "prod") or __import__("os").getenv("APP
 def _inpps_cutoff() -> int:
     """Cut-off operativo (screening) per INPPS. Configurabile via Secrets: [pnev] INPPS_CUTOFF=7"""
     try:
-        return int(st.secrets.get("pnev", {}).get("INPPS_CUTOFF", 7))
+        return int(_secrets_get_root("pnev", {}).get("INPPS_CUTOFF", 7))
     except Exception:
         return 7
 
@@ -445,13 +445,13 @@ def _inpps_cutoff() -> int:
 
 
 def _public_links_enabled() -> bool:
-    return bool(st.secrets.get("public_links", {}).get("ENABLED", False))
+    return bool(_secrets_get_root("public_links", {}).get("ENABLED", False))
 
 def _public_base_url() -> str:
-    return str(st.secrets.get("public_links", {}).get("BASE_URL", "")).rstrip("/")
+    return str(_secrets_get_root("public_links", {}).get("BASE_URL", "")).rstrip("/")
 
 def _token_secret() -> str:
-    return str(st.secrets.get("public_links", {}).get("TOKEN_SECRET", ""))
+    return str(_secrets_get_root("public_links", {}).get("TOKEN_SECRET", ""))
 
 def _hash_token(token: str) -> str:
     key = _token_secret()
@@ -464,7 +464,7 @@ def create_questionario_link(cur, paziente_id: int, questionario: str, ttl_days:
     token = secrets.token_urlsafe(32)
     token_hash = _hash_token(token)
 
-    ttl = ttl_days or int(st.secrets.get("public_links", {}).get("DEFAULT_TTL_DAYS", 7))
+    ttl = ttl_days or int(_secrets_get_root("public_links", {}).get("DEFAULT_TTL_DAYS", 7))
     expires_at = datetime.now(timezone.utc) + timedelta(days=ttl)
 
     cur.execute(
@@ -980,7 +980,7 @@ def inpps_collect_ui(prefix: str, existing: dict | None = None) -> tuple[dict, s
 def _inpps_adulti_cutoff() -> int:
     """Cut-off operativo (screening) per INPP-R adulti. Configurabile via Secrets: [pnev] INPPS_ADULTI_CUTOFF=12"""
     try:
-        return int(st.secrets.get("pnev", {}).get("INPPS_ADULTI_CUTOFF", 12))
+        return int(_secrets_get_root("pnev", {}).get("INPPS_ADULTI_CUTOFF", 12))
     except Exception:
         return 12
 
@@ -1593,15 +1593,15 @@ def _pwd_verify(pw: str, stored: str) -> bool:
 def _breakglass_enabled() -> bool:
     """Emergency login toggle (TEST only)."""
     try:
-        if str(st.secrets.get("APP_MODE", "prod")).lower().strip() != "test":
+        if str(_secrets_get_root("APP_MODE", "prod")).lower().strip() != "test":
             return False
     except Exception:
         return False
-    bg = st.secrets.get("breakglass", {})
+    bg = _secrets_get_root("breakglass", {})
     return bool(bg.get("ENABLED", False))
 
 def _breakglass_check(username: str, password: str) -> bool:
-    bg = st.secrets.get("breakglass", {})
+    bg = _secrets_get_root("breakglass", {})
     return username == bg.get("USERNAME") and password == bg.get("PASSWORD")
 
 
@@ -8548,7 +8548,7 @@ def ui_debug_db():
                 for p in pericolose
             )
             try:
-                expected_pwd = st.secrets.get("EXPORT_PASSWORD", "theorganism2026")
+                expected_pwd = _secrets_get_root("EXPORT_PASSWORD", "theorganism2026")
             except Exception:
                 expected_pwd = "theorganism2026"
             if is_destructive and pwd != expected_pwd:
@@ -8839,7 +8839,7 @@ def _s3_put_private(key: str, data: bytes, content_type: str = "application/pdf"
 def _s3_client():
     if boto3 is None:
         raise RuntimeError("Manca boto3. Aggiungi 'boto3' in requirements.txt")
-    cfg = st.secrets.get("storage", {})
+    cfg = _secrets_get_root("storage", {})
     return boto3.client(
         "s3",
         endpoint_url=_valid_endpoint_url(cfg.get("S3_ENDPOINT_URL")),
@@ -8849,14 +8849,14 @@ def _s3_client():
     )
 
 def _s3_bucket():
-    cfg = st.secrets.get("storage", {})
+    cfg = _secrets_get_root("storage", {})
     b = cfg.get("S3_BUCKET")
     if not b:
         raise RuntimeError("Secrets mancanti: [storage].S3_BUCKET")
     return b
 
 def _presign_expires():
-    cfg = st.secrets.get("storage", {})
+    cfg = _secrets_get_root("storage", {})
     # default 24h
     return int(cfg.get("PRESIGN_EXPIRE_SECONDS", 86400))
 
@@ -9161,7 +9161,7 @@ def _b64url_decode(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + pad)
 
 def _token_secret() -> bytes:
-    sec = st.secrets.get("privacy", {}).get("TOKEN_SECRET")
+    sec = _secrets_get_root("privacy", {}).get("TOKEN_SECRET")
     if not sec:
         raise RuntimeError("Secrets mancanti: [privacy].TOKEN_SECRET (string lunga e casuale)")
     return sec.encode("utf-8")
@@ -9196,8 +9196,8 @@ def _public_sign_url(token: str) -> str:
     # usa base url configurabile dalla sezione [privacy] o, in fallback,
     # da [public_links] (che è già configurata per i link dei questionari)
     base = (
-        st.secrets.get("privacy", {}).get("PUBLIC_BASE_URL", "")
-        or st.secrets.get("public_links", {}).get("BASE_URL", "")
+        _secrets_get_root("privacy", {}).get("PUBLIC_BASE_URL", "")
+        or _secrets_get_root("public_links", {}).get("BASE_URL", "")
     )
     if base:
         return base.rstrip("/") + "/?sign=" + _urlparse.quote(token)
@@ -9209,7 +9209,7 @@ import smtplib
 from email.message import EmailMessage
 
 def _smtp_cfg():
-    cfg = st.secrets.get("smtp", {})
+    cfg = _secrets_get_root("smtp", {})
     if not cfg.get("HOST") or not cfg.get("PORT") or not cfg.get("USERNAME") or not cfg.get("PASSWORD"):
         raise RuntimeError("Secrets mancanti: [smtp] HOST, PORT, USERNAME, PASSWORD. (Facoltativi: FROM, USE_TLS)")
     return cfg
@@ -9239,7 +9239,7 @@ def _send_email_with_pdf(to_list: list[str], subject: str, body: str, pdf_bytes:
             s.send_message(msg)
 
 def _clinic_email() -> str:
-    return st.secrets.get("privacy", {}).get("CLINIC_EMAIL") or st.secrets.get("smtp", {}).get("FROM") or st.secrets.get("smtp", {}).get("USERNAME") or ""
+    return _secrets_get_root("privacy", {}).get("CLINIC_EMAIL") or _secrets_get_root("smtp", {}).get("FROM") or _secrets_get_root("smtp", {}).get("USERNAME") or ""
 
 def ui_privacy_pdf():
     st.subheader("Privacy e Consensi (PDF)")
@@ -9499,7 +9499,7 @@ def ui_privacy_pdf():
     # ── GENERA LINK FIRMA ONLINE ──────────────────────────────────────────
     st.markdown("**Invia link firma online al paziente**")
     st.caption("Il paziente apre il link sul telefono, legge il consenso, firma con il dito e invia. La firma viene salvata automaticamente.")
-    exp = int(st.secrets.get("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
+    exp = int(_secrets_get_root("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
     if st.button("Genera link firma online", key=f"gen_sign_{pid}_{doc_type}", type="primary"):
         try:
             token = _make_sign_token(int(pid), doc_type, exp)
