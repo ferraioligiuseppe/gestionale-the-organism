@@ -174,6 +174,13 @@ SEZIONI = [
 
 TIPO_DOCUMENTO = "Esame funzionale"
 
+AREE_LAVORO_PSICO = ["Tono ed equilibrio", "Coordinazione dinamica generale",
+                     "Coordinazione fine mano-dita", "Dominanza laterale",
+                     "Percezione tempo/ritmo", "Percezione spaziale",
+                     "Schema corporeo", "Aggiustamento/comportamento", "Altro"]
+RISPOSTA_PSICO = ["—", "🟢 Buona", "🟡 Parziale", "🔴 Scarsa"]
+STATO_OB_PSICO = ["🟦 In corso", "🟢 Raggiunto", "🟡 Parziale", "⏸️ Sospeso"]
+
 
 def _eta_anni(dn) -> int | None:
     if not dn:
@@ -270,12 +277,9 @@ def _salva_documento_pdf(conn, paz_id, studio_id, nome_file, corpo_testo, pazien
 
 def render_psicomotricita_funzionale(conn, paz_id=None, paziente=None):
     st.header("🤸 Psicomotricità funzionale")
-    st.caption("Analisi Psicomotoria Funzionale: funzione energetico-affettiva e funzioni operative "
-               "(aggiustamento, tono, equilibrio, coordinazione, dominanza laterale, percezione, "
-               "schema corporeo). Percorso guidato a step, con note libere per area.")
 
     if not paz_id:
-        st.info("Seleziona un paziente per iniziare la valutazione.")
+        st.info("Seleziona un paziente per iniziare.")
         return
 
     if paziente is None:
@@ -287,9 +291,25 @@ def render_psicomotricita_funzionale(conn, paz_id=None, paziente=None):
 
     try:
         _ensure_table(conn)
+        _assicura_tabella_sedute(conn)
+        _assicura_tabella_obiettivi(conn)
     except Exception as e:
-        st.error(f"Impossibile preparare la tabella: {e}")
+        st.error(f"Impossibile preparare le tabelle: {e}")
         return
+
+    modo = st.radio("Sezione", ["📋 Valutazione (Analisi Psicomotoria Funzionale)",
+                                "📅 Diario sedute", "🎯 Obiettivi & monitoraggio"],
+                    horizontal=True, key=f"psico_modo_{paz_id}")
+    if modo == "📅 Diario sedute":
+        _render_diario_sedute(conn, paz_id)
+        return
+    if modo == "🎯 Obiettivi & monitoraggio":
+        _render_obiettivi(conn, paz_id)
+        return
+
+    st.caption("Analisi Psicomotoria Funzionale: funzione energetico-affettiva e funzioni operative "
+               "(aggiustamento, tono, equilibrio, coordinazione, dominanza laterale, percezione, "
+               "schema corporeo). Percorso guidato a step, con note libere per area.")
 
     dn = (paziente or {}).get("data_nascita") if paziente else None
     eta = _eta_anni(dn)
@@ -398,3 +418,269 @@ def render_psicomotricita_funzionale(conn, paz_id=None, paziente=None):
             if pdf_bytes:
                 st.download_button("⬇️ Scarica il PDF", data=pdf_bytes, file_name=nome_file,
                                    mime="application/pdf", key=f"psico_dl_{paz_id}")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  DIARIO SEDUTE
+# ═══════════════════════════════════════════════════════════════════════
+def _assicura_tabella_sedute(conn):
+    cur = conn.cursor()
+    try:
+        cur.execute("""CREATE TABLE IF NOT EXISTS psico_sedute(
+            id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+            data_seduta DATE, numero INT,
+            aree TEXT, obiettivo TEXT, attivita TEXT,
+            risposta TEXT, compiti TEXT, note TEXT,
+            creato TIMESTAMP DEFAULT NOW());""")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _render_diario_sedute(conn, paz_id):
+    st.caption("Quaderno di lavoro: registra ogni seduta di psicomotricità funzionale.")
+
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM psico_sedute WHERE paziente_id=%s", (paz_id,))
+        n_fatte = cur.fetchone()[0] or 0
+    except Exception:
+        n_fatte = 0
+        try: conn.rollback()
+        except Exception: pass
+
+    with st.expander("➕ Nuova seduta", expanded=True):
+        with st.form("psico_seduta", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            data_s = c1.date_input("Data seduta", value=datetime.date.today(), key="psico_sd_data")
+            numero = c2.number_input("N° seduta", min_value=1, step=1,
+                                     value=int(n_fatte) + 1, key="psico_sd_num")
+            aree = st.multiselect("Aree di lavoro", AREE_LAVORO_PSICO, key="psico_sd_aree")
+            obiettivo = st.text_input("Obiettivo della seduta", key="psico_sd_ob")
+            attivita = st.text_area("Attività svolte", height=90, key="psico_sd_att")
+            c3, c4 = st.columns(2)
+            risposta = c3.selectbox("Risposta del paziente", RISPOSTA_PSICO, key="psico_sd_risp")
+            compiti = c4.text_input("Compiti a casa", key="psico_sd_comp")
+            note = st.text_area("Note", height=70, key="psico_sd_note")
+            if st.form_submit_button("💾 Salva seduta", type="primary"):
+                if _salva_seduta(conn, paz_id, data_s, numero, aree, obiettivo,
+                                 attivita, risposta, compiti, note):
+                    st.success(f"Seduta n° {numero} salvata.")
+                    st.rerun()
+                else:
+                    st.error("Salvataggio non riuscito.")
+
+    st.markdown(f"#### Sedute registrate ({n_fatte})")
+    _elenco_sedute(conn, paz_id)
+
+
+def _salva_seduta(conn, paz_id, data_s, numero, aree, ob, att, risp, comp, note) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("""INSERT INTO psico_sedute(paziente_id, data_seduta, numero,
+            aree, obiettivo, attivita, risposta, compiti, note)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (paz_id, data_s, int(numero), ", ".join(aree), ob, att, risp, comp, note))
+        conn.commit()
+        return True
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return False
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _elenco_sedute(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT id, data_seduta, numero, aree, obiettivo, attivita,
+            risposta, compiti, note FROM psico_sedute
+            WHERE paziente_id=%s ORDER BY data_seduta DESC, numero DESC""", (paz_id,))
+        righe = cur.fetchall()
+    except Exception:
+        righe = []
+        try: conn.rollback()
+        except Exception: pass
+    if not righe:
+        st.caption("Nessuna seduta registrata per ora.")
+        return
+    for rid, ds, num, aree, ob, att, risp, comp, note in righe:
+        ds_str = ds.strftime("%d/%m/%Y") if ds else ""
+        titolo = f"**Seduta n° {num}** — {ds_str}"
+        if risp and risp != "—":
+            titolo += f"  ·  {risp}"
+        st.markdown(titolo)
+        if aree:
+            st.caption("Aree: " + aree)
+        if ob:
+            st.markdown(f"🎯 {ob}")
+        if att:
+            st.markdown(att)
+        det = []
+        if comp:
+            det.append(f"📝 Compiti: {comp}")
+        if note:
+            det.append(note)
+        if det:
+            st.caption(" · ".join(det))
+        if st.button("🗑 Elimina", key=f"psico_sd_del_{rid}"):
+            try:
+                cur = conn.cursor()
+                cur.execute("DELETE FROM psico_sedute WHERE id=%s", (rid,))
+                conn.commit()
+                st.rerun()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
+                    unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  OBIETTIVI & MONITORAGGIO
+# ═══════════════════════════════════════════════════════════════════════
+def _assicura_tabella_obiettivi(conn):
+    cur = conn.cursor()
+    try:
+        cur.execute("""CREATE TABLE IF NOT EXISTS psico_obiettivi(
+            id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+            area TEXT, descrizione TEXT,
+            baseline INT, attuale INT, target INT,
+            stato TEXT, data_inizio DATE, data_rivalut DATE,
+            note TEXT, creato TIMESTAMP DEFAULT NOW());""")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _render_obiettivi(conn, paz_id):
+    st.caption("Definisci gli obiettivi terapeutici e aggiornane il livello nel tempo "
+               "(scala 0–10). Alla chiusura, l'esito confluisce nell'apprendimento PNEV.")
+
+    with st.expander("➕ Nuovo obiettivo", expanded=True):
+        with st.form("psico_ob_new", clear_on_submit=True):
+            area = st.selectbox("Area", AREE_LAVORO_PSICO, key="psico_ob_area")
+            descr = st.text_input("Obiettivo (in positivo, osservabile)",
+                                  placeholder="es. Equilibrio statico su un piede a occhi chiusi",
+                                  key="psico_ob_descr")
+            c1, c2, c3 = st.columns(3)
+            baseline = c1.slider("Livello iniziale", 0, 10, 2, key="psico_ob_base")
+            target = c2.slider("Target", 0, 10, 8, key="psico_ob_targ")
+            data_riv = c3.date_input("Rivalutazione prevista",
+                                     value=datetime.date.today() + datetime.timedelta(weeks=10),
+                                     key="psico_ob_riv")
+            if st.form_submit_button("💾 Crea obiettivo", type="primary"):
+                if descr.strip():
+                    if _salva_obiettivo(conn, paz_id, area, descr, baseline, target, data_riv):
+                        st.success("Obiettivo creato.")
+                        st.rerun()
+                    else:
+                        st.error("Salvataggio non riuscito.")
+                else:
+                    st.warning("Scrivi l'obiettivo.")
+
+    st.markdown("#### Obiettivi del paziente")
+    _elenco_obiettivi(conn, paz_id)
+
+
+def _salva_obiettivo(conn, paz_id, area, descr, baseline, target, data_riv) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("""INSERT INTO psico_obiettivi(paziente_id, area, descrizione,
+            baseline, attuale, target, stato, data_inizio, data_rivalut)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (paz_id, area, descr, int(baseline), int(baseline), int(target),
+             "🟦 In corso", datetime.date.today(), data_riv))
+        conn.commit()
+        return True
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return False
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def _elenco_obiettivi(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT id, area, descrizione, baseline, attuale, target,
+            stato, data_inizio, data_rivalut FROM psico_obiettivi
+            WHERE paziente_id=%s ORDER BY creato DESC""", (paz_id,))
+        righe = cur.fetchall()
+    except Exception:
+        righe = []
+        try: conn.rollback()
+        except Exception: pass
+    if not righe:
+        st.caption("Nessun obiettivo definito per ora.")
+        return
+    for rid, area, descr, base, attuale, target, stato, dini, driv in righe:
+        st.markdown(f"**{descr}**  ·  _{area}_")
+        rng = max(1, (target or 10) - (base or 0))
+        prog = min(1.0, max(0.0, ((attuale or 0) - (base or 0)) / rng))
+        st.progress(prog, text=f"{stato}  ·  {attuale}/{target} (partenza {base})")
+        c1, c2, c3 = st.columns([2, 2, 1])
+        nuovo = c1.slider("Livello attuale", 0, 10, int(attuale or 0), key=f"psico_ob_upd_{rid}")
+        nuovo_stato = c2.selectbox("Stato", STATO_OB_PSICO,
+                                   index=STATO_OB_PSICO.index(stato) if stato in STATO_OB_PSICO else 0,
+                                   key=f"psico_ob_st_{rid}")
+        with c3:
+            st.write("")
+            st.write("")
+            if st.button("💾", key=f"psico_ob_save_{rid}", help="Aggiorna"):
+                _aggiorna_obiettivo(conn, rid, nuovo, nuovo_stato, paz_id, descr, area)
+                st.rerun()
+        if driv:
+            st.caption(f"Rivalutazione prevista: {driv.strftime('%d/%m/%Y') if hasattr(driv,'strftime') else driv}")
+        if st.button("🗑 Elimina", key=f"psico_ob_del_{rid}"):
+            try:
+                cur = conn.cursor()
+                cur.execute("DELETE FROM psico_obiettivi WHERE id=%s", (rid,))
+                conn.commit()
+                st.rerun()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
+                    unsafe_allow_html=True)
+
+
+def _aggiorna_obiettivo(conn, rid, attuale, stato, paz_id, descr, area):
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE psico_obiettivi SET attuale=%s, stato=%s WHERE id=%s",
+                    (int(attuale), stato, rid))
+        conn.commit()
+        if stato in ("🟢 Raggiunto", "🟡 Parziale", "⏸️ Sospeso"):
+            esito = {"🟢 Raggiunto": "🟢 Migliorato", "🟡 Parziale": "🟡 Stabile / fermo",
+                     "⏸️ Sospeso": "⚪ Non valutabile"}.get(stato, "⚪ Non valutabile")
+            try:
+                cur.execute("""CREATE TABLE IF NOT EXISTS esiti_pnev(
+                    id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
+                    data TIMESTAMP DEFAULT NOW(),
+                    intervento TEXT, esito TEXT, note TEXT);""")
+                cur.execute("INSERT INTO esiti_pnev(paziente_id, intervento, esito, note) "
+                            "VALUES(%s,%s,%s,%s)",
+                            (paz_id, f"Psicomotricità funzionale — {area}: {descr}", esito,
+                             "Da obiettivo psicomotorio"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: cur.close()
+        except Exception: pass
