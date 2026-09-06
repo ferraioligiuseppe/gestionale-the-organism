@@ -422,7 +422,15 @@ def _ai_enabled() -> bool:
     except Exception:
         return False
 
-APP_MODE = st.secrets.get("APP_MODE", "prod")
+def _secrets_get_root(key, default=None):
+    """Legge una chiave root dai Secrets senza esplodere se secrets.toml
+    non esiste (es. su Render, dove si usano solo variabili d'ambiente)."""
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
+APP_MODE = _secrets_get_root("APP_MODE", "prod") or __import__("os").getenv("APP_MODE", "prod")
 
 
 def _inpps_cutoff() -> int:
