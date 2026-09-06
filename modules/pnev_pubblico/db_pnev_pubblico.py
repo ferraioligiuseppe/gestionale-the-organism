@@ -470,3 +470,117 @@ def admin_lista_utenti(conn):
     finally:
         try: cur.close()
         except Exception: pass
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  MAPS-Read — sessioni comfort visivo (stesso utente/magic-link di
+#  MAPS-CLEAR: stesso paziente, screening comparabile tra le due prove)
+# ══════════════════════════════════════════════════════════════════════
+
+def init_maps_read_db(conn):
+    """Crea la tabella sessioni MAPS-Read. Idempotente."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pnev_pubblico_maps_read_sessioni (
+                id              BIGSERIAL PRIMARY KEY,
+                studio_id       BIGINT      NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+                utente_id       BIGINT      NOT NULL REFERENCES pnev_pubblico_utenti(id) ON DELETE CASCADE,
+                giorno          INTEGER     NOT NULL DEFAULT 1,
+                data_sessione   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                contenuto       TEXT,
+                condizione      TEXT,
+                testo_usato     TEXT,
+                comfort_pre     INTEGER,
+                fatica_pre      INTEGER,
+                comfort_post    INTEGER,
+                fatica_post     INTEGER,
+                facilita        TEXT,
+                note            TEXT,
+                creato_il       TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (utente_id, giorno, condizione)
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS ix_pnev_pubblico_maps_read_utente
+            ON pnev_pubblico_maps_read_sessioni (utente_id, giorno);
+        """)
+        cur.execute("ALTER TABLE pnev_pubblico_maps_read_sessioni ENABLE ROW LEVEL SECURITY;")
+        cur.execute("ALTER TABLE pnev_pubblico_maps_read_sessioni FORCE ROW LEVEL SECURITY;")
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_policies
+                    WHERE tablename = 'pnev_pubblico_maps_read_sessioni'
+                      AND policyname = 'pnev_pubblico_maps_read_sessioni_studio'
+                ) THEN
+                    CREATE POLICY pnev_pubblico_maps_read_sessioni_studio
+                        ON pnev_pubblico_maps_read_sessioni
+                        USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                        WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+                END IF;
+            END $$;
+        """)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def salva_sessione_read(conn, utente_id, giorno, contenuto, condizione, testo_usato,
+                         comfort_pre, fatica_pre, comfort_post, fatica_post,
+                         facilita, note=None):
+    """Salva (o sovrascrive) una sessione MAPS-Read per una data condizione visiva."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO pnev_pubblico_maps_read_sessioni
+                (utente_id, giorno, contenuto, condizione, testo_usato,
+                 comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (utente_id, giorno, condizione) DO UPDATE
+                SET contenuto = EXCLUDED.contenuto,
+                    testo_usato = EXCLUDED.testo_usato,
+                    comfort_pre = EXCLUDED.comfort_pre,
+                    fatica_pre = EXCLUDED.fatica_pre,
+                    comfort_post = EXCLUDED.comfort_post,
+                    fatica_post = EXCLUDED.fatica_post,
+                    facilita = EXCLUDED.facilita,
+                    note = EXCLUDED.note,
+                    data_sessione = now()
+        """, (utente_id, giorno, contenuto, condizione, testo_usato,
+              comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def get_sessioni_read(conn, utente_id):
+    """Tutte le sessioni MAPS-Read del paziente, più recenti prima."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, giorno, data_sessione, contenuto, condizione, testo_usato,
+                   comfort_pre, fatica_pre, comfort_post, fatica_post, facilita, note
+            FROM pnev_pubblico_maps_read_sessioni
+            WHERE utente_id = %s
+            ORDER BY data_sessione DESC
+        """, (utente_id,))
+        return cur.fetchall()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: cur.close()
+        except Exception: pass
