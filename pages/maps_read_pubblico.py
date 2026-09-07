@@ -81,7 +81,8 @@ with st.form("form_maps_read_pubblico"):
     facilita = st.selectbox("Facilità percepita rispetto a prima", opz_facilita,
                              index=opz_facilita.index(_def_fac) if _def_fac in opz_facilita else 2)
     note = st.text_area("Note (facoltativo)", value=_q("note", ""))
-    audio_file = st.audio_input("🎙️ Se hai registrato la lettura, caricala qui (facoltativo)")
+    audio_file = st.file_uploader("🎙️ Carica qui il file audio scaricato da MAPS-Read (facoltativo)",
+                                   type=["webm", "wav", "mp3", "m4a", "ogg"])
     submitted = st.form_submit_button("📤 INVIA AL GESTIONALE", type="primary", use_container_width=True)
 
 if submitted:
@@ -92,7 +93,8 @@ if submitted:
             audio_url = None
             if audio_file is not None:
                 from modules.dropbox_upload import upload_audio_bytes
-                path = f"/maps-read/{utente_id}/giorno{int(giorno)}_{condizione.strip()[:20]}.wav"
+                ext = (audio_file.name.rsplit(".", 1)[-1] if "." in audio_file.name else "webm")
+                path = f"/maps-read/{utente_id}/giorno{int(giorno)}_{condizione.strip()[:20]}.{ext}"
                 audio_url = upload_audio_bytes(audio_file.getvalue(), path)
             db.salva_sessione_read(
                 conn, utente_id, giorno=int(giorno), contenuto=contenuto,
