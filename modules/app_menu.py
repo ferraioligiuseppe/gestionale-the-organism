@@ -1,26 +1,17 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║  APP MENU — Struttura razionalizzata PNEV (v7, con rami annidati)    ║
+║  APP MENU — Struttura razionalizzata PNEV (v8, Valutazione/Terapia   ║
+║  separate) ║
 ║                                                                      ║
-║  AREE (in ordine):                                                   ║
-║  1. 📅 Agenda                                                        ║
-║  2. 👥 Pazienti                                                      ║
-║  3. 📋 Questionari                                                   ║
-║  4. 🎮 PNEV Games                                                    ║
-║  5. 🧠 Valutazione e Trattamento PNEV                                ║
-║       ↳ 4 rami annidati (si sceglie il ramo, poi la voce):           ║
-║         👶 PNEV Child · 👁️ PNEV Visiva ·                             ║
-║         🧬 Integrazione sensoriale · 🎧 Uditiva                       ║
-║  6. 👁️ Oculistica · LAC                                              ║
-║  7. 🩺 Ortottica                                                     ║
-║  8. 🗣️ Logopedia / TNPEE                                            ║
-║  9. 🎓 PNEV Academy  (Osteopatia + Eventi/iscrizioni)                 ║
-║  10. 🏃 Fisioterapia                                                 ║
-║  11. 🧠 NPS / Psicologia                                             ║
-║  12. 🖥️ Test live (generico)                                        ║
-║  13. 📄 Relazioni & studio clinico                                   ║
-║  14. ⚙️ Studio                                                       ║
+║  🧠 Valutazione PNEV: Riflessi primitivi · Visiva · Uditiva ·        ║
+║     Apprendimenti · Test psicologici · PNEV Games (solo assessment)  ║
+║  🧘 Terapia: Terapia riflessi primitivi · Terapia visiva ·           ║
+║     Terapia uditiva · Terapia psicologica/psicoterapia ·             ║
+║     Miofunzionale · Metodo Castagnini                                ║
+║  Le altre aree (Oculistica, Ortottica, Logopedia/TNPEE, Osteopatia,  ║
+║  Fisioterapia, Test live, Relazioni, Academy, Studio) restano a      ║
+║  parte, come prima.                                                  ║
 ║                                                                      ║
 ║  Le voci "🚧 …(in arrivo)" sono placeholder: compaiono nel menu ma    ║
 ║  mostrano solo un avviso "in costruzione" — non esiste ancora un     ║
@@ -38,14 +29,14 @@
 AREA_AGENDA        = "📅 Agenda"
 AREA_PAZIENTI      = "👥 Pazienti"
 AREA_INVII         = "📋 Questionari"
-AREA_PNEV          = "🧠 Valutazione e Trattamento Multisensoriale"
+AREA_PNEV          = "🧠 Valutazione PNEV"
+AREA_TERAPIA_PNEV  = "🧘 Terapia"
 AREA_OCULISTICA    = "👁️ Oculistica · LAC"
 AREA_ORTOTTICA     = "🩺 Ortottica"
 AREA_TNPEE         = "🗣️ Logopedia / TNPEE"
 AREA_OSTEOPATIA    = "🦴 Osteopatia"
 AREA_ACADEMY       = "🎓 PNEV Academy"
 AREA_FISIOTERAPIA  = "🏃 Fisioterapia"
-AREA_NPS_PSI       = "🧠 NPS / Psicologia"
 AREA_TEST_LIVE     = "🖥️ Test live"
 AREA_TERAPIA       = "📄 Relazioni & studio clinico"
 AREA_STUDIO        = "⚙️ Studio"
@@ -62,75 +53,104 @@ AREA_AUDIOLOGIA         = AREA_PNEV
 AREA_MARKETING          = AREA_ACADEMY
 AREA_FORMAZIONE         = AREA_ACADEMY
 AREA_EVENTI             = AREA_ACADEMY
+AREA_NPS_PSI            = AREA_PNEV  # alias legacy: la sezione NPS/Psicologia confluisce in Valutazione PNEV
 
 AREE_ORDINE = [
     AREA_AGENDA,
     AREA_PAZIENTI,
     AREA_INVII,
     AREA_PNEV,
+    AREA_TERAPIA_PNEV,
     AREA_OCULISTICA,
     AREA_ORTOTTICA,
     AREA_TNPEE,
     AREA_OSTEOPATIA,
     AREA_FISIOTERAPIA,
-    AREA_NPS_PSI,
     AREA_TEST_LIVE,
     AREA_TERAPIA,
     AREA_ACADEMY,
     AREA_STUDIO,
 ]
 
-# ── Rami dell'area PNEV (annidati: si sceglie prima il ramo, poi la voce) ──
+# ── Rami dell'area Valutazione PNEV (solo assessment — le procedure di
+#    trattamento vivono nell'area Terapia qui sotto) ──────────────────
 PNEV_RAMI = {
-    "👶 Child": [
+    "🧬 Riflessi primitivi": [
         "📋 Anamnesi PNEV",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
-        "🚧 Castagnini (in arrivo)",
-        "🚧 Vojta (in arrivo)",
+        "🧬 INPP — Valutazione diagnostica",
+        "🎬 Animazioni dei riflessi",
     ],
-    "👁️ Visivo": [
+    "👁️ Visiva": [
         "👁️ Anamnesi visiva",
         "👁️ Valutazione visuo-percettiva",
         "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
         "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
-        "🎯 Piano Vision Therapy",
         "📐 PNEV-Chart (schede stampabili)",
         "🥁 PNEV Metronomo",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
     ],
-    "🧬 Neurosensorimotor Reflex Integration": [
-        "🧬 INPP — Valutazione diagnostica",
-        "🎬 Animazioni dei riflessi",
-        "🚧 Masgutova / MNRI (in arrivo)",
-        "🚧 TMR — Movimenti ritmici (in arrivo)",
-        "🚧 Melillo / NCHW (in arrivo)",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
-    ],
-    "🎧 Valutazione e Stimolazione Uditiva": [
-        "🎧 Stimolazione uditiva",
+    "🎧 Uditiva": [
         "📊 Audiometria funzionale",
         "🎧 Bilancio uditivo",
         "🎧 Audiometria tonale calibrata",
-        "🎧 MAPS",
-        "🗂 Programmi MAPS",
-        "🧭 Percorsi MAPS",
-        "🎧 MAPS-CLEAR pubblico",
-        "🎧 MAPS-CLEAR in studio",
-        "🔤 MAPS-Read",
         "🎧 Libreria calibrazioni cuffie",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
+    ],
+    "📚 Apprendimenti": [
+        "🧪 Apprendimento PNEV",
+        "📚 DSA — Apprendimento",
+        "📖 Lettura avanzata",
+    ],
+    "🔬 Test psicologici": [
+        "🧠 NPS — Neuropsicologica",
+        "🚧 Psicologia (in arrivo)",
     ],
     "🎮 PNEV Games": [
         "🎮 Esercizi Wordwall",
         "🕹️ PNEV Game Center",
         "🏃 PNEV Sport Vision",
     ],
+}
+
+# ── Rami dell'area Terapia (trattamento — parallela alla Valutazione) ──
+TERAPIA_RAMI = {
+    "🧬 Terapia riflessi primitivi": [
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+        "🚧 Vojta (in arrivo)",
+    ],
+    "👁️ Terapia visiva": [
+        "🎯 Piano Vision Therapy",
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+    ],
+    "🎧 Terapia uditiva": [
+        "🎧 Stimolazione uditiva",
+        "🎧 MAPS",
+        "🗂 Programmi MAPS",
+        "🧭 Percorsi MAPS",
+        "🎧 MAPS-CLEAR pubblico",
+        "🎧 MAPS-CLEAR in studio",
+        "🔤 MAPS-Read",
+        "🧘 Percorsi terapeutici",
+    ],
+    "🧠 Terapia psicologica / psicoterapia": [
+        "🧘 Percorsi terapeutici",
+    ],
+    "💆 Miofunzionale": [
+        "🧘 Percorsi terapeutici",
+    ],
+    "🧩 Metodo Castagnini": [
+        "🧘 Percorsi terapeutici",
+    ],
+}
+
+# Aree ramificate (menu a 2 livelli: ramo poi voce). Il router usa questo
+# dizionario invece di agganciarsi a una sola area — così si possono avere
+# più aree con rami senza toccare app_main_router.py.
+RAMI_PER_AREA = {
+    AREA_PNEV: PNEV_RAMI,
+    AREA_TERAPIA_PNEV: TERAPIA_RAMI,
 }
 
 # Etichette delle voci "in arrivo" — vedi PLACEHOLDER_VOCI in
@@ -202,11 +222,7 @@ SOTTOSEZIONI = {
     AREA_FISIOTERAPIA: [
         "🚧 Fisioterapia (in arrivo)",
     ],
-    AREA_NPS_PSI: [
-        "🧠 NPS — Neuropsicologica",
-        "📚 DSA — Apprendimento",
-        "🚧 Psicologia (in arrivo)",
-    ],
+    AREA_NPS_PSI: [],
     AREA_TEST_LIVE: [
         "🖥️ Somministrazione test",
         "📸 Photoref AI",

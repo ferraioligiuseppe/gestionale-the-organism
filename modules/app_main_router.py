@@ -11,7 +11,7 @@ from .app_menu import (
     AREE_ORDINE, SOTTOSEZIONI,
     AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_VALUTAZIONE_VISIVA, AREA_TEST_NEUROEVOL, AREA_TEST_LIVE,
     AREA_QUESTIONARI, AREA_REPORT_AI, AREA_AUDIOLOGIA,
-    AREA_MARKETING, AREA_STUDIO,
+    AREA_MARKETING, AREA_STUDIO, AREA_TERAPIA_PNEV, RAMI_PER_AREA,
 )
 
 
@@ -338,9 +338,9 @@ def _render_dashboard(conn) -> None:
         ("📎 Documenti clinici", "👥 Pazienti", "📎 Documenti clinici"),
         ("📝 Diagnosi assistita", "👥 Pazienti", "📝 Diagnosi assistita"),
         ("📈 Esiti / Follow-up", "👥 Pazienti", "📈 Esiti / Follow-up"),
-        ("🧘 Percorsi terapeutici", "🧠 Valutazione e Trattamento Multisensoriale", "🧘 Percorsi terapeutici"),
-        ("🧩 Programma PNEV", "🧠 Valutazione e Trattamento Multisensoriale", "🧩 Programma PNEV"),
-        ("👁️ Valutazione visuo-percettiva", "🧠 Valutazione e Trattamento Multisensoriale",
+        ("🧘 Percorsi terapeutici", AREA_TERAPIA_PNEV, "🧘 Percorsi terapeutici"),
+        ("🧩 Programma PNEV", AREA_TERAPIA_PNEV, "🧩 Programma PNEV"),
+        ("👁️ Valutazione visuo-percettiva", AREA_VALUTAZIONE,
          "👁️ Valutazione visuo-percettiva"),
         ("🎟️ Coupon OF / SDS", "👥 Pazienti", "🎟️ Coupon OF / SDS"),
     ]
@@ -407,9 +407,9 @@ _PROSSIMO_PASSO = {
         _AREA_PNEV_SEQ, "👁️ Valutazione visuo-percettiva",
         "▶ Passo successivo: Valutazione visiva"),
     "👁️ Valutazione visuo-percettiva": (
-        _AREA_PNEV_SEQ, "🎧 Stimolazione uditiva",
+        _AREA_PNEV_SEQ, "📊 Audiometria funzionale",
         "▶ Passo successivo: Valutazione uditiva"),
-    "🎧 Stimolazione uditiva": (
+    "📊 Audiometria funzionale": (
         "👥 Pazienti", "📝 Diagnosi assistita",
         "▶ Passo successivo: Diagnosi"),
 }
@@ -1532,13 +1532,12 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
         st.session_state["nav_area"] = _goto_a
         _goto_s = st.session_state.pop("goto_sotto", None)
         if _goto_s:
-            from .app_menu import AREA_PNEV as _AP, PNEV_RAMI as _PR
-            if _goto_a == _AP:
-                # Area PNEV: trova il ramo che contiene la voce e imposta
+            if _goto_a in RAMI_PER_AREA:
+                # Area ramificata: trova il ramo che contiene la voce e imposta
                 # la chiave annidata giusta (nav_sotto_{area}_{ramo}).
-                for _ramo, _voci in _PR.items():
+                for _ramo, _voci in RAMI_PER_AREA[_goto_a].items():
                     if _goto_s in _voci:
-                        st.session_state["nav_pnev_ramo"] = _ramo
+                        st.session_state[f"nav_ramo_{_goto_a}"] = _ramo
                         st.session_state[f"nav_sotto_{_goto_a}_{_ramo}"] = _goto_s
                         break
             else:
@@ -1568,8 +1567,6 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]{gap:0 !important;margin:0 !important}
     section[data-testid="stSidebar"] hr{margin:5px 0 !important}
     </style>""", unsafe_allow_html=True)
-
-    from .app_menu import AREA_PNEV, PNEV_RAMI
 
     area = st.session_state.get("nav_area") or AREE_ORDINE[0]
     if area not in AREE_ORDINE:
@@ -1609,21 +1606,23 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
             return _cc.button(label, key=key, use_container_width=True,
                               type="primary" if attivo else "secondary")
 
-        if _a == AREA_PNEV:
-            rami = list(PNEV_RAMI.keys())
-            ramo = st.session_state.get("nav_pnev_ramo") or rami[0]
+        if _a in RAMI_PER_AREA:
+            _rami_area = RAMI_PER_AREA[_a]
+            rami = list(_rami_area.keys())
+            _ramo_key = f"nav_ramo_{_a}"
+            ramo = st.session_state.get(_ramo_key) or rami[0]
             if ramo not in rami:
                 ramo = rami[0]
-            st.session_state["nav_pnev_ramo"] = ramo
+            st.session_state[_ramo_key] = ramo
             for _r in rami:
                 _r_aperto = (_r == ramo)
                 if _btn_liv2(("▼ " if _r_aperto else "▸ ") + _r,
-                             f"navbtn_ramo_{_r}", _r_aperto):
+                             f"navbtn_ramo_{_a}_{_r}", _r_aperto):
                     if not _r_aperto:
-                        st.session_state["nav_pnev_ramo"] = _r
+                        st.session_state[_ramo_key] = _r
                         st.rerun()
                 if _r_aperto:
-                    _voci_r = _filtra(PNEV_RAMI.get(_r, []))
+                    _voci_r = _filtra(_rami_area.get(_r, []))
                     _sk = f"nav_sotto_{_a}_{_r}"
                     _cur = st.session_state.get(_sk)
                     if _cur not in _voci_r:

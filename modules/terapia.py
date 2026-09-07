@@ -78,7 +78,9 @@ def _docx_procedure_casa(nome_paz, protocollo, settimana, casa):
 
 
 TERAPIE = ["Vision Therapy", "MAPS", "Stanza del sale", "Osteopatia",
-           "Terapia miofunzionale", "Sports Vision"]
+           "Terapia miofunzionale", "Sports Vision",
+           "Terapia riflessi primitivi", "Terapia psicologica / psicoterapia",
+           "Metodo Castagnini"]
 RISPOSTA = ["—", "🟢 Buona", "🟡 Parziale", "🔴 Scarsa"]
 STATO_OB = ["🟦 In corso", "🟢 Raggiunto", "🟡 Parziale", "⏸️ Sospeso"]
 METODI = ["—", "Contanti", "POS / Carta", "Bonifico", "Assegno", "Altro"]
@@ -131,6 +133,24 @@ def render_terapia(conn=None, paz_id=None, paziente=None):
         return
 
     _assicura_tabelle(conn)
+
+    _RAMO_TERAPIA_DEFAULT = {
+        "🧬 Terapia riflessi primitivi": "Terapia riflessi primitivi",
+        "👁️ Terapia visiva": "Vision Therapy",
+        "🎧 Terapia uditiva": "MAPS",
+        "🧠 Terapia psicologica / psicoterapia": "Terapia psicologica / psicoterapia",
+        "💆 Miofunzionale": "Terapia miofunzionale",
+        "🧩 Metodo Castagnini": "Metodo Castagnini",
+    }
+    try:
+        from .app_menu import AREA_TERAPIA_PNEV as _ATP
+        _ramo_corrente = st.session_state.get(f"nav_ramo_{_ATP}")
+        _default_terapia = _RAMO_TERAPIA_DEFAULT.get(_ramo_corrente)
+        if _default_terapia and st.session_state.get("_ter_last_ramo_applied") != _ramo_corrente:
+            st.session_state["ter_tipo"] = _default_terapia
+            st.session_state["_ter_last_ramo_applied"] = _ramo_corrente
+    except Exception:
+        pass
 
     terapia = st.selectbox("Percorso terapeutico", TERAPIE, key="ter_tipo")
     modo = st.radio("Sezione", ["📅 Diario sedute", "🎯 Obiettivi & monitoraggio",
@@ -202,6 +222,17 @@ def _render_diario(conn, paz_id, terapia):
             metodo = st.selectbox("Metodo", METODI, key="ter_sd_met")
         note = st.text_area("Note", height=70, key="ter_sd_note")
 
+        st.markdown("**🏠 Materiale dato per casa**")
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            materiale_casa = st.text_input("Materiale consegnato", key="ter_sd_mat",
+                                           placeholder="es. occhialini rosso/verde, scheda esercizi…")
+        with f2:
+            data_consegna = st.date_input("Data consegna", value=None, key="ter_sd_cons")
+        with f3:
+            data_riconsegna = st.date_input("Data riconsegna prevista", value=None,
+                                            key="ter_sd_ricons")
+
         # ── Procedure assegnate in questa seduta (studio / casa) ──────
         st.markdown("---")
         sel_studio_all, sel_casa_all = _blocco_programma_settimana(conn, paz_id)
@@ -228,7 +259,8 @@ def _render_diario(conn, paz_id, terapia):
                          use_container_width=True):
                 ok = _salva_seduta(conn, paz_id, terapia, data_s, numero, prof,
                                    obiettivo, attivita, risposta, costo, sconto,
-                                   incassato, metodo, note, sel_studio_all, sel_casa_all)
+                                   incassato, metodo, note, sel_studio_all, sel_casa_all,
+                                   materiale_casa, data_consegna, data_riconsegna)
                 if ok:
                     st.success(f"Seduta n° {numero} salvata "
                                f"({len(sel_studio_all)} studio, {len(sel_casa_all)} casa).")
@@ -236,8 +268,58 @@ def _render_diario(conn, paz_id, terapia):
                 else:
                     st.error("Salvataggio non riuscito.")
 
+    st.markdown("---")
+    _blocco_portale_famiglia(conn, paz_id, _nome_paz)
+
     st.markdown(f"#### Sedute di {terapia} ({n_fatte})")
     _elenco_sedute(conn, paz_id, terapia)
+
+
+def _blocco_portale_famiglia(conn, paz_id, nome_paz):
+    """Credenziali di accesso al portale famiglia + aderenza alle procedure di casa
+    + link video how-to per procedura."""
+    from modules import db_portale_famiglia as dbf
+    dbf.init_db(conn)
+
+    with st.expander("🏠 Portale famiglia — accesso, video, aderenza"):
+        email_attuale = dbf.get_credenziali_paziente(conn, paz_id)
+        st.markdown("**🔑 Accesso al portale**")
+        if email_attuale:
+            st.caption(f"Email attuale: {email_attuale}")
+        c1, c2 = st.columns(2)
+        nuova_email = c1.text_input("Email famiglia", value=email_attuale or "", key="pf_email")
+        nuova_pw = c2.text_input("Password (nuova o da reimpostare)", type="password", key="pf_pw")
+        if st.button("💾 Salva credenziali", key="pf_salva_cred"):
+            if not nuova_email.strip() or not nuova_pw.strip():
+                st.error("Email e password sono obbligatorie.")
+            elif dbf.set_credenziali(conn, paz_id, nuova_email.strip(), nuova_pw.strip()):
+                st.success(f"Credenziali salvate per {nuova_email.strip()}.")
+            else:
+                st.error("Email già in uso da un altro paziente, o errore di salvataggio.")
+
+        st.markdown("---")
+        st.markdown("**📊 Aderenza (ultimi 30 giorni)**")
+        riep = dbf.get_aderenza_riepilogo(conn, paz_id, giorni=30)
+        if riep["totali"]:
+            m1, m2 = st.columns(2)
+            m1.metric("Procedure fatte", f"{riep['pct']}%", f"{riep['fatti']}/{riep['totali']}")
+            m2.metric("Valutazione media", f"{riep['media_valutazione'] or '—'}/5")
+        else:
+            st.caption("Nessun feedback ancora registrato dalla famiglia.")
+
+        st.markdown("---")
+        st.markdown("**🎥 Video how-to per procedura**")
+        programma = dbf.get_programma_corrente(conn, paz_id)
+        if programma and programma["procedure"]:
+            for proc in programma["procedure"]:
+                nome = proc if isinstance(proc, str) else proc.get("nome", str(proc))
+                url_attuale = dbf.get_video_url(conn, nome)
+                nuovo_url = st.text_input(f"Link video — {nome}", value=url_attuale or "",
+                                          key=f"pf_video_{nome}", placeholder="https://youtube.com/... o https://vimeo.com/...")
+                if nuovo_url != (url_attuale or ""):
+                    dbf.set_video_url(conn, nome, nuovo_url)
+        else:
+            st.caption("Assegna prima le procedure di casa in questa seduta per collegare i video.")
 
 
 def _scheda_vuota_html(terapia):
@@ -510,20 +592,26 @@ def _salva_programma_casa(conn, paz_id, protocollo, settimana, procedure) -> boo
 
 def _salva_seduta(conn, paz_id, terapia, data_s, numero, prof, ob, att, risp,
                   costo, sconto, incassato, metodo, note,
-                  proc_studio=None, proc_casa=None) -> bool:
+                  proc_studio=None, proc_casa=None,
+                  materiale_casa=None, data_consegna=None, data_riconsegna=None) -> bool:
     import json as _json
     try:
         cur = conn.cursor()
         cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS procedure_studio TEXT;")
         cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS procedure_casa TEXT;")
+        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS materiale_casa TEXT;")
+        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS data_consegna DATE;")
+        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS data_riconsegna DATE;")
         cur.execute("""INSERT INTO terapia_sedute(paziente_id, terapia, data_seduta,
             numero, professionista, obiettivo, attivita, risposta,
-            costo, sconto, incassato, metodo, note, procedure_studio, procedure_casa)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            costo, sconto, incassato, metodo, note, procedure_studio, procedure_casa,
+            materiale_casa, data_consegna, data_riconsegna)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (paz_id, terapia, data_s, int(numero), prof, ob, att, risp,
              float(costo or 0), float(sconto or 0), float(incassato or 0), metodo, note,
              _json.dumps(proc_studio or [], ensure_ascii=False),
-             _json.dumps(proc_casa or [], ensure_ascii=False)))
+             _json.dumps(proc_casa or [], ensure_ascii=False),
+             materiale_casa or None, data_consegna, data_riconsegna))
         conn.commit()
         # confluenza negli incassi: riga nella tabella Sedute (canonica)
         try:
@@ -579,6 +667,8 @@ def _elenco_sedute(conn, paz_id, terapia):
             cap += f"  ·  {risp}"
         if inc:
             cap += f"  ·  💶 {inc:.0f}€"
+        if mat_casa:
+            cap += f"  ·  🏠 {mat_casa}"
         with st.expander(cap):
             e1, e2, e3 = st.columns(3)
             with e1:
@@ -614,6 +704,16 @@ def _elenco_sedute(conn, paz_id, terapia):
                                         value=float(inc or 0), key=f"ter_ed_inc_{rid}")
             n_note = st.text_area("Note", value=note or "", height=70,
                                   key=f"ter_ed_note_{rid}")
+            st.markdown("**🏠 Materiale dato per casa**")
+            g1, g2, g3 = st.columns(3)
+            with g1:
+                n_mat = st.text_input("Materiale consegnato", value=mat_casa or "",
+                                      key=f"ter_ed_mat_{rid}")
+            with g2:
+                n_cons = st.date_input("Data consegna", value=d_cons, key=f"ter_ed_cons_{rid}")
+            with g3:
+                n_ricons = st.date_input("Data riconsegna", value=d_ricons,
+                                         key=f"ter_ed_ricons_{rid}")
             if l_studio or l_casa:
                 st.markdown("**🏥 In studio:** " + (", ".join(l_studio) or "—"))
                 st.markdown("**🏠 A casa:** " + (", ".join(l_casa) or "—"))
@@ -627,7 +727,8 @@ def _elenco_sedute(conn, paz_id, terapia):
             with b1:
                 if st.button("💾 Salva modifiche", key=f"ter_ed_save_{rid}", type="primary"):
                     if _aggiorna_seduta(conn, rid, n_data, n_num, n_prof, n_ob, n_att,
-                                        n_risp, n_costo, n_sconto, n_inc, n_met, n_note):
+                                        n_risp, n_costo, n_sconto, n_inc, n_met, n_note,
+                                        n_mat, n_cons, n_ricons):
                         st.success("Seduta aggiornata.")
                         st.rerun()
                     else:
@@ -647,14 +748,17 @@ def _elenco_sedute(conn, paz_id, terapia):
 
 
 def _aggiorna_seduta(conn, rid, data_s, num, prof, ob, att, risp,
-                     costo, sconto, inc, met, note) -> bool:
+                     costo, sconto, inc, met, note,
+                     materiale_casa=None, data_consegna=None, data_riconsegna=None) -> bool:
     try:
         cur = conn.cursor()
         cur.execute("""UPDATE terapia_sedute SET data_seduta=%s, numero=%s,
             professionista=%s, obiettivo=%s, attivita=%s, risposta=%s,
-            costo=%s, sconto=%s, incassato=%s, metodo=%s, note=%s WHERE id=%s""",
+            costo=%s, sconto=%s, incassato=%s, metodo=%s, note=%s,
+            materiale_casa=%s, data_consegna=%s, data_riconsegna=%s WHERE id=%s""",
             (data_s, int(num), prof, ob, att, risp, float(costo or 0),
-             float(sconto or 0), float(inc or 0), met, note, rid))
+             float(sconto or 0), float(inc or 0), met, note,
+             materiale_casa or None, data_consegna, data_riconsegna, rid))
         conn.commit()
         return True
     except Exception:
