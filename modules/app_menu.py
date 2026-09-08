@@ -103,6 +103,7 @@ PNEV_RAMI = {
     ],
     "🔬 Test psicologici": [
         "🧠 NPS — Neuropsicologica",
+        "🌐 WHODAS 2.0",
         "🚧 Psicologia (in arrivo)",
     ],
     "🎮 PNEV Games": [

@@ -738,6 +738,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except ImportError as e:
             st.error(f"Modulo NPS non disponibile: {e}")
         return True
+    if sotto == "🌐 WHODAS 2.0":
+        try:
+            from .ui_whodas import render_whodas
+            render_whodas(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo WHODAS non disponibile: {e}")
+        return True
     if sotto == "📚 DSA — Apprendimento":
         try:
             from .ui_dsa import render_dsa
@@ -1150,6 +1157,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 render_nps_completo(conn, paz_id)
             except ImportError as e:
                 st.error(f"Modulo NPS non disponibile: {e}")
+            return
+        if sotto == "🌐 WHODAS 2.0":
+            try:
+                from .ui_whodas import render_whodas
+                render_whodas(conn, paz_id)
+            except ImportError as e:
+                st.error(f"Modulo WHODAS non disponibile: {e}")
             return
         if sotto == "📚 DSA — Apprendimento":
             try:
