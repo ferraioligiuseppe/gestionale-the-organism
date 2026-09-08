@@ -352,9 +352,13 @@ CREATE POLICY whodas_somm_tenant ON whodas_somministrazioni
 
 def crea_schema(conn):
     """Crea tabelle, indici e policy RLS se non esistono."""
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(DDL)
-    conn.commit()
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 # --------------------------------------------------------------------------- #
@@ -378,7 +382,8 @@ def salva_somministrazione(conn, studio_id, paziente_id, anagrafica, risposte,
     campi = dict(anagrafica)
     campi.update(accessorie)
 
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         if somministrazione_id is None:
             cur.execute(
                 """
@@ -453,14 +458,17 @@ def salva_somministrazione(conn, studio_id, paziente_id, anagrafica, risposte,
                 """,
                 (somministrazione_id, codice, int(valore)),
             )
-
-    conn.commit()
-    return somministrazione_id
+        conn.commit()
+        return somministrazione_id
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def carica_somministrazione(conn, studio_id, somministrazione_id):
     """Restituisce (testata_dict, risposte_dict) oppure (None, {})."""
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             SELECT id, paziente_id, versione, data_somministrazione, numero_intervista,
@@ -485,13 +493,16 @@ def carica_somministrazione(conn, studio_id, somministrazione_id):
             (somministrazione_id,),
         )
         risposte = {c: v for c, v in cur.fetchall()}
-
-    return testata, risposte
+        return testata, risposte
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def lista_somministrazioni(conn, studio_id, paziente_id):
     """Elenco cronologico delle somministrazioni di un paziente."""
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             """
             SELECT id, data_somministrazione, numero_intervista, lavora_studia, completata
@@ -503,15 +514,22 @@ def lista_somministrazioni(conn, studio_id, paziente_id):
         )
         colonne = [d[0] for d in cur.description]
         return [dict(zip(colonne, r)) for r in cur.fetchall()]
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def elimina_somministrazione(conn, studio_id, somministrazione_id):
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(
             "DELETE FROM whodas_somministrazioni WHERE id = %s AND studio_id = %s",
             (somministrazione_id, studio_id),
         )
-    conn.commit()
+        conn.commit()
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def serie_storica(conn, studio_id, paziente_id):
