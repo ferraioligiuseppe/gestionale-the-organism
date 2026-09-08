@@ -454,7 +454,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "🔬 PNEV", "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
-        "🧠 NPS — Neuropsicologica", "📚 DSA — Apprendimento",
+        "🧠 NPS — Neuropsicologica", "🌐 WHODAS 2.0", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
