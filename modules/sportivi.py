@@ -345,9 +345,11 @@ def _init_kit_db(conn):
                 verificato  BOOLEAN DEFAULT false,
                 token_verifica TEXT,
                 spedito     BOOLEAN DEFAULT false,
-                creato_il   TIMESTAMPTZ NOT NULL DEFAULT now()
+                creato_il   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                programma   TEXT NOT NULL DEFAULT 'sport'
             );
         """)
+        cur.execute("ALTER TABLE sv_kit_richieste ADD COLUMN IF NOT EXISTS programma TEXT NOT NULL DEFAULT 'sport';")
         cur.execute("ALTER TABLE sv_kit_richieste ENABLE ROW LEVEL SECURITY;")
         cur.execute("ALTER TABLE sv_kit_richieste FORCE ROW LEVEL SECURITY;")
         cur.execute("""
@@ -534,6 +536,108 @@ def ui_public_kit_sportivo(get_conn):
         st.rerun()
 
 
+GAMES_BASE_URL = "https://www.pnev.it/wp-content/uploads/giochi"
+
+
+def ui_public_kit_giochi(get_conn):
+    """Pagina pubblica (no login): richiesta kit anaglifico per PNEV Games (bambini) +
+    generazione codice. Aperta come link diretto (non iframe) dalle pagine dei giochi su pnev.it."""
+    conn = get_conn()
+    try:
+        _init_kit_db(conn)
+    except Exception as e:
+        st.error(f"Servizio non disponibile: {e}")
+        return
+
+    st.markdown("""<style>
+      #MainMenu, footer, header {visibility:hidden}
+      .block-container{max-width:520px;padding-top:1.2rem}
+    </style>""", unsafe_allow_html=True)
+
+    codice_generato = st.session_state.get("_kit_codice")
+    if codice_generato:
+        st.success(f"Fatto! Il codice è **{codice_generato}** — lo trovi già registrato nel gestionale.")
+        st.link_button("Torna ai giochi →", f"{GAMES_BASE_URL}/index.html", use_container_width=True)
+        return
+
+    if st.session_state.get("_kit_email_inviata"):
+        st.success("Ti abbiamo mandato un'email di conferma. Apri la posta e clicca sul link: "
+                   "il codice comparirà subito dopo.")
+        st.caption("Non arriva? Controlla anche lo spam.")
+        return
+
+    st.markdown("#### Richiedi il kit anaglifico gratuito per i giochi PNEV")
+    st.caption("Un kit gratuito a bambino. Mandiamo gli occhialini rosso/ciano o rosso/verde a casa e registriamo l'anagrafica, così i giochi con l'anaglifico si possono fare da subito.")
+
+    email_check = st.text_input("La tua email (per controllare se hai già ricevuto un kit)", key="pg_kit_email_check")
+    gia_richiesto = _email_ha_gia_richiesto(conn, email_check) if email_check.strip() else False
+
+    if gia_richiesto:
+        st.warning("Con questa email hai già ricevuto un kit gratuito. Un secondo kit è disponibile con "
+                   "un'offerta libera (minimo 4€) come contributo all'associazione **The Organism** — "
+                   "ci aiuta a fare del bene a chi ne ha davvero bisogno.")
+        st.markdown(f"**IBAN The Organism:** `{IBAN_THE_ORGANISM}`")
+        st.caption("Causale: nome e cognome del bambino + \"kit PNEV Games\". Dopo il versamento, scrivici e ti sblocchiamo il secondo kit.")
+        return
+
+    with st.form("form_kit_giochi"):
+        st.markdown("**Dati del bambino**")
+        c1, c2 = st.columns(2)
+        nome = c1.text_input("Nome del bambino *")
+        cognome = c2.text_input("Cognome *")
+        indirizzo = st.text_input("Indirizzo di spedizione *", placeholder="Via, civico, città, CAP")
+        c3, c4 = st.columns(2)
+        email = c3.text_input("Email di un genitore *")
+        telefono = c4.text_input("Cellulare di un genitore *")
+        codice_fiscale = st.text_input("Codice fiscale del bambino *").strip().upper()
+        data_nascita = st.date_input("Data di nascita *", value=None,
+                                      min_value=datetime(1930, 1, 1), max_value=datetime.now())
+        consenso = st.checkbox(
+            "Ho letto l'informativa privacy e acconsento al trattamento dei dati "
+            "per la spedizione del kit e per essere ricontattato/a. *")
+        st.caption("I dati sono trattati dallo Studio The Organism ai soli fini della "
+                   "spedizione del kit e del ricontatto (GDPR art. 6.1.a). Puoi chiederne "
+                   "la cancellazione in qualsiasi momento.")
+        inviato = st.form_submit_button("Invia richiesta →", type="primary", use_container_width=True)
+
+    if inviato:
+        manca = [l for l, v in [("Nome", nome), ("Cognome", cognome), ("Indirizzo", indirizzo),
+                                 ("Email", email), ("Cellulare", telefono), ("Codice fiscale", codice_fiscale)]
+                 if not (v or "").strip()]
+        if not data_nascita:
+            manca.append("Data di nascita")
+        if manca:
+            st.error("Campi obbligatori mancanti: " + ", ".join(manca))
+            return
+        if "@" not in email or "." not in email.split("@")[-1]:
+            st.error("L'indirizzo email non sembra valido.")
+            return
+        if len(codice_fiscale) != 16:
+            st.error("Il codice fiscale deve avere 16 caratteri.")
+            return
+        if not _cf_valido(codice_fiscale):
+            st.error("Il codice fiscale non è valido: controlla di averlo scritto correttamente.")
+            return
+        if not consenso:
+            st.error("Serve il consenso al trattamento dei dati per procedere.")
+            return
+        try:
+            import secrets as _secrets
+            token = _secrets.token_urlsafe(24)
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO sv_kit_richieste (nome, cognome, indirizzo, email, telefono, codice_fiscale, data_nascita, token_verifica, programma)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'games')""",
+                        (nome.strip(), cognome.strip(), indirizzo.strip(), email.strip(),
+                         telefono.strip(), codice_fiscale, data_nascita.isoformat(), token))
+            conn.commit()
+        except Exception as e:
+            st.error(f"Errore: {e}")
+            return
+        _invia_email_conferma(email.strip(), nome.strip(), token)
+        st.session_state["_kit_email_inviata"] = True
+        st.rerun()
+
+
 def ui_public_kit_conferma(get_conn):
     """Pagina pubblica (no login): conferma la richiesta via link email e genera il codice."""
     conn = get_conn()
@@ -549,19 +653,21 @@ def ui_public_kit_conferma(get_conn):
 
     token = st.query_params.get("kit_conferma", "")
     cur = conn.cursor()
-    cur.execute("""SELECT id, nome, cognome, indirizzo, email, telefono, codice_fiscale, data_nascita, codice, verificato
+    cur.execute("""SELECT id, nome, cognome, indirizzo, email, telefono, codice_fiscale, data_nascita, codice, verificato, programma
                    FROM sv_kit_richieste WHERE token_verifica = %s LIMIT 1""", (token,))
     r = cur.fetchone()
     if not r:
         st.error("Link non valido o già usato.")
         return
-    rid, nome, cognome, indirizzo, email, telefono, cf, dn, codice_esistente, verificato = r
+    rid, nome, cognome, indirizzo, email, telefono, cf, dn, codice_esistente, verificato, programma = r
+    link_dest = (f"{SPORT_BASE_URL}/programma.html" if programma != "games"
+                 else f"{GAMES_BASE_URL}/index.html")
+    label_dest = "Vai al mio programma →" if programma != "games" else "Torna ai giochi →"
 
     if verificato and codice_esistente:
         st.success(f"Email già confermata. Il tuo codice è **{codice_esistente}**.")
-        st.link_button("Vai al mio programma →",
-                        f"{SPORT_BASE_URL}/programma.html?codice={codice_esistente}",
-                        use_container_width=True)
+        suffix = "" if programma == "games" else f"?codice={codice_esistente}"
+        st.link_button(label_dest, f"{link_dest}{suffix}", use_container_width=True)
         return
 
     try:
@@ -575,10 +681,9 @@ def ui_public_kit_conferma(get_conn):
         return
 
     _notifica_kit_richiesto(nome, cognome, indirizzo, codice, email, telefono)
-    st.success(f"Email confermata! Il tuo codice è **{codice}** — usalo per iniziare il tuo programma.")
-    st.link_button("Vai al mio programma →",
-                    f"{SPORT_BASE_URL}/programma.html?codice={codice}",
-                    use_container_width=True)
+    st.success(f"Email confermata! Il tuo codice è **{codice}**.")
+    suffix = "" if programma == "games" else f"?codice={codice}"
+    st.link_button(label_dest, f"{link_dest}{suffix}", use_container_width=True)
 
 
 def _lista_richieste_kit(conn, solo_da_spedire=False):

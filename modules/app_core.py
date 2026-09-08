@@ -11975,6 +11975,16 @@ def main():
             st.error(f"Modulo non disponibile: {_e}")
         return
 
+    # --- PUBLIC KIT PNEV GAMES (no login) — richiesta occhiali per i bambini ---
+    if st.query_params.get('kit_giochi'):
+        try:
+            from modules.sportivi import ui_public_kit_giochi
+            ui_public_kit_giochi(get_connection)
+        except Exception as _e:
+            st.error(f"Modulo non disponibile: {_e}")
+        return
+        return
+
     # --- PUBLIC KIT SPORT VISION — conferma email (no login) ---
     if st.query_params.get('kit_conferma'):
         try:
