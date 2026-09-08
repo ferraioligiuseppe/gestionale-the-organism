@@ -332,7 +332,7 @@ def azione_iscrizione_evento(conn):
         "Acconsento a essere ricontattato/a per comunicare l'esito e un eventuale approfondimento."
     )
 
-    if st.button("✅ Confirma iscrizione", type="primary", use_container_width=True):
+    if st.button("✅ Conferma iscrizione", type="primary", use_container_width=True):
         obbligatori = [nome_b, cognome_b, nome_g, cognome_g, email, telefono]
         if not all((v or "").strip() for v in obbligatori):
             st.error("Compila tutti i campi obbligatori (*).")
