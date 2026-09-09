@@ -77,10 +77,53 @@ def _conn():
     return psycopg2.connect(dsn)
 
 
+class _DictCursorWrapper:
+    """Adatta un cursore qualsiasi (anche il wrapper del gestionale, che non
+    accetta cursor_factory) restituendo righe come dict, così il resto del
+    modulo PECS (scritto per RealDictCursor) funziona senza modifiche."""
+    def __init__(self, cur):
+        self._cur = cur
+
+    def _to_dict(self, row):
+        if row is None:
+            return None
+        if isinstance(row, dict):
+            return row
+        cols = [d[0] for d in self._cur.description]
+        return dict(zip(cols, row))
+
+    def execute(self, *a, **kw):
+        return self._cur.execute(*a, **kw)
+
+    def fetchone(self):
+        return self._to_dict(self._cur.fetchone())
+
+    def fetchall(self):
+        return [self._to_dict(r) for r in self._cur.fetchall()]
+
+    def fetchmany(self, *a, **kw):
+        return [self._to_dict(r) for r in self._cur.fetchmany(*a, **kw)]
+
+    def close(self):
+        return self._cur.close()
+
+    @property
+    def description(self):
+        return self._cur.description
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+
 @contextmanager
 def _cursor(studio_id: Optional[int] = None, commit: bool = False):
     conn = _conn()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur_raw = conn.cursor(cursor_factory=RealDictCursor)
+    except TypeError:
+        cur_raw = _DictCursorWrapper(conn.cursor())
+    cur = cur_raw
     try:
         if studio_id is not None:
             cur.execute("SELECT set_config('app.studio_id', %s, true)",
