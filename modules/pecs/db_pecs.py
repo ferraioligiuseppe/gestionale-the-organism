@@ -24,6 +24,7 @@ Studio The Organism - Dott. Giuseppe Ferraioli
 from __future__ import annotations
 
 import os
+import re
 from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -153,15 +154,55 @@ def adesso() -> datetime:
 # Schema
 # ---------------------------------------------------------------------------
 
+def _split_sql_statements(ddl: str) -> list:
+    """Split su ';' che rispetta i blocchi dollar-quoted (DO $$ ... $$;),
+    così un DO block con ';' al suo interno non viene tagliato a metà."""
+    statements = []
+    buf = []
+    i = 0
+    n = len(ddl)
+    dollar_tag = None
+    while i < n:
+        ch = ddl[i]
+        if dollar_tag is None:
+            m = re.match(r"\$[A-Za-z0-9_]*\$", ddl[i:])
+            if m:
+                dollar_tag = m.group(0)
+                buf.append(dollar_tag)
+                i += len(dollar_tag)
+                continue
+            if ch == ";":
+                stmt = "".join(buf).strip()
+                if stmt:
+                    statements.append(stmt)
+                buf = []
+                i += 1
+                continue
+            buf.append(ch)
+            i += 1
+        else:
+            if ddl[i:i + len(dollar_tag)] == dollar_tag:
+                buf.append(dollar_tag)
+                i += len(dollar_tag)
+                dollar_tag = None
+                continue
+            buf.append(ch)
+            i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        statements.append(tail)
+    return statements
+
+
 def inizializza_schema() -> None:
     """Esegue schema_pecs.sql. Idempotente. Esegue ogni istruzione separatamente
     perché alcuni wrapper di cursore (es. quello del gestionale) non supportano
-    più statement in una sola execute()."""
+    più statement in una sola execute(); lo split rispetta i blocchi DO $$ ... $$."""
     percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "schema_pecs.sql")
     with open(percorso, "r", encoding="utf-8") as f:
         ddl = f.read()
-    statements = [s.strip() for s in ddl.split(";") if s.strip()]
+    statements = _split_sql_statements(ddl)
     with _cursor(commit=True) as cur:
         for stmt in statements:
             cur.execute(stmt + ";")
