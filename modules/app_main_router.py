@@ -454,7 +454,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "🔬 PNEV", "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
-        "🧠 NPS — Neuropsicologica", "🌐 WHODAS 2.0", "📚 DSA — Apprendimento",
+        "🧠 NPS — Neuropsicologica", "🌐 WHODAS 2.0", "🖼️ PECS — CAA", "📚 DSA — Apprendimento",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
@@ -744,6 +744,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             render_whodas(conn, paz_id)
         except ImportError as e:
             st.error(f"Modulo WHODAS non disponibile: {e}")
+        return True
+    if sotto == "🖼️ PECS — CAA":
+        try:
+            from .pecs.ui_pecs import render_pecs
+            render_pecs(conn, paz_id)
+        except ImportError as e:
+            st.error(f"Modulo PECS non disponibile: {e}")
         return True
     if sotto == "📚 DSA — Apprendimento":
         try:
@@ -1164,6 +1171,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 render_whodas(conn, paz_id)
             except ImportError as e:
                 st.error(f"Modulo WHODAS non disponibile: {e}")
+            return
+        if sotto == "🖼️ PECS — CAA":
+            try:
+                from .pecs.ui_pecs import render_pecs
+                render_pecs(conn, paz_id)
+            except ImportError as e:
+                st.error(f"Modulo PECS non disponibile: {e}")
             return
         if sotto == "📚 DSA — Apprendimento":
             try:

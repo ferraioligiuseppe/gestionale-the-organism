@@ -34,6 +34,7 @@ AREA_TERAPIA_PNEV  = "🧘 Terapia"
 AREA_OCULISTICA    = "👁️ Oculistica · LAC"
 AREA_ORTOTTICA     = "🩺 Ortottica"
 AREA_TNPEE         = "🗣️ Logopedia / TNPEE"
+AREA_PECS          = "🖼️ PECS — CAA"
 AREA_OSTEOPATIA    = "🦴 Osteopatia"
 AREA_ACADEMY       = "🎓 PNEV Academy"
 AREA_FISIOTERAPIA  = "🏃 Fisioterapia"
@@ -64,6 +65,7 @@ AREE_ORDINE = [
     AREA_OCULISTICA,
     AREA_ORTOTTICA,
     AREA_TNPEE,
+    AREA_PECS,
     AREA_OSTEOPATIA,
     AREA_FISIOTERAPIA,
     AREA_TEST_LIVE,
@@ -214,6 +216,9 @@ SOTTOSEZIONI = {
     AREA_TNPEE: [
         "🗣️ Logopedia / SMOF",
         "🤸 Psicomotricità funzionale",
+    ],
+    AREA_PECS: [
+        "🖼️ PECS — CAA",
     ],
     AREA_ACADEMY: [
         "📅 Eventi e iscrizioni",
