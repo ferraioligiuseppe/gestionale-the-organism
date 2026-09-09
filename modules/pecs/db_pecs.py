@@ -498,12 +498,11 @@ def lista_pazienti(studio_id: int) -> List[Dict[str, Any]]:
     sql = """
         SELECT {pid} AS id, {nome} AS nome, {cognome} AS cognome
           FROM {tab}
-         WHERE studio_id = %s
          ORDER BY {cognome}, {nome}
     """.format(tab=TABELLA_PAZIENTI, pid=COL_PAZIENTE_ID,
                nome=COL_PAZIENTE_NOME, cognome=COL_PAZIENTE_COGNOME)
     with _cursor(studio_id) as cur:
-        cur.execute(sql, (studio_id,))
+        cur.execute(sql)
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -511,10 +510,10 @@ def get_paziente(studio_id: int, paziente_id: int) -> Optional[Dict[str, Any]]:
     sql = """
         SELECT {pid} AS id, {nome} AS nome, {cognome} AS cognome
           FROM {tab}
-         WHERE studio_id = %s AND {pid} = %s
+         WHERE {pid} = %s
     """.format(tab=TABELLA_PAZIENTI, pid=COL_PAZIENTE_ID,
                nome=COL_PAZIENTE_NOME, cognome=COL_PAZIENTE_COGNOME)
     with _cursor(studio_id) as cur:
-        cur.execute(sql, (studio_id, paziente_id))
+        cur.execute(sql, (paziente_id,))
         row = cur.fetchone()
     return dict(row) if row else None
