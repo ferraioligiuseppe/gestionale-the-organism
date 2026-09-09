@@ -154,9 +154,22 @@ def adesso() -> datetime:
 # Schema
 # ---------------------------------------------------------------------------
 
+def _rimuovi_commenti_sql(ddl: str) -> str:
+    """Rimuove commenti -- e /* */ da tutto il testo PRIMA dello split sui ';'
+    — necessario perché un commento può contenere un ';' al suo interno
+    (es. '-- Nota: ... paziente; l'isolamento ...') e romperebbe lo split
+    altrimenti."""
+    ddl = re.sub(r"/\*.*?\*/", "", ddl, flags=re.S)
+    ddl = re.sub(r"--.*", "", ddl)
+    return ddl
+
+
 def _split_sql_statements(ddl: str) -> list:
     """Split su ';' che rispetta i blocchi dollar-quoted (DO $$ ... $$;),
-    così un DO block con ';' al suo interno non viene tagliato a metà."""
+    così un DO block con ';' al suo interno non viene tagliato a metà.
+    I commenti vengono rimossi prima, altrimenti un ';' dentro un commento
+    romperebbe lo split."""
+    ddl = _rimuovi_commenti_sql(ddl)
     statements = []
     buf = []
     i = 0
