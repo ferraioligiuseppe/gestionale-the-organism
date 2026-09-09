@@ -154,13 +154,17 @@ def adesso() -> datetime:
 # ---------------------------------------------------------------------------
 
 def inizializza_schema() -> None:
-    """Esegue schema_pecs.sql. Idempotente."""
+    """Esegue schema_pecs.sql. Idempotente. Esegue ogni istruzione separatamente
+    perché alcuni wrapper di cursore (es. quello del gestionale) non supportano
+    più statement in una sola execute()."""
     percorso = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "schema_pecs.sql")
     with open(percorso, "r", encoding="utf-8") as f:
         ddl = f.read()
+    statements = [s.strip() for s in ddl.split(";") if s.strip()]
     with _cursor(commit=True) as cur:
-        cur.execute(ddl)
+        for stmt in statements:
+            cur.execute(stmt + ";")
 
 
 # ---------------------------------------------------------------------------

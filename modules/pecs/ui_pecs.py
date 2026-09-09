@@ -73,8 +73,9 @@ def render_pecs(conn, paziente_id):
     db_pecs.configura(get_connection=lambda: conn, chiudi_connessione=False)
     try:
         db_pecs.inizializza_schema()
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"Errore inizializzazione schema PECS: {e}")
+        return
     studio_id = None
     try:
         cur = conn.cursor()
