@@ -118,9 +118,20 @@ for proc in programma["procedure"]:
         valutazione = cc2.select_slider("Com'è andata?", options=[1, 2, 3, 4, 5], value=3,
                                          key=f"val_{nome}_{data_sel}",
                                          format_func=lambda v: "😣😕😐🙂😄"[v-1])
+        video_file = st.file_uploader("🎥 Registra/carica un video del bambino che lo esegue (facoltativo)",
+                                      type=["mp4", "mov", "webm"], key=f"video_{nome}_{data_sel}")
         if st.button("💾 Salva", key=f"save_{nome}_{data_sel}"):
-            db.salva_feedback(conn, paziente_id, nome, data_sel, fatto, valutazione)
-            st.success("Salvato ✅")
+            video_url = None
+            if video_file is not None:
+                try:
+                    from modules.dropbox_upload import upload_audio_bytes
+                    ext = video_file.name.rsplit(".", 1)[-1] if "." in video_file.name else "mp4"
+                    path = f"/portale-famiglia/{paziente_id}/{nome.replace(' ','_')}_{data_sel}.{ext}"
+                    video_url = upload_audio_bytes(video_file.getvalue(), path)
+                except Exception:
+                    video_url = None
+            db.salva_feedback(conn, paziente_id, nome, data_sel, fatto, valutazione, video_url)
+            st.success("Salvato ✅" + (" — video caricato" if video_url else ""))
 
 st.markdown("---")
 riep = db.get_aderenza_riepilogo(conn, paziente_id, giorni=30)
