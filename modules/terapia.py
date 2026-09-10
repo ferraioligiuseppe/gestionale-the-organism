@@ -308,6 +308,16 @@ def _blocco_portale_famiglia(conn, paz_id, nome_paz):
             st.caption("Nessun feedback ancora registrato dalla famiglia.")
 
         st.markdown("---")
+        st.markdown("**🎥 Video caricati dalla famiglia (ultimi 30 giorni)**")
+        video_recenti = dbf.get_video_bambino_recenti(conn, paz_id, giorni=30)
+        if video_recenti:
+            for procedura, data_v, url, valutazione in video_recenti:
+                st.caption(f"{data_v:%d/%m/%Y} — {procedura} (valutazione genitore: {valutazione or '—'}/5)")
+                st.video(url)
+        else:
+            st.caption("Nessun video caricato dalla famiglia negli ultimi 30 giorni.")
+
+        st.markdown("---")
         st.markdown("**🎥 Video how-to per procedura**")
         programma = dbf.get_programma_corrente(conn, paz_id)
         if programma and programma["procedure"]:
