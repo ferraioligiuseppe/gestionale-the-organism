@@ -72,9 +72,17 @@ def render_pecs(conn, paziente_id):
     from . import db_pecs
     db_pecs.configura(get_connection=lambda: conn, chiudi_connessione=False)
     try:
+        conn.rollback()
+    except Exception:
+        pass
+    try:
         db_pecs.inizializza_schema()
     except Exception as e:
         st.error(f"Errore inizializzazione schema PECS: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return
     studio_id = None
     try:
@@ -132,7 +140,7 @@ def render(studio_id: Optional[int] = None, paziente_id: Optional[int] = None,
                   pc.etichetta_fase(fase_corrente)))
 
     tabs = st.tabs(["Sessione", "Andamento e criterio", "Rinforzatori",
-                    "Scheda della fase", "Report", "Protocollo"])
+                    "Scheda della fase", "Vocabolario", "Report", "Protocollo"])
 
     with tabs[0]:
         _tab_sessione(sid, protocollo, op)
@@ -143,8 +151,10 @@ def render(studio_id: Optional[int] = None, paziente_id: Optional[int] = None,
     with tabs[3]:
         _tab_scheda(fase_corrente)
     with tabs[4]:
-        _tab_report(sid, protocollo, paziente, op)
+        _tab_vocabolario(sid, protocollo)
     with tabs[5]:
+        _tab_report(sid, protocollo, paziente, op)
+    with tabs[6]:
         _tab_protocollo(sid, protocollo)
 
 
@@ -471,6 +481,37 @@ def _tab_rinforzatori(sid: int, protocollo: Dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # Tab: scheda clinica della fase
 # ---------------------------------------------------------------------------
+
+def _tab_vocabolario(sid, protocollo) -> None:
+    st.caption(
+        "Pittogrammi ARASAAC (gratuiti per uso clinico) come punto di partenza. "
+        "Puoi sostituire ciascuna card con una foto reale dell'item o del paziente "
+        "— resta personale per questo paziente."
+    )
+    paziente_id = protocollo["paziente_id"]
+    categorie = ["Tutte"] + pc.categorie_vocabolario()
+    cat_scelta = st.selectbox("Categoria", categorie, key="pecs_voc_cat")
+    items = [it for it in pc.VOCABOLARIO_INIZIALE
+             if cat_scelta == "Tutte" or it.categoria == cat_scelta]
+
+    cols = st.columns(4)
+    for i, item in enumerate(items):
+        with cols[i % 4]:
+            foto = db.get_foto_item(sid, paziente_id, item.nome)
+            if foto:
+                st.image(foto, use_container_width=True)
+            else:
+                st.image(pc.url_arasaac(item.arasaac_id), use_container_width=True)
+            st.caption(f"**{item.nome}**")
+            up = st.file_uploader("Sostituisci con una foto", type=["png", "jpg", "jpeg"],
+                                  key=f"pecs_upl_{item.nome}", label_visibility="collapsed")
+            if up is not None:
+                db.salva_foto_item(sid, paziente_id, item.nome, up.getvalue())
+                st.rerun()
+            if foto and st.button("Ripristina pittogramma", key=f"pecs_reset_{item.nome}"):
+                db.elimina_foto_item(sid, paziente_id, item.nome)
+                st.rerun()
+
 
 def _tab_scheda(fase_corrente: str) -> None:
     fase = st.selectbox("Fase", pc.ORDINE_FASI,

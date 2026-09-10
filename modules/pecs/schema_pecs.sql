@@ -107,6 +107,20 @@ CREATE INDEX IF NOT EXISTS idx_pecs_prove_sessione
     ON pecs_prove (studio_id, sessione_id, ordine);
 
 -- ---------------------------------------------------------------------
+-- 6. Foto personalizzate del vocabolario (sostituiscono il pittogramma
+--    ARASAAC standard con una foto reale dell'item/paziente)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS pecs_foto_item (
+    id              BIGSERIAL PRIMARY KEY,
+    studio_id       BIGINT      NOT NULL,
+    paziente_id     BIGINT      NOT NULL,
+    nome_item       TEXT        NOT NULL,
+    foto            BYTEA       NOT NULL,
+    aggiornato_il   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (studio_id, paziente_id, nome_item)
+);
+
+-- ---------------------------------------------------------------------
 -- 5. Transizioni di fase: traccia di ogni passaggio, con evidenza
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS pecs_transizioni (
