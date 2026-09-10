@@ -355,39 +355,64 @@ def azione_iscrizione_evento(conn):
                 st.error("Questo orario è appena stato prenotato da un'altra persona. Ricarica la pagina e scegline un altro.")
                 st.stop()
 
+        # Avviso non bloccante: stessa email già usata per un altro bambino a questo evento
+        from modules.eventi.db_eventi import email_gia_iscritta
+        if email_gia_iscritta(conn, ev["id"], email):
+            st.info("ℹ️ Con questa email hai già iscritto un altro bambino/a a questo evento — va bene, "
+                     "l'iscrizione di un fratello/sorella diverso procede comunque.")
+
         try:
-            iscr = dbev.crea_iscrizione(
-                conn, ev["id"],
-                nome=nome_g, cognome=cognome_g, email=email, telefono=telefono,
-                note=f"Bambino/a: {cognome_b.strip()} {nome_b.strip()} · Scuola: {scuola or '—'} {classe or ''}".strip(),
-                consenso_privacy=cons_privacy, consenso_marketing=cons_contatto,
-                sorgente="web_slot",
-            )
-
-            if slot_scelto:
-                assegna_slot(conn, iscr["id"], slot_scelto)
-
-            orario_evento = slot_scelto or ev["data_ora"]
-            durata = ev.get("slot_durata_minuti") if slot_scelto else (ev.get("durata_minuti") or 15)
-            titolo_cal = f"Screening — {cognome_b.strip()} {nome_b.strip()}"
-            gcal_id = None
-            if orario_evento:
-                gcal_id = crea_evento_calendario(
-                    titolo=titolo_cal,
-                    inizio=orario_evento,
-                    durata_minuti=int(durata or 15),
-                    descrizione=(
-                        f"Genitore: {cognome_g.strip()} {nome_g.strip()} · Tel: {telefono} · Email: {email}\n"
-                        f"Scuola: {scuola or '—'} {classe or ''}"
-                    ),
+            with st.spinner("Stiamo confermando la tua iscrizione, un attimo…"):
+                iscr = dbev.crea_iscrizione(
+                    conn, ev["id"],
+                    nome=nome_g, cognome=cognome_g, email=email, telefono=telefono,
+                    note=f"Bambino/a: {cognome_b.strip()} {nome_b.strip()} · Scuola: {scuola or '—'} {classe or ''}".strip(),
+                    consenso_privacy=cons_privacy, consenso_marketing=cons_contatto,
+                    sorgente="web_slot",
                 )
-            if gcal_id:
-                salva_gcal_event_id(conn, iscr["id"], gcal_id)
+
+                if slot_scelto:
+                    assegna_slot(conn, iscr["id"], slot_scelto)
+
+                orario_evento = slot_scelto or ev["data_ora"]
+                durata = ev.get("slot_durata_minuti") if slot_scelto else (ev.get("durata_minuti") or 15)
+                titolo_cal = f"Screening — {cognome_b.strip()} {nome_b.strip()}"
+                gcal_id = None
+                if orario_evento:
+                    gcal_id = crea_evento_calendario(
+                        titolo=titolo_cal,
+                        inizio=orario_evento,
+                        durata_minuti=int(durata or 15),
+                        descrizione=(
+                            f"Genitore: {cognome_g.strip()} {nome_g.strip()} · Tel: {telefono} · Email: {email}\n"
+                            f"Scuola: {scuola or '—'} {classe or ''}"
+                        ),
+                    )
+                if gcal_id:
+                    salva_gcal_event_id(conn, iscr["id"], gcal_id)
+
+                # Email di conferma al genitore (non bloccante se fallisce)
+                try:
+                    from modules.email_otp import invia_email
+                    corpo_email = (
+                        f"Ciao {nome_g.strip()},\n\n"
+                        f"la tua iscrizione a \"{ev['titolo']}\" per {nome_b.strip()} {cognome_b.strip()} è confermata.\n"
+                    )
+                    if slot_scelto:
+                        corpo_email += f"Appuntamento: {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}\n"
+                    elif ev.get("data_ora"):
+                        corpo_email += f"Data: {ev['data_ora'].strftime('%d/%m/%Y alle %H:%M')}\n"
+                    if ev.get("sede"):
+                        corpo_email += f"Sede: {ev['sede']}\n"
+                    corpo_email += "\nPer qualsiasi domanda scrivi a info@theorganism.com.\n\nStudio The Organism"
+                    invia_email(email.strip(), f"Iscrizione confermata — {ev['titolo']}", corpo_email)
+                except Exception:
+                    pass
 
             st.success("🎉 Iscrizione confermata!")
             if slot_scelto:
                 st.markdown(f"**Il tuo appuntamento:** {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}")
-            st.info("Se hai domande scrivi a info@theorganism.com.")
+            st.info("Ti abbiamo inviato una email di conferma. Se non arriva controlla anche lo spam, oppure scrivi a info@theorganism.com.")
             st.stop()
         except ValueError as e:
             st.error(str(e))
