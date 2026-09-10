@@ -52,10 +52,12 @@ def init_db(conn):
                 data            DATE NOT NULL,
                 fatto           BOOLEAN NOT NULL DEFAULT FALSE,
                 valutazione     INT,
+                video_bambino_url TEXT,
                 creato_il       TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (paziente_id, procedura, data)
             );
         """)
+        cur.execute("ALTER TABLE programma_casa_feedback ADD COLUMN IF NOT EXISTS video_bambino_url TEXT;")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS portale_otp (
                 id              BIGSERIAL PRIMARY KEY,
@@ -173,15 +175,16 @@ def get_programma_corrente(conn, paziente_id):
         except Exception: pass
 
 
-def salva_feedback(conn, paziente_id, procedura, data, fatto, valutazione):
+def salva_feedback(conn, paziente_id, procedura, data, fatto, valutazione, video_url=None):
     cur = conn.cursor()
     try:
         cur.execute("""
-            INSERT INTO programma_casa_feedback (paziente_id, procedura, data, fatto, valutazione)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO programma_casa_feedback (paziente_id, procedura, data, fatto, valutazione, video_bambino_url)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (paziente_id, procedura, data) DO UPDATE
-                SET fatto = EXCLUDED.fatto, valutazione = EXCLUDED.valutazione
-        """, (paziente_id, procedura, data, fatto, valutazione))
+                SET fatto = EXCLUDED.fatto, valutazione = EXCLUDED.valutazione,
+                    video_bambino_url = COALESCE(EXCLUDED.video_bambino_url, programma_casa_feedback.video_bambino_url)
+        """, (paziente_id, procedura, data, fatto, valutazione, video_url))
         conn.commit()
         return True
     except Exception:
@@ -202,6 +205,24 @@ def get_feedback_settimana(conn, paziente_id, data_da, data_a):
             WHERE paziente_id=%s AND data BETWEEN %s AND %s
             ORDER BY data DESC
         """, (paziente_id, data_da, data_a))
+        return cur.fetchall()
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def get_video_bambino_recenti(conn, paziente_id, giorni=30):
+    """Video caricati dal genitore (esecuzione del bambino), più recenti prima —
+    da rivedere in studio."""
+    cur = conn.cursor()
+    try:
+        soglia = datetime.date.today() - datetime.timedelta(days=giorni)
+        cur.execute("""
+            SELECT procedura, data, video_bambino_url, valutazione
+            FROM programma_casa_feedback
+            WHERE paziente_id=%s AND data >= %s AND video_bambino_url IS NOT NULL
+            ORDER BY data DESC
+        """, (paziente_id, soglia))
         return cur.fetchall()
     finally:
         try: cur.close()
