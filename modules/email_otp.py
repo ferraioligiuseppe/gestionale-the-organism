@@ -9,6 +9,28 @@ import smtplib
 from email.mime.text import MIMEText
 
 
+def invia_email(to_email: str, oggetto: str, corpo: str) -> bool:
+    """Invio email generico (conferme, notifiche) via lo stesso Gmail SMTP
+    usato per i codici OTP."""
+    try:
+        import streamlit as st
+        cfg = st.secrets.get("gmail", {})
+        mittente = cfg.get("EMAIL")
+        app_password = cfg.get("APP_PASSWORD")
+        if not mittente or not app_password:
+            return False
+        msg = MIMEText(corpo)
+        msg["Subject"] = oggetto
+        msg["From"] = mittente
+        msg["To"] = to_email
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(mittente, app_password)
+            server.sendmail(mittente, [to_email], msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
 def invia_codice(to_email: str, codice: str) -> bool:
     try:
         import streamlit as st
