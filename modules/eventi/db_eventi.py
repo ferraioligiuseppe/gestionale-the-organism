@@ -655,7 +655,7 @@ def lista_iscrizioni(
     conn: Any,
     evento_id: int,
     stato: Optional[str] = None,
-    ordina_per: str = "created_at",
+    ordina_per: str = "slot_orario",
     ordina_desc: bool = False,
 ) -> list[dict]:
     """
@@ -664,7 +664,7 @@ def lista_iscrizioni(
     """
     if stato and stato not in STATI_VALIDI:
         raise ValueError(f"Stato non valido: {stato}")
-    if ordina_per not in ("created_at", "cognome", "email", "stato"):
+    if ordina_per not in ("created_at", "cognome", "email", "stato", "slot_orario"):
         raise ValueError(f"Ordinamento non valido: {ordina_per}")
 
     ph = _placeholder(conn)
@@ -674,10 +674,11 @@ def lista_iscrizioni(
         where.append(f"stato = {ph}")
         params.append(stato)
 
+    nulls_clause = "NULLS LAST" if _is_postgres(conn) else ""
     sql = f"""
         SELECT * FROM ev_iscrizioni
         WHERE {' AND '.join(where)}
-        ORDER BY {ordina_per} {'DESC' if ordina_desc else 'ASC'};
+        ORDER BY {ordina_per} {'DESC' if ordina_desc else 'ASC'} {nulls_clause};
     """
 
     cur = conn.cursor()
