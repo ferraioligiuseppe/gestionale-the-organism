@@ -113,9 +113,12 @@ CREATE INDEX IF NOT EXISTS idx_ev_iscrizioni_paziente
 CREATE INDEX IF NOT EXISTS idx_ev_iscrizioni_stato
     ON ev_iscrizioni(stato);
 
--- Vincolo: stessa email non si può iscrivere due volte (se non annullata)
+-- Vincolo: stesso bambino (email + nome/cognome genitore + note, dove le
+-- note contengono il nome del bambino) non si iscrive due volte per errore;
+-- fratelli diversi con la stessa email genitore restano permessi.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ev_iscrizione_unica
-    ON ev_iscrizioni(evento_id, lower(email))
+    ON ev_iscrizioni(evento_id, lower(email), lower(coalesce(nome, '')),
+                      lower(coalesce(cognome, '')), lower(coalesce(note, '')))
     WHERE stato != 'annullata';
 """
 
@@ -208,6 +211,14 @@ def apply_schema(conn: Any, db_backend: str = "postgres") -> None:
         logger.info(f"Apply schema modulo eventi (backend={db_backend})...")
 
         if db_backend == "postgres":
+            # Migrazione: l'indice univoco iscrizioni è cambiato (email da sola
+            # -> email+nome+cognome+note) per permettere due fratelli con la
+            # stessa email genitore. Va droppato prima, altrimenti il vecchio
+            # CREATE UNIQUE INDEX IF NOT EXISTS con lo stesso nome non si aggiorna.
+            try:
+                cur.execute("DROP INDEX IF EXISTS idx_ev_iscrizione_unica;")
+            except Exception:
+                pass
             for ddl in DDL_PG_ALL:
                 cur.execute(ddl)
         else:

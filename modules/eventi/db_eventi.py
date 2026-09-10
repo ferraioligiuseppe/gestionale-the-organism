@@ -460,6 +460,46 @@ def posti_rimasti(conn: Any, evento_id: int) -> Optional[int]:
 # ISCRIZIONI — CRUD
 # =============================================================================
 
+def email_gia_iscritta_stesso_bambino(conn: Any, evento_id: int, email: str,
+                                       nome_genitore: str, cognome_genitore: str,
+                                       note: Optional[str]) -> bool:
+    """True solo se la STESSA combinazione email + genitore + bambino (dedotto
+    da note) è già iscritta — permette a due fratelli con la stessa email
+    genitore di iscriversi entrambi, ma blocca il doppio invio accidentale
+    dello stesso modulo."""
+    ph = _placeholder(conn)
+    cur = conn.cursor()
+    try:
+        if _is_postgres(conn):
+            cur.execute(
+                f"""SELECT 1 FROM ev_iscrizioni
+                    WHERE evento_id = {ph}
+                      AND lower(email) = lower({ph})
+                      AND lower(coalesce(nome, '')) = lower({ph})
+                      AND lower(coalesce(cognome, '')) = lower({ph})
+                      AND lower(coalesce(note, '')) = lower({ph})
+                      AND stato != 'annullata'
+                    LIMIT 1;""",
+                (evento_id, email, nome_genitore or "", cognome_genitore or "", note or ""),
+            )
+        else:
+            cur.execute(
+                f"""SELECT 1 FROM ev_iscrizioni
+                    WHERE evento_id = {ph}
+                      AND lower(email) = lower({ph})
+                      AND lower(coalesce(nome, '')) = lower({ph})
+                      AND lower(coalesce(cognome, '')) = lower({ph})
+                      AND lower(coalesce(note, '')) = lower({ph})
+                      AND stato != 'annullata'
+                    LIMIT 1;""",
+                (evento_id, email, nome_genitore or "", cognome_genitore or "", note or ""),
+            )
+        return cur.fetchone() is not None
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
 def email_gia_iscritta(conn: Any, evento_id: int, email: str) -> bool:
     """
     True se quell'email è già iscritta a quell'evento (in stato non-annullata).
@@ -548,8 +588,8 @@ def crea_iscrizione(
     if not evento.get("iscrizioni_aperte") and forza_stato is None:
         raise ValueError("Iscrizioni chiuse per questo evento")
 
-    if email_gia_iscritta(conn, evento_id, email):
-        raise ValueError("Questa email è già iscritta a questo evento")
+    if email_gia_iscritta_stesso_bambino(conn, evento_id, email, nome, cognome, note):
+        raise ValueError("Questo bambino/a risulta già iscritto a questo evento con questa email.")
 
     # Determina stato
     if forza_stato:
