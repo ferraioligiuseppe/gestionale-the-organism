@@ -158,6 +158,22 @@ def link_dashboard(token):
 # AZIONI (scrittura)
 # ═══════════════════════════════════════════════════════════════
 
+def _client_ip():
+    """Recupera l'IP del client dagli header del proxy (Render/Streamlit Cloud).
+    Best-effort: se non disponibile ritorna stringa vuota."""
+    try:
+        headers = st.context.headers
+        fwd = headers.get("X-Forwarded-For", "")
+        if fwd:
+            return fwd.split(",")[0].strip()
+        return headers.get("X-Real-Ip", "") or ""
+    except Exception:
+        return ""
+
+
+LIMITE_REGISTRAZIONI_IP_GIORNO = 3
+
+
 def azione_registra(conn):
     nome = qp("nome")
     email = qp("email")
@@ -165,10 +181,18 @@ def azione_registra(conn):
         st.error("Dati di registrazione incompleti (nome ed email sono obbligatori).")
         st.stop()
 
+    ip = _client_ip()
+    if ip and db.conta_registrazioni_ip_oggi(conn, ip) >= LIMITE_REGISTRAZIONI_IP_GIORNO:
+        st.error("Hai già raggiunto il numero massimo di registrazioni da questa rete oggi. "
+                 "Se hai bisogno di più accessi, scrivi a info@theorganism.com.")
+        st.stop()
+
     utente_id = db.crea_utente(
         conn, nome=nome, email=email,
         eta=qp_int("eta"), mano=qp("mano"), gdpr=True,
     )
+    if ip:
+        db.registra_ip(conn, ip)
 
     risposte = leggi_questionario_da_url()
     if risposte:
