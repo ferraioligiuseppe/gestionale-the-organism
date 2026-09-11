@@ -298,11 +298,15 @@ def _corpo_seleziona(conn, ns="default"):
             st.rerun()
         return
 
-    # Filtro testuale rapido
+    # Filtro testuale rapido — chiave FISSA (non legata a ns/contatore di render):
+    # se la chiave cambia da un rerun all'altro (es. ns che varia perché questo
+    # popover viene aperto da punti diversi della pagina), Streamlit tratta il
+    # campo come un widget nuovo e perde il testo appena digitato, mostrando
+    # sempre la lista intera invece del risultato filtrato.
     cerca = st.text_input(
         "Cerca",
         placeholder="🔍 Cognome, nome, ID o telefono...",
-        key=f"paz_attivo_cerca_{ns}",
+        key="paz_attivo_cerca_box",
         label_visibility="collapsed",
     )
 
@@ -320,7 +324,7 @@ def _corpo_seleziona(conn, ns="default"):
 
     ordina_recenti = False
     if not cerca.strip():
-        ordina_recenti = st.checkbox("🕓 Ordina per ultimi registrati", key=f"paz_attivo_recenti_{ns}")
+        ordina_recenti = st.checkbox("🕓 Ordina per ultimi registrati", key="paz_attivo_recenti_box")
         if ordina_recenti:
             pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
 
