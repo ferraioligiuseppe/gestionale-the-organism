@@ -160,6 +160,50 @@ def init_pnev_pubblico_db(conn):
         except Exception: pass
 
 
+def conta_registrazioni_ip_oggi(conn, ip: str) -> int:
+    """Quante registrazioni sono arrivate da questo IP nelle ultime 24 ore."""
+    if not ip:
+        return 0
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pnev_pubblico_registrazioni_ip (
+                id BIGSERIAL PRIMARY KEY,
+                ip TEXT NOT NULL,
+                creato_il TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """)
+        cur.execute("""
+            SELECT COUNT(*) FROM pnev_pubblico_registrazioni_ip
+            WHERE ip = %s AND creato_il > now() - interval '24 hours'
+        """, (ip,))
+        n = cur.fetchone()[0]
+        conn.commit()
+        return n
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return 0
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def registra_ip(conn, ip: str):
+    if not ip:
+        return
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO pnev_pubblico_registrazioni_ip (ip) VALUES (%s)", (ip,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
 def crea_utente(conn, nome, email, eta=None, mano=None, gdpr=True):
     """
     Crea (o aggiorna) un utente pubblico e il suo record percorso.
