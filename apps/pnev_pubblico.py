@@ -392,12 +392,21 @@ def azione_iscrizione_evento(conn):
                     salva_gcal_event_id(conn, iscr["id"], gcal_id)
 
                 # Email di conferma al genitore (non bloccante se fallisce)
+                stato_iscr = iscr.get("stato", "confermata")
                 try:
                     from modules.email_otp import invia_email
-                    corpo_email = (
-                        f"Ciao {nome_g.strip()},\n\n"
-                        f"la tua iscrizione a \"{ev['titolo']}\" per {nome_b.strip()} {cognome_b.strip()} è confermata.\n"
-                    )
+                    if stato_iscr == "lista_attesa":
+                        corpo_email = (
+                            f"Ciao {nome_g.strip()},\n\n"
+                            f"la tua iscrizione a \"{ev['titolo']}\" per {nome_b.strip()} {cognome_b.strip()} "
+                            f"è stata registrata in LISTA D'ATTESA (i posti disponibili sono terminati).\n"
+                            f"Ti contatteremo se si libera un posto.\n"
+                        )
+                    else:
+                        corpo_email = (
+                            f"Ciao {nome_g.strip()},\n\n"
+                            f"la tua iscrizione a \"{ev['titolo']}\" per {nome_b.strip()} {cognome_b.strip()} è confermata.\n"
+                        )
                     if slot_scelto:
                         corpo_email += f"Appuntamento: {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}\n"
                     elif ev.get("data_ora"):
@@ -405,7 +414,38 @@ def azione_iscrizione_evento(conn):
                     if ev.get("sede"):
                         corpo_email += f"Sede: {ev['sede']}\n"
                     corpo_email += "\nPer qualsiasi domanda scrivi a info@theorganism.com.\n\nStudio The Organism"
-                    invia_email(email.strip(), f"Iscrizione confermata — {ev['titolo']}", corpo_email)
+                    oggetto_genitore = (
+                        f"Sei in lista d'attesa — {ev['titolo']}" if stato_iscr == "lista_attesa"
+                        else f"Iscrizione confermata — {ev['titolo']}"
+                    )
+                    invia_email(email.strip(), oggetto_genitore, corpo_email)
+                except Exception:
+                    pass
+
+                # Notifica interna allo studio, ad ogni iscrizione (confermata o lista d'attesa)
+                try:
+                    from modules.email_otp import invia_email
+                    riga_slot = (
+                        f"Slot: {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}\n" if slot_scelto
+                        else (f"Data: {ev['data_ora'].strftime('%d/%m/%Y alle %H:%M')}\n" if ev.get("data_ora") else "")
+                    )
+                    corpo_staff = (
+                        f"Nuova iscrizione — stato: {stato_iscr.upper()}\n\n"
+                        f"Evento: {ev['titolo']}\n"
+                        f"{riga_slot}"
+                        f"Genitore: {cognome_g.strip()} {nome_g.strip()} · Tel: {telefono} · Email: {email}\n"
+                        f"Bambino/a: {nome_b.strip()} {cognome_b.strip()}\n"
+                        f"Scuola: {scuola or '—'} {classe or ''}"
+                    )
+                    oggetto_staff = (
+                        f"[Lista attesa] {ev['titolo']}" if stato_iscr == "lista_attesa"
+                        else f"[Iscrizione] {ev['titolo']}"
+                    )
+                    for dest in ("aps@theorganism.com", "dr.ferraioligiuseppe@gmail.com"):
+                        try:
+                            invia_email(dest, oggetto_staff, corpo_staff)
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
