@@ -2371,7 +2371,7 @@ class _PgConn:
     Aggiunge keepalive automatico: se la connessione Postgres è scaduta/ibernata,
     la ricrea trasparentemente prima di restituire il cursore.
     """
-    def __init__(self, conn, options="-c statement_timeout=30000"):
+    def __init__(self, conn, options="-c statement_timeout=60000"):
         self._conn = conn
         self._db_url = _DB_URL  # salvato per reconnect
         self._options = options  # include app.current_studio: va riusato a ogni riconnessione
@@ -2675,7 +2675,7 @@ def _connect_cached(studio_id: int = 1):
         except (TypeError, ValueError):
             _sid = 1
 
-        _opts = f"-c statement_timeout=30000 -c app.current_studio={_sid}"
+        _opts = f"-c statement_timeout=60000 -c app.current_studio={_sid}"
         try:
             conn = psycopg2.connect(
                 _DB_URL,
