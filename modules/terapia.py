@@ -119,15 +119,9 @@ def render_terapia(conn=None, paz_id=None, paziente=None):
         st.info("Connessione non disponibile.")
         return
 
-    # Header con paziente attivo + bottone per cercare/selezionare dall'elenco
-    try:
-        from .paziente_attivo import header_paziente_attivo
-        sel = header_paziente_attivo(conn)
-        if sel:
-            paz_id = sel
-    except Exception:
-        pass
-
+    # Il paziente attivo è già selezionato una volta dal router (VOCI_CON_PAZIENTE)
+    # prima di arrivare qui: NON richiamare header_paziente_attivo di nuovo,
+    # altrimenti il box paziente si duplica e la pagina rallenta (doppie query).
     if not paz_id:
         st.info("Seleziona un paziente qui sopra per gestire i suoi percorsi.")
         return
