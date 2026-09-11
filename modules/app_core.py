@@ -1605,8 +1605,15 @@ def _breakglass_check(username: str, password: str) -> bool:
     return username == bg.get("USERNAME") and password == bg.get("PASSWORD")
 
 
+_AUTH_SCHEMA_READY = False
+
 def ensure_auth_schema(conn):
-    """Create auth tables if missing (safe to call multiple times)."""
+    """Create auth tables if missing (safe to call multiple times, ma la DDL
+    pesante viene tentata una sola volta per processo per evitare lock/timeout
+    quando più ambienti (Streamlit Cloud + Render) sono connessi allo stesso DB)."""
+    global _AUTH_SCHEMA_READY
+    if _AUTH_SCHEMA_READY:
+        return
     cur = conn.cursor()
     try:
         cur.execute("""
@@ -1666,6 +1673,7 @@ def ensure_auth_schema(conn):
                 try: conn.rollback()
                 except Exception: pass
         conn.commit()
+        _AUTH_SCHEMA_READY = True
     finally:
         try: cur.close()
         except Exception: pass
