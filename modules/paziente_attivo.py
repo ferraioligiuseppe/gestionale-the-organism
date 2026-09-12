@@ -459,6 +459,35 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
     return pid
 
 
+def _mostra_moduli_pnev_attivi(conn, pid):
+    """Riga compatta, sempre visibile sotto il banner paziente in ogni scheda:
+    quali moduli della Terapia PNEV (stimolazione multisensoriale) sta
+    seguendo — evita di doverlo andare a cercare dentro Terapia."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT terapia, COUNT(*), MAX(data_seduta)
+            FROM terapia_sedute WHERE paziente_id=%s
+            GROUP BY terapia ORDER BY MAX(data_seduta) DESC
+        """, (pid,))
+        righe = cur.fetchall()
+    except Exception:
+        righe = []
+        try: conn.rollback()
+        except Exception: pass
+    if not righe:
+        return
+    chips = " &nbsp; ".join(
+        f"<span style='background:var(--color-background-info);border-radius:999px;padding:3px 10px;font-size:12px;white-space:nowrap;'>"
+        f"🧘 {t} · {n} sedut{'a' if n==1 else 'e'}</span>"
+        for t, n, _ in righe
+    )
+    st.markdown(
+        f"<div style='margin:2px 0 10px;line-height:2.1'>{chips}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def header_paziente_attivo(conn) -> int | None:
     """Mostra l'header del paziente attivo (banner + bottone Cambia).
 
@@ -547,6 +576,8 @@ def header_paziente_attivo(conn) -> int | None:
                 unsafe_allow_html=True,
             )
             _corpo_seleziona(conn, ns=f"hdr_{_hpa_n}")
+
+    _mostra_moduli_pnev_attivi(conn, pid)
 
     with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
         c1, c2, c3 = st.columns(3)
