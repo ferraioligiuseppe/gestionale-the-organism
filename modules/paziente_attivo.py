@@ -1,375 +1,167 @@
 # -*- coding: utf-8 -*-
-"""
-╔══════════════════════════════════════════════════════════════════════╗
-║  PROGRAMMA PNEV — Libreria procedure + protocollo del paziente       ║
-║                                                                      ║
-║  Il cuore "componibile" della terapia PNEV:                          ║
-║                                                                      ║
-║  📚 LIBRERIA PROCEDURE  — magazzino di procedure, organizzate per     ║
-║     approccio (Terapia visiva, INPP, Movimenti ritmici, Miofunzio-   ║
-║     nale, MAPS, Castagnini…) e, per la visiva, per STEP              ║
-║     (Monoculare → Bioculare → Binoculare). Pre-riempita, editabile.  ║
-║                                                                      ║
-║  🧩 PROGRAMMA DEL PAZIENTE — il clinico PESCA le procedure (anche da  ║
-║     approcci diversi) e compone il protocollo personale, che può     ║
-║     VARIARE nel percorso (aggiungi/togli, fai avanzare di stato).    ║
-║     Gli stati conclusi confluiscono negli Esiti → Apprendimento PNEV.║
-╚══════════════════════════════════════════════════════════════════════╝
-"""
+"""Gestione del 'paziente attivo' globale in tutto il gestionale.
 
+Il paziente attivo è memorizzato in st.session_state["paziente_attivo_id"]
+e in st.session_state["paziente_attivo_record"] (dict completo).
+
+Usage:
+    from modules.paziente_attivo import header_paziente_attivo
+    paz_id = header_paziente_attivo(conn)
+    if not paz_id:
+        return  # nessun paziente selezionato
+
+In cima alla pagina compare un banner con i dati del paziente e un bottone
+"Cambia paziente" che apre un dialog con la tabella ag-grid.
+"""
+from __future__ import annotations
 import datetime
 import streamlit as st
 
-APPROCCI = ["Terapia visiva", "INPP / Riflessi primitivi", "Movimenti ritmici",
-            "Terapia miofunzionale", "MAPS", "Castagnini", "Altro"]
-STEP_VISIVA = ["🔵 Monoculare", "🟢 Bioculare", "🟣 Binoculare"]
-STATI = ["⚪ Da iniziare", "🟦 In corso", "🟢 Acquisita", "⏸️ Sospesa"]
 
-# ── Libreria iniziale (esempi da correggere: 2A) ──────────────────────
-# Le procedure di Terapia visiva (mono/bio/bino) sono caricate dal protocollo
-# reale (modules/vt_procedure_data.py). Qui restano solo gli approcci ancora
-# da popolare, come esempi-base da correggere.
-_SEED = [
-    # INPP
-    ("INPP / Riflessi primitivi", "—", "Inibizione TLR",
-     "Integrazione del riflesso tonico labirintico"),
-    ("INPP / Riflessi primitivi", "—", "Inibizione ATNR",
-     "Integrazione del riflesso tonico asimmetrico del collo"),
-    ("INPP / Riflessi primitivi", "—", "Inibizione STNR",
-     "Integrazione del riflesso tonico simmetrico del collo"),
-    ("INPP / Riflessi primitivi", "—", "Inibizione Moro",
-     "Integrazione del riflesso di Moro"),
-    ("INPP / Riflessi primitivi", "—", "Inibizione Spinale di Galant",
-     "Integrazione del riflesso spinale di Galant"),
-    # Movimenti ritmici
-    ("Movimenti ritmici", "—", "RMT passivi",
-     "Movimenti ritmici passivi (guidati)"),
-    ("Movimenti ritmici", "—", "RMT attivi",
-     "Movimenti ritmici attivi (autonomi)"),
-    # Miofunzionale
-    ("Terapia miofunzionale", "—", "Respirazione nasale",
-     "Ripristino del pattern respiratorio nasale"),
-    ("Terapia miofunzionale", "—", "Postura linguale a riposo",
-     "Corretta postura della lingua a riposo"),
-    ("Terapia miofunzionale", "—", "Deglutizione corretta",
-     "Rieducazione della deglutizione"),
-    ("Terapia miofunzionale", "—", "Tonificazione labiale",
-     "Competenza e tono labiale"),
-    # MAPS
-    ("MAPS", "—", "Protocollo MAPS base",
-     "Stimolazione multisensoriale MAPS"),
-    # Castagnini
-    ("Castagnini", "—", "Sequenze Castagnini",
-     "Sequenze motorie secondo Castagnini"),
-    # Terapia psicologica / psicoterapia
-    ("Terapia psicologica / psicoterapia", "—", "Diario emotivo",
-     "Annotare quotidianamente stato d'animo e situazioni scatenanti"),
-    ("Terapia psicologica / psicoterapia", "—", "Esercizio di respirazione/rilassamento",
-     "Tecnica di autoregolazione assegnata in seduta"),
-    ("Terapia psicologica / psicoterapia", "—", "Compito comportamentale della settimana",
-     "Attività specifica assegnata dal terapeuta da svolgere a casa"),
-]
+KEY_ID = "paziente_attivo_id"
+KEY_REC = "paziente_attivo_record"
 
 
-def _seed_visive(cur):
-    """Carica le procedure di Terapia visiva dal protocollo reale (PDF estratti)."""
+# ════════════════════════════════════════════════════════════════════
+#  HELPERS DATI
+# ════════════════════════════════════════════════════════════════════
+
+def _fmt_dn(iso) -> str:
+    if not iso:
+        return ""
     try:
-        from .vt_procedure_data import PROCEDURE
+        return datetime.date.fromisoformat(str(iso)[:10]).strftime("%d/%m/%Y")
     except Exception:
-        return
-    for p in PROCEDURE:
-        cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, istruzioni) "
-                    "VALUES(%s,%s,%s,%s)",
-                    ("Terapia visiva", p.get("parte", "—"), p.get("nome", ""),
-                     p.get("istruzioni", "")))
+        return str(iso)[:10]
 
 
-def ricarica_visive(conn):
-    """Cancella e ricarica SOLO le procedure di Terapia visiva dal protocollo."""
+def _eta_anni(dn):
+    try:
+        d = datetime.date.fromisoformat(str(dn)[:10])
+        return (datetime.date.today() - d).days // 365
+    except Exception:
+        return None
+
+
+def _badge_stato(stato: str) -> str:
+    s = (stato or "ATTIVO").upper()
+    if s == "ATTIVO":
+        return "🟢"
+    if s == "SOSPESO":
+        return "🟡"
+    return "⚫"
+
+
+def _carica_paziente_record(conn, paz_id):
+    """Carica il record completo di un paziente."""
     try:
         cur = conn.cursor()
-        cur.execute("DELETE FROM terapia_libreria WHERE approccio=%s", ("Terapia visiva",))
-        _seed_visive(cur)
-        conn.commit()
-        try:
-            _procedure_libreria.clear(); _tutte_procedure.clear()
-        except Exception:
-            pass
-        return True
+        cur.execute("SELECT * FROM pazienti WHERE id=%s", (paz_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        if isinstance(row, dict):
+            return row
+        cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
     except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return False
+        try: conn.rollback()
+        except Exception: pass
+        return None
 
 
-def _assicura_tabelle(conn):
-    try:
-        cur = conn.cursor()
-        cur.execute("""CREATE TABLE IF NOT EXISTS terapia_libreria(
-            id BIGSERIAL PRIMARY KEY, approccio TEXT, step TEXT,
-            nome TEXT, obiettivo TEXT, istruzioni TEXT, video_url TEXT,
-            attiva BOOLEAN DEFAULT TRUE, creato TIMESTAMP DEFAULT NOW());""")
-        cur.execute("ALTER TABLE terapia_libreria ADD COLUMN IF NOT EXISTS video_url TEXT;")
-        cur.execute("""CREATE TABLE IF NOT EXISTS terapia_programma(
-            id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
-            procedura_id BIGINT, approccio TEXT, step TEXT, nome TEXT,
-            stato TEXT, note TEXT, data_inserim DATE DEFAULT CURRENT_DATE,
-            creato TIMESTAMP DEFAULT NOW());""")
-        conn.commit()
-        # seed solo se la libreria è vuota
-        cur.execute("SELECT COUNT(*) FROM terapia_libreria")
-        if (cur.fetchone()[0] or 0) == 0:
-            for appr, step, nome, ob in _SEED:
-                cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, obiettivo) "
-                            "VALUES(%s,%s,%s,%s)", (appr, step, nome, ob))
-            _seed_visive(cur)
-            conn.commit()
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
-
-def render_programma(conn=None, paz_id=None, paziente=None):
-    st.header("🧩 Programma PNEV — procedure")
-    st.caption("Componi il protocollo del paziente pescando dalla libreria di "
-               "procedure. Approcci come scaffali, procedure come mattoni: "
-               "li combini e li fai variare durante il percorso.")
-
-    if conn is None:
-        st.info("Connessione non disponibile.")
-        return
-
-    _assicura_tabelle(conn)
-
-    t_prot, t_prog, t_libr = st.tabs(["📋 Protocolli", "🧩 Programma del paziente",
-                                      "📚 Libreria procedure"])
-    with t_prot:
-        try:
-            from .terapia_protocolli import render_protocolli
-            render_protocolli(conn, paz_id, paziente)
-        except Exception as e:
-            st.error(f"Errore protocolli: {e}")
-    with t_prog:
-        _render_programma_paziente(conn, paz_id)
-    with t_libr:
-        _render_libreria(conn)
-
-
-# ══════════════════════════════════════════════════════════════════════
-#  PROGRAMMA DEL PAZIENTE
-# ══════════════════════════════════════════════════════════════════════
-
-def _render_programma_paziente(conn, paz_id):
-    if not paz_id:
-        st.info("Seleziona prima un paziente (header in alto).")
-        return
-
-    # ── Aggiungi procedure dalla libreria ─────────────────────────────
-    with st.expander("➕ Aggiungi procedure al programma", expanded=True):
-        st.caption("Puoi combinare approcci diversi nello stesso programma: scegli "
-                   "«🔀 Tutti gli approcci» per pescare insieme procedure visive, "
-                   "miofunzionali, INPP, ritmiche… e aggiungerle in un colpo solo.")
-        appr = st.selectbox("Approccio", ["🔀 Tutti gli approcci"] + APPROCCI,
-                            key="prog_add_appr")
-        proc = _procedure_libreria(conn, None if appr.startswith("🔀") else appr)
-        if not proc:
-            st.caption("Nessuna procedura in libreria per questo approccio "
-                       "(aggiungile nel tab Libreria).")
-        else:
-            mostra_appr = appr.startswith("🔀")
-            def _et(p):
-                pre = f"{p['approccio']} · " if mostra_appr else ""
-                stp = f"{p['step']} · " if p.get('step') and p['step'] != '—' else ""
-                return f"{pre}{stp}{p['nome']}"
-            etichette = {_et(p): p for p in proc}
-            scelte = st.multiselect("Procedure da aggiungere", list(etichette.keys()),
-                                    key="prog_add_sel")
-            if st.button("➕ Aggiungi al programma", type="primary", key="prog_add_btn"):
-                n = 0
-                for et in scelte:
-                    p = etichette[et]
-                    if _aggiungi_al_programma(conn, paz_id, p):
-                        n += 1
-                if n:
-                    st.success(f"{n} procedure aggiunte al programma.")
-                    st.rerun()
-
-        # ── Non c'è? Creala al volo, senza uscire ─────────────────────
-        st.markdown("---")
-        st.markdown("**Non trovi una procedura? Creala qui** 👇")
-        with st.form("prog_new_proc", clear_on_submit=True):
-            f1, f2 = st.columns(2)
-            with f1:
-                n_appr = st.selectbox("Approccio", APPROCCI, key="prog_new_appr")
-            with f2:
-                n_step = st.selectbox("Step (solo Terapia visiva)",
-                                      ["—"] + STEP_VISIVA, key="prog_new_step")
-            n_nome = st.text_input("Nome della procedura", key="prog_new_nome",
-                                   placeholder="es. Saccadi con metronomo")
-            n_ob = st.text_input("A cosa serve (facoltativo)", key="prog_new_ob")
-            if st.form_submit_button("➕ Crea e aggiungi subito al programma",
-                                     type="primary"):
-                if not n_nome.strip():
-                    st.warning("Scrivi il nome della procedura.")
-                else:
-                    if _crea_e_aggiungi(conn, paz_id, n_appr, n_step, n_nome, n_ob):
-                        st.success(f"«{n_nome}» creata e aggiunta al programma.")
-                        st.rerun()
-                    else:
-                        st.error("Non è stato possibile crearla. Riprova.")
-
-    # ── Programma attuale, raggruppato per approccio ──────────────────
-    righe = _programma_paziente(conn, paz_id)
-    if not righe:
-        st.info("Programma ancora vuoto: aggiungi le prime procedure qui sopra.")
-        return
-
-    st.markdown("#### Protocollo attuale")
-    per_appr = {}
-    for r in righe:
-        per_appr.setdefault(r["approccio"] or "—", []).append(r)
-
-    for appr, lista in per_appr.items():
-        st.markdown(f"##### {appr}")
-        for r in lista:
-            rid = r["id"]
-            testa = f"**{r['nome']}**"
-            if r.get("step") and r["step"] != "—":
-                testa += f"  ·  _{r['step']}_"
-            st.markdown(testa)
-            c1, c2, c3 = st.columns([3, 3, 1])
-            with c1:
-                stato = st.selectbox(
-                    "Stato", STATI,
-                    index=STATI.index(r["stato"]) if r.get("stato") in STATI else 0,
-                    key=f"prog_st_{rid}")
-            with c2:
-                note = st.text_input("Note", value=r.get("note") or "",
-                                     key=f"prog_note_{rid}")
-            with c3:
-                st.write("")
-                st.write("")
-                if st.button("💾", key=f"prog_save_{rid}", help="Aggiorna"):
-                    _aggiorna_programma(conn, rid, stato, note, paz_id, r)
-                    st.rerun()
-            if st.button("🗑 Togli dal programma", key=f"prog_del_{rid}"):
-                _togli_dal_programma(conn, rid)
-                st.rerun()
-            st.markdown("<hr style='margin:6px 0;border:none;border-top:1px solid #eee'>",
-                        unsafe_allow_html=True)
-
-
-@st.cache_data(ttl=120, show_spinner=False)
-def _procedure_libreria(_conn, approccio):
+@st.cache_data(ttl=30, show_spinner=False)
+def _carica_lista_pazienti(_conn):
+    """Lista pazienti ATTIVI per il dialog di selezione."""
     conn = _conn
     try:
         cur = conn.cursor()
-        if approccio:
-            cur.execute("SELECT id, approccio, step, nome, obiettivo FROM terapia_libreria "
-                        "WHERE approccio=%s AND attiva=TRUE ORDER BY step, nome", (approccio,))
-        else:
-            cur.execute("SELECT id, approccio, step, nome, obiettivo FROM terapia_libreria "
-                        "WHERE attiva=TRUE ORDER BY approccio, step, nome")
-        return [{"id": r[0], "approccio": r[1], "step": r[2], "nome": r[3],
-                 "obiettivo": r[4]} for r in cur.fetchall()]
-    except Exception:
         try:
-            conn.rollback()
+            cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
+            conn.commit()
         except Exception:
-            pass
-        return []
-
-
-def _crea_e_aggiungi(conn, paz_id, appr, step, nome, ob) -> bool:
-    """Crea una nuova procedura in libreria e la aggiunge subito al programma."""
-    try:
-        cur = conn.cursor()
-        cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, obiettivo) "
-                    "VALUES(%s,%s,%s,%s) RETURNING id", (appr, step, nome, ob))
-        new_id = cur.fetchone()[0]
-        conn.commit()
-        try:
-            _procedure_libreria.clear(); _tutte_procedure.clear()
-        except Exception:
-            pass
-        return _aggiungi_al_programma(conn, paz_id, {
-            "id": new_id, "approccio": appr, "step": step, "nome": nome})
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return False
-
-
-def _aggiungi_al_programma(conn, paz_id, p) -> bool:
-    try:
-        cur = conn.cursor()
-        cur.execute("""INSERT INTO terapia_programma(paziente_id, procedura_id, approccio,
-            step, nome, stato) VALUES(%s,%s,%s,%s,%s,%s)""",
-            (paz_id, p["id"], p["approccio"], p.get("step") or "—", p["nome"],
-             "⚪ Da iniziare"))
-        conn.commit()
-        return True
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return False
-
-
-def _programma_paziente(conn, paz_id):
-    try:
-        cur = conn.cursor()
-        cur.execute("""SELECT id, approccio, step, nome, stato, note FROM terapia_programma
-            WHERE paziente_id=%s ORDER BY approccio, step, creato""", (paz_id,))
-        return [{"id": r[0], "approccio": r[1], "step": r[2], "nome": r[3],
-                 "stato": r[4], "note": r[5]} for r in cur.fetchall()]
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return []
-
-
-def _aggiorna_programma(conn, rid, stato, note, paz_id, r):
-    try:
-        cur = conn.cursor()
-        cur.execute("UPDATE terapia_programma SET stato=%s, note=%s WHERE id=%s",
-                    (stato, note, rid))
-        conn.commit()
-        # esito → Apprendimento PNEV quando una procedura è acquisita/sospesa
-        if stato in ("🟢 Acquisita", "⏸️ Sospesa"):
-            esito = "🟢 Migliorato" if stato == "🟢 Acquisita" else "⚪ Non valutabile"
             try:
-                cur.execute("""CREATE TABLE IF NOT EXISTS esiti_pnev(
-                    id BIGSERIAL PRIMARY KEY, paziente_id BIGINT,
-                    data TIMESTAMP DEFAULT NOW(),
-                    intervento TEXT, esito TEXT, note TEXT);""")
-                cur.execute("INSERT INTO esiti_pnev(paziente_id, intervento, esito, note) "
-                            "VALUES(%s,%s,%s,%s)",
-                            (paz_id, f"{r.get('approccio','')} — {r.get('nome','')}",
-                             esito, "Da procedura del programma"))
-                conn.commit()
-            except Exception:
                 conn.rollback()
+            except Exception:
+                pass
+        cur.execute(
+            "SELECT id, cognome, nome, data_nascita, telefono, stato_paziente, creato_il "
+            "FROM pazienti "
+            "WHERE COALESCE(stato_paziente, 'ATTIVO') = 'ATTIVO' "
+            "ORDER BY cognome, nome"
+        )
+        rows = cur.fetchall() or []
+        cols = [d[0] for d in cur.description] if cur.description else []
+        # Forza dict Python puri (non DictRow / RealDictRow / sqlite Row)
+        # altrimenti st.cache_data fallisce con UnserializableReturnValueError
+        result = []
+        for r in rows:
+            if isinstance(r, dict):
+                result.append({k: (v if not hasattr(v, 'isoformat') else v.isoformat())
+                               for k, v in r.items()})
+            else:
+                result.append({c: (v if not hasattr(v, 'isoformat') else v.isoformat())
+                               for c, v in zip(cols, r)})
+        return result
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return []
+
+
+# ════════════════════════════════════════════════════════════════════
+#  API PUBBLICA
+# ════════════════════════════════════════════════════════════════════
+
+def paziente_attivo_id() -> int | None:
+    """Ritorna l'ID del paziente attivo, o None."""
+    pid = st.session_state.get(KEY_ID)
+    if pid is None:
+        return None
+    try:
+        return int(pid)
+    except (ValueError, TypeError):
+        return None
+
+
+def paziente_attivo_record() -> dict | None:
+    """Ritorna il record completo del paziente attivo, o None."""
+    return st.session_state.get(KEY_REC)
+
+
+def set_paziente_attivo(conn, paz_id: int) -> None:
+    """Imposta il paziente attivo. Carica e cachea il record completo.
+    Aggiorna anche 'ultimo_accesso' (quando l'anagrafica è stata aperta
+    l'ultima volta), creando la colonna al volo se non esiste ancora."""
+    st.session_state[KEY_ID] = int(paz_id)
+    rec = _carica_paziente_record(conn, paz_id)
+    st.session_state[KEY_REC] = rec or {}
+    try:
+        cur = conn.cursor()
+        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS ultimo_accesso TIMESTAMPTZ;")
+        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
+        cur.execute("UPDATE pazienti SET ultimo_accesso=NOW() WHERE id=%s", (int(paz_id),))
+        conn.commit()
     except Exception:
         try:
             conn.rollback()
         except Exception:
             pass
+    _salva_ultimo_paziente_utente(conn, paz_id)
 
 
-def _togli_dal_programma(conn, rid):
+def _salva_ultimo_paziente_utente(conn, paz_id: int) -> None:
+    """Ricorda per l'utente loggato l'ultimo paziente aperto, così al prossimo
+    accesso (anche dopo un riavvio dell'app) si ripresenta da solo."""
     try:
+        u = st.session_state.get("user") or {}
+        uid = u.get("id")
+        if not uid:
+            return
         cur = conn.cursor()
-        cur.execute("DELETE FROM terapia_programma WHERE id=%s", (rid,))
+        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;")
+        cur.execute("UPDATE auth_users SET ultimo_paziente_id=%s WHERE id=%s",
+                    (int(paz_id), int(uid)))
         conn.commit()
     except Exception:
         try:
@@ -378,148 +170,469 @@ def _togli_dal_programma(conn, rid):
             pass
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  LIBRERIA PROCEDURE
-# ══════════════════════════════════════════════════════════════════════
+def ripristina_ultimo_paziente(conn) -> None:
+    """Se non c'è ancora un paziente attivo in questa sessione, ricarica
+    l'ultimo aperto dall'utente loggato (persistito su DB)."""
+    if st.session_state.get(KEY_ID):
+        return
+    try:
+        u = st.session_state.get("user") or {}
+        uid = u.get("id")
+        if not uid:
+            return
+        cur = conn.cursor()
+        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;")
+        cur.execute("SELECT ultimo_paziente_id FROM auth_users WHERE id=%s", (int(uid),))
+        row = cur.fetchone()
+        conn.commit()
+        pid = row[0] if row and not isinstance(row, dict) else (row.get("ultimo_paziente_id") if row else None)
+        if pid:
+            set_paziente_attivo(conn, int(pid))
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
-def _render_libreria(conn):
-    st.caption("Il magazzino delle procedure. La Terapia visiva è caricata dal tuo "
-               "protocollo reale (mono/bio/bino, con istruzioni). Gli altri approcci "
-               "sono esempi-base da correggere.")
+
+def reset_paziente_attivo() -> None:
+    """Pulisce la selezione del paziente attivo."""
+    st.session_state.pop(KEY_ID, None)
+    st.session_state.pop(KEY_REC, None)
+
+
+# ════════════════════════════════════════════════════════════════════
+#  CREAZIONE RAPIDA PAZIENTE (inline nel dialog)
+# ════════════════════════════════════════════════════════════════════
+
+def _parse_dn(s):
+    """Prova a interpretare una data digitata. Ritorna (date|None, errore|None)."""
+    s = (s or "").strip()
+    if not s:
+        return None, None
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d/%m/%y"):
+        try:
+            return datetime.datetime.strptime(s, fmt).date(), None
+        except Exception:
+            pass
+    return None, "Data nascita non valida (usa GG/MM/AAAA)"
+
+
+def _crea_paziente_rapido(conn, cognome, nome, dn_str, sesso, telefono):
+    """Crea un paziente con i campi minimi. Ritorna (id|None, errore|None)."""
+    data_iso = None
+    if (dn_str or "").strip():
+        d, err = _parse_dn(dn_str)
+        if err:
+            return None, err
+        data_iso = d.isoformat() if d else None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO pazienti (cognome, nome, data_nascita, sesso, telefono, stato_paziente) "
+            "VALUES (%s,%s,%s,%s,%s,'ATTIVO') RETURNING id",
+            (cognome.strip().upper(), nome.strip().title(), data_iso,
+             (sesso or None), (telefono.strip() or None)),
+        )
+        row = cur.fetchone()
+        pid = int(row["id"] if isinstance(row, dict) else row[0])
+        conn.commit()
+        try:
+            _carica_lista_pazienti.clear()
+        except Exception:
+            pass
+        return pid, None
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None, f"Errore nella creazione: {e}"
+
+
+def _form_nuovo_paziente(conn, key_suffix=None):
+    """Form compatto per creare al volo un paziente e renderlo attivo.
+    key_suffix rende univoche le chiavi quando il form compare in più punti
+    nello stesso run (es. schermata coupon + dialog selezione)."""
+    if key_suffix is None:
+        key_suffix = "default"
+    ks = key_suffix
+    with st.form(f"form_nuovo_paziente_rapido_{ks}", clear_on_submit=False):
+        c1, c2 = st.columns(2)
+        cognome = c1.text_input("Cognome *", key=f"np_cognome_{ks}")
+        nome = c2.text_input("Nome *", key=f"np_nome_{ks}")
+        c3, c4 = st.columns(2)
+        dn = c3.text_input("Data nascita (GG/MM/AAAA)", key=f"np_dn_{ks}")
+        sesso = c4.selectbox("Sesso", ["", "M", "F"], key=f"np_sesso_{ks}")
+        tel = st.text_input("Telefono", key=f"np_tel_{ks}")
+        ok = st.form_submit_button("➕ Crea e seleziona", type="primary",
+                                   use_container_width=True)
+    if ok:
+        if not cognome.strip() or not nome.strip():
+            st.error("Cognome e Nome sono obbligatori.")
+            return
+        pid, err = _crea_paziente_rapido(conn, cognome, nome, dn, sesso, tel)
+        if err:
+            st.error(err)
+            return
+        set_paziente_attivo(conn, pid)
+        st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════
+#  DIALOG SELEZIONE
+# ════════════════════════════════════════════════════════════════════
+
+@st.dialog("👤 Seleziona paziente", width="large")
+def _dialog_seleziona(conn):
+    _corpo_seleziona(conn)
+
+
+def _corpo_seleziona(conn, ns="default"):
+    pazienti = _carica_lista_pazienti(conn)
+    if not pazienti:
+        st.info("Nessun paziente registrato. Puoi aggiungerne uno qui sotto.")
+        st.markdown("##### ➕ Nuovo paziente")
+        _form_nuovo_paziente(conn, key_suffix="empty")
+        if st.button("Chiudi"):
+            st.rerun()
+        return
+
+    # Filtro testuale rapido — chiave FISSA (non legata a ns/contatore di render):
+    # se la chiave cambia da un rerun all'altro (es. ns che varia perché questo
+    # popover viene aperto da punti diversi della pagina), Streamlit tratta il
+    # campo come un widget nuovo e perde il testo appena digitato, mostrando
+    # sempre la lista intera invece del risultato filtrato.
+    cerca = st.text_input(
+        "Cerca",
+        placeholder="🔍 Cognome, nome, ID o telefono...",
+        key="paz_attivo_cerca_box",
+        label_visibility="collapsed",
+    )
+
+    if cerca.strip():
+        q = cerca.strip().upper()
+        pazienti = [
+            p for p in pazienti
+            if q in (p.get("cognome", "") or "").upper()
+            or q in (p.get("nome", "") or "").upper()
+            or q in (p.get("telefono", "") or "")
+            or q in str(p.get("id", ""))
+        ]
+
+    st.caption(f"{len(pazienti)} paziente/i")
+
+    ordina_recenti = False
+    if not cerca.strip():
+        ordina_recenti = st.checkbox("🕓 Ordina per ultimi registrati", key="paz_attivo_recenti_box")
+        if ordina_recenti:
+            pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
+
+    # Nuovo paziente al volo — SEMPRE APERTO e in evidenza, così le
+    # collaboratrici vedono subito come creare un'anagrafica senza uscire.
+    with st.expander("➕ Crea NUOVA anagrafica (senza uscire da qui)",
+                     expanded=True):
+        st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
+                   "il paziente viene creato e selezionato subito.")
+        _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
+
+    # Tabella ag-grid
+    try:
+        from st_aggrid import (
+            AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode,
+        )
+        import pandas as pd
+    except ImportError:
+        # Fallback: selectbox
+        st.warning("Tabella avanzata non disponibile, uso selettore semplice.")
+        opts = [
+            f"{p['id']} - {p.get('cognome', '')} {p.get('nome', '')} "
+            f"· {_fmt_dn(p.get('data_nascita'))}"
+            for p in pazienti
+        ]
+        sel = st.selectbox("Paziente", opts, key=f"paz_attivo_fb_{ns}")
+        if st.button("Conferma", type="primary", use_container_width=True):
+            try:
+                pid = int(sel.split(" - ", 1)[0])
+                set_paziente_attivo(conn, pid)
+                st.rerun()
+            except Exception:
+                st.error("Selezione non valida.")
+        return
+
+    rows_df = []
+    for p in pazienti:
+        rows_df.append({
+            "_id": p.get("id"),
+            "Stato": _badge_stato(p.get("stato_paziente")),
+            "Cognome": p.get("cognome", "") or "",
+            "Nome": p.get("nome", "") or "",
+            "Data nasc.": _fmt_dn(p.get("data_nascita")),
+            "Età": _eta_anni(p.get("data_nascita")) or "",
+            "Telefono": p.get("telefono", "") or "",
+            "Registrato il": _fmt_dn(p.get("creato_il")) if p.get("creato_il") else "",
+        })
+    df = pd.DataFrame(rows_df)
+
+    # Età come intero nullable: evita il mix int/"" (colonna object) che rompe
+    # la serializzazione pyarrow di AgGrid. Solo se la colonna esiste (lista non vuota).
+    if "Età" in df.columns:
+        try:
+            df["Età"] = pd.to_numeric(df["Età"], errors="coerce").astype("Int64")
+        except Exception:
+            df["Età"] = df["Età"].astype(str)
+
+    gob = GridOptionsBuilder.from_dataframe(df)
+    gob.configure_default_column(filter=True, sortable=True, resizable=True)
+    gob.configure_column("_id", hide=True)
+    gob.configure_column("Stato", width=70, pinned="left")
+    gob.configure_column("Cognome", width=170, pinned="left", sort="asc")
+    gob.configure_column("Nome", width=140)
+    gob.configure_column("Data nasc.", width=110)
+    gob.configure_column("Età", width=70, type=["numericColumn"])
+    gob.configure_column("Telefono", width=130)
+    gob.configure_selection(selection_mode="single", use_checkbox=False)
+    gob.configure_grid_options(
+        rowHeight=32, headerHeight=34,
+        suppressCellFocus=True, domLayout="normal",
+    )
+
+    grid_response = AgGrid(
+        df,
+        gridOptions=gob.build(),
+        height=400,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        data_return_mode=DataReturnMode.AS_INPUT,
+        allow_unsafe_jscode=False,
+        theme="balham",
+        fit_columns_on_grid_load=False,
+        key=f"aggrid_paz_attivo_{ns}_{cerca}",
+    )
+
+    selected = grid_response.get("selected_rows", [])
+    if hasattr(selected, "to_dict"):
+        try:
+            selected = selected.to_dict("records")
+        except Exception:
+            selected = []
+
+    if selected:
+        try:
+            pid = int(selected[0].get("_id"))
+            set_paziente_attivo(conn, pid)
+            st.rerun()
+        except Exception:
+            st.error("Selezione non valida.")
+
+
+# ════════════════════════════════════════════════════════════════════
+#  HEADER PAZIENTE ATTIVO
+# ════════════════════════════════════════════════════════════════════
+
+def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
+    """Solo lettura: ritorna l'id del paziente attivo o None.
+
+    Da usare nei moduli che vengono raggiunti DOPO che il router ha già
+    mostrato l'header. Non mostra alcuna UI tranne (opzionalmente) un
+    warning se nessun paziente è selezionato.
+    """
+    pid = paziente_attivo_id()
+    if pid:
+        # Verifico che il record sia caricato (cache miss recuperata)
+        if not paziente_attivo_record():
+            rec = _carica_paziente_record(conn, pid)
+            if rec:
+                st.session_state[KEY_REC] = rec
+            else:
+                reset_paziente_attivo()
+                pid = None
+    if not pid and show_warning:
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.warning(
+                "⚠️ Nessun paziente selezionato. "
+                "Selezionane uno per continuare."
+            )
+        with c2:
+            with st.popover("👤 Seleziona paziente"):
+                _corpo_seleziona(conn, ns=f"gpa_{_hpa_n}")
+    return pid
+
+
+def _mostra_moduli_pnev_attivi(conn, pid):
+    """Riga compatta, sempre visibile sotto il banner paziente in ogni scheda:
+    quali moduli della Terapia PNEV (stimolazione multisensoriale) sta
+    seguendo — evita di doverlo andare a cercare dentro Terapia."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT terapia, COUNT(*), MAX(data_seduta)
+            FROM terapia_sedute WHERE paziente_id=%s
+            GROUP BY terapia ORDER BY MAX(data_seduta) DESC
+        """, (pid,))
+        righe = cur.fetchall()
+    except Exception:
+        righe = []
+        try: conn.rollback()
+        except Exception: pass
+    if not righe:
+        return
+    chips = " &nbsp; ".join(
+        f"<span style='background:var(--color-background-info);border-radius:999px;padding:3px 10px;font-size:12px;white-space:nowrap;'>"
+        f"🧘 {t} · {n} sedut{'a' if n==1 else 'e'}</span>"
+        for t, n, _ in righe
+    )
+    st.markdown(
+        f"<div style='margin:2px 0 10px;line-height:2.1'>{chips}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def header_paziente_attivo(conn) -> int | None:
+    """Mostra l'header del paziente attivo (banner + bottone Cambia).
+
+    Se non c'è un paziente attivo, mostra solo il bottone 'Seleziona paziente'
+    e ritorna None. Altrimenti ritorna l'id del paziente attivo.
+
+    Va chiamato all'inizio di ogni pagina che richiede un paziente.
+    """
+    pid = paziente_attivo_id()
+    rec = paziente_attivo_record()
+    # Questo header può essere richiamato più volte nello stesso caricamento
+    # da punti diversi del codice (router + modulo specifico): rendo ogni
+    # chiave dei suoi widget sempre unica per evitare "duplicate element key".
+    st.session_state["_hpa_render_n"] = st.session_state.get("_hpa_render_n", 0) + 1
+    _hpa_n = st.session_state["_hpa_render_n"]
+    if not pid:
+        ripristina_ultimo_paziente(conn)
+        pid = paziente_attivo_id()
+        rec = paziente_attivo_record()
+
+    # Se ho l'id ma non il record (cache pulita o sessione nuova) → ricarico
+    if pid and not rec:
+        rec = _carica_paziente_record(conn, pid)
+        if rec:
+            st.session_state[KEY_REC] = rec
+        else:
+            # Paziente non più esistente → reset
+            reset_paziente_attivo()
+            pid = None
+
+    if not pid or not rec:
+        # Nessun paziente attivo: bottone per selezionarne uno
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
+        with c2:
+            with st.popover("👤 Seleziona paziente"):
+                _corpo_seleziona(conn, ns=f"nopid_{_hpa_n}")
+        return None
+
+    # Banner paziente attivo
+    cog = rec.get("cognome", "") or ""
+    nom = rec.get("nome", "") or ""
+    dn = rec.get("data_nascita", "")
+    eta = _eta_anni(dn)
+    badge = _badge_stato(rec.get("stato_paziente", "ATTIVO"))
+
+    info_parts = []
+    if dn:
+        info_parts.append(_fmt_dn(dn))
+    if eta is not None:
+        info_parts.append(f"{eta} anni")
+    info_str = " · ".join(info_parts)
+
+    # Questo header viene richiamato più volte nello stesso caricamento da
+    # punti diversi del codice (router + modulo specifico): rendo la chiave
+    # del bottone sempre unica per evitare "duplicate element key".
+    _hpa_key = f"hpa_change_{_hpa_n}"
 
     c1, c2 = st.columns([3, 2])
+    with c1:
+        st.markdown(
+            f"""<div style="
+                padding: 10px 14px;
+                background: var(--color-background-info);
+                border-left: 3px solid var(--color-text-info);
+                border-radius: var(--border-radius-md, 6px);
+                margin-bottom: 8px;">
+                <div style="font-size: 11px; color: var(--color-text-secondary); margin-bottom: 2px;">
+                    PAZIENTE IN LAVORAZIONE
+                </div>
+                <div style="font-size: 15px; font-weight: 600;">
+                    {badge} {cog} {nom}
+                </div>
+                <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
+                    ID {pid}{(" · " + info_str) if info_str else ""}
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
     with c2:
-        if st.button("🔄 Ricarica Terapia visiva dal protocollo", key="libr_reload",
-                     help="Cancella e ricarica le procedure visive dai PDF del protocollo"):
-            if ricarica_visive(conn):
-                st.success("Procedure visive ricaricate dal protocollo.")
-                st.rerun()
+        st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
+        with st.popover("🔄 Cambia paziente", use_container_width=True):
+            st.markdown(
+                "<style>div[data-testid='stPopoverBody']{max-width:560px}</style>",
+                unsafe_allow_html=True,
+            )
+            _corpo_seleziona(conn, ns=f"hdr_{_hpa_n}")
+
+    _mostra_moduli_pnev_attivi(conn, pid)
+
+    with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            n_cog = st.text_input("Cognome", value=cog, key=f"hpa_edit_cog_{pid}_{_hpa_n}")
+            n_nom = st.text_input("Nome", value=nom, key=f"hpa_edit_nom_{pid}_{_hpa_n}")
+        with c2:
+            n_dn = st.text_input("Data nascita (GG/MM/AAAA)",
+                                 value=_fmt_dn(dn) if dn else "",
+                                 key=f"hpa_edit_dn_{pid}_{_hpa_n}")
+            n_tel = st.text_input("Telefono", value=rec.get("telefono", "") or "",
+                                  key=f"hpa_edit_tel_{pid}_{_hpa_n}")
+        with c3:
+            n_ind = st.text_input("Indirizzo", value=rec.get("indirizzo", "") or "",
+                                  key=f"hpa_edit_ind_{pid}_{_hpa_n}")
+            n_email = st.text_input("Email", value=rec.get("email", "") or "",
+                                    key=f"hpa_edit_email_{pid}_{_hpa_n}")
+        if st.button("💾 Salva modifiche", key=f"hpa_edit_save_{pid}_{_hpa_n}", type="primary"):
+            errore = _salva_modifica_rapida(conn, pid, n_cog, n_nom, n_dn, n_tel,
+                                            n_ind, n_email)
+            if errore:
+                st.error(errore)
             else:
-                st.warning("Ricarica non riuscita.")
+                st.session_state[KEY_REC] = _carica_paziente_record(conn, pid)
+                st.success("Anagrafica aggiornata.")
+                st.rerun()
 
-    with st.expander("➕ Nuova procedura", expanded=False):
-        with st.form("libr_new", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            with c1:
-                appr = st.selectbox("Approccio", APPROCCI, key="libr_appr")
-            with c2:
-                step = st.selectbox("Step (solo Terapia visiva)",
-                                    ["—"] + STEP_VISIVA, key="libr_step")
-            nome = st.text_input("Nome procedura", key="libr_nome")
-            ob = st.text_input("Obiettivo", key="libr_ob")
-            istr = st.text_area("Istruzioni (facoltative)", height=80, key="libr_istr")
-            if st.form_submit_button("💾 Aggiungi alla libreria", type="primary"):
-                if nome.strip():
-                    if _salva_procedura(conn, appr, step, nome, ob, istr):
-                        st.success("Procedura aggiunta.")
-                        st.rerun()
-                else:
-                    st.warning("Scrivi il nome della procedura.")
-
-    filtro = st.selectbox("Mostra approccio", ["Tutti"] + APPROCCI, key="libr_filtro")
-    righe = _tutte_procedure(conn, None if filtro == "Tutti" else filtro)
-    if not righe:
-        st.caption("Libreria vuota.")
-        return
-
-    per_appr = {}
-    for r in righe:
-        per_appr.setdefault(r["approccio"] or "—", []).append(r)
-    for appr, lista in per_appr.items():
-        st.markdown(f"##### {appr}  ({len(lista)})")
-        for r in lista:
-            rid = r["id"]
-            riga = f"{'🔴 ' if not r['attiva'] else ''}**{r['nome']}**"
-            if r.get("step") and r["step"] != "—":
-                riga += f"  ·  _{r['step']}_"
-            if r.get("obiettivo"):
-                riga += f" — {r['obiettivo']}"
-            cc1, cc2 = st.columns([6, 1])
-            with cc1:
-                st.markdown(riga)
-                if r.get("istruzioni"):
-                    with st.expander("📖 Istruzioni"):
-                        st.markdown(r["istruzioni"])
-                vu = st.text_input("🎬 Link video (YouTube non in elenco)",
-                                   value=r.get("video_url") or "", key=f"libr_vid_{rid}",
-                                   placeholder="https://youtu.be/...")
-                if vu != (r.get("video_url") or ""):
-                    if st.button("💾 Salva link video", key=f"libr_vidsave_{rid}"):
-                        _salva_video(conn, rid, vu)
-                        st.success("Link video salvato.")
-                        st.rerun()
-            with cc2:
-                lbl = "Disattiva" if r["attiva"] else "Riattiva"
-                if st.button(lbl, key=f"libr_tog_{rid}"):
-                    _toggle_procedura(conn, rid, not r["attiva"])
-                    st.rerun()
+    return pid
 
 
-def _salva_video(conn, rid, url):
+def _salva_modifica_rapida(conn, pid, cognome, nome, dn_str, telefono, indirizzo, email):
+    """Aggiorna i campi base dell'anagrafica dal riquadro rapido dell'header.
+    Ritorna un messaggio d'errore, o None se tutto ok."""
+    cognome = (cognome or "").strip()
+    nome = (nome or "").strip()
+    if not cognome or not nome:
+        return "Cognome e Nome sono obbligatori."
+    data_iso = None
+    if (dn_str or "").strip():
+        d, err = _parse_dn(dn_str)
+        if err:
+            return err
+        data_iso = d.isoformat() if d else None
     try:
         cur = conn.cursor()
-        cur.execute("UPDATE terapia_libreria SET video_url=%s WHERE id=%s", (url, rid))
+        cur.execute(
+            "UPDATE pazienti SET cognome=%s, nome=%s, data_nascita=%s, "
+            "telefono=%s, indirizzo=%s, email=%s WHERE id=%s",
+            (cognome, nome, data_iso, telefono.strip(), indirizzo.strip(),
+             email.strip(), int(pid)))
         conn.commit()
-    except Exception:
+        return None
+    except Exception as e:
         try:
             conn.rollback()
         except Exception:
             pass
-
-
-def _salva_procedura(conn, appr, step, nome, ob, istr) -> bool:
-    try:
-        cur = conn.cursor()
-        cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, obiettivo, istruzioni) "
-                    "VALUES(%s,%s,%s,%s,%s)", (appr, step, nome, ob, istr))
-        conn.commit()
-        try:
-            _procedure_libreria.clear(); _tutte_procedure.clear()
-        except Exception:
-            pass
-        return True
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return False
-
-
-@st.cache_data(ttl=120, show_spinner=False)
-def _tutte_procedure(_conn, approccio):
-    conn = _conn
-    try:
-        cur = conn.cursor()
-        if approccio:
-            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva, istruzioni, video_url "
-                        "FROM terapia_libreria WHERE approccio=%s ORDER BY step, nome",
-                        (approccio,))
-        else:
-            cur.execute("SELECT id, approccio, step, nome, obiettivo, attiva, istruzioni, video_url "
-                        "FROM terapia_libreria ORDER BY approccio, step, nome")
-        return [{"id": r[0], "approccio": r[1], "step": r[2], "nome": r[3],
-                 "obiettivo": r[4], "attiva": r[5], "istruzioni": r[6],
-                 "video_url": r[7]} for r in cur.fetchall()]
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return []
-
-
-def _toggle_procedura(conn, rid, attiva):
-    try:
-        cur = conn.cursor()
-        cur.execute("UPDATE terapia_libreria SET attiva=%s WHERE id=%s", (attiva, rid))
-        conn.commit()
-        try:
-            _procedure_libreria.clear(); _tutte_procedure.clear()
-        except Exception:
-            pass
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
+        return f"Salvataggio non riuscito: {e}"
