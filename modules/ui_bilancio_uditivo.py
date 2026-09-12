@@ -47,7 +47,7 @@ def _is_postgres(conn) -> bool:
         import sys, os
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if root not in sys.path: sys.path.insert(0, root)
-        from app_patched import _DB_BACKEND
+        from modules.app_core import _DB_BACKEND
         return _DB_BACKEND == "postgres"
     except Exception: pass
     return False
@@ -63,7 +63,7 @@ def _get_conn():
         import sys, os
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if root not in sys.path: sys.path.insert(0, root)
-        from app_patched import get_connection; return get_connection()
+        from modules.app_core import get_connection; return get_connection()
     except Exception: pass
     import sqlite3
     conn = sqlite3.connect("organism.db"); conn.row_factory = sqlite3.Row; return conn
@@ -176,10 +176,13 @@ def ui_bilancio_uditivo():
     if not pazienti:
         st.info("Nessun paziente registrato."); return
 
-    opts = [f"{_row_get(p,'id')} - {_row_get(p,'Cognome','')} {_row_get(p,'Nome','')}".strip()
-            for p in pazienti]
-    sel = st.selectbox("Paziente", opts, key="bu_paz")
-    paz_id = int(sel.split(" - ", 1)[0])
+    try:
+        from .paziente_attivo import get_paziente_attivo
+        paz_id = get_paziente_attivo(conn)
+    except Exception:
+        paz_id = None
+    if not paz_id:
+        return
     op = st.text_input("Operatore", "", key="bu_op")
     st.divider()
 

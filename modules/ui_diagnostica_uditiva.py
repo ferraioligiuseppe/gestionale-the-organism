@@ -134,7 +134,7 @@ def _is_pg(conn):
         import sys, os
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if root not in sys.path: sys.path.insert(0, root)
-        from app_patched import _DB_BACKEND
+        from modules.app_core import _DB_BACKEND
         return _DB_BACKEND == "postgres"
     except Exception: pass
     return False
@@ -153,7 +153,7 @@ def _get_conn():
         import sys, os
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if root not in sys.path: sys.path.insert(0, root)
-        from app_patched import get_connection; return get_connection()
+        from modules.app_core import get_connection; return get_connection()
     except Exception: pass
     import sqlite3
     c = sqlite3.connect("organism.db"); c.row_factory = sqlite3.Row; return c
@@ -328,34 +328,16 @@ def ui_diagnostica_uditiva(conn=None):
         _init_db(conn); ss["_du_init"] = True
     cur = conn.cursor()
 
-    # Selezione paziente — lista in cache di sessione (evita query DB ad ogni interazione)
-    if st.button("🔄 Aggiorna lista pazienti", key="du_refresh"):
-        ss.pop("_du_paz_cache", None); st.rerun()
-    if "_du_paz_cache" not in ss:
-        ss["_du_paz_cache"] = _fetch_pazienti(conn)
-    rows = ss["_du_paz_cache"]
-    if not rows:
-        st.info("Nessun paziente registrato."); return
+    # Selezione paziente — usa il paziente attivo selezionato nel banner in alto
 
-    options = [(int(r[0]), f"{r[1]} {r[2]}") for r in rows]
     try:
-        from .paziente_attivo import paziente_attivo_id
-        _pid_attivo = paziente_attivo_id()
+        from .paziente_attivo import get_paziente_attivo
+        paz_id = get_paziente_attivo(conn)
     except Exception:
-        _pid_attivo = None
-    _default_idx = 0
-    if _pid_attivo:
-        for _i, _o in enumerate(options):
-            if _o[0] == int(_pid_attivo):
-                _default_idx = _i
-                break
-    c1, c2 = st.columns([3,1])
-    with c1:
-        sel = st.selectbox("Paziente", options=options, index=_default_idx,
-                           format_func=lambda x: x[1], key="du_paz")
-    with c2:
-        op = st.text_input("Operatore", "", key="du_op")
-    paz_id = sel[0]
+        paz_id = None
+    if not paz_id:
+        return
+    op = st.text_input("Operatore", "", key="du_op")
 
     st.divider()
 
@@ -1390,23 +1372,10 @@ def _ui_storico(conn, cur, paz_id):
         note = _rg(r,"note","")
 
         with st.expander(f"#{eid} | {tipo} | {data} | {cls}"):
-            c1,c2,c3 = st.columns([2,2,1])
+            c1,c2 = st.columns(2)
             if score is not None:
                 c1.metric("Punteggio", f"{score}")
             c2.metric("Classificazione", cls or "—")
-            with c3:
-                st.write("")
-                if st.button("🗑 Elimina", key=f"du_del_{eid}"):
-                    try:
-                        cur2 = conn.cursor()
-                        ph1b = _ph(1, conn)
-                        cur2.execute("DELETE FROM diagnostica_uditiva WHERE id = " + ph1b, (eid,))
-                        conn.commit()
-                        st.success("Record eliminato.")
-                        st.rerun()
-                    except Exception as e:
-                        conn.rollback()
-                        st.error(f"Errore eliminazione: {e}")
             if note: st.caption(f"Note: {note}")
             try:
                 dati = json.loads(_rg(r,"dati_json","{}") or "{}")
