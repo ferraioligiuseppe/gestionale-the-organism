@@ -77,6 +77,39 @@ def _docx_procedure_casa(nome_paz, protocollo, settimana, casa):
     return buf.getvalue()
 
 
+def _render_quadro_terapie(conn, paz_id):
+    """Quadro d'insieme: per ognuno dei percorsi terapeutici, quante sedute
+    sono già state fatte, l'ultima data e la prossima azione consigliata —
+    prima di dover scegliere un percorso specifico."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT terapia, COUNT(*) AS n, MAX(data) AS ultima
+            FROM terapia_sedute WHERE paziente_id=%s
+            GROUP BY terapia ORDER BY ultima DESC
+        """, (paz_id,))
+        righe = cur.fetchall()
+    except Exception:
+        righe = []
+        try: conn.rollback()
+        except Exception: pass
+
+    fatte = {r[0]: (r[1], r[2]) for r in righe}
+    if not fatte:
+        st.info("Nessuna seduta registrata finora per questo paziente, su nessun percorso.")
+        return
+
+    with st.expander(f"📋 Quadro terapie — {len(fatte)} percors{'o' if len(fatte)==1 else 'i'} con sedute registrate", expanded=True):
+        for terapia in TERAPIE:
+            if terapia in fatte:
+                n, ultima = fatte[terapia]
+                data_str = ultima.strftime("%d/%m/%Y") if ultima else "—"
+                st.markdown(f"✅ **{terapia}** — {n} sedut{'a' if n==1 else 'e'} · ultima il {data_str}")
+        non_iniziati = [t for t in TERAPIE if t not in fatte]
+        if non_iniziati:
+            st.caption("Non ancora iniziati: " + ", ".join(non_iniziati))
+
+
 TERAPIE = ["Vision Therapy", "MAPS", "Stanza del sale", "Osteopatia",
            "Terapia miofunzionale", "Sports Vision",
            "Terapia riflessi primitivi", "Terapia psicologica / psicoterapia",
@@ -127,6 +160,9 @@ def render_terapia(conn=None, paz_id=None, paziente=None):
         return
 
     _assicura_tabelle(conn)
+
+    # ── Quadro d'insieme: cosa ha già fatto questo paziente, su TUTTI i percorsi ──
+    _render_quadro_terapie(conn, paz_id)
 
     _RAMO_TERAPIA_DEFAULT = {
         "🧬 Terapia riflessi primitivi": "Terapia riflessi primitivi",
