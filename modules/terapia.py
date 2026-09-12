@@ -121,7 +121,12 @@ METODI = ["—", "Contanti", "POS / Carta", "Bonifico", "Assegno", "Altro"]
 
 # ── Tabelle ───────────────────────────────────────────────────────────
 
+_TERAPIA_TABELLE_PRONTE = False
+
 def _assicura_tabelle(conn):
+    global _TERAPIA_TABELLE_PRONTE
+    if _TERAPIA_TABELLE_PRONTE:
+        return
     try:
         cur = conn.cursor()
         cur.execute("""CREATE TABLE IF NOT EXISTS terapia_sedute(
@@ -136,6 +141,7 @@ def _assicura_tabelle(conn):
             stato TEXT, data_inizio DATE, data_rivalut DATE,
             note TEXT, creato TIMESTAMP DEFAULT NOW());""")
         conn.commit()
+        _TERAPIA_TABELLE_PRONTE = True
     except Exception:
         try:
             conn.rollback()
