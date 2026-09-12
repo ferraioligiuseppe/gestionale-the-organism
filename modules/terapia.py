@@ -84,7 +84,7 @@ def _render_quadro_terapie(conn, paz_id):
     try:
         cur = conn.cursor()
         cur.execute("""
-            SELECT terapia, COUNT(*) AS n, MAX(data) AS ultima
+            SELECT terapia, COUNT(*) AS n, MAX(data_seduta) AS ultima
             FROM terapia_sedute WHERE paziente_id=%s
             GROUP BY terapia ORDER BY ultima DESC
         """, (paz_id,))
