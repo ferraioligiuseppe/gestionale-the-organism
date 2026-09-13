@@ -86,10 +86,11 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
             cur.execute("SELECT id, cognome, nome, data_nascita FROM pazienti "
                         "ORDER BY cognome, nome LIMIT 3000")
             righe = cur.fetchall() or []
-        except Exception:
+        except Exception as e:
             righe = []
             try: conn.rollback()
             except Exception: pass
+            st.error(f"Impossibile leggere l'anagrafica: {e}")
         if righe:
             def _g(r, i, k):
                 return r.get(k) if hasattr(r, "get") else r[i]
@@ -104,7 +105,7 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
                 nome_sel = _g(r, 2, "nome") or ""
                 dn_sel = _g(r, 3, "data_nascita")
                 nome_precompilato = f"{cognome_sel} {nome_sel}".strip()
-                data_nascita_precompilata = dn_sel.strftime("%d/%m/%Y") if dn_sel else ""
+                data_nascita_precompilata = dn_sel.strftime("%d/%m/%Y") if hasattr(dn_sel, "strftime") else (str(dn_sel) if dn_sel else "")
 
     _precompila_js = ""
     if nome_precompilato:
