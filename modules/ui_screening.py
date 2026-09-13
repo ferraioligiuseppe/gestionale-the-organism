@@ -282,6 +282,19 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
         if ling_semp:
             _significato("valuta come il bambino semplifica i suoni difficili nel parlato "
                           "spontaneo — normale fino a una certa età, un campanello d'allarme se persiste.")
+            with st.expander("📅 A che età è normale (canovaccio per i genitori)"):
+                st.markdown(
+                    "- **2;6–3 anni**: quasi tutte le semplificazioni sono normali "
+                    "(Stopping, Riduzione gruppi consonantici, Eliminazione sillaba debole, "
+                    "Riduzione dittonghi, Armonia consonantica/vocalica).\n"
+                    "- **3–3;6 anni**: si risolvono anche Affricazione, Desonorizzazione, "
+                    "Metatesi, Epentesi.\n"
+                    "- **3;6–4;6 anni**: Gliding e gruppi consonantici con /r/ (gli ultimi ad "
+                    "acquisirsi) restano normali fino a questa età.\n"
+                    "- **Dopo i 5 anni**: qualunque semplificazione ancora presente merita "
+                    "un approfondimento; dopo i 6 anni è un campanello d'allarme.\n"
+                    "- **Posteriorizzazione**: atipica a qualunque età, anche prima dei 3;6 anni."
+                )
             st.markdown("**Semplificazioni di sistema**")
             semp_sist = st.multiselect("Semplificazioni", [
                 "Stopping", "Fricazione", "Affricazione", "Anteriorizzazione",
