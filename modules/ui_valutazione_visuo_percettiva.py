@@ -491,6 +491,107 @@ def _sez_a(pid, stored):
 #  SEZIONE B — EQUILIBRIO BINOCULARE (Skeffington/OEP)
 # ══════════════════════════════════════════════════════════════════════
 
+_TB_SCHEDE = [
+    {"id": "simul", "titolo": "1 — Percezione simultanea",
+     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
+             "<div style='position:absolute;inset:0;color:#E8000D;font-size:120px;text-align:center;mix-blend-mode:screen;transform:translateX(-6px)'>●</div>"
+             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:120px;text-align:center;mix-blend-mode:screen;transform:translateX(6px)'>▲</div></div>",
+     "domanda": "Cosa vede il bambino?",
+     "opzioni": ["Entrambe le forme (cerchio e triangolo)", "Solo il cerchio (rosso)", "Solo il triangolo (ciano)", "Nessuna delle due"],
+     "esito_normale": "Entrambe le forme (cerchio e triangolo)"},
+    {"id": "fus_cen", "titolo": "2 — Fusione centrale",
+     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
+             "<div style='position:absolute;inset:0;color:#E8000D;font-size:90px;text-align:center;mix-blend-mode:screen;transform:translateX(-4px)'>◆</div>"
+             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:90px;text-align:center;mix-blend-mode:screen;transform:translateX(4px)'>◆</div></div>",
+     "domanda": "Il rombo appare come uno solo, o doppio/sovrapposto in modo instabile?",
+     "opzioni": ["Uno solo, stabile (fusione presente)", "Doppio o sfarfalla (fusione instabile)", "Ne vede solo uno dei due colori (soppressione)"],
+     "esito_normale": "Uno solo, stabile (fusione presente)"},
+    {"id": "fus_per", "titolo": "3 — Fusione periferica",
+     "html": "<div style='position:relative;width:240px;height:240px;margin:0 auto;border:6px solid transparent'>"
+             "<div style='position:absolute;inset:0;border:10px solid #E8000D;mix-blend-mode:screen;transform:translateX(-5px)'></div>"
+             "<div style='position:absolute;inset:0;border:10px solid #00AEEF;mix-blend-mode:screen;transform:translateX(5px)'></div>"
+             "<div style='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:60px'>●</div></div>",
+     "domanda": "Mentre fissa il pallino centrale, vede la cornice tutta intera intorno?",
+     "opzioni": ["Sì, cornice intera", "Manca un pezzo di cornice da un lato", "Non vede la cornice"],
+     "esito_normale": "Sì, cornice intera"},
+    {"id": "sopp_od", "titolo": "4 — Soppressione occhio destro",
+     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
+             "<div style='position:absolute;inset:0;color:#E8000D;font-size:110px;text-align:center;mix-blend-mode:screen'>D</div>"
+             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:110px;text-align:center;mix-blend-mode:screen;opacity:0'>D</div></div>",
+     "domanda": "Questa lettera è visibile solo con l'occhio destro (rosso). La vede?",
+     "opzioni": ["Sì, la vede (OD funzionante)", "No, non la vede (possibile soppressione OD)"],
+     "esito_normale": "Sì, la vede (OD funzionante)"},
+    {"id": "sopp_os", "titolo": "5 — Soppressione occhio sinistro",
+     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
+             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:110px;text-align:center;mix-blend-mode:screen'>S</div>"
+             "<div style='position:absolute;inset:0;color:#E8000D;font-size:110px;text-align:center;mix-blend-mode:screen;opacity:0'>S</div></div>",
+     "domanda": "Questa lettera è visibile solo con l'occhio sinistro (ciano). La vede?",
+     "opzioni": ["Sì, la vede (OS funzionante)", "No, non la vede (possibile soppressione OS)"],
+     "esito_normale": "Sì, la vede (OS funzionante)"},
+    {"id": "stereo", "titolo": "6 — Stereopsi (profondità)",
+     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
+             "<div style='position:absolute;inset:0;color:#E8000D;font-size:90px;text-align:center;mix-blend-mode:screen;transform:translateX(-10px)'>●</div>"
+             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:90px;text-align:center;mix-blend-mode:screen;transform:translateX(10px)'>●</div></div>",
+     "domanda": "Il cerchio sembra 'staccarsi' dallo sfondo, come se fosse più vicino?",
+     "opzioni": ["Sì, effetto di profondità netto", "Un po', ma incerto", "No, appare piatto/sdoppiato"],
+     "esito_normale": "Sì, effetto di profondità netto"},
+    {"id": "foria_h", "titolo": "7 — Foria orizzontale",
+     "html": "<div style='position:relative;width:240px;height:100px;margin:0 auto'>"
+             "<div style='position:absolute;top:45px;left:0;right:0;height:6px;background:#E8000D;mix-blend-mode:screen'></div>"
+             "<div style='position:absolute;top:45px;left:0;right:0;height:6px;background:#00AEEF;mix-blend-mode:screen'></div>"
+             "<div style='position:absolute;top:35px;left:115px;font-size:26px'>✛</div></div>",
+     "domanda": "Le due linee orizzontali sembrano allineate sulla stessa altezza?",
+     "opzioni": ["Sì, allineate (ortoforia)", "Una più in alto/basso (foria verticale)", "Non le vede entrambe"],
+     "esito_normale": "Sì, allineate (ortoforia)"},
+    {"id": "worth", "titolo": "8 — Worth a 4 punti (adattato)",
+     "html": "<div style='position:relative;width:200px;height:200px;margin:0 auto;font-size:56px'>"
+             "<div style='position:absolute;top:0;left:80px;color:#00AEEF;mix-blend-mode:screen'>●</div>"
+             "<div style='position:absolute;top:70px;left:10px;color:#E8000D;mix-blend-mode:screen'>●</div>"
+             "<div style='position:absolute;top:70px;left:150px;color:#E8000D;mix-blend-mode:screen'>●</div>"
+             "<div style='position:absolute;top:140px;left:80px;color:#fff;mix-blend-mode:screen'>●</div></div>",
+     "domanda": "Quanti punti vede in totale?",
+     "opzioni": ["4 punti (fusione normale)", "2 punti rossi (soppressione OS)", "1 punto ciano (soppressione OD)", "5 punti (diplopia)"],
+     "esito_normale": "4 punti (fusione normale)"},
+]
+
+
+def _telebinocular_quick_test(pid, salvate: dict):
+    """Sequenza di 8 schede anaglifiche rapide (occhialini rosso/ciano),
+    ognuna rispondibile in pochi secondi — con secondo monitor per mostrarle
+    al bambino mentre l'operatore registra la risposta."""
+    try:
+        from .finestra_bambino import bottone_secondo_monitor
+    except Exception:
+        bottone_secondo_monitor = None
+
+    st.caption("🔴🔵 Richiede gli occhialini anaglifici rosso/ciano. 8 schede, risposta in pochi secondi ciascuna.")
+    risposte = {}
+    n_anomale = 0
+    for scheda in _TB_SCHEDE:
+        with st.expander(scheda["titolo"], expanded=False):
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                st.markdown(scheda["html"], unsafe_allow_html=True)
+                if bottone_secondo_monitor:
+                    bottone_secondo_monitor(scheda["html"], key=f"tb_{pid}_{scheda['id']}")
+            with c2:
+                prec = salvate.get(scheda["id"], "")
+                idx = scheda["opzioni"].index(prec) if prec in scheda["opzioni"] else 0
+                risp = st.radio(scheda["domanda"], scheda["opzioni"], index=idx,
+                                 key=f"tbq_{pid}_{scheda['id']}")
+                risposte[scheda["id"]] = risp
+                if risp == scheda["esito_normale"]:
+                    st.caption("🟢 Nella norma")
+                else:
+                    st.caption("🔴 Da approfondire")
+                    n_anomale += 1
+    if n_anomale:
+        st.warning(f"{n_anomale}/8 schede fuori norma — coerente con un possibile deficit di integrazione binoculare.")
+    else:
+        st.success("8/8 schede nella norma.")
+    return risposte
+
+
 def _sez_b(pid, stored):
     st.markdown("### B — Equilibrio Binoculare")
     st.caption("Notazione Skeffington / OEP")
@@ -514,6 +615,7 @@ def _sez_b(pid, stored):
     # Telebinocular (Keystone/Bernell — schede a distanza standard)
     st.markdown("#### Telebinocular")
     st.caption("Schede standard: fusione periferica/centrale, soppressione, foria, stereopsi")
+    _tb_out = _telebinocular_quick_test(pid, d.get("tb_cards", {}))
     tb1, tb2, tb3 = st.columns(3)
     with tb1:
         tb_fus_per = _radio("Fusione periferica", ["Presente", "Assente", "Instabile"],
@@ -638,6 +740,7 @@ def _sez_b(pid, stored):
         "ct_l":ct_l,"ct_l_pr":ct_l_pr,"ct_v":ct_v,"ct_v_pr":ct_v_pr,
         "tb_fus_per":tb_fus_per,"tb_fus_cen":tb_fus_cen,"tb_sopp_od":tb_sopp_od,
         "tb_sopp_os":tb_sopp_os,"tb_foria":tb_foria,"tb_stereo":tb_stereo,"tb_note":tb_note,
+        "tb_cards":_tb_out,
         "madd_or_l":madd_or_l,"madd_or_v":madd_or_v,
         "madd_ver_l":madd_ver_l,"madd_ver_v":madd_ver_v,
         "disp_l":disp_l,"disp_v":disp_v,"testa_incl":testa_incl,
