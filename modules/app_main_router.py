@@ -462,6 +462,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📐 PNEV-Chart (schede stampabili)",
         "🥁 PNEV Metronomo",
         "👁️ Eye tracking",
+        "🩶 Postura (Wii Balance Board)",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
@@ -1258,6 +1259,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "👁️ Eye tracking":
             from .sections.ui_cliniche import render_gaze_section
             render_gaze_section(); return
+        if sotto == "🩶 Postura (Wii Balance Board)":
+            from .ui_postura_wiifit import render_postura_wiifit
+            render_postura_wiifit(conn, paz_id); return
 
     # ── AREA TEST NEUROEVOLUTIVI ──────────────────────────────────────
     elif area == AREA_TEST_NEUROEVOL:

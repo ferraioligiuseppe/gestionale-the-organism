@@ -465,6 +465,21 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             tb_prog_xl = ctb6.text_input("Progression of Fusion — XL", key="scr_vp_tb_progxl")
             tb_prog_xv = ctb7.text_input("Progression of Fusion — XV", key="scr_vp_tb_progxv")
 
+        vp_postura = st.checkbox("Eseguito — Postura (pedana stabilometrica)", key="scr_vp_postura_on")
+        post_peso_sx = post_peso_dx = post_oscill_oa = post_oscill_oc = post_romberg = post_note_postura = ""
+        if vp_postura:
+            _significato("misura come il bambino distribuisce il peso tra i due piedi e quanto oscilla "
+                         "in equilibrio, a occhi aperti e chiusi — la differenza tra le due condizioni "
+                         "(indice di Romberg) indica quanto si appoggia alla vista per stare in equilibrio.")
+            cp1, cp2 = st.columns(2)
+            post_peso_sx = cp1.text_input("Appoggio piede sinistro (%)", key="scr_vp_post_pesosx")
+            post_peso_dx = cp2.text_input("Appoggio piede destro (%)", key="scr_vp_post_pesodx")
+            cp3, cp4 = st.columns(2)
+            post_oscill_oa = cp3.text_input("Oscillazione occhi aperti (mm o u.a.)", key="scr_vp_post_oa")
+            post_oscill_oc = cp4.text_input("Oscillazione occhi chiusi (mm o u.a.)", key="scr_vp_post_oc")
+            post_romberg = st.text_input("Indice di Romberg (OC/OA)", key="scr_vp_post_romberg")
+            post_note_postura = st.text_input("Note posturali", key="scr_vp_post_note")
+
     with t_mio:
         mio_anamnesi = st.checkbox("Eseguito — Anamnesi rapida", key="scr_mio_anamnesi_on")
         parto = allattamento = ""
@@ -543,6 +558,13 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             "telebinocular_soppressione_od": tb_sopp_od if tb_eseguito else None,
             "telebinocular_soppressione_os": tb_sopp_os if tb_eseguito else None,
             "telebinocular_stereopsi": tb_stereo if tb_eseguito else None,
+            "postura_eseguito": vp_postura,
+            "postura_peso_sx": post_peso_sx if vp_postura else None,
+            "postura_peso_dx": post_peso_dx if vp_postura else None,
+            "postura_oscillazione_oa": post_oscill_oa if vp_postura else None,
+            "postura_oscillazione_oc": post_oscill_oc if vp_postura else None,
+            "postura_indice_romberg": post_romberg if vp_postura else None,
+            "postura_note": post_note_postura if vp_postura else None,
             "telebinocular_schede": tb_cards_risposte if tb_eseguito else None,
             "telebinocular_progression_xl": tb_prog_xl if tb_eseguito else None,
             "telebinocular_progression_xv": tb_prog_xv if tb_eseguito else None,
