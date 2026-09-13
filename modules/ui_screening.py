@@ -23,6 +23,38 @@ def _big(html: str):
                 unsafe_allow_html=True)
 
 
+def _icona_svg(tipo, colore="#1D6B44", size=34):
+    """Icone originali (forme geometriche semplici), non riprodotte da alcuna
+    scheda commerciale — usate come stimolo per Visual Skills/Peek-A-Boo."""
+    forme = {
+        "cerchio": f'<circle cx="17" cy="17" r="13" fill="{colore}"/>',
+        "quadrato": f'<rect x="5" y="5" width="24" height="24" rx="4" fill="{colore}"/>',
+        "triangolo": f'<polygon points="17,4 30,29 4,29" fill="{colore}"/>',
+        "stella": f'<polygon points="17,3 21,13 32,13 23,20 26,31 17,24 8,31 11,20 2,13 13,13" fill="{colore}"/>',
+        "cuore": f'<path d="M17 29 C4 20 2 10 9 6 C13 4 17 8 17 11 C17 8 21 4 25 6 C32 10 30 20 17 29 Z" fill="{colore}"/>',
+        "croce": f'<rect x="13" y="3" width="8" height="28" fill="{colore}"/><rect x="3" y="13" width="28" height="8" fill="{colore}"/>',
+        "casa": f'<polygon points="17,4 30,16 24,16 24,30 10,30 10,16 4,16" fill="{colore}"/>',
+        "albero": f'<rect x="14" y="20" width="6" height="10" fill="#8a5a2b"/><circle cx="17" cy="14" r="12" fill="{colore}"/>',
+    }
+    svg = forme.get(tipo, forme["cerchio"])
+    return f'<svg width="{size}" height="{size}" viewBox="0 0 34 34">{svg}</svg>'
+
+
+def _riga_test_binoculare(numero, titolo, distanza, opzioni, key_prefix):
+    """Una riga di test tipo Telebinocular: mostra le icone (disegni originali)
+    delle opzioni possibili e fa scegliere quella osservata — stesso principio
+    clinico delle schede Keystone, senza riprodurne il layout protetto."""
+    st.markdown(f"**Test {numero} — {titolo}** _{('lontano' if distanza=='L' else 'vicino')}_")
+    cols = st.columns(len(opzioni) + 1)
+    icone_cli = ["cerchio", "quadrato", "triangolo", "stella", "cuore", "croce", "casa", "albero"]
+    for i, opz in enumerate(opzioni):
+        with cols[i]:
+            st.markdown(_icona_svg(icone_cli[i % len(icone_cli)]), unsafe_allow_html=True)
+            st.caption(opz)
+    scelta = st.radio(" ", opzioni, key=f"{key_prefix}_{numero}", horizontal=True, label_visibility="collapsed")
+    return scelta
+
+
 def _finestra_bambino(html_inner: str, key: str):
     """Compatibilità: usa ora il modulo condiviso finestra_bambino, così tutti
     i test del gestionale riusano la stessa finestra sul secondo monitor."""
@@ -299,7 +331,58 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
          "💆 Miofunzionale", "🦴 Osteopatico"])
 
     with t_ling:
-        ling_semp = st.checkbox("Eseguito — Semplificazioni fonologiche", key="scr_ling_semp_on")
+        ling_bilancio = st.checkbox("Eseguito — Bilancio fonetico (protocollo completo)", key="scr_ling_bilancio_on")
+        bilancio_dati = {}
+        if ling_bilancio:
+            _significato("per ogni fono, in posizione iniziale e intervocalica, chiedi al bambino di "
+                         "dire la parola-stimolo (denominazione su figura o ripetizione) e segna l'esito: "
+                         "✓ corretto, S sostituzione, O omissione, D distorsione, I instabile.")
+            _LISTA_FONI = [
+                ("Occlusivi", [("p", "pane", "lupo"), ("b", "barca", "tubo"), ("t", "tavolo", "moto"),
+                                ("d", "dado", "nido"), ("k", "casa", "fuoco"), ("g", "gatto", "ago")]),
+                ("Fricativi", [("f", "fiore", "telefono"), ("v", "vaso", "uva"), ("s", "sole", "sasso"),
+                                ("sc [ʃ]", "sciarpa", "pesce")]),
+                ("Affricati", [("z [ts]", "zampa", "pizza"), ("z [dz]", "zebra", "azzurro"),
+                                ("ci [tʃ]", "cena", "braccio"), ("gi [dʒ]", "giraffa", "valigia")]),
+                ("Nasali", [("m", "mano", "lumaca"), ("n", "naso", "luna"), ("gn [ɲ]", "gnomo", "bagno")]),
+                ("Liquidi", [("l", "luna", "gelato"), ("gl [ʎ]", "gli occhi", "foglia"),
+                              ("r (vibr.)", "rana", "faro"), ("r (tenuta)", "ferro", "arrotolare")]),
+            ]
+            esiti_opz = ["✓ corretto", "S sostituzione", "O omissione", "D distorsione", "I instabile", "NR"]
+            for categoria, foni in _LISTA_FONI:
+                st.markdown(f"**{categoria}**")
+                for fono, parola_in, parola_interv in foni:
+                    c1, c2, c3 = st.columns([1, 2, 2])
+                    c1.markdown(f"**{fono}**")
+                    with c2:
+                        st.caption(f"Iniziale: *{parola_in}*")
+                        v1 = st.selectbox(" ", esiti_opz, key=f"scr_bf_{fono}_in", label_visibility="collapsed")
+                    with c3:
+                        st.caption(f"Intervocalica: *{parola_interv}*")
+                        v2 = st.selectbox(" ", esiti_opz, key=f"scr_bf_{fono}_iv", label_visibility="collapsed")
+                    bilancio_dati[fono] = {"iniziale": v1, "intervocalica": v2}
+
+            st.markdown("**Processi di semplificazione — frequenza**")
+            st.caption("0 assente · 1 sporadico (<25%) · 2 frequente (25-75%) · 3 sistematico (>75%)")
+            _PROCESSI = [
+                ("Stopping", "sole → «tole»", "3;6–4;0"), ("Fricazione", "cena → «sena»", "4;0"),
+                ("Affricazione", "sole → «zole»", "4;0"), ("Anteriorizzazione", "casa → «tasa»", "4;0"),
+                ("Posteriorizzazione", "tavolo → «cavolo»", "3;6"), ("Desonorizzazione", "barca → «parca»", "3;6"),
+                ("Gliding", "rana → «jana»", "5;0"), ("Elim. sillaba debole", "elefante → «fante»", "4;0"),
+                ("Armonia consonantica", "tavolo → «lavolo»", "3;6"), ("Armonia vocalica", "bambino → «bimbino»", "3;6"),
+                ("Riduzione gruppi", "treno → «teno»", "4;6–5;0"), ("Riduzione dittonghi", "uovo → «ovo»", "4;0"),
+                ("Metatesi", "ospedale → «opsedale»", "4;6"), ("Epentesi", "blu → «belu»", "4;0"),
+                ("Cancellazione", "pane → «ane»", "3;6"),
+            ]
+            processi_dati = {}
+            for nome, esempio, limite in _PROCESSI:
+                cp1, cp2, cp3 = st.columns([2, 2, 1])
+                cp1.markdown(f"**{nome}** — _{esempio}_")
+                cp2.caption(f"Limite indicativo: {limite}")
+                freq = cp3.selectbox(" ", [0, 1, 2, 3], key=f"scr_proc_{nome}", label_visibility="collapsed")
+                processi_dati[nome] = freq
+
+        ling_semp = st.checkbox("Eseguito — Semplificazioni fonologiche (versione rapida)", key="scr_ling_semp_on")
         semp_sist = semp_strut = []
         if ling_semp:
             _significato("valuta come il bambino semplifica i suoni difficili nel parlato "
@@ -471,36 +554,55 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
                          "fusione, visione binoculare utilizzabile e stereopsi — usa le tavole "
                          "originali dello strumento, qui si registra solo il risultato.")
             tb_serie = st.selectbox("Serie di tavole utilizzata", [
-                "5100 Visual Skills (15 obiettivi)",
-                "5170 Peek-A-Boo (prescolari/non lettori)",
-                "5135 Screening rapido scuola",
-                "5155 Clinical Fusion — riserve prismatiche"], key="scr_vp_tb_serie")
+                "Visual Skills (14 test)",
+                "Peek-A-Boo (9 test — prescolari/non lettori)",
+                "Screening rapido scuola",
+                "Clinical Fusion — riserve prismatiche"], key="scr_vp_tb_serie")
             ctb0a, ctb0b = st.columns(2)
             tb_occhiali = ctb0a.selectbox("Occhiali durante l'esame", ["No", "Sì"], key="scr_vp_tb_occhiali")
             tb_collab = ctb0b.selectbox("Collaborazione", ["Buona", "Discontinua", "Insufficiente"],
                                          key="scr_vp_tb_collab")
-            if tb_serie.startswith("5100"):
-                st.caption("Serie 5100 — Visual Skills (15 obiettivi): L=lontano · V=vicino")
-                _TB_5100 = [
-                    ("1", "Visione simultanea/soppressione", "L", ["Solo OD", "Solo OS", "Entrambe"]),
-                    ("2", "Squilibrio verticale", "L", ["Ipo dx", "Nei limiti", "Ipo sx"]),
-                    ("3", "Squilibrio laterale (foria orizz.)", "L", ["Exo", "Nei limiti", "Ottimale", "Eso"]),
+            if tb_serie.startswith("Visual Skills"):
+                st.caption("Icone originali (non riprodotte da alcuna scheda commerciale) — clicca "
+                           "l'opzione osservata sotto ciascun test.")
+                _VS_14 = [
+                    ("1", "Visione simultanea", "L", ["Solo sinistro", "Solo destro", "Entrambe"]),
+                    ("2", "Postura verticale", "L", ["Ipo dx", "Nei limiti", "Ipo sx"]),
+                    ("3", "Postura laterale (foria orizz.)", "L", ["Exo", "Nei limiti", "Ottimale", "Eso"]),
                     ("4", "Fusione", "L", ["Exo", "Nei limiti", "Ottimale", "Eso", "Soppressione"]),
-                    ("4/5", "Visione utilizzabile binoculare", "L", ["Nei limiti", "Ridotta"]),
-                    ("5", "Visione utilizzabile OD", "L", ["Nei limiti", "Ridotta"]),
-                    ("6", "Visione utilizzabile OS", "L", ["Nei limiti", "Ridotta"]),
-                    ("7", "Stereopsi/profondità", "L", ["Assente", "Ridotta", "Nei limiti", "Ottimale"]),
-                    ("8", "Colore — prima tavola", "L", ["Tutti", "Parziale", "Errata"]),
-                    ("9", "Colore — seconda tavola", "L", ["Tutti", "Parziale", "Errata"]),
-                    ("10", "Squilibrio laterale (foria orizz.)", "V", ["Exo", "Nei limiti", "Ottimale", "Eso"]),
+                    ("5", "Visione usabile — binoculare", "L", ["Nei limiti", "Ridotta"]),
+                    ("6", "Visione usabile — sinistro", "L", ["Nei limiti", "Ridotta"]),
+                    ("7", "Stereopsi", "L", ["Assente", "Ridotta", "Nei limiti", "Ottimale"]),
+                    ("8", "Percezione colore — I", "L", ["Tutti", "Parziale", "Errata"]),
+                    ("9", "Percezione colore — II", "L", ["Tutti", "Parziale", "Errata"]),
+                    ("10", "Postura laterale (foria orizz.)", "V", ["Exo", "Nei limiti", "Ottimale", "Eso"]),
                     ("11", "Fusione", "V", ["Exo", "Nei limiti", "Ottimale", "Eso", "Soppressione"]),
-                    ("12", "Visione utilizzabile binoculare", "V", ["Nei limiti", "Ridotta"]),
-                    ("13", "Visione utilizzabile OD", "V", ["Nei limiti", "Ridotta"]),
-                    ("14", "Visione utilizzabile OS", "V", ["Nei limiti", "Ridotta"]),
+                    ("12", "Visione usabile — binoculare", "V", ["Nei limiti", "Ridotta"]),
+                    ("13", "Visione usabile — sinistro", "V", ["Nei limiti", "Ridotta"]),
+                    ("14", "Visione usabile — destro", "V", ["Nei limiti", "Ridotta"]),
                 ]
-                for num, nome, dist, opzioni in _TB_5100:
-                    v = st.selectbox(f"{num}. {nome} ({dist})", opzioni, key=f"scr_vp_tb5100_{num}")
+                for num, nome, dist, opzioni in _VS_14:
+                    v = _riga_test_binoculare(num, nome, dist, opzioni, "scr_vp_vs")
                     tb_test_risposte[f"{num} {nome} ({dist})"] = v
+                    st.markdown("---")
+            elif tb_serie.startswith("Peek-A-Boo"):
+                st.caption("Icone originali — batteria figurata per prescolari/non lettori. "
+                           "Clicca l'opzione osservata sotto ciascun test.")
+                _PAB_9 = [
+                    ("1", "Acuità (denominazione)", "L", ["Identifica tutto", "Parziale", "Non identifica"]),
+                    ("2", "Coordinazione laterale", "L", ["Convergenza insuff.", "Nei limiti", "Divergenza"]),
+                    ("3", "Fusione", "L", ["1 clown (soppr.)", "2 clown (diplopia)", "Nei limiti"]),
+                    ("4", "Stereopsi/colore (facoltativo)", "L", ["Assente", "Nei limiti"]),
+                    ("5", "Coordinazione verticale", "L", ["Ipo dx", "Nei limiti", "Ipo sx"]),
+                    ("6", "Coordinazione verticale", "V", ["Ipo dx", "Nei limiti", "Ipo sx"]),
+                    ("7", "Fusione", "V", ["1 clown (soppr.)", "2 clown (diplopia)", "Nei limiti"]),
+                    ("8", "Coordinazione laterale", "V", ["Convergenza insuff.", "Nei limiti", "Divergenza"]),
+                    ("9", "Acuità (denominazione)", "V", ["Identifica tutto", "Parziale", "Non identifica"]),
+                ]
+                for num, nome, dist, opzioni in _PAB_9:
+                    v = _riga_test_binoculare(num, nome, dist, opzioni, "scr_vp_pab")
+                    tb_test_risposte[f"{num} {nome} ({dist})"] = v
+                    st.markdown("---")
             else:
                 st.caption("Per questa serie, annota qui l'esito sintetico (le tavole restano quelle "
                            "originali dello strumento).")
@@ -582,6 +684,8 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
 
     sezioni = {
         "linguaggio": {
+            "bilancio_fonetico_completo": bilancio_dati if ling_bilancio else None,
+            "processi_semplificazione": processi_dati if ling_bilancio else None,
             "semplificazioni_sistema": semp_sist, "semplificazioni_struttura": semp_strut,
             "livello_lessicale": livello_lex, "livello_morfosintattico": livello_morfo,
             "balbuzie": balbuzie, "tachilalia": tachilalia, "extra_verbale": extra_verbale,
