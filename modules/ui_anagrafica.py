@@ -611,22 +611,43 @@ def _salva_modifica(conn, paz_id, d: dict) -> bool:
 
 
 def _salva_consenso(conn, paz_id, c: dict) -> bool:
+    if (c.get("genitori_situazione") == "separati_condivisa"
+            and not c.get("consenso_tratt2")):
+        st.error("Potestà condivisa: manca il consenso del secondo genitore, obbligatorio per legge.")
+        return False
     try:
         cur = conn.cursor()
+        cur.execute("""
+            ALTER TABLE consensi_privacy
+                ADD COLUMN IF NOT EXISTS genitori_situazione TEXT,
+                ADD COLUMN IF NOT EXISTS consenso_trattamento_g2 BOOLEAN,
+                ADD COLUMN IF NOT EXISTS tutore2_nome TEXT,
+                ADD COLUMN IF NOT EXISTS tutore2_cf TEXT,
+                ADD COLUMN IF NOT EXISTS tutore2_telefono TEXT,
+                ADD COLUMN IF NOT EXISTS tutore2_email TEXT
+        """)
         cur.execute("""
             INSERT INTO consensi_privacy
             (paziente_id, data_ora, tipo,
              tutore_nome, tutore_cf, tutore_telefono, tutore_email,
+             genitori_situazione, consenso_trattamento_g2,
+             tutore2_nome, tutore2_cf, tutore2_telefono, tutore2_email,
              consenso_trattamento, consenso_comunicazioni, consenso_marketing,
              canale_email, canale_sms, canale_whatsapp,
              usa_klaviyo, note)
-            VALUES (%s,NOW(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,NOW(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             paz_id, c.get("tipo", "adulto"),
             c.get("tutore_nome", "") or None,
             c.get("tutore_cf", "") or None,
             c.get("tutore_tel", "") or None,
             c.get("tutore_email", "") or None,
+            c.get("genitori_situazione", "") or None,
+            1 if c.get("consenso_tratt2") else 0,
+            c.get("tutore2_nome", "") or None,
+            c.get("tutore2_cf", "") or None,
+            c.get("tutore2_tel", "") or None,
+            c.get("tutore2_email", "") or None,
             1 if c.get("consenso_tratt") else 0,
             1 if c.get("consenso_com") else 0,
             1 if c.get("consenso_mkt") else 0,
@@ -1063,6 +1084,8 @@ def _form_privacy(key: str, c: dict | None = None) -> dict:
                      horizontal=True, key=f"{key}_priv_tipo")
 
     tutore_nome = tutore_cf = tutore_tel = tutore_email = ""
+    genitori_situazione = ""
+    tutore2_nome = tutore2_cf = tutore2_tel = tutore2_email = ""
     if tipo == "Minore":
         st.markdown("**Dati genitore / tutore**")
         ct1, ct2 = st.columns(2)
@@ -1081,11 +1104,56 @@ def _form_privacy(key: str, c: dict | None = None) -> dict:
                                            value=c.get("tutore_email", "") or "",
                                            key=f"{key}_tut_e")
 
+        genitori_situazione = st.radio(
+            "Situazione genitoriale",
+            ["Genitori insieme", "Separati/divorziati con potestà condivisa",
+             "Affido esclusivo / decadenza potestà dell'altro genitore"],
+            index=["insieme", "separati_condivisa", "affido_esclusivo"].index(
+                c.get("genitori_situazione") or "insieme"
+            ) if (c.get("genitori_situazione") or "insieme") in
+                ["insieme", "separati_condivisa", "affido_esclusivo"] else 0,
+            key=f"{key}_gen_sit",
+            help="In caso di potestà condivisa, la legge richiede il consenso di "
+                 "entrambi i genitori. Con affido esclusivo o decadenza della potestà "
+                 "dell'altro genitore, basta la firma del genitore affidatario "
+                 "(allegare documentazione al fascicolo).",
+        )
+        _map_sit = {"Genitori insieme": "insieme",
+                    "Separati/divorziati con potestà condivisa": "separati_condivisa",
+                    "Affido esclusivo / decadenza potestà dell'altro genitore": "affido_esclusivo"}
+        genitori_situazione = _map_sit.get(genitori_situazione, "insieme")
+
+        if genitori_situazione == "separati_condivisa":
+            st.info("Potestà condivisa: serve il consenso di **entrambi** i genitori. "
+                    "Compila anche i dati del secondo genitore.")
+            st.markdown("**Dati secondo genitore**")
+            ct3, ct4 = st.columns(2)
+            with ct3:
+                tutore2_nome = st.text_input("Nome e cognome secondo genitore",
+                                              value=c.get("tutore2_nome", "") or "",
+                                              key=f"{key}_tut2_n")
+                tutore2_tel = st.text_input("Telefono secondo genitore",
+                                             value=c.get("tutore2_telefono", "") or "",
+                                             key=f"{key}_tut2_t")
+            with ct4:
+                tutore2_cf = st.text_input("CF secondo genitore",
+                                            value=c.get("tutore2_cf", "") or "",
+                                            key=f"{key}_tut2_cf").upper()
+                tutore2_email = st.text_input("Email secondo genitore",
+                                               value=c.get("tutore2_email", "") or "",
+                                               key=f"{key}_tut2_e")
+
     st.markdown("**Consensi**")
     consenso_tratt = st.checkbox(
         "Consenso al trattamento dati per finalità cliniche/gestionali (obbligatorio)",
         value=bool(c.get("consenso_trattamento", 1)) if c else False,
         key=f"{key}_c_tratt")
+    consenso_tratt2 = True
+    if genitori_situazione == "separati_condivisa":
+        consenso_tratt2 = st.checkbox(
+            "Consenso al trattamento dati anche del secondo genitore (obbligatorio, potestà condivisa)",
+            value=bool(c.get("consenso_trattamento_g2", 0)) if c else False,
+            key=f"{key}_c_tratt2")
     consenso_com = st.checkbox(
         "Consenso a comunicazioni di servizio (appuntamenti, referti, promemoria)",
         value=bool(c.get("consenso_comunicazioni", 1)) if c else True,
@@ -1124,7 +1192,11 @@ def _form_privacy(key: str, c: dict | None = None) -> dict:
         "tipo": tipo.lower(),
         "tutore_nome": tutore_nome, "tutore_cf": tutore_cf,
         "tutore_tel": tutore_tel, "tutore_email": tutore_email,
-        "consenso_tratt": consenso_tratt, "consenso_com": consenso_com,
+        "genitori_situazione": genitori_situazione,
+        "tutore2_nome": tutore2_nome, "tutore2_cf": tutore2_cf,
+        "tutore2_tel": tutore2_tel, "tutore2_email": tutore2_email,
+        "consenso_tratt": consenso_tratt, "consenso_tratt2": consenso_tratt2,
+        "consenso_com": consenso_com,
         "consenso_mkt": consenso_mkt, "can_email": can_email,
         "can_sms": can_sms, "can_wa": can_wa, "usa_klaviyo": usa_klaviyo,
         "note": note,
