@@ -539,7 +539,7 @@ def _salva_nuovo(conn, d: dict):
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'ATTIVO')
             RETURNING id
         """, (
-            d["cognome"].strip().upper(), d["nome"].strip().title(),
+            d["cognome"].strip().upper(), d["nome"].strip().upper(),
             data_iso, d["sesso"],
             d["tel"].strip(), d.get("tel_fisso","").strip(), d["email"].strip().lower(),
             d["indirizzo"].strip(), d["cap"].strip(),
@@ -589,7 +589,7 @@ def _salva_modifica(conn, paz_id, d: dict) -> bool:
                 stato_paziente=%s
             WHERE id=%s
         """, (
-            d["cognome"].strip().upper(), d["nome"].strip().title(),
+            d["cognome"].strip().upper(), d["nome"].strip().upper(),
             data_iso, d["sesso"],
             d["tel"].strip(), d.get("tel_fisso","").strip(), d["email"].strip().lower(),
             d["indirizzo"].strip(), d["cap"].strip(),
@@ -1509,6 +1509,26 @@ def _dialog_export(pazienti: list, totale: int):
 #  RENDER PRINCIPALE
 # ════════════════════════════════════════════════════════════════════
 
+def _uniforma_maiuscolo(conn) -> int:
+    """Converte in MAIUSCOLO nome e cognome di tutti i pazienti che non lo sono
+    già (una tantum). Ritorna quante righe sono state aggiornate."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE pazienti SET cognome = UPPER(cognome), nome = UPPER(nome)
+            WHERE cognome != UPPER(cognome) OR nome != UPPER(nome)
+        """)
+        n = cur.rowcount
+        conn.commit()
+        return n
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return 0
+
+
 def render_anagrafica(conn) -> None:
     """Render principale anagrafica v3.0 - aggrid + dialog."""
 
@@ -1532,6 +1552,15 @@ def render_anagrafica(conn) -> None:
         if st.button("📥 Esporta Excel", key="btn_export",
                        use_container_width=True):
             st.session_state["ana_apri_export"] = True
+
+    with st.expander("🔠 Uniforma nomi/cognomi in MAIUSCOLO (una tantum)"):
+        st.caption("Converte in MAIUSCOLO nome e cognome di tutte le anagrafiche "
+                   "esistenti che non lo sono già. Da eseguire una volta.")
+        if st.button("Uniforma ora tutte le anagrafiche", key="btn_uniforma_maiuscolo"):
+            n = _uniforma_maiuscolo(conn)
+            st.success(f"{n} anagrafiche aggiornate in MAIUSCOLO.")
+            _invalida_cache()
+            st.rerun()
 
     # Filtro stato
     filtro = st.segmented_control(
