@@ -289,21 +289,138 @@ def _genera_e_invia_relazione(conn, paz_id, sezioni, note):
             st.error(f"Errore invio: {e}")
 
 
-# Testi IReST (International Reading Speed Texts, versione italiana) — 10 brani
-# calibrati e omogenei per lunghezza, con norme di riferimento (tempo/velocità)
+# Testi di lettura ad alta voce — brani ORIGINALI (non IReST: quello è materiale
+# editoriale protetto, va usato con le tavole fisiche originali dello studio).
+# Qui solo testi nostri, di lunghezza omogenea, per una misura ripetibile
+# intra-soggetto (non norme di popolazione).
 _TESTI_IREST = [
-    {"nome": "Topi", "testo": "In una cittadina c'era un negozio di frutta e verdura che si trovava sopra una grande cantina. Ogni notte i topi uscivano dalla cantina ed entravano nel negozio, dove mangiavano mele e pere, uva e noci, senza risparmiare nemmeno le patate o altre verdure. Niente nel negozio si salvava da quei molesti roditori. Alla sera, finché c'erano rumori per la strada e le auto circolavano, i topi se ne restavano buoni in cantina. Ma appena il vecchio orologio sulla torre del palazzo comunale suonava la mezzanotte, e calava il silenzio sulla città, i topi uscivano a frotte e si gettavano sulla frutta, con dei veri e propri festini i cui resti riempivano il proprietario di disperazione quando, alla mattina, entrava in negozio. Il fruttivendolo aveva provato in vari modi a difendersi dai topi. All'inizio aveva messo delle trappole.", "parole": 138, "tempo_medio": "46.4 ± 5.2 s", "velocita_media": "181 ± 24 parole/min"},
-    {"nome": "Castoro", "testo": "Il castoro è un ottimo nuotatore, che in acqua può raggiungere la velocità di dieci chilometri all'ora. Per proteggersi dal freddo è ricoperto da uno spesso strato di grasso e da una pelle con migliaia di peli. Grazie ai suoi grandi polmoni può restare sott'acqua senza problemi per oltre venti minuti. Il castoro è in grado di abbattere gli alberi ed è anche un abile costruttore di dighe. Per far cadere un albero rode il tronco in modo da lasciare solo una piccola giuntura tra la parte superiore e quella inferiore: quando il legno è abbastanza sottile e il castoro è stanco, sarà il vento a completare il lavoro. I rami più piccoli vengono poi tagliati e ammucchiati vicino alla tana, che si trova di solito su un isolotto. I rami più grandi, invece, vengono selezionati accuratamente e sono utilizzati per fabbricare le dighe.", "parole": 144, "tempo_medio": "42.6 ± 5.1 s", "velocita_media": "206 ± 29 parole/min"},
-    {"nome": "Alberi", "testo": "Gli alberi crescono praticamente ovunque, tranne che tra i ghiacci perenni, sulle montagne più alte o nei deserti. Se un terreno viene abbandonato per un certo tempo, prima o poi inizieranno a crescere degli alberi. Dapprima la terra si ricopre di piante più basse. Crescono poi dei cespugli, che con la loro ombra fanno morire la maggior parte delle altre piante. Dopo un po', iniziano a crescere gli alberi. Quando diventano grandi, la loro ombra copre i cespugli, facendone morire una parte. È così che nel tempo si forma una foresta. Molti alberi crescono lentamente e possono diventare anche molto vecchi. Quando muoiono gli alberi più vecchi, gli altri più giovani prendono il loro posto. La foresta è un habitat che può rimanere stabile per molto tempo. Il clima determina il tipo di alberi che si possono trovare in un'area.", "parole": 140, "tempo_medio": "43.8 ± 5 s", "velocita_media": "194 ± 24 parole/min"},
-    {"nome": "Preda", "testo": "Tutti gli animali che si cibano di altri animali hanno il problema di come catturare le loro prede. Alcuni le seguono e le attaccano, altri rimangono fermi aspettando che una vittima gli passi vicino. Un sistema molto diffuso per procurarsi cibo senza troppe difficoltà è quello di costruire una trappola. I ragni sono l'esempio più noto di animali che ne catturano altri mediante trappole. Le loro tele appiccicose sono così fini da risultare quasi invisibili: di solito un insetto se ne accorge solo quando vi resta impigliato, così che il ragno non deve fare altro che avvicinarsi. L'insetto viene mangiato direttamente sul posto oppure viene avvolto con filamenti appiccicosi per essere consumato in seguito. Altre creature che vivono tra le rocce o sui fondali marini si cibano di animaletti e piante che trovano nell'acqua.", "parole": 134, "tempo_medio": "44.1 ± 5.5 s", "velocita_media": "185 ± 26 parole/min"},
-    {"nome": "Deserto", "testo": "Nelle zone calde e aride le piante e gli animali devono adattarsi all'ambiente. Diverse piante superano periodi di siccità in forma di semi, che possono rimanere sotto terra per anni prima che la pioggia cada facendoli germogliare. Quando ciò accade, le piante crescono rapidamente, producendo fiori e semi da cui nascerà la generazione successiva. Lo stesso accade ad alcuni animali: ad esempio ci sono rane che si seppelliscono sotto terra formando una capsula che le protegge dal secco, ed escono in superficie solo quando cade la prima pioggia; in questo periodo in cui l'acqua è disponibile riescono a riprodursi e far crescere i piccoli. Molte piante del deserto si sono adattate alla siccità in altri modi. Alcune hanno lunghe radici che assorbono l'acqua da un'area molto ampia o che scendono nel suolo a grande profondità.", "parole": 135, "tempo_medio": "43.9 ± 5.4 s", "velocita_media": "188 ± 26 parole/min"},
-    {"nome": "Veleno", "testo": "Una delle principali minacce per la vita di animali e piante è il rischio di essere mangiati. Alcuni animali risolvono il problema mimetizzandosi, altri nascondendosi. Parecchi riescono a volare via, mentre altri scappano correndo davanti ai loro nemici. Le piante, come è noto, non sono capaci di correre: esse riescono a proteggersi in altri modi, ad esempio coprendosi di spine o con una robusta scorza. Altre piante, ma anche molti animali, si proteggono con il veleno, che non deve essere necessariamente mortale, ma deve solo impedire ad altri animali di ingerirli. Alcuni animali si difendono semplicemente assomigliando ad altri che contengono sostanze velenose. Nel regno animale, un colore particolarmente intenso segnala di solito che l'animale non è commestibile e ciò è sufficiente per scoraggiare eventuali predatori.", "parole": 126, "tempo_medio": "44.7 ± 6.3 s", "velocita_media": "174 ± 29 parole/min"},
-    {"nome": "Isola", "testo": "Si chiamano 'isole' le aree di terra circondate dal mare su tutti i lati. Le isole si possono formare da vulcani sorti dal fondo del mare, oppure in seguito a innalzamenti o abbassamenti del livello delle acque. Molte isole si sono formate alla fine dell'ultima era glaciale: il ghiaccio, sciogliendosi in acqua, ha alzato il livello dei mari, che hanno così invaso vaste aree di terre costiere, lasciando scoperti solo i punti più alti, che oggi emergono come isole. Gli animali e le piante che riescono in qualche modo a raggiungere un'isola remota di solito non possono più lasciarla. Se vogliono sopravvivere devono adattarsi molto rapidamente al nuovo ambiente. Le creature native di un'isola rischiano sempre di estinguersi quando arrivano nuovi animali o quando gli esseri umani iniziano a interferire con il loro habitat.", "parole": 134, "tempo_medio": "42.5 ± 5.8 s", "velocita_media": "193 ± 29 parole/min"},
-    {"nome": "Ragni", "testo": "In passato si credeva che i ragni fossero capaci di proteggersi in qualche modo dalla sostanza appiccicosa di cui sono fatte le ragnatele, mentre le mosche e gli altri insetti fossero privi di tale protezione. Ricerche più recenti hanno però dimostrato che ciò non è vero: anche un ragno resterebbe prigioniero della sua rete se non usasse uno stratagemma. I ragni infatti producono due tipi di filamento. Prima costruiscono una rete di fili non appiccicosi. Quando questa è finita, il ragno vi tesse sopra il materiale vischioso. Solo questa seconda rete riesce a catturare gli insetti che vi cadono. Per non restare lui stesso impigliato, il ragno lascia alcune parti della tela senza la sostanza vischiosa. Queste aree sono posizionate in modo che il ragno possa raggiungere ogni punto della ragnatela senza rimanere invischiato.", "parole": 134, "tempo_medio": "43.4 ± 5.2 s", "velocita_media": "188 ± 27 parole/min"},
-    {"nome": "Inverno", "testo": "Gli animali e le piante che vivono in zone a clima freddo o temperato devono trovare modi per superare i mesi invernali. Molte piante passano l'inverno sotto forma di semi che in primavera germoglieranno per dare nuove piante. Altre piante lasciano seccare le parti sopra il livello del suolo, per formare nuovi getti quando l'aria si fa più mite in primavera. Molti alberi e cespugli perdono le foglie in autunno e trascorrono un periodo di riposo durante l'inverno. Gli animali, dovendo muoversi sempre, consumano molta più energia delle piante. La maggior parte di loro non cambia significativamente le proprie abitudini durante l'inverno. Altri però devono mettere in atto varie strategie per non morire congelati. Ad esempio, alcuni uccelli risolvono il problema migrando in autunno verso zone più piacevoli nel Sud del mondo.", "parole": 132, "tempo_medio": "43.5 ± 6.8 s", "velocita_media": "187 ± 34 parole/min"},
-    {"nome": "Colori", "testo": "I colori di un animale o una pianta di solito hanno una funzione. Dato che negli uccelli la percezione visiva è ben sviluppata, in molte specie i maschi hanno un aspetto variopinto per piacere di più alle femmine. Anche le piante spesso producono fiori colorati per attrarre gli insetti, attraverso i quali avviene la loro riproduzione. Alcuni animali velenosi o disgustosi portano colori sgargianti come avvertimento. Le vespe, ad esempio, si riconoscono facilmente per le strisce gialle e nere, e gli uccelli imparano presto che verranno punti se attaccano insetti con queste strisce. Ma non tutti gli animali colorati sono velenosi: alcune mosche, infatti, imitano le vespe pur non avendo il pungiglione. Altri animali si difendono rendendosi quasi invisibili, mimetizzandosi tra le foglie, il terreno o le rocce su cui vivono.", "parole": 131, "tempo_medio": "44.7 ± 6.4 s", "velocita_media": "179 ± 27 parole/min"},
+    {"nome": "Il mercato", "testo": "Ogni giovedì mattina la piazza del paese si riempiva di bancarelle colorate, disposte in file ordinate lungo tutto il perimetro. I venditori arrivavano già alle sei, scaricando cassette di frutta, formaggi e stoffe dai loro furgoni. Verso le nove la piazza era già piena di gente che camminava lenta tra i banchi, fermandosi a chiacchierare con i venditori che conosceva da anni. Alcuni bambini si divertivano a contare quante bancarelle vendevano dolciumi, mentre i genitori sceglievano con calma la verdura più fresca per il pranzo della domenica.", "parole": 96},
+    {"nome": "Il faro", "testo": "Sulla punta più estrema della costa si ergeva un faro bianco, visibile da chilometri di distanza nelle notti serene. Il guardiano che lo custodiva viveva lì da più di trent'anni, insieme a un gatto che lo seguiva ovunque tra le scale a chiocciola. Ogni sera, poco prima del tramonto, saliva fino alla lanterna per controllare che la luce girasse regolarmente, proteggendo le barche dagli scogli nascosti sotto la superficie dell'acqua. Con il tempo, quel gesto era diventato quasi un rito, ripetuto senza mai saltare una sera.", "parole": 92},
+    {"nome": "La bottega del falegname", "testo": "Nel retro della vecchia bottega, tra segatura e attrezzi appesi alle pareti, il falegname lavorava seduto su uno sgabello basso, la pialla in mano e la radio accesa in sottofondo. Ogni pezzo di legno veniva scelto con cura, osservato controluce per capire dove si nascondevano i nodi più duri. I clienti che entravano si fermavano spesso a guardarlo lavorare, incuriositi dal modo in cui trasformava semplici tavole in mobili solidi e ben rifiniti, pronti per arredare case che non avrebbe mai visto.", "parole": 90},
+    {"nome": "La gita in barca", "testo": "Quella mattina il mare era completamente calmo, senza nemmeno un'onda a increspare la superficie. Il pescatore aveva deciso di portare i due nipoti al largo, mostrando loro come si preparavano le reti prima di calarle in acqua. I bambini osservavano tutto con attenzione, facendo domande su ogni corda e ogni nodo, mentre la barca si allontanava piano dalla riva. Al ritorno, stanchi ma contenti, raccontarono ai genitori ogni singolo dettaglio della giornata passata sull'acqua.", "parole": 84},
+    {"nome": "Il vecchio orologio", "testo": "Sopra il camino del salotto era appeso un orologio a pendolo, ereditato dal nonno insieme alla casa. Ogni ora suonava un rintocco leggermente stonato, che con gli anni era diventato un suono familiare per tutta la famiglia. Nessuno aveva mai voluto farlo riparare del tutto, perché quel piccolo difetto sembrava far parte della sua storia. Quando arrivavano ospiti, spesso qualcuno notava il suono particolare e chiedeva da quanto tempo fosse in famiglia quell'orologio così antico.", "parole": 86},
 ]
 _PROBLEMI_CALCOLO = ["7 + 5 =", "12 − 4 =", "6 × 3 =", "20 ÷ 4 =", "15 + 8 ="]
+
+
+def _trova_paziente_per_cf(conn, codice_fiscale: str):
+    """Cerca un paziente già in anagrafica con lo stesso codice fiscale."""
+    if not codice_fiscale:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM pazienti WHERE UPPER(codice_fiscale) = UPPER(%s) LIMIT 1",
+                    (codice_fiscale.strip(),))
+        r = cur.fetchone()
+        return (r[0] if r else None)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
+
+
+def _crea_paziente_da_iscrizione(conn, iscr) -> int | None:
+    """Crea un paziente in anagrafica a partire da un'iscrizione evento, se non
+    già agganciato — usa nome/cognome/data nascita del bambino e email/telefono
+    del genitore come contatto. Se esiste già un paziente con lo stesso codice
+    fiscale, riusa quello invece di duplicare."""
+    gid = lambda k: (iscr.get(k) if hasattr(iscr, "get") else None)
+    cf = gid("codice_fiscale") or gid("codice_fiscale_bambino")
+    esistente = _trova_paziente_per_cf(conn, cf)
+    if esistente:
+        return esistente
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO pazienti (cognome, nome, data_nascita, email, telefono, codice_fiscale)
+            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+        """, (
+            gid("cognome_bambino") or gid("cognome") or "",
+            gid("nome_bambino") or gid("nome") or "",
+            gid("data_nascita_bambino") or gid("data_nascita"),
+            gid("email"), gid("telefono"), cf,
+        ))
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        return new_id
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        st.error(f"Errore creazione anagrafica: {e}")
+        return None
+
+
+def sincronizza_tutte_iscrizioni_in_anagrafica(conn) -> dict:
+    """Passa TUTTI gli iscritti di TUTTI gli eventi: se già presenti in
+    anagrafica per codice fiscale li aggancia, altrimenti li crea. Non
+    duplica mai un paziente con lo stesso codice fiscale."""
+    from .eventi.db_eventi import lista_eventi, lista_iscrizioni, aggancia_paziente
+    creati, agganciati, saltati = 0, 0, 0
+    for e in (lista_eventi(conn) or []):
+        evento_id = e.get("id") if hasattr(e, "get") else e[0]
+        for iscr in (lista_iscrizioni(conn, evento_id) or []):
+            gid = lambda k: (iscr.get(k) if hasattr(iscr, "get") else None)
+            if gid("paziente_id"):
+                saltati += 1
+                continue
+            cf = gid("codice_fiscale") or gid("codice_fiscale_bambino")
+            esistente = _trova_paziente_per_cf(conn, cf)
+            if esistente:
+                aggancia_paziente(conn, gid("id"), esistente)
+                agganciati += 1
+            else:
+                nuovo_id = _crea_paziente_da_iscrizione(conn, iscr)
+                if nuovo_id:
+                    aggancia_paziente(conn, gid("id"), nuovo_id)
+                    creati += 1
+    return {"creati": creati, "agganciati": agganciati, "saltati": saltati}
+
+
+def _selettore_da_evento(conn):
+    """Box 'Da evento': scegli un evento e un iscritto, il paziente viene
+    creato/agganciato in automatico e diventa il paziente attivo."""
+    try:
+        from .eventi.db_eventi import lista_eventi, lista_iscrizioni, aggancia_paziente
+    except Exception:
+        return
+    with st.expander("📥 Prendi anagrafica da un evento (es. Giornata del benessere del bambino)"):
+        if st.button("🔄 Sincronizza TUTTI gli iscritti di TUTTI gli eventi in anagrafica",
+                      key="scr_sync_tutti"):
+            esito = sincronizza_tutte_iscrizioni_in_anagrafica(conn)
+            st.success(f"Creati {esito['creati']} nuovi pazienti · agganciati {esito['agganciati']} "
+                       f"a pazienti già esistenti (stesso codice fiscale) · {esito['saltati']} già collegati.")
+        st.markdown("---")
+        eventi = lista_eventi(conn) or []
+        if not eventi:
+            st.caption("Nessun evento trovato.")
+            return
+        nomi_eventi = {f"{e.get('titolo') if hasattr(e,'get') else e[1]} — "
+                       f"{e.get('id') if hasattr(e,'get') else e[0]}": (e.get('id') if hasattr(e,'get') else e[0])
+                       for e in eventi}
+        scelto = st.selectbox("Evento", list(nomi_eventi.keys()), key="scr_evento_scelto")
+        evento_id = nomi_eventi[scelto]
+        iscrizioni = lista_iscrizioni(conn, evento_id) or []
+        if not iscrizioni:
+            st.caption("Nessun iscritto per questo evento.")
+            return
+        def _label(i):
+            g = lambda k: (i.get(k) if hasattr(i, "get") else None)
+            return f"{g('cognome_bambino') or ''} {g('nome_bambino') or ''} — {g('email') or ''}".strip()
+        mappa = {_label(i): i for i in iscrizioni}
+        scelto_iscr = st.selectbox("Iscritto", list(mappa.keys()), key="scr_iscritto_scelto")
+        iscr = mappa[scelto_iscr]
+        gid = lambda k: (iscr.get(k) if hasattr(iscr, "get") else None)
+        if st.button("✅ Usa questo iscritto per lo screening", key="scr_usa_iscritto"):
+            paz_id_esistente = gid("paziente_id")
+            if paz_id_esistente:
+                st.session_state["_paziente_attivo_id"] = paz_id_esistente
+            else:
+                nuovo_id = _crea_paziente_da_iscrizione(conn, iscr)
+                if nuovo_id:
+                    aggancia_paziente(conn, gid("id"), nuovo_id)
+                    st.session_state["_paziente_attivo_id"] = nuovo_id
+            st.success("Fatto — ricarico con questo paziente attivo.")
+            st.rerun()
 
 
 def render_screening(conn=None, paz_id=None, paziente=None) -> None:
@@ -323,6 +440,9 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
     if conn is None:
         st.info("Connessione non disponibile.")
         return
+
+    _selettore_da_evento(conn)
+
     if not paz_id:
         st.info("Seleziona un paziente qui sopra.")
         return
@@ -470,27 +590,149 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             lett_parole = c1.text_input("Parole", key="scr_appr_lett_parole")
             lett_nonparole = c2.text_input("Non parole", key="scr_appr_lett_nonparole")
             lett_brano = c3.text_input("Brano", key="scr_appr_lett_brano")
-            with st.expander("📺 Testo da far leggere (schermo grande — IReST)", expanded=True):
-                if st.button("🔁 Nuovo testo", key="scr_lettura_nuovo"):
-                    st.session_state["scr_lettura_idx"] = random.randrange(len(_TESTI_IREST))
-                idx_t = st.session_state.get("scr_lettura_idx", 0)
-                brano = _TESTI_IREST[idx_t]
-                _big(brano["testo"])
-                st.caption(f"IReST · \"{brano['nome']}\" · {brano['parole']} parole · "
-                           f"norma tempo: {brano['tempo_medio']} · norma velocità: {brano['velocita_media']}")
-                _finestra_bambino(brano["testo"], "lettura")
+            with st.expander("📺 Testo da far leggere (schermo grande)", expanded=True):
+                usa_cartaceo = st.checkbox("Uso le tavole IReST cartacee (non mostrare nulla a schermo)",
+                                            value=True, key="scr_lettura_cartaceo")
+                if usa_cartaceo:
+                    _IREST_NORME = {
+                        "Topi":    {"parole":138, "sillabe":299, "tempo_medio":46.4, "tempo_ds":5.2, "vel_media":181, "vel_ds":24},
+                        "Castoro": {"parole":144, "sillabe":295, "tempo_medio":42.6, "tempo_ds":5.1, "vel_media":206, "vel_ds":29},
+                        "Alberi":  {"parole":140, "sillabe":283, "tempo_medio":43.8, "tempo_ds":5.5, "vel_media":194, "vel_ds":24},
+                        "Preda":   {"parole":134, "sillabe":299, "tempo_medio":44.1, "tempo_ds":5.5, "vel_media":185, "vel_ds":26},
+                        "Deserto": {"parole":135, "sillabe":294, "tempo_medio":43.9, "tempo_ds":5.4, "vel_media":188, "vel_ds":26},
+                        "Veleno":  {"parole":126, "sillabe":302, "tempo_medio":44.7, "tempo_ds":6.3, "vel_media":174, "vel_ds":29},
+                        "Isola":   {"parole":134, "sillabe":298, "tempo_medio":42.5, "tempo_ds":5.8, "vel_media":193, "vel_ds":29},
+                        "Ragni":   {"parole":134, "sillabe":260, "tempo_medio":43.4, "tempo_ds":5.2, "vel_media":188, "vel_ds":27},
+                        "Inverno": {"parole":132, "sillabe":289, "tempo_medio":43.5, "tempo_ds":6.8, "vel_media":187, "vel_ds":34},
+                        "Colori":  {"parole":131, "sillabe":297, "tempo_medio":44.7, "tempo_ds":6.4, "vel_media":179, "vel_ds":27},
+                    }
+                    tavola_scelta = st.selectbox("Tavola IReST utilizzata (cartacea)", list(_IREST_NORME.keys()),
+                                                  key="scr_lettura_tavola")
+                    norme = _IREST_NORME[tavola_scelta]
+                    st.caption(f"Tavola \"{tavola_scelta}\" — {norme['parole']} parole, {norme['sillabe']} sillabe. "
+                               f"Norma adulti: {norme['tempo_medio']}±{norme['tempo_ds']}s · "
+                               f"{norme['vel_media']}±{norme['vel_ds']} par/min.")
+                    ci1, ci2 = st.columns(2)
+                    tempo_letto = ci1.number_input("Tempo di lettura (s)", min_value=0.1, step=0.1, key="scr_irest_tempo")
+                    errori_letti = ci2.number_input("Errori (n.)", min_value=0, step=1, key="scr_irest_errori")
+                    if tempo_letto > 0:
+                        vel_parmin = norme["parole"] * 60 / tempo_letto
+                        vel_sillsec = norme["sillabe"] / tempo_letto
+                        z = (vel_parmin - norme["vel_media"]) / norme["vel_ds"] if norme["vel_ds"] else 0
+                        accuratezza = (norme["parole"] - errori_letti) * 100 / norme["parole"]
+                        cr1, cr2, cr3, cr4 = st.columns(4)
+                        cr1.metric("Velocità", f"{vel_parmin:.0f} par/min")
+                        cr2.metric("Sillabe/sec", f"{vel_sillsec:.2f}")
+                        cr3.metric("z (vs adulti)", f"{z:+.2f}")
+                        cr4.metric("Accuratezza", f"{accuratezza:.0f}%")
+                        st.caption("⚠️ Le norme sono su adulti normolettori: lo z in età evolutiva va letto come "
+                                   "misura ripetibile intra-soggetto (confronto pre/post), non come deviazione da "
+                                   "una norma per età.")
+                else:
+                    nomi_testi = [b["nome"] for b in _TESTI_IREST]
+                    scelto = st.selectbox("Scegli il testo originale da mostrare a schermo", nomi_testi,
+                                           key="scr_lettura_scelta")
+                    idx_t = nomi_testi.index(scelto)
+                    brano = _TESTI_IREST[idx_t]
+                    _big(brano["testo"])
+                    st.caption(f"Testo di lettura originale · \"{brano['nome']}\" · {brano['parole']} parole "
+                               f"— misura ripetibile intra-soggetto, non tarata su campione normativo.")
+                    _finestra_bambino(brano["testo"], "lettura")
 
-        appr_scrittura = st.checkbox("Eseguito — Scrittura", key="scr_appr_scrittura_on")
-        scr_parole = scr_nonparole = scr_omofone = grafia = ""
+        appr_scrittura = st.checkbox("Eseguito — Scrittura (protocollo completo)", key="scr_appr_scrittura_on")
+        dettato_parole_scr = omofone_scr = griglia_errori_scr = None
+        dettato_esiti_scr = tempo_dettato_scr = profilo_prevalente_scr = ""
         if appr_scrittura:
-            _significato("valuta gli errori ortografici sotto dettatura — utile per individuare "
-                         "difficoltà di scrittura (disortografia).")
-            st.markdown("**Scrittura (errori)**")
-            c4, c5, c6 = st.columns(3)
-            scr_parole = c4.text_input("Parole", key="scr_appr_scr_parole")
-            scr_nonparole = c5.text_input("Non parole", key="scr_appr_scr_nonparole")
-            scr_omofone = c6.text_input("Omofone non omografe", key="scr_appr_scr_omofone")
-            grafia = st.text_area("Grafia", key="scr_appr_grafia", height=68)
+            _significato("valuta gli errori ortografici sotto dettatura, per categoria — fonologici, "
+                         "non fonologici/lessicali, fonetici — utile per individuare e classificare "
+                         "la disortografia, secondo lo stesso standard usato nel protocollo completo.")
+            st.markdown("**4.2a Dettato di parole e non parole** (tutte le fasce)")
+            df_dett = pd.DataFrame([
+                {"Serie": "P1 — parole regolari", "Item": "tavolo · fiume · pratica · salame · destino · burrone · mandorla · calamita", "Errori": ""},
+                {"Serie": "P2 — digrammi/trigrammi", "Item": "chiodo · ghiaccio · scienza · guglia · sciopero · ciliegia · gnocco · quaglia", "Errori": ""},
+                {"Serie": "P3 — doppie e accenti", "Item": "bicchiere · perché · attrezzo · città · raggruppare · virtù · soqquadro · lassù", "Errori": ""},
+                {"Serie": "NP — non parole", "Item": "brastone · gliunfo · scenaglio · quortimo · sbicchera · zampruglio · ghialdo · trescimo", "Errori": ""},
+            ])
+            dettato_parole_scr = st.data_editor(df_dett, key="scr_scr_dettato_parole", hide_index=True,
+                use_container_width=True,
+                column_config={"Serie": st.column_config.TextColumn(disabled=True),
+                               "Item": st.column_config.TextColumn(disabled=True)})
+
+            with st.expander("📺 4.2b Dettato — Fascia A (infanzia/1ª primaria)"):
+                st.caption("Prima le 8 sillabe, poi le 10 parole, poi le 2 frasi. Stampato maiuscolo ammesso.")
+                st.markdown("Sillabe: *ma · le · si · ro · fu · ne · pi · to*")
+                st.markdown("Parole: *luna · rana · dado · sole · vaso · mela · nido · pane · fumo · gatto*")
+                st.markdown("Frasi: «Il gatto beve il latte.» — «La mamma apre la porta.»")
+            with st.expander("📺 4.2c Dettato — Fascia B (2ª-5ª primaria) · «Il temporale d'agosto» (69 parole)"):
+                st.markdown(
+                    "Quel pomeriggio d'agosto il cielo si è fatto scuro all'improvviso. La nonna ha chiuso le "
+                    "finestre e ha acceso la luce in cucina. Fuori l'acqua scendeva a scrosci e il vento faceva "
+                    "sbattere la porta del garage. Gli uccelli si erano rifugiati sotto il tetto della legnaia. "
+                    "Quando la pioggia è cessata, sull'aia c'erano pozzanghere grandi come specchi e un profumo "
+                    "di terra bagnata saliva dal campo."
+                )
+                st.caption("Bersagli: apostrofo · h di avere · accento (è) · digrammi/trigrammi · qu · doppie · "
+                           "gruppi consonantici.")
+                _finestra_bambino(
+                    "Quel pomeriggio d'agosto il cielo si è fatto scuro all'improvviso...", "dettato_b")
+            with st.expander("📺 4.2d Dettato — Fascia C (secondaria) · «La biblioteca» (112 parole)"):
+                st.markdown(
+                    "Da quando l'anno scorso hanno ristrutturato la biblioteca, ci vado quasi ogni pomeriggio. "
+                    "All'ingresso c'è un cartello che ricorda di non far rumore: qualcuno lo legge, altri no. Ieri "
+                    "ho scelto un volume di scienze e mi sono seduto vicino alla finestra, dove d'inverno batte il "
+                    "sole. A un certo punto è entrato un ragazzo con l'aria smarrita: cercava un'enciclopedia che "
+                    "non aveva mai visto prima. Gliel'ho indicata sullo scaffale più alto, poi siamo rimasti a "
+                    "chiacchierare finché la bibliotecaria non ci ha fatto cenno di uscire. Fuori pioveva ancora, "
+                    "ma ormai non avevamo fretta: ci siamo dati appuntamento per giovedì."
+                )
+                st.caption("Bersagli: coppie omofone · apostrofo con articolo femminile/assenza con maschile · "
+                           "clitico composto · accenti · sci/sce · chi · doppie e nessi complessi.")
+            dettato_esiti_scr = st.text_area("Esiti dettato brano (errori, tempo, ripetizioni richieste)",
+                                              key="scr_scr_dettato_esiti", height=68)
+
+            st.markdown("**4.2e Dettato di coppie omofone non omografe** (B dalla 3ª · C)")
+            df_omof = pd.DataFrame([
+                {"#": 1, "Frase": "L'anno scorso hanno vinto loro.", "Bersaglio": "anno / hanno", "Esito": ""},
+                {"#": 2, "Frase": "Ho comprato o un libro o un quaderno.", "Bersaglio": "ho / o", "Esito": ""},
+                {"#": 3, "Frase": "Ha detto che va a casa a piedi.", "Bersaglio": "ha / a", "Esito": ""},
+                {"#": 4, "Frase": "Ai bambini piace il gelato: hai visto?", "Bersaglio": "ai / hai", "Esito": ""},
+                {"#": 5, "Frase": "Non c'è nessuno, ce ne andiamo.", "Bersaglio": "c'è / ce", "Esito": ""},
+                {"#": 6, "Frase": "Un'amica mi ha prestato un ombrello.", "Bersaglio": "un' / un", "Esito": ""},
+                {"#": 7, "Frase": "Ce l'ho in tasca, ma non l'ho portato.", "Bersaglio": "l'ho / lo", "Esito": ""},
+                {"#": 8, "Frase": "Gliel'ha data lui, gliela riporterò domani.", "Bersaglio": "gliel'ha / gliela", "Esito": ""},
+                {"#": 9, "Frase": "Dov'è andato? Dove abiti tu?", "Bersaglio": "dov'è / dove", "Esito": ""},
+                {"#": 10, "Frase": "Se n'è andato senza dire niente.", "Bersaglio": "n'è / ne", "Esito": ""},
+            ])
+            omofone_scr = st.data_editor(df_omof, key="scr_scr_omofone", hide_index=True, use_container_width=True,
+                column_config={"#": st.column_config.TextColumn(disabled=True),
+                               "Frase": st.column_config.TextColumn(disabled=True),
+                               "Bersaglio": st.column_config.TextColumn(disabled=True)})
+
+            st.markdown("**4.2f Griglia di analisi degli errori**")
+            df_grig = pd.DataFrame([
+                {"Categoria": "Fonologici", "Sottotipo": "Scambio grafemi (f/v, t/d, p/b, m/n, s/z, r/l)", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Fonologici", "Sottotipo": "Omissione/aggiunta lettere o sillabe", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Fonologici", "Sottotipo": "Inversione di lettere o sillabe", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Fonologici", "Sottotipo": "Grafema inesatto (sci/sc, gn/ni, gli/li, ch/c, gh/g)", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Non fonologici", "Sottotipo": "Separazione illegale", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Non fonologici", "Sottotipo": "Fusione illegale", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Non fonologici", "Sottotipo": "Scambio grafema omofono (qu/cu/cq, h iniziale)", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Non fonologici", "Sottotipo": "Omofone non omografe", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Fonetici", "Sottotipo": "Doppie (omesse o aggiunte)", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Fonetici", "Sottotipo": "Accenti (omessi, aggiunti, mal collocati)", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Altri", "Sottotipo": "Punteggiatura, maiuscole", "Parole": "", "Non par.": "", "Brano": ""},
+                {"Categoria": "Altri", "Sottotipo": "Autocorrezioni e cancellature", "Parole": "", "Non par.": "", "Brano": ""},
+            ])
+            griglia_errori_scr = st.data_editor(df_grig, key="scr_scr_griglia", hide_index=True, use_container_width=True,
+                column_config={"Categoria": st.column_config.TextColumn(disabled=True),
+                               "Sottotipo": st.column_config.TextColumn(disabled=True)})
+            c_scr1, c_scr2 = st.columns(2)
+            tempo_dettato_scr = c_scr1.text_input("Tempo totale dettato (' \")", key="scr_scr_tempo")
+            profilo_prevalente_scr = c_scr2.selectbox("Profilo prevalente",
+                ["", "Fonologico", "Non fonologico/lessicale", "Fonetico", "Misto"], key="scr_scr_profilo")
+
+        # compatibilità con le vecchie chiavi del riepilogo/relazione
+        scr_parole = scr_nonparole = scr_omofone = grafia = ""
 
         appr_calcolo = st.checkbox("Eseguito — Calcolo", key="scr_appr_calcolo_on")
         calc_scritto = enumerazione = fatti_proc = ""
@@ -716,6 +958,11 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             "lettura_parole": lett_parole, "lettura_nonparole": lett_nonparole,
             "lettura_brano": lett_brano, "scrittura_parole": scr_parole,
             "scrittura_nonparole": scr_nonparole, "scrittura_omofone": scr_omofone,
+            "scrittura_dettato_parole": dettato_parole_scr.to_dict("records") if dettato_parole_scr is not None else None,
+            "scrittura_dettato_esiti": dettato_esiti_scr,
+            "scrittura_omofone_tabella": omofone_scr.to_dict("records") if omofone_scr is not None else None,
+            "scrittura_griglia_errori": griglia_errori_scr.to_dict("records") if griglia_errori_scr is not None else None,
+            "scrittura_tempo_dettato": tempo_dettato_scr, "scrittura_profilo_prevalente": profilo_prevalente_scr,
             "grafia": grafia, "calcolo_scritto": calc_scritto,
             "enumerazione": enumerazione, "fatti_procedure": fatti_proc,
         },
