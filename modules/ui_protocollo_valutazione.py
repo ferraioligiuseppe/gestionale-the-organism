@@ -57,6 +57,127 @@ def _tabella(nome, righe, colonne_fisse, key, altezza=None):
                            column_config=cfg, height=altezza)
 
 
+def _dati_paziente(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT cognome, nome, data_nascita, email FROM pazienti WHERE id=%s""", (paz_id,))
+        r = cur.fetchone()
+        if not r:
+            return {}
+        if hasattr(r, "get"):
+            return dict(r)
+        return {"cognome": r[0], "nome": r[1], "data_nascita": r[2], "email": r[3]}
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return {}
+
+
+def _email_consenso(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT tutore_email FROM consensi_privacy
+                       WHERE paziente_id=%s ORDER BY data_ora DESC NULLS LAST, id DESC LIMIT 1""", (paz_id,))
+        r = cur.fetchone()
+        email = (r["tutore_email"] if hasattr(r, "get") else r[0]) if r else None
+        return (email or "").strip() or None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
+
+
+def _relazione_template_pv(nome_completo, dati) -> str:
+    righe = [
+        "Dott. Giuseppe Ferraioli — Psicologo Optometrista Comportamentale",
+        "Studio Associato The Organism", "",
+        f"PROTOCOLLO DI VALUTAZIONE — {nome_completo}", "",
+    ]
+    etichette = {
+        "parte1_bilancio_fonetico": "PARTE 1 — Bilancio fonetico", "parte2_linguaggio": "PARTE 2 — Linguaggio",
+        "parte3_fluenza": "PARTE 3 — Disturbi della fluenza", "parte4_apprendimento": "PARTE 4 — Apprendimento",
+        "parte5_sintesi": "PARTE 5 — Sintesi del profilo", "parte6_miofunzionale": "PARTE 6 — Miofunzionale",
+        "parte7_osteopatica": "PARTE 7 — Osteopatica", "parte8_visuo_posturale": "PARTE 8 — Visuo-posturale",
+    }
+    for chiave, titolo in etichette.items():
+        sezione = {k: v for k, v in (dati.get(chiave) or {}).items() if v not in (None, "", [], False)}
+        if not sezione:
+            continue
+        righe.append(f"## {titolo}")
+        for k, v in sezione.items():
+            righe.append(f"- {k.replace('_',' ').capitalize()}: {v}")
+        righe.append("")
+    righe.append(
+        "Il presente documento riporta i dati raccolti nel protocollo di valutazione. Le prove qui "
+        "utilizzate sono criteriali e clinico-osservative: dove non è indicata una taratura italiana su "
+        "campione normativo, il dato non va convertito in punteggio standardizzato né usato da solo per "
+        "formulare una diagnosi di DSA, che richiede test tarati e certificati."
+    )
+    return "\n".join(righe)
+
+
+def _genera_e_invia_relazione_pv(conn, paz_id, dati):
+    paziente = _dati_paziente(conn, paz_id)
+    nome_completo = f"{paziente.get('cognome','')} {paziente.get('nome','')}".strip() or "il/la bambino/a"
+
+    testo = None
+    try:
+        from .ai_estrazione import genera_testo, ai_disponibile
+        if ai_disponibile():
+            prompt = (
+                f"Scrivi una relazione clinica su {nome_completo}, nello stile e nel registro di una "
+                f"relazione dello Studio The Organism (Metodo PNEV), a partire dai dati completi del "
+                f"Protocollo di valutazione (anamnesi, bilancio fonetico, linguaggio, fluenza, "
+                f"apprendimento — lettura/scrittura/grafia/calcolo, miofunzionale, osteopatica, "
+                f"visuo-posturale/optometrica). Il linguaggio deve essere preciso nei termini tecnici, "
+                f"condivisibile con un'équipe multidisciplinare (inclusa neuropsichiatria infantile) "
+                f"quando un'area lo richiede, ma sempre accompagnato da una spiegazione in parole "
+                f"semplici per il genitore.\n\n"
+                f"DATI RACCOLTI (per parte):\n{json.dumps(dati, default=str, ensure_ascii=False)}\n\n"
+                f"Struttura la relazione per PARTE (come il protocollo), segnalando per ciascuna area se "
+                f"i risultati sono nella norma o se emerge un'area da approfondire; chiudi con una "
+                f"sezione \"Si consiglia\" con indicazioni concrete — incluso un eventuale invio a "
+                f"un'équipe/specialista specifico quando i dati lo giustificano. Non scrivere una "
+                f"diagnosi formale di DSA o altro disturbo: le prove sono criteriali/clinico-osservative, "
+                f"non tarate su campione normativo italiano; la diagnosi richiede test certificati."
+            )
+            sistema = ("Sei un assistente clinico dello Studio The Organism (Metodo PNEV). Scrivi "
+                       "relazioni professionali basate sul Protocollo di valutazione completo, "
+                       "condivisibili con un'équipe multidisciplinare, sempre comprensibili al genitore.")
+            with st.spinner("Genero la relazione con l'AI…"):
+                bozza = genera_testo(prompt, sistema)
+            if not bozza.startswith("⚠️"):
+                testo = bozza
+    except Exception:
+        pass
+
+    if testo is None:
+        st.info("AI non disponibile in questo momento: uso una relazione basata direttamente sui dati inseriti.")
+        testo = _relazione_template_pv(nome_completo, dati)
+
+    st.text_area("Bozza relazione (modificabile prima dell'invio)", value=testo, height=380, key="pv_bozza_relazione")
+    testo_finale = st.session_state.get("pv_bozza_relazione", testo)
+
+    email_dest = _email_consenso(conn, paz_id)
+    if not email_dest:
+        st.warning("Nessuna email trovata nel consenso privacy del paziente: correggi il testo sopra e invia manualmente.")
+        return
+
+    if st.button(f"📤 Invia ora a {email_dest}", key="pv_invia_conferma", type="primary"):
+        try:
+            from .email_otp import invia_email
+            invia_email(email_dest, f"Protocollo di valutazione — {nome_completo}",
+                        testo_finale + "\n\n— Studio The Organism")
+            for staff in ("aps@theorganism.com", "dr.ferraioligiuseppe@gmail.com"):
+                try:
+                    invia_email(staff, f"[Protocollo] Relazione inviata — {nome_completo}", testo_finale)
+                except Exception:
+                    pass
+            st.success(f"Relazione inviata a {email_dest}.")
+        except Exception as e:
+            st.error(f"Errore invio: {e}")
+
+
 def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None:
     st.header("📋 Protocollo di valutazione — Studio The Organism")
     st.caption("Replica del documento su carta, parte per parte, nello stesso ordine di somministrazione.")
@@ -1102,3 +1223,10 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     if st.button("💾 Salva protocollo completo (PARTE 1-8)", type="primary", key="pv_salva"):
         if _salva(conn, paz_id, esaminatore, dati):
             st.success("Salvato. Protocollo completo — PARTE 1-8 (PARTE 9 gestita dal modulo Consenso privacy).")
+
+    st.markdown("---")
+    st.markdown("#### 📄 Relazione — generazione e invio")
+    st.caption("Disponibile in ogni momento, anche senza salvare prima: usa i dati inseriti qui sopra. "
+               "Se l'AI non è disponibile, genera comunque una relazione basata sui dati.")
+    if st.button("✉️ Genera relazione e invia al genitore", key="pv_genera_invia"):
+        _genera_e_invia_relazione_pv(conn, paz_id, dati)
