@@ -511,6 +511,23 @@ def _sez_b(pid, stored):
             s("ct_v"), d.get("ct_v","Ortoforia"))
         ct_v_pr = _num("Prismi CT vicino (dp)", s("ct_v_pr"), d.get("ct_v_pr",0), step=0.5)
 
+    # Telebinocular (Keystone/Bernell — schede a distanza standard)
+    st.markdown("#### Telebinocular")
+    st.caption("Schede standard: fusione periferica/centrale, soppressione, foria, stereopsi")
+    tb1, tb2, tb3 = st.columns(3)
+    with tb1:
+        tb_fus_per = _radio("Fusione periferica", ["Presente", "Assente", "Instabile"],
+                             s("tb_fus_per"), d.get("tb_fus_per", "Presente"))
+        tb_fus_cen = _radio("Fusione centrale", ["Presente", "Assente", "Instabile"],
+                             s("tb_fus_cen"), d.get("tb_fus_cen", "Presente"))
+    with tb2:
+        tb_sopp_od = st.checkbox("Soppressione OD", value=d.get("tb_sopp_od", False), key=s("tb_sopp_od"))
+        tb_sopp_os = st.checkbox("Soppressione OS", value=d.get("tb_sopp_os", False), key=s("tb_sopp_os"))
+        tb_foria = _num("Foria (dp)", s("tb_foria"), d.get("tb_foria", 0), step=0.5)
+    with tb3:
+        tb_stereo = _txt("Stereopsi (scheda)", s("tb_stereo"), d.get("tb_stereo", ""))
+        tb_note = _txt("Note Telebinocular", s("tb_note"), d.get("tb_note", ""))
+
     # Maddox
     st.markdown("#### Maddox — Foria")
     c3,c4 = st.columns(2)
@@ -619,6 +636,8 @@ def _sez_b(pid, stored):
 
     return {"sez_b": {
         "ct_l":ct_l,"ct_l_pr":ct_l_pr,"ct_v":ct_v,"ct_v_pr":ct_v_pr,
+        "tb_fus_per":tb_fus_per,"tb_fus_cen":tb_fus_cen,"tb_sopp_od":tb_sopp_od,
+        "tb_sopp_os":tb_sopp_os,"tb_foria":tb_foria,"tb_stereo":tb_stereo,"tb_note":tb_note,
         "madd_or_l":madd_or_l,"madd_or_v":madd_or_v,
         "madd_ver_l":madd_ver_l,"madd_ver_v":madd_ver_v,
         "disp_l":disp_l,"disp_v":disp_v,"testa_incl":testa_incl,
@@ -1072,6 +1091,8 @@ OS: {_f(rs_os2.get("sf"))} / {_f(rs_os2.get("cil"))} x {rs_os2.get("ax",0)} grad
 
 ### Equilibrio binoculare
 Cover test lontano: {bino.get("ct_l","nd")}  |  Cover test vicino: {bino.get("ct_v","nd")}
+Telebinocular — fusione periferica: {bino.get("tb_fus_per","nd")}  |  fusione centrale: {bino.get("tb_fus_cen","nd")}
+Telebinocular — soppressione OD: {"sì" if bino.get("tb_sopp_od") else "no"}  |  soppressione OS: {"sì" if bino.get("tb_sopp_os") else "no"}  |  stereopsi: {bino.get("tb_stereo","nd")}
 PPC: {bino.get("ppc_acc_rot","nd")} / {bino.get("ppc_acc_rec","nd")} cm  |  AC/A: {bino.get("aca","nd")}
 Randot: {bino.get("randot","nd")} sec d arco
 
@@ -1200,6 +1221,8 @@ OS: {_f(sos.get("sf"))} / {_f(sos.get("cil"))} x {sos.get("ax",0)} gradi  -  Vis
 
 ### Equilibrio binoculare
 Cover test lontano: {bino.get("ct_l","nd")}  |  Cover test vicino: {bino.get("ct_v","nd")}
+Telebinocular — fusione periferica: {bino.get("tb_fus_per","nd")}  |  fusione centrale: {bino.get("tb_fus_cen","nd")}
+Telebinocular — soppressione OD: {"sì" if bino.get("tb_sopp_od") else "no"}  |  soppressione OS: {"sì" if bino.get("tb_sopp_os") else "no"}  |  stereopsi: {bino.get("tb_stereo","nd")}
 PPC accomodativo: {bino.get("ppc_acc_rot","nd")} / {bino.get("ppc_acc_rec","nd")} cm
 AC/A: {bino.get("aca","nd")}  |  Worth lontano: {bino.get("worth_l","nd")}
 Randot: {bino.get("randot","nd")} sec d arco
