@@ -220,8 +220,8 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             "Riduzione gruppi consonantici", "Riduzione dittonghi", "Metatesi",
             "Epentesi", "Cancellazione consonante e/o vocale"],
             key="scr_ling_semp_strut")
-        livello_lex = st.text_area("Livello lessicale-semantico", key="scr_ling_lex", height=60)
-        livello_morfo = st.text_area("Livello morfosintattico e narrativo", key="scr_ling_morfo", height=60)
+        livello_lex = st.text_area("Livello lessicale-semantico", key="scr_ling_lex", height=68)
+        livello_morfo = st.text_area("Livello morfosintattico e narrativo", key="scr_ling_morfo", height=68)
         st.markdown("**Disturbi della fluenza**")
         balbuzie = st.text_input("Balbuzie (familiarità, epoca insorgenza)", key="scr_ling_balbuzie")
         tachilalia = st.text_input("Tachilalia / cluttering", key="scr_ling_tachilalia")
