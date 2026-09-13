@@ -241,14 +241,11 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
   }
 })();
 </script>
-</body>
 """
+    _script_completo = _second_monitor_js + (_precompila_js or "")
     if "</body>" in html:
-        html = html.replace("</body>", _second_monitor_js, 1)
+        html = html.replace("</body>", _script_completo + "</body>", 1)
     else:
-        html += _second_monitor_js
-
-    if _precompila_js:
-        html = html.replace("</body>", _precompila_js + "</body>", 1) if "</body>" in html else html + _precompila_js
+        html += _script_completo
 
     components.html(html, height=1400, scrolling=True)
