@@ -20,6 +20,7 @@ Limiti da sapere:
 """
 from __future__ import annotations
 import os
+import datetime
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -56,6 +57,30 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
     # e Data di nascita nell'HTML statico (che di per sé non ha accesso al DB).
     nome_precompilato = data_nascita_precompilata = ""
     if conn is not None:
+        with st.expander("➕ Nuovo paziente (non ancora in anagrafica)"):
+            cn1, cn2 = st.columns(2)
+            nuovo_cognome = cn1.text_input("Cognome", key="pv_html_nuovo_cognome")
+            nuovo_nome = cn2.text_input("Nome", key="pv_html_nuovo_nome")
+            nuova_dn = st.date_input("Data di nascita", key="pv_html_nuova_dn",
+                                      value=None, min_value=datetime.date(1930, 1, 1))
+            if st.button("Crea e usa questo paziente", key="pv_html_crea_paziente"):
+                if not nuovo_cognome or not nuovo_nome:
+                    st.warning("Cognome e nome sono obbligatori.")
+                else:
+                    try:
+                        cur = conn.cursor()
+                        cur.execute("INSERT INTO pazienti (cognome, nome, data_nascita) "
+                                    "VALUES (%s, %s, %s) RETURNING id",
+                                    (nuovo_cognome.strip(), nuovo_nome.strip(), nuova_dn))
+                        nuovo_id = cur.fetchone()[0]
+                        conn.commit()
+                        st.session_state["_paziente_attivo_id"] = nuovo_id
+                        st.success(f"Paziente creato (#{nuovo_id}) e impostato come attivo.")
+                        st.rerun()
+                    except Exception as e:
+                        try: conn.rollback()
+                        except Exception: pass
+                        st.error(f"Errore creazione: {e}")
         try:
             cur = conn.cursor()
             cur.execute("SELECT id, cognome, nome, data_nascita FROM pazienti "
