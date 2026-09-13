@@ -209,89 +209,147 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
          "💆 Miofunzionale", "🦴 Osteopatico"])
 
     with t_ling:
-        st.markdown("**Semplificazioni di sistema**")
-        semp_sist = st.multiselect("Semplificazioni", [
-            "Stopping", "Fricazione", "Affricazione", "Anteriorizzazione",
-            "Posteriorizzazione", "Desonorizzazione", "Gliding"],
-            key="scr_ling_semp_sist")
-        st.markdown("**Semplificazioni di struttura**")
-        semp_strut = st.multiselect("Semplificazioni", [
-            "Eliminazione sillaba debole", "Armonia consonantica", "Armonia vocalica",
-            "Riduzione gruppi consonantici", "Riduzione dittonghi", "Metatesi",
-            "Epentesi", "Cancellazione consonante e/o vocale"],
-            key="scr_ling_semp_strut")
-        livello_lex = st.text_area("Livello lessicale-semantico", key="scr_ling_lex", height=68)
-        livello_morfo = st.text_area("Livello morfosintattico e narrativo", key="scr_ling_morfo", height=68)
-        st.markdown("**Disturbi della fluenza**")
-        balbuzie = st.text_input("Balbuzie (familiarità, epoca insorgenza)", key="scr_ling_balbuzie")
-        tachilalia = st.text_input("Tachilalia / cluttering", key="scr_ling_tachilalia")
-        extra_verbale = st.text_input("Sintomatologia extra-verbale", key="scr_ling_extra")
+        ling_semp = st.checkbox("Eseguito — Semplificazioni fonologiche", key="scr_ling_semp_on")
+        semp_sist = semp_strut = []
+        if ling_semp:
+            st.markdown("**Semplificazioni di sistema**")
+            semp_sist = st.multiselect("Semplificazioni", [
+                "Stopping", "Fricazione", "Affricazione", "Anteriorizzazione",
+                "Posteriorizzazione", "Desonorizzazione", "Gliding"],
+                key="scr_ling_semp_sist")
+            st.markdown("**Semplificazioni di struttura**")
+            semp_strut = st.multiselect("Semplificazioni", [
+                "Eliminazione sillaba debole", "Armonia consonantica", "Armonia vocalica",
+                "Riduzione gruppi consonantici", "Riduzione dittonghi", "Metatesi",
+                "Epentesi", "Cancellazione consonante e/o vocale"],
+                key="scr_ling_semp_strut")
+
+        ling_livelli = st.checkbox("Eseguito — Livello lessicale/morfosintattico", key="scr_ling_livelli_on")
+        livello_lex = livello_morfo = ""
+        if ling_livelli:
+            livello_lex = st.text_area("Livello lessicale-semantico", key="scr_ling_lex", height=68)
+            livello_morfo = st.text_area("Livello morfosintattico e narrativo", key="scr_ling_morfo", height=68)
+
+        ling_fluenza = st.checkbox("Eseguito — Disturbi della fluenza", key="scr_ling_fluenza_on")
+        balbuzie = tachilalia = extra_verbale = ""
+        if ling_fluenza:
+            balbuzie = st.text_input("Balbuzie (familiarità, epoca insorgenza)", key="scr_ling_balbuzie")
+            tachilalia = st.text_input("Tachilalia / cluttering", key="scr_ling_tachilalia")
+            extra_verbale = st.text_input("Sintomatologia extra-verbale", key="scr_ling_extra")
 
     with t_appr:
-        st.markdown("**Lettura — velocità e correttezza (numero errori)**")
-        c1, c2, c3 = st.columns(3)
-        lett_parole = c1.text_input("Parole", key="scr_appr_lett_parole")
-        lett_nonparole = c2.text_input("Non parole", key="scr_appr_lett_nonparole")
-        lett_brano = c3.text_input("Brano", key="scr_appr_lett_brano")
-        st.markdown("**Scrittura (errori)**")
-        c4, c5, c6 = st.columns(3)
-        scr_parole = c4.text_input("Parole", key="scr_appr_scr_parole")
-        scr_nonparole = c5.text_input("Non parole", key="scr_appr_scr_nonparole")
-        scr_omofone = c6.text_input("Omofone non omografe", key="scr_appr_scr_omofone")
-        grafia = st.text_area("Grafia", key="scr_appr_grafia", height=68)
-        st.markdown("**Calcolo**")
-        calc_scritto = st.text_area("Calcolo scritto e a mente", key="scr_appr_calc_scritto", height=68)
-        enumerazione = st.text_input("Enumerazione", key="scr_appr_enum")
-        fatti_proc = st.text_input("Fatti e procedure", key="scr_appr_fatti")
+        appr_lettura = st.checkbox("Eseguito — Lettura", key="scr_appr_lettura_on")
+        lett_parole = lett_nonparole = lett_brano = ""
+        if appr_lettura:
+            st.markdown("**Lettura — velocità e correttezza (numero errori)**")
+            c1, c2, c3 = st.columns(3)
+            lett_parole = c1.text_input("Parole", key="scr_appr_lett_parole")
+            lett_nonparole = c2.text_input("Non parole", key="scr_appr_lett_nonparole")
+            lett_brano = c3.text_input("Brano", key="scr_appr_lett_brano")
+
+        appr_scrittura = st.checkbox("Eseguito — Scrittura", key="scr_appr_scrittura_on")
+        scr_parole = scr_nonparole = scr_omofone = grafia = ""
+        if appr_scrittura:
+            st.markdown("**Scrittura (errori)**")
+            c4, c5, c6 = st.columns(3)
+            scr_parole = c4.text_input("Parole", key="scr_appr_scr_parole")
+            scr_nonparole = c5.text_input("Non parole", key="scr_appr_scr_nonparole")
+            scr_omofone = c6.text_input("Omofone non omografe", key="scr_appr_scr_omofone")
+            grafia = st.text_area("Grafia", key="scr_appr_grafia", height=68)
+
+        appr_calcolo = st.checkbox("Eseguito — Calcolo", key="scr_appr_calcolo_on")
+        calc_scritto = enumerazione = fatti_proc = ""
+        if appr_calcolo:
+            st.markdown("**Calcolo**")
+            calc_scritto = st.text_area("Calcolo scritto e a mente", key="scr_appr_calc_scritto", height=68)
+            enumerazione = st.text_input("Enumerazione", key="scr_appr_enum")
+            fatti_proc = st.text_input("Fatti e procedure", key="scr_appr_fatti")
 
     with t_vp:
-        st.markdown("**Cover Test / Telebinocular**")
-        c1, c2 = st.columns(2)
-        ct_lontano = c1.text_input("Cover test lontano (XL)", key="scr_vp_ct_l")
-        ct_vicino = c2.text_input("Cover test vicino (XV)", key="scr_vp_ct_v")
-        c3, c4 = st.columns(2)
-        harmon = c3.text_input("Harmon (cm)", key="scr_vp_harmon")
-        rrd = c4.text_input("RRD (cm)", key="scr_vp_rrd")
-        c5, c6 = st.columns(2)
-        ppc = c5.text_input("PPC (rottura/recupero)", key="scr_vp_ppc")
-        ppa = c6.text_input("PPA OD/OS", key="scr_vp_ppa")
-        st.markdown("**NSUCO — Pursuit / Saccadi**")
-        c7, c8 = st.columns(2)
-        nsuco_pursuit = c7.selectbox("Pursuit (abilità 1-5)", ["", 1, 2, 3, 4, 5], key="scr_vp_nsuco_p")
-        nsuco_saccadi = c8.selectbox("Saccadi (abilità 1-5)", ["", 1, 2, 3, 4, 5], key="scr_vp_nsuco_s")
-        st.markdown("**DEM / K-D Test / Clinical Fusion**")
-        c9, c10, c11 = st.columns(3)
-        dem = c9.text_input("DEM (A/B/C, sec, err)", key="scr_vp_dem")
-        kd = c10.text_input("K-D Test (I/II/III, sec, err)", key="scr_vp_kd")
-        cft = c11.text_input("Clinical Fusion Test", key="scr_vp_cft")
+        vp_cover = st.checkbox("Eseguito — Cover Test", key="scr_vp_cover_on")
+        ct_lontano = ct_vicino = harmon = rrd = ppc = ppa = ""
+        if vp_cover:
+            st.markdown("**Cover Test**")
+            c1, c2 = st.columns(2)
+            ct_lontano = c1.text_input("Cover test lontano (XL)", key="scr_vp_ct_l")
+            ct_vicino = c2.text_input("Cover test vicino (XV)", key="scr_vp_ct_v")
+            c3, c4 = st.columns(2)
+            harmon = c3.text_input("Harmon (cm)", key="scr_vp_harmon")
+            rrd = c4.text_input("RRD (cm)", key="scr_vp_rrd")
+            c5, c6 = st.columns(2)
+            ppc = c5.text_input("PPC (rottura/recupero)", key="scr_vp_ppc")
+            ppa = c6.text_input("PPA OD/OS", key="scr_vp_ppa")
+
+        vp_nsuco = st.checkbox("Eseguito — NSUCO (Pursuit/Saccadi)", key="scr_vp_nsuco_on")
+        nsuco_pursuit = nsuco_saccadi = ""
+        if vp_nsuco:
+            c7, c8 = st.columns(2)
+            nsuco_pursuit = c7.selectbox("Pursuit (abilità 1-5)", ["", 1, 2, 3, 4, 5], key="scr_vp_nsuco_p")
+            nsuco_saccadi = c8.selectbox("Saccadi (abilità 1-5)", ["", 1, 2, 3, 4, 5], key="scr_vp_nsuco_s")
+
+        vp_dem = st.checkbox("Eseguito — DEM / K-D Test / Clinical Fusion", key="scr_vp_dem_on")
+        dem = kd = cft = ""
+        if vp_dem:
+            c9, c10, c11 = st.columns(3)
+            dem = c9.text_input("DEM (A/B/C, sec, err)", key="scr_vp_dem")
+            kd = c10.text_input("K-D Test (I/II/III, sec, err)", key="scr_vp_kd")
+            cft = c11.text_input("Clinical Fusion Test", key="scr_vp_cft")
+
+        tb_eseguito = st.checkbox("Eseguito — Telebinocular", key="scr_vp_tb_eseguito")
+        tb_fus_per = tb_fus_cen = tb_sopp_od = tb_sopp_os = tb_stereo = ""
+        if tb_eseguito:
+            ctb1, ctb2, ctb3 = st.columns(3)
+            tb_fus_per = ctb1.selectbox("Fusione periferica", ["Presente", "Assente", "Instabile"],
+                                         key="scr_vp_tb_fusper")
+            tb_fus_cen = ctb2.selectbox("Fusione centrale", ["Presente", "Assente", "Instabile"],
+                                         key="scr_vp_tb_fuscen")
+            tb_stereo = ctb3.text_input("Stereopsi (scheda)", key="scr_vp_tb_stereo")
+            ctb4, ctb5 = st.columns(2)
+            tb_sopp_od = ctb4.checkbox("Soppressione OD", key="scr_vp_tb_soppod")
+            tb_sopp_os = ctb5.checkbox("Soppressione OS", key="scr_vp_tb_soppos")
 
     with t_mio:
-        st.markdown("**Anamnesi rapida**")
-        c1, c2 = st.columns(2)
-        parto = c1.selectbox("Parto", ["", "Eutocico", "Distocico", "Cesareo d'urgenza", "Cesareo programmato"],
-                              key="scr_mio_parto")
-        allattamento = c2.text_input("Allattamento (seno/biberon, durata)", key="scr_mio_allatt")
-        mio_flags = st.multiselect("Segnalazioni", [
-            "Ha sofferto di coliche gassose", "Ha sofferto di otiti", "Ha sofferto di tonsille/adenoidi",
-            "Soffre di mal di testa", "Ha dolori al collo/spalle/schiena", "Respira a bocca aperta",
-            "Dorme a bocca aperta", "Russa", "Bruxa", "Succhia pollice/labbra/lingua",
-            "Soffre di raffreddore allergico/asma"], key="scr_mio_flags")
-        st.markdown("**Valutazione**")
-        postura_orale = st.text_input("Postura orale a riposo", key="scr_mio_postura_orale")
-        postura_linguale = st.text_input("Postura linguale", key="scr_mio_postura_ling")
-        deglutizione = st.text_input("Deglutizione", key="scr_mio_deglut")
-        respirazione = st.selectbox("Meccanismo respiratorio", ["", "Nasale", "Orale", "Misto"],
-                                     key="scr_mio_respiro")
+        mio_anamnesi = st.checkbox("Eseguito — Anamnesi rapida", key="scr_mio_anamnesi_on")
+        parto = allattamento = ""
+        mio_flags = []
+        if mio_anamnesi:
+            st.markdown("**Anamnesi rapida**")
+            c1, c2 = st.columns(2)
+            parto = c1.selectbox("Parto", ["", "Eutocico", "Distocico", "Cesareo d'urgenza", "Cesareo programmato"],
+                                  key="scr_mio_parto")
+            allattamento = c2.text_input("Allattamento (seno/biberon, durata)", key="scr_mio_allatt")
+            mio_flags = st.multiselect("Segnalazioni", [
+                "Ha sofferto di coliche gassose", "Ha sofferto di otiti", "Ha sofferto di tonsille/adenoidi",
+                "Soffre di mal di testa", "Ha dolori al collo/spalle/schiena", "Respira a bocca aperta",
+                "Dorme a bocca aperta", "Russa", "Bruxa", "Succhia pollice/labbra/lingua",
+                "Soffre di raffreddore allergico/asma"], key="scr_mio_flags")
+
+        mio_valutazione = st.checkbox("Eseguito — Valutazione posturale/deglutizione", key="scr_mio_valutazione_on")
+        postura_orale = postura_linguale = deglutizione = respirazione = ""
+        if mio_valutazione:
+            st.markdown("**Valutazione**")
+            postura_orale = st.text_input("Postura orale a riposo", key="scr_mio_postura_orale")
+            postura_linguale = st.text_input("Postura linguale", key="scr_mio_postura_ling")
+            deglutizione = st.text_input("Deglutizione", key="scr_mio_deglut")
+            respirazione = st.selectbox("Meccanismo respiratorio", ["", "Nasale", "Orale", "Misto"],
+                                         key="scr_mio_respiro")
 
     with t_osteo:
-        st.markdown("**Anamnesi**")
-        gravidanza = st.text_area("Gravidanza / parto", key="scr_osteo_grav", height=68)
-        crescita = st.text_input("Crescita e sviluppo (peso, tappe motorie)", key="scr_osteo_crescita")
-        patologie = st.text_input("Patologie note / visite specialistiche", key="scr_osteo_patologie")
-        st.markdown("**Indicazioni**")
-        indicazione = st.radio("Esito", [
-            "Nessuna restrizione significativa", "Possibile beneficio da trattamento osteopatico",
-            "Suggerita valutazione pediatrica / specialistica"], key="scr_osteo_indic")
+        osteo_anamnesi = st.checkbox("Eseguito — Anamnesi osteopatica", key="scr_osteo_anamnesi_on")
+        gravidanza = crescita = patologie = ""
+        if osteo_anamnesi:
+            st.markdown("**Anamnesi**")
+            gravidanza = st.text_area("Gravidanza / parto", key="scr_osteo_grav", height=68)
+            crescita = st.text_input("Crescita e sviluppo (peso, tappe motorie)", key="scr_osteo_crescita")
+            patologie = st.text_input("Patologie note / visite specialistiche", key="scr_osteo_patologie")
+
+        osteo_indicazioni = st.checkbox("Eseguito — Indicazioni osteopatiche", key="scr_osteo_indic_on")
+        indicazione = ""
+        if osteo_indicazioni:
+            st.markdown("**Indicazioni**")
+            indicazione = st.radio("Esito", [
+                "Nessuna restrizione significativa", "Possibile beneficio da trattamento osteopatico",
+                "Suggerita valutazione pediatrica / specialistica"], key="scr_osteo_indic")
 
     note = st.text_area("Note generali", key="scr_note", height=70)
 
@@ -315,6 +373,12 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
                 "harmon": harmon, "rrd": rrd, "ppc": ppc, "ppa": ppa,
                 "nsuco_pursuit": nsuco_pursuit, "nsuco_saccadi": nsuco_saccadi,
                 "dem": dem, "kd": kd, "clinical_fusion_test": cft,
+                "telebinocular_eseguito": tb_eseguito,
+                "telebinocular_fusione_periferica": tb_fus_per if tb_eseguito else None,
+                "telebinocular_fusione_centrale": tb_fus_cen if tb_eseguito else None,
+                "telebinocular_soppressione_od": tb_sopp_od if tb_eseguito else None,
+                "telebinocular_soppressione_os": tb_sopp_os if tb_eseguito else None,
+                "telebinocular_stereopsi": tb_stereo if tb_eseguito else None,
             },
             "miofunzionale": {
                 "parto": parto, "allattamento": allattamento, "segnalazioni": mio_flags,
@@ -340,8 +404,8 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
         if st.button("✉️ Genera relazione AI e invia al genitore", key="scr_genera_invia"):
             _genera_e_invia_relazione(
                 conn, paz_id,
-                st.session_state.get("scr_ultima_sezioni", sezioni),
-                st.session_state.get("scr_ultima_note", note),
+                st.session_state.get("scr_ultima_sezioni") or {},
+                st.session_state.get("scr_ultima_note") or "",
             )
 
     st.markdown("---")
