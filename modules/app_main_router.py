@@ -464,6 +464,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
         "📋 Protocollo di valutazione (completo)",
+        "📋 Protocollo di valutazione — app stampabile",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
@@ -868,6 +869,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "📋 Protocollo di valutazione (completo)":
         from .ui_protocollo_valutazione import render_protocollo_valutazione
         render_protocollo_valutazione(conn, paz_id); return True
+    if sotto == "📋 Protocollo di valutazione — app stampabile":
+        from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+        render_protocollo_pdf_app(conn, paz_id); return True
     if sotto == "📸 Photoref AI":
         try:
             from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
@@ -1272,6 +1276,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📋 Protocollo di valutazione (completo)":
             from .ui_protocollo_valutazione import render_protocollo_valutazione
             render_protocollo_valutazione(conn, paz_id); return
+        if sotto == "📋 Protocollo di valutazione — app stampabile":
+            from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+            render_protocollo_pdf_app(conn, paz_id); return
 
     # ── AREA TEST NEUROEVOLUTIVI ──────────────────────────────────────
     elif area == AREA_TEST_NEUROEVOL:
