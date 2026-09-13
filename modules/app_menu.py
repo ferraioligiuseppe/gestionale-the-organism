@@ -39,6 +39,7 @@ AREA_OSTEOPATIA    = "🦴 Osteopatia"
 AREA_ACADEMY       = "🎓 PNEV Academy"
 AREA_FISIOTERAPIA  = "🏃 Fisioterapia"
 AREA_TEST_LIVE     = "🖥️ Test live"
+AREA_SCREENING     = "🩺 Screening"
 AREA_TERAPIA       = "📄 Relazioni & studio clinico"
 AREA_STUDIO        = "⚙️ Studio"
 
@@ -67,6 +68,7 @@ AREE_ORDINE = [
     AREA_TNPEE,
     AREA_PECS,
     AREA_OSTEOPATIA,
+    AREA_SCREENING,
     AREA_FISIOTERAPIA,
     AREA_TEST_LIVE,
     AREA_TERAPIA,
@@ -211,6 +213,9 @@ SOTTOSEZIONI = {
     ],
     AREA_OSTEOPATIA: [
         "🦴 Osteopatia",
+    ],
+    AREA_SCREENING: [
+        "🩺 Screening rapido",
     ],
     AREA_TNPEE: [
         "🗣️ Logopedia / SMOF",
