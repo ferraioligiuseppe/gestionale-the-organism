@@ -92,8 +92,6 @@ PNEV_RAMI = {
         "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
-        "📋 Protocollo di valutazione (completo)",
-        "📋 Protocollo di valutazione — app stampabile",
         "📐 PNEV-Chart (schede stampabili)",
         "🥁 PNEV Metronomo",
     ],
@@ -219,6 +217,7 @@ SOTTOSEZIONI = {
     ],
     AREA_SCREENING: [
         "🩺 Screening rapido",
+        "🩺 Screening completo",
     ],
     AREA_TNPEE: [
         "🗣️ Logopedia / SMOF",

@@ -463,8 +463,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🥁 PNEV Metronomo",
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
-        "📋 Protocollo di valutazione (completo)",
-        "📋 Protocollo di valutazione — app stampabile",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
@@ -866,10 +864,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🩶 Postura (Wii Balance Board)":
         from .ui_postura_wiifit import render_postura_wiifit
         render_postura_wiifit(conn, paz_id); return True
-    if sotto == "📋 Protocollo di valutazione (completo)":
-        from .ui_protocollo_valutazione import render_protocollo_valutazione
-        render_protocollo_valutazione(conn, paz_id); return True
-    if sotto == "📋 Protocollo di valutazione — app stampabile":
+    if sotto == "📋 Protocollo di valutazione":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(conn, paz_id); return True
     if sotto == "📸 Photoref AI":
@@ -1013,6 +1008,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             st.error(f"Errore screening: {e}")
         return True
+    if sotto == "🩺 Screening completo":
+        from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+        render_protocollo_pdf_app(conn, paz_id); return True
     if sotto == "🎬 Animazioni dei riflessi":
         from .ui_riflessi_animazioni import render_riflessi_animazioni
         render_riflessi_animazioni(); return True
@@ -1273,10 +1271,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🩶 Postura (Wii Balance Board)":
             from .ui_postura_wiifit import render_postura_wiifit
             render_postura_wiifit(conn, paz_id); return
-        if sotto == "📋 Protocollo di valutazione (completo)":
-            from .ui_protocollo_valutazione import render_protocollo_valutazione
-            render_protocollo_valutazione(conn, paz_id); return
-        if sotto == "📋 Protocollo di valutazione — app stampabile":
+        if sotto == "📋 Protocollo di valutazione":
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             render_protocollo_pdf_app(conn, paz_id); return
 
