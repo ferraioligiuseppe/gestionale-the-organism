@@ -472,6 +472,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🎧 Audiometria tonale calibrata",
         "🤖 Relazioni cliniche (AI)", "📝 Relazione clinica",
         "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
+        "🩺 Screening rapido",
     }
 
     paz_id = None
@@ -993,6 +994,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🦴 Osteopatia":
         from .sections.ui_cliniche import render_osteopatia_section
         render_osteopatia_section(); return True
+    if sotto == "🩺 Screening rapido":
+        try:
+            from .ui_screening import render_screening
+            render_screening(conn=conn, paz_id=paz_id)
+        except Exception as e:
+            st.error(f"Errore screening: {e}")
+        return True
     if sotto == "🎬 Animazioni dei riflessi":
         from .ui_riflessi_animazioni import render_riflessi_animazioni
         render_riflessi_animazioni(); return True
