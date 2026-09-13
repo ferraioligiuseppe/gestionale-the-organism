@@ -143,18 +143,25 @@ def _questionari_paziente(conn, paz_id, limit=5):
 
 
 def _relazione_template(nome_completo, sezioni, note) -> str:
-    """Relazione semplice senza AI — sempre disponibile anche se l'AI non
-    è configurata o non risponde."""
-    righe = [f"Risultati screening — {nome_completo}", ""]
+    """Relazione senza AI, nello stile Studio The Organism (intestazione,
+    aree valutate A-F, conclusioni, consigli) — sempre disponibile anche
+    se l'AI non è configurata o non risponde."""
+    righe = [
+        "Dott. Giuseppe Ferraioli — Psicologo Optometrista Comportamentale",
+        "Studio Associato The Organism", "",
+        f"SCREENING — {nome_completo}", "",
+    ]
     etichette = {
-        "linguaggio": "Linguaggio", "apprendimento": "Apprendimento",
-        "visuo_posturale": "Visuo-posturale", "miofunzionale": "Miofunzionale",
-        "osteopatico": "Osteopatico",
+        "linguaggio": "B. Abilità del linguaggio", "apprendimento": "C. Apprendimenti",
+        "visuo_posturale": "A/D. Visuo-posturale", "miofunzionale": "E. Valutazione miofunzionale",
+        "osteopatico": "D. Valutazione osteopatica",
     }
+    aree_con_dati = []
     for chiave, titolo in etichette.items():
         dati = {k: v for k, v in (sezioni.get(chiave) or {}).items() if v not in (None, "", [], False)}
         if not dati:
             continue
+        aree_con_dati.append(titolo)
         righe.append(f"## {titolo}")
         for k, v in dati.items():
             righe.append(f"- {k.replace('_',' ').capitalize()}: {v}")
@@ -162,8 +169,12 @@ def _relazione_template(nome_completo, sezioni, note) -> str:
     if note:
         righe.append(f"Note dell'operatore: {note}")
         righe.append("")
-    righe.append("Questo screening è una prima rilevazione orientativa, non una diagnosi. "
-                  "Per un approfondimento vi consigliamo di prenotare una valutazione PNEV completa.")
+    righe.append(
+        "Questo screening è una prima rilevazione orientativa e criteriale, non una "
+        "valutazione clinica completa né una diagnosi. Per un approfondimento diagnostico "
+        "(anche in équipe multidisciplinare con neuropsichiatria infantile, laddove le "
+        "aree segnalate lo richiedano) consigliamo di prenotare una valutazione PNEV completa."
+    )
     return "\n".join(righe)
 
 
@@ -180,8 +191,13 @@ def _genera_e_invia_relazione(conn, paz_id, sezioni, note):
                 f"- {q.get('tipo') if hasattr(q,'get') else q[0]}: compilato" for q in questionari
             ) or "Nessun questionario aggiuntivo disponibile."
             prompt = (
-                f"Scrivi una relazione sintetica e comprensibile per un genitore, a partire dai risultati "
-                f"di uno screening rapido multidisciplinare svolto su {nome_completo}.\n\n"
+                f"Scrivi una relazione di screening su {nome_completo}, nello stile e nel registro "
+                f"di una relazione clinica dello Studio The Organism (Metodo PNEV): professionale, "
+                f"organizzata per aree (linguaggio, apprendimento, visuo-posturale, miofunzionale, "
+                f"osteopatico), con un linguaggio che deve poter essere condiviso anche con un'équipe "
+                f"multidisciplinare (inclusa neuropsichiatria infantile) quando un'area lo richiede — "
+                f"quindi preciso nei termini tecnici usati, ma sempre accompagnato da una spiegazione "
+                f"in parole semplici per il genitore.\n\n"
                 f"DATI RACCOLTI (per area):\n"
                 f"Linguaggio: {sezioni.get('linguaggio')}\n"
                 f"Apprendimento: {sezioni.get('apprendimento')}\n"
@@ -190,14 +206,20 @@ def _genera_e_invia_relazione(conn, paz_id, sezioni, note):
                 f"Osteopatico: {sezioni.get('osteopatico')}\n"
                 f"Note dell'operatore: {note or '—'}\n\n"
                 f"Questionari già compilati dalla famiglia:\n{q_riassunto}\n\n"
-                f"Scrivi in italiano semplice e diretto, senza tecnicismi non spiegati. Per ciascuna area "
-                f"segnala se i risultati sono nella norma o se emerge un'area da approfondire, e chiudi con "
-                f"3-5 consigli pratici concreti da poter già iniziare a casa. Non scrivere una diagnosi: "
-                f"è uno screening orientativo, non una valutazione clinica completa."
+                f"Struttura: per ciascuna area valutata segnala se i risultati sono nella norma o se "
+                f"emerge un'area da approfondire (specifica se il termine tecnico usato richiede una "
+                f"spiegazione a parte); chiudi con una sezione \"Si consiglia\" con 3-5 indicazioni "
+                f"concrete — che possono comprendere un approfondimento specialistico specifico "
+                f"(es. valutazione neuropsicologica, invio ad équipe NPI, valutazione logopedica) "
+                f"quando i dati lo giustificano, oltre a consigli pratici da poter già iniziare a casa. "
+                f"Non scrivere una diagnosi: è uno screening orientativo e criteriale, non una "
+                f"valutazione clinica completa tarata."
             )
-            sistema = ("Sei un assistente clinico dello Studio The Organism (Metodo PNEV). "
-                       "Scrivi relazioni chiare per genitori non specialisti, mai allarmistiche, "
-                       "sempre orientate a un'azione concreta successiva (valutazione o consigli pratici).")
+            sistema = ("Sei un assistente clinico dello Studio The Organism (Metodo PNEV). Scrivi "
+                       "relazioni di screening con un registro professionale, utilizzabili anche per "
+                       "un invio in équipe multidisciplinare (NPI, logopedia, neuropsicologia) quando "
+                       "necessario, ma sempre comprensibili al genitore — mai allarmistiche, sempre "
+                       "orientate a un'azione concreta successiva.")
             with st.spinner("Genero la relazione con l'AI…"):
                 bozza = genera_testo(prompt, sistema)
             if not bozza.startswith("⚠️"):
@@ -442,31 +464,52 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
                 _finestra_bambino("<br>".join(righe_numeri), "demkd")
 
         tb_eseguito = st.checkbox("Eseguito — Telebinocular", key="scr_vp_tb_eseguito")
-        tb_fus_per = tb_fus_cen = tb_sopp_od = tb_sopp_os = tb_stereo = tb_prog_xl = tb_prog_xv = ""
-        tb_cards_risposte = {}
+        tb_serie = tb_occhiali = tb_collab = ""
+        tb_test_risposte = {}
         if tb_eseguito:
-            _significato("con lo strumento Telebinocular verifica fusione, soppressione di un occhio "
-                         "e percezione della profondità (stereopsi) — usa le schede standard dello strumento.")
-            try:
-                from .ui_valutazione_visuo_percettiva import _telebinocular_quick_test
-                tb_cards_risposte = _telebinocular_quick_test(paz_id, {})
-            except Exception as e:
-                st.warning(f"Schede interattive non disponibili ({e}); uso i campi manuali sotto.")
-            ctb1, ctb2, ctb3 = st.columns(3)
-            tb_fus_per = ctb1.selectbox("Fusione periferica", ["Presente", "Assente", "Instabile"],
-                                         key="scr_vp_tb_fusper")
-            tb_fus_cen = ctb2.selectbox("Fusione centrale", ["Presente", "Assente", "Instabile"],
-                                         key="scr_vp_tb_fuscen")
-            tb_stereo = ctb3.text_input("Stereopsi (scheda)", key="scr_vp_tb_stereo")
-            ctb4, ctb5 = st.columns(2)
-            tb_sopp_od = ctb4.checkbox("Soppressione OD", key="scr_vp_tb_soppod")
-            tb_sopp_os = ctb5.checkbox("Soppressione OS", key="scr_vp_tb_soppos")
-            ctb6, ctb7 = st.columns(2)
-            tb_prog_xl = ctb6.text_input("Progression of Fusion — XL", key="scr_vp_tb_progxl")
-            tb_prog_xv = ctb7.text_input("Progression of Fusion — XV", key="scr_vp_tb_progxv")
+            _significato("con lo strumento Telebinocular verifica visione simultanea, foria, "
+                         "fusione, visione binoculare utilizzabile e stereopsi — usa le tavole "
+                         "originali dello strumento, qui si registra solo il risultato.")
+            tb_serie = st.selectbox("Serie di tavole utilizzata", [
+                "5100 Visual Skills (15 obiettivi)",
+                "5170 Peek-A-Boo (prescolari/non lettori)",
+                "5135 Screening rapido scuola",
+                "5155 Clinical Fusion — riserve prismatiche"], key="scr_vp_tb_serie")
+            ctb0a, ctb0b = st.columns(2)
+            tb_occhiali = ctb0a.selectbox("Occhiali durante l'esame", ["No", "Sì"], key="scr_vp_tb_occhiali")
+            tb_collab = ctb0b.selectbox("Collaborazione", ["Buona", "Discontinua", "Insufficiente"],
+                                         key="scr_vp_tb_collab")
+            if tb_serie.startswith("5100"):
+                st.caption("Serie 5100 — Visual Skills (15 obiettivi): L=lontano · V=vicino")
+                _TB_5100 = [
+                    ("1", "Visione simultanea/soppressione", "L", ["Solo OD", "Solo OS", "Entrambe"]),
+                    ("2", "Squilibrio verticale", "L", ["Ipo dx", "Nei limiti", "Ipo sx"]),
+                    ("3", "Squilibrio laterale (foria orizz.)", "L", ["Exo", "Nei limiti", "Ottimale", "Eso"]),
+                    ("4", "Fusione", "L", ["Exo", "Nei limiti", "Ottimale", "Eso", "Soppressione"]),
+                    ("4/5", "Visione utilizzabile binoculare", "L", ["Nei limiti", "Ridotta"]),
+                    ("5", "Visione utilizzabile OD", "L", ["Nei limiti", "Ridotta"]),
+                    ("6", "Visione utilizzabile OS", "L", ["Nei limiti", "Ridotta"]),
+                    ("7", "Stereopsi/profondità", "L", ["Assente", "Ridotta", "Nei limiti", "Ottimale"]),
+                    ("8", "Colore — prima tavola", "L", ["Tutti", "Parziale", "Errata"]),
+                    ("9", "Colore — seconda tavola", "L", ["Tutti", "Parziale", "Errata"]),
+                    ("10", "Squilibrio laterale (foria orizz.)", "V", ["Exo", "Nei limiti", "Ottimale", "Eso"]),
+                    ("11", "Fusione", "V", ["Exo", "Nei limiti", "Ottimale", "Eso", "Soppressione"]),
+                    ("12", "Visione utilizzabile binoculare", "V", ["Nei limiti", "Ridotta"]),
+                    ("13", "Visione utilizzabile OD", "V", ["Nei limiti", "Ridotta"]),
+                    ("14", "Visione utilizzabile OS", "V", ["Nei limiti", "Ridotta"]),
+                ]
+                for num, nome, dist, opzioni in _TB_5100:
+                    v = st.selectbox(f"{num}. {nome} ({dist})", opzioni, key=f"scr_vp_tb5100_{num}")
+                    tb_test_risposte[f"{num} {nome} ({dist})"] = v
+            else:
+                st.caption("Per questa serie, annota qui l'esito sintetico (le tavole restano quelle "
+                           "originali dello strumento).")
+                tb_test_risposte["esito_sintetico"] = st.text_area(
+                    "Esito", key="scr_vp_tb_altra_serie", height=90)
 
         vp_postura = st.checkbox("Eseguito — Postura (pedana stabilometrica)", key="scr_vp_postura_on")
         post_peso_sx = post_peso_dx = post_oscill_oa = post_oscill_oc = post_romberg = post_note_postura = ""
+        post_superficie = post_lng = ""
         if vp_postura:
             _significato("misura come il bambino distribuisce il peso tra i due piedi e quanto oscilla "
                          "in equilibrio, a occhi aperti e chiusi — la differenza tra le due condizioni "
@@ -479,6 +522,10 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             post_oscill_oc = cp4.text_input("Oscillazione occhi chiusi (mm o u.a.)", key="scr_vp_post_oc")
             post_romberg = st.text_input("Indice di Romberg (OC/OA)", key="scr_vp_post_romberg")
             post_note_postura = st.text_input("Note posturali", key="scr_vp_post_note")
+            with st.expander("Indici avanzati (se la pedana li fornisce)"):
+                pc1, pc2 = st.columns(2)
+                post_superficie = pc1.text_input("Superficie ellisse conf. 90% (mm²)", key="scr_vp_post_sup")
+                post_lng = pc2.text_input("Lunghezza tracciato — LNG (mm)", key="scr_vp_post_lng")
 
     with t_mio:
         mio_anamnesi = st.checkbox("Eseguito — Anamnesi rapida", key="scr_mio_anamnesi_on")
@@ -553,21 +600,19 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             "nsuco_pursuit": nsuco_pursuit, "nsuco_saccadi": nsuco_saccadi,
             "dem": dem, "kd": kd, "clinical_fusion_test": cft,
             "telebinocular_eseguito": tb_eseguito,
-            "telebinocular_fusione_periferica": tb_fus_per if tb_eseguito else None,
-            "telebinocular_fusione_centrale": tb_fus_cen if tb_eseguito else None,
-            "telebinocular_soppressione_od": tb_sopp_od if tb_eseguito else None,
-            "telebinocular_soppressione_os": tb_sopp_os if tb_eseguito else None,
-            "telebinocular_stereopsi": tb_stereo if tb_eseguito else None,
+            "telebinocular_serie": tb_serie if tb_eseguito else None,
+            "telebinocular_occhiali": tb_occhiali if tb_eseguito else None,
+            "telebinocular_collaborazione": tb_collab if tb_eseguito else None,
+            "telebinocular_risposte": tb_test_risposte if tb_eseguito else None,
             "postura_eseguito": vp_postura,
             "postura_peso_sx": post_peso_sx if vp_postura else None,
             "postura_peso_dx": post_peso_dx if vp_postura else None,
             "postura_oscillazione_oa": post_oscill_oa if vp_postura else None,
             "postura_oscillazione_oc": post_oscill_oc if vp_postura else None,
             "postura_indice_romberg": post_romberg if vp_postura else None,
+            "postura_superficie_ellisse": post_superficie if vp_postura else None,
+            "postura_lunghezza_tracciato": post_lng if vp_postura else None,
             "postura_note": post_note_postura if vp_postura else None,
-            "telebinocular_schede": tb_cards_risposte if tb_eseguito else None,
-            "telebinocular_progression_xl": tb_prog_xl if tb_eseguito else None,
-            "telebinocular_progression_xv": tb_prog_xv if tb_eseguito else None,
         },
         "miofunzionale": {
             "parto": parto, "allattamento": allattamento, "segnalazioni": mio_flags,
