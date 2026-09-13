@@ -315,6 +315,14 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             tachilalia = st.text_input("Tachilalia / cluttering", key="scr_ling_tachilalia")
             extra_verbale = st.text_input("Sintomatologia extra-verbale", key="scr_ling_extra")
 
+        ling_fonetico = st.checkbox("Eseguito — Bilancio fonetico", key="scr_ling_fonetico_on")
+        bilancio_fonetico = {}
+        if ling_fonetico:
+            _significato("fotografa quali fonemi dell'italiano il bambino produce correttamente, "
+                         "raggruppati per categoria articolatoria (occlusivi, fricativi, affricati, nasali, liquidi).")
+            from .ui_valutazione_visuo_percettiva import render_bilancio_fonetico
+            bilancio_fonetico = render_bilancio_fonetico(f"scr_{paz_id}")
+
     with t_appr:
         appr_lettura = st.checkbox("Eseguito — Lettura", key="scr_appr_lettura_on")
         lett_parole = lett_nonparole = lett_brano = ""
@@ -421,10 +429,16 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
                 _finestra_bambino("<br>".join(righe_numeri), "demkd")
 
         tb_eseguito = st.checkbox("Eseguito — Telebinocular", key="scr_vp_tb_eseguito")
-        tb_fus_per = tb_fus_cen = tb_sopp_od = tb_sopp_os = tb_stereo = ""
+        tb_fus_per = tb_fus_cen = tb_sopp_od = tb_sopp_os = tb_stereo = tb_prog_xl = tb_prog_xv = ""
+        tb_cards_risposte = {}
         if tb_eseguito:
             _significato("con lo strumento Telebinocular verifica fusione, soppressione di un occhio "
                          "e percezione della profondità (stereopsi) — usa le schede standard dello strumento.")
+            try:
+                from .ui_valutazione_visuo_percettiva import _telebinocular_quick_test
+                tb_cards_risposte = _telebinocular_quick_test(paz_id, {})
+            except Exception as e:
+                st.warning(f"Schede interattive non disponibili ({e}); uso i campi manuali sotto.")
             ctb1, ctb2, ctb3 = st.columns(3)
             tb_fus_per = ctb1.selectbox("Fusione periferica", ["Presente", "Assente", "Instabile"],
                                          key="scr_vp_tb_fusper")
@@ -434,6 +448,9 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             ctb4, ctb5 = st.columns(2)
             tb_sopp_od = ctb4.checkbox("Soppressione OD", key="scr_vp_tb_soppod")
             tb_sopp_os = ctb5.checkbox("Soppressione OS", key="scr_vp_tb_soppos")
+            ctb6, ctb7 = st.columns(2)
+            tb_prog_xl = ctb6.text_input("Progression of Fusion — XL", key="scr_vp_tb_progxl")
+            tb_prog_xv = ctb7.text_input("Progression of Fusion — XV", key="scr_vp_tb_progxv")
 
     with t_mio:
         mio_anamnesi = st.checkbox("Eseguito — Anamnesi rapida", key="scr_mio_anamnesi_on")
@@ -493,6 +510,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             "semplificazioni_sistema": semp_sist, "semplificazioni_struttura": semp_strut,
             "livello_lessicale": livello_lex, "livello_morfosintattico": livello_morfo,
             "balbuzie": balbuzie, "tachilalia": tachilalia, "extra_verbale": extra_verbale,
+            "bilancio_fonetico": bilancio_fonetico,
         },
         "apprendimento": {
             "lettura_parole": lett_parole, "lettura_nonparole": lett_nonparole,
@@ -512,6 +530,9 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             "telebinocular_soppressione_od": tb_sopp_od if tb_eseguito else None,
             "telebinocular_soppressione_os": tb_sopp_os if tb_eseguito else None,
             "telebinocular_stereopsi": tb_stereo if tb_eseguito else None,
+            "telebinocular_schede": tb_cards_risposte if tb_eseguito else None,
+            "telebinocular_progression_xl": tb_prog_xl if tb_eseguito else None,
+            "telebinocular_progression_xv": tb_prog_xv if tb_eseguito else None,
         },
         "miofunzionale": {
             "parto": parto, "allattamento": allattamento, "segnalazioni": mio_flags,
