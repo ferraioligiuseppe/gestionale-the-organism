@@ -133,6 +133,19 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
   setTimeout(fill, 300);
   setTimeout(fill, 800);
   setTimeout(fill, 1500);
+
+  // Bottone manuale nella topbar: garantisce il riempimento anche se i
+  // tentativi automatici sono partiti troppo presto/tardi rispetto al
+  // caricamento reale della pagina.
+  var topbar2 = document.querySelector('.topbar');
+  if (topbar2) {{
+    var btn2 = document.createElement('button');
+    btn2.type = 'button'; btn2.className = 'noprint';
+    btn2.textContent = '📋 Inserisci dati anagrafica selezionati';
+    btn2.style.cssText = 'background:#1D6B44;color:#fff;border:0;border-radius:4px;padding:6px 11px;font-size:12px;font-family:inherit;cursor:pointer;margin-left:6px';
+    btn2.addEventListener('click', fill);
+    topbar2.appendChild(btn2);
+  }}
 }})();
 </script>
 """
