@@ -116,12 +116,22 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
   function fill(){{
     var f1 = document.querySelector('[data-k="f1"]');
     var f2 = document.querySelector('[data-k="f2"]');
-    if (f1 && !f1.value) f1.value = `{_safe_nome}`;
-    if (f2 && !f2.value) f2.value = `{_safe_dn}`;
-    if (f1) f1.dispatchEvent(new Event('input', {{bubbles:true}}));
-    if (f2) f2.dispatchEvent(new Event('input', {{bubbles:true}}));
+    if (f1) {{ f1.value = `{_safe_nome}`;
+      f1.dispatchEvent(new Event('input', {{bubbles:true}}));
+      f1.dispatchEvent(new Event('change', {{bubbles:true}}));
+      f1.dispatchEvent(new Event('blur', {{bubbles:true}})); }}
+    if (f2) {{ f2.value = `{_safe_dn}`;
+      f2.dispatchEvent(new Event('input', {{bubbles:true}}));
+      f2.dispatchEvent(new Event('change', {{bubbles:true}}));
+      f2.dispatchEvent(new Event('blur', {{bubbles:true}})); }}
   }}
-  if (document.readyState === 'complete') fill(); else window.addEventListener('load', fill);
+  // Esegue subito, poi ripete più volte: alcune app ripristinano i campi da
+  // localStorage dopo il caricamento, e dobbiamo vincere anche su quello.
+  fill();
+  window.addEventListener('load', fill);
+  setTimeout(fill, 300);
+  setTimeout(fill, 800);
+  setTimeout(fill, 1500);
 }})();
 </script>
 """
