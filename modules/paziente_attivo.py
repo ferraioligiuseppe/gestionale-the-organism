@@ -231,7 +231,7 @@ def _crea_paziente_rapido(conn, cognome, nome, dn_str, sesso, telefono):
         cur.execute(
             "INSERT INTO pazienti (cognome, nome, data_nascita, sesso, telefono, stato_paziente) "
             "VALUES (%s,%s,%s,%s,%s,'ATTIVO') RETURNING id",
-            (cognome.strip().upper(), nome.strip().title(), data_iso,
+            (cognome.strip().upper(), nome.strip().upper(), data_iso,
              (sesso or None), (telefono.strip() or None)),
         )
         row = cur.fetchone()
@@ -306,7 +306,7 @@ def _corpo_seleziona(conn, ns="default"):
     cerca = st.text_input(
         "Cerca",
         placeholder="🔍 Cognome, nome, ID o telefono...",
-        key="paz_attivo_cerca_box",
+        key=f"paz_attivo_cerca_box_{ns}",
         label_visibility="collapsed",
     )
 
@@ -324,7 +324,7 @@ def _corpo_seleziona(conn, ns="default"):
 
     ordina_recenti = False
     if not cerca.strip():
-        ordina_recenti = st.checkbox("🕓 Ordina per ultimi registrati", key="paz_attivo_recenti_box")
+        ordina_recenti = st.checkbox("🕓 Ordina per ultimi registrati", key=f"paz_attivo_recenti_box_{ns}")
         if ordina_recenti:
             pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
 
