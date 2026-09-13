@@ -400,9 +400,47 @@ def _render_tab_iscritti(conn, ev: dict):
                             st.rerun()
                         except Exception as e:
                             st.error(f"Errore: {e}")
+                if st.button("➕ Crea anagrafica da questa iscrizione", key=f"crea_paz_{sel['id']}"):
+                    try:
+                        nuovo_id = _crea_paziente_da_iscrizione(conn, sel)
+                        aggancia_paziente(conn, sel["id"], nuovo_id)
+                        st.success(f"Anagrafica creata (ID {nuovo_id}) e collegata.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore: {e}")
 
 
 # ----- TAB AZIONI -----
+
+def _crea_paziente_da_iscrizione(conn, sel: dict) -> int:
+    """Crea una nuova anagrafica dai dati dell'iscrizione a un evento.
+    Il consenso privacy risulta già firmato al momento dell'iscrizione
+    (spunta obbligatoria nel form pubblico), quindi viene registrato subito
+    anche in consensi_privacy."""
+    cur = conn.cursor()
+    cognome = (sel.get("cognome") or "").strip().upper()
+    nome = (sel.get("nome") or "").strip().upper()
+    email = (sel.get("email") or "").strip().lower()
+    tel = (sel.get("telefono") or "").strip()
+    cur.execute(
+        "INSERT INTO pazienti (cognome, nome, telefono, email, stato_paziente) "
+        "VALUES (%s,%s,%s,%s,'ATTIVO') RETURNING id",
+        (cognome, nome, tel or None, email or None),
+    )
+    row = cur.fetchone()
+    nuovo_id = int(row["id"] if isinstance(row, dict) else row[0])
+    try:
+        cur.execute("""
+            INSERT INTO consensi_privacy
+            (paziente_id, tipo, consenso_trattamento, consenso_comunicazioni,
+             canale_email, canale_whatsapp, data_ora, note)
+            VALUES (%s,'adulto',1,1,1,1,NOW(),'Consenso firmato in fase di iscrizione evento')
+        """, (nuovo_id,))
+    except Exception:
+        pass
+    conn.commit()
+    return nuovo_id
+
 
 def _render_tab_azioni(conn, ev: dict):
     st.markdown("**Modifica evento**")
