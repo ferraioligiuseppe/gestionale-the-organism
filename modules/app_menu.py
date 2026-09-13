@@ -128,7 +128,6 @@ TERAPIA_RAMI = {
         "🧩 Programma PNEV",
     ],
     "🎧 Terapia uditiva": [
-        "🎧 Stimolazione uditiva",
         "🎧 MAPS",
         "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS",
