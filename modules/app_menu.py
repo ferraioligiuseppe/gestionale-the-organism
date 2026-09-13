@@ -92,6 +92,7 @@ PNEV_RAMI = {
         "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
+        "📋 Protocollo di valutazione (completo)",
         "📐 PNEV-Chart (schede stampabili)",
         "🥁 PNEV Metronomo",
     ],

@@ -463,6 +463,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🥁 PNEV Metronomo",
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
+        "📋 Protocollo di valutazione (completo)",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
@@ -1262,6 +1263,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🩶 Postura (Wii Balance Board)":
             from .ui_postura_wiifit import render_postura_wiifit
             render_postura_wiifit(conn, paz_id); return
+        if sotto == "📋 Protocollo di valutazione (completo)":
+            from .ui_protocollo_valutazione import render_protocollo_valutazione
+            render_protocollo_valutazione(conn, paz_id); return
 
     # ── AREA TEST NEUROEVOLUTIVI ──────────────────────────────────────
     elif area == AREA_TEST_NEUROEVOL:
