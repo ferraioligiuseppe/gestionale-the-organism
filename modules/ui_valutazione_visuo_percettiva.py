@@ -491,104 +491,159 @@ def _sez_a(pid, stored):
 #  SEZIONE B — EQUILIBRIO BINOCULARE (Skeffington/OEP)
 # ══════════════════════════════════════════════════════════════════════
 
-_TB_SCHEDE = [
-    {"id": "simul", "titolo": "1 — Percezione simultanea",
-     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
-             "<div style='position:absolute;inset:0;color:#E8000D;font-size:120px;text-align:center;mix-blend-mode:screen;transform:translateX(-6px)'>●</div>"
-             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:120px;text-align:center;mix-blend-mode:screen;transform:translateX(6px)'>▲</div></div>",
-     "domanda": "Cosa vede il bambino?",
-     "opzioni": ["Entrambe le forme (cerchio e triangolo)", "Solo il cerchio (rosso)", "Solo il triangolo (ciano)", "Nessuna delle due"],
-     "esito_normale": "Entrambe le forme (cerchio e triangolo)"},
-    {"id": "fus_cen", "titolo": "2 — Fusione centrale",
-     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
-             "<div style='position:absolute;inset:0;color:#E8000D;font-size:90px;text-align:center;mix-blend-mode:screen;transform:translateX(-4px)'>◆</div>"
-             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:90px;text-align:center;mix-blend-mode:screen;transform:translateX(4px)'>◆</div></div>",
-     "domanda": "Il rombo appare come uno solo, o doppio/sovrapposto in modo instabile?",
-     "opzioni": ["Uno solo, stabile (fusione presente)", "Doppio o sfarfalla (fusione instabile)", "Ne vede solo uno dei due colori (soppressione)"],
-     "esito_normale": "Uno solo, stabile (fusione presente)"},
-    {"id": "fus_per", "titolo": "3 — Fusione periferica",
-     "html": "<div style='position:relative;width:240px;height:240px;margin:0 auto;border:6px solid transparent'>"
-             "<div style='position:absolute;inset:0;border:10px solid #E8000D;mix-blend-mode:screen;transform:translateX(-5px)'></div>"
-             "<div style='position:absolute;inset:0;border:10px solid #00AEEF;mix-blend-mode:screen;transform:translateX(5px)'></div>"
-             "<div style='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:60px'>●</div></div>",
-     "domanda": "Mentre fissa il pallino centrale, vede la cornice tutta intera intorno?",
-     "opzioni": ["Sì, cornice intera", "Manca un pezzo di cornice da un lato", "Non vede la cornice"],
-     "esito_normale": "Sì, cornice intera"},
-    {"id": "sopp_od", "titolo": "4 — Soppressione occhio destro",
-     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
-             "<div style='position:absolute;inset:0;color:#E8000D;font-size:110px;text-align:center;mix-blend-mode:screen'>D</div>"
-             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:110px;text-align:center;mix-blend-mode:screen;opacity:0'>D</div></div>",
-     "domanda": "Questa lettera è visibile solo con l'occhio destro (rosso). La vede?",
-     "opzioni": ["Sì, la vede (OD funzionante)", "No, non la vede (possibile soppressione OD)"],
-     "esito_normale": "Sì, la vede (OD funzionante)"},
-    {"id": "sopp_os", "titolo": "5 — Soppressione occhio sinistro",
-     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
-             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:110px;text-align:center;mix-blend-mode:screen'>S</div>"
-             "<div style='position:absolute;inset:0;color:#E8000D;font-size:110px;text-align:center;mix-blend-mode:screen;opacity:0'>S</div></div>",
-     "domanda": "Questa lettera è visibile solo con l'occhio sinistro (ciano). La vede?",
-     "opzioni": ["Sì, la vede (OS funzionante)", "No, non la vede (possibile soppressione OS)"],
-     "esito_normale": "Sì, la vede (OS funzionante)"},
-    {"id": "stereo", "titolo": "6 — Stereopsi (profondità)",
-     "html": "<div style='position:relative;width:220px;height:220px;margin:0 auto'>"
-             "<div style='position:absolute;inset:0;color:#E8000D;font-size:90px;text-align:center;mix-blend-mode:screen;transform:translateX(-10px)'>●</div>"
-             "<div style='position:absolute;inset:0;color:#00AEEF;font-size:90px;text-align:center;mix-blend-mode:screen;transform:translateX(10px)'>●</div></div>",
-     "domanda": "Il cerchio sembra 'staccarsi' dallo sfondo, come se fosse più vicino?",
-     "opzioni": ["Sì, effetto di profondità netto", "Un po', ma incerto", "No, appare piatto/sdoppiato"],
-     "esito_normale": "Sì, effetto di profondità netto"},
-    {"id": "foria_h", "titolo": "7 — Foria orizzontale",
-     "html": "<div style='position:relative;width:240px;height:100px;margin:0 auto'>"
-             "<div style='position:absolute;top:45px;left:0;right:0;height:6px;background:#E8000D;mix-blend-mode:screen'></div>"
-             "<div style='position:absolute;top:45px;left:0;right:0;height:6px;background:#00AEEF;mix-blend-mode:screen'></div>"
-             "<div style='position:absolute;top:35px;left:115px;font-size:26px'>✛</div></div>",
-     "domanda": "Le due linee orizzontali sembrano allineate sulla stessa altezza?",
-     "opzioni": ["Sì, allineate (ortoforia)", "Una più in alto/basso (foria verticale)", "Non le vede entrambe"],
-     "esito_normale": "Sì, allineate (ortoforia)"},
-    {"id": "worth", "titolo": "8 — Worth a 4 punti (adattato)",
-     "html": "<div style='position:relative;width:200px;height:200px;margin:0 auto;font-size:56px'>"
-             "<div style='position:absolute;top:0;left:80px;color:#00AEEF;mix-blend-mode:screen'>●</div>"
-             "<div style='position:absolute;top:70px;left:10px;color:#E8000D;mix-blend-mode:screen'>●</div>"
-             "<div style='position:absolute;top:70px;left:150px;color:#E8000D;mix-blend-mode:screen'>●</div>"
-             "<div style='position:absolute;top:140px;left:80px;color:#fff;mix-blend-mode:screen'>●</div></div>",
-     "domanda": "Quanti punti vede in totale?",
-     "opzioni": ["4 punti (fusione normale)", "2 punti rossi (soppressione OS)", "1 punto ciano (soppressione OD)", "5 punti (diplopia)"],
-     "esito_normale": "4 punti (fusione normale)"},
+_TB_SCALA_FORIA = ["Eso marcato", "Eso lieve", "Nei limiti", "Ottimale", "Exo lieve", "Exo marcato"]
+
+_TB_14 = [
+    {"n": 1, "titolo": "Test 1 — Percezione simultanea e foria grossolana",
+     "desc": "Scena con due elementi (uno per occhio): verifica se il bambino vede entrambi insieme (fusione) o solo uno (soppressione OD/OS), e in che direzione la scena appare spostata (eso/exo).",
+     "tipo": "foria", "extra_opzioni": ["Solo OS", "Solo OD"]},
+    {"n": 2, "titolo": "Test 2 — Foria (schema a punti, lontano)",
+     "desc": "Colonna di punti con una riga di riferimento: il bambino indica dove cade la riga rispetto ai punti — misura la foria a distanza.",
+     "tipo": "foria", "extra_opzioni": []},
+    {"n": 3, "titolo": "Test 3 — Ampiezza di foria (scala graduata)",
+     "desc": "Scala numerata: il bambino indica il punto in cui le due immagini si fondono — quantifica l'ampiezza della foria.",
+     "tipo": "foria", "extra_opzioni": []},
+    {"n": 4, "titolo": "Test 4 — Foria (schema a punti, vicino)",
+     "desc": "Come il Test 2 ma a distanza ravvicinata — confronta la foria lontano/vicino.",
+     "tipo": "foria", "extra_opzioni": []},
+    {"n": 5, "titolo": "Test 4/5 — Identificazione lettere (soppressione)",
+     "desc": "Lettere diverse mostrate a ciascun occhio (L/B/T/R): quali legge indica se sopprime un occhio.",
+     "tipo": "lettere", "extra_opzioni": []},
+    {"n": 6, "titolo": "Test 5 — Identificazione lettere (2)",
+     "desc": "Come sopra, combinazione diversa di lettere.", "tipo": "lettere", "extra_opzioni": []},
+    {"n": 7, "titolo": "Test 6 — Identificazione lettere (3)",
+     "desc": "Come sopra, combinazione diversa di lettere.", "tipo": "lettere", "extra_opzioni": []},
+    {"n": 8, "titolo": "Test 7 — Identificazione forme (soppressione)",
+     "desc": "Forme diverse per occhio (croce, cerchio, stella, quadrato, cuore): quali vede indica soppressione/dominanza.",
+     "tipo": "forme", "extra_opzioni": []},
+    {"n": 9, "titolo": "Test 8 — Numeri (fusione centrale)",
+     "desc": "Due numeri diversi sovrapposti: se la fusione è buona il bambino legge \"tutti\" i numeri, non solo uno.",
+     "tipo": "numeri", "extra_opzioni": []},
+    {"n": 10, "titolo": "Test 9 — Numeri (fusione periferica)",
+     "desc": "Come sopra, con i numeri più distanziati (fusione periferica).", "tipo": "numeri", "extra_opzioni": []},
+    {"n": 11, "titolo": "Test 10 — Ampiezza di foria (scala graduata, 2)",
+     "desc": "Scala numerata come il Test 3, con range diverso — seconda misura di ampiezza foria.",
+     "tipo": "foria", "extra_opzioni": []},
+    {"n": 12, "titolo": "Test 11 — Foria (schema a punti, 3)",
+     "desc": "Terza misura di foria con schema a punti, per confermare la costanza della misura.",
+     "tipo": "foria", "extra_opzioni": []},
+    {"n": 13, "titolo": "Test 12 — Sequenza lettere D/L/G (direzionalità)",
+     "desc": "Sequenza di lettere D-L-G per occhio: la combinazione letta indica dominanza/soppressione posizionale.",
+     "tipo": "lettere", "extra_opzioni": []},
+    {"n": 14, "titolo": "Test 13 — Sequenza lettere D/L/G (2)",
+     "desc": "Come sopra, sequenza diversa.", "tipo": "lettere", "extra_opzioni": []},
+    {"n": 15, "titolo": "Test 14 — Sequenza lettere D/L/G (3)",
+     "desc": "Come sopra, sequenza diversa — terza conferma.", "tipo": "lettere", "extra_opzioni": []},
 ]
+
+_BILANCIO_FONETICO = {
+    "Occlusivi": ["p", "b", "t", "d", "k", "g"],
+    "Fricativi": ["f", "v", "s", "sc"],
+    "Affricati": ["z", "ci", "gi"],
+    "Nasali": ["m", "n", "gn"],
+    "Liquidi": ["l", "gl", "vibrante r"],
+}
+
+_PAROLE_FONEMI = {
+    "p": ["pane", "papà", "topo"], "b": ["barca", "bimbo", "sabbia"],
+    "t": ["tavolo", "topo", "gatto"], "d": ["dado", "dente", "cadere"],
+    "k": ["casa", "cane", "scuola"], "g": ["gatto", "gomma", "fungo"],
+    "f": ["foglia", "farfalla", "telefono"], "v": ["vaso", "vela", "uva"],
+    "s": ["sole", "sasso", "rosa"], "sc": ["scarpa", "pesce", "scimmia"],
+    "z": ["zaino", "pizza", "zucchero"], "ci": ["ciao", "cioccolato", "faccia"],
+    "gi": ["giallo", "giraffa", "formaggio"],
+    "m": ["mano", "mamma", "gomma"], "n": ["naso", "nonna", "banana"], "gn": ["gnomo", "castagna", "bagno"],
+    "l": ["luna", "latte", "palla"], "gl": ["aglio", "famiglia", "coniglio"], "vibrante r": ["rana", "remo", "carota"],
+}
+
+
+def render_bilancio_fonetico(pid_key: str, salvato: dict | None = None):
+    """Bilancio fonetico — repertorio dei fonemi dell'italiano, raggruppati
+    per categoria articolatoria, con esito presente/assente/distorto per
+    ciascuno. Usato in Linguaggio per fotografare velocemente quali suoni
+    il bambino produce correttamente."""
+    salvato = salvato or {}
+    st.caption("Per ogni fonema: chiedi al bambino di dire le parole elencate, poi indica l'esito.")
+    esiti = {}
+    for categoria, fonemi in _BILANCIO_FONETICO.items():
+        st.markdown(f"**{categoria}**")
+        cols = st.columns(len(fonemi))
+        for i, fon in enumerate(fonemi):
+            with cols[i]:
+                parole = _PAROLE_FONEMI.get(fon, [])
+                st.caption(f"**{fon}** — {', '.join(parole)}" if parole else f"**{fon}**")
+                v = st.selectbox(" ", ["✅ Presente", "❌ Assente", "🔁 Distorto/sostituito"],
+                                  index=["✅ Presente", "❌ Assente", "🔁 Distorto/sostituito"].index(
+                                      salvato.get(fon, "✅ Presente")),
+                                  key=f"bf_{pid_key}_{categoria}_{fon}", label_visibility="collapsed")
+                esiti[fon] = v
+    return esiti
 
 
 def _telebinocular_quick_test(pid, salvate: dict):
-    """Sequenza di 8 schede anaglifiche rapide (occhialini rosso/ciano),
-    ognuna rispondibile in pochi secondi — con secondo monitor per mostrarle
-    al bambino mentre l'operatore registra la risposta."""
+    """14 test Telebinocular (struttura reale dello strumento: percezione
+    simultanea, foria lontano/vicino su scala graduata, identificazione
+    lettere/forme/numeri per la soppressione) — con secondo monitor per
+    mostrare lo stimolo al bambino. Stimoli originali (non le schede
+    proprietarie Keystone/Bernell) per evitare qualunque problema di
+    copyright, mantenendo lo stesso principio di misura."""
     try:
         from .finestra_bambino import bottone_secondo_monitor
     except Exception:
         bottone_secondo_monitor = None
 
-    st.caption("🔴🔵 Richiede gli occhialini anaglifici rosso/ciano. 8 schede, risposta in pochi secondi ciascuna.")
+    st.caption("🔴🔵 Richiede gli occhialini anaglifici rosso/ciano. 14 test, pochi secondi ciascuno. "
+               "Stimoli originali dello studio (non le schede proprietarie dello strumento).")
     risposte = {}
-    n_anomale = 0
-    for scheda in _TB_SCHEDE:
-        with st.expander(scheda["titolo"], expanded=False):
+    n_fuori_norma = 0
+    for t in _TB_14:
+        with st.expander(t["titolo"], expanded=False):
+            st.caption(t["desc"])
             c1, c2 = st.columns([1, 1])
             with c1:
-                st.markdown(scheda["html"], unsafe_allow_html=True)
-                if bottone_secondo_monitor:
-                    bottone_secondo_monitor(scheda["html"], key=f"tb_{pid}_{scheda['id']}")
-            with c2:
-                prec = salvate.get(scheda["id"], "")
-                idx = scheda["opzioni"].index(prec) if prec in scheda["opzioni"] else 0
-                risp = st.radio(scheda["domanda"], scheda["opzioni"], index=idx,
-                                 key=f"tbq_{pid}_{scheda['id']}")
-                risposte[scheda["id"]] = risp
-                if risp == scheda["esito_normale"]:
-                    st.caption("🟢 Nella norma")
+                if t["tipo"] == "foria":
+                    html_stim = ("<div style='font-size:2.4rem'>┃</div>"
+                                 "<div style='letter-spacing:.4em;font-size:1.6rem'>● ● ● ●</div>")
+                elif t["tipo"] == "lettere":
+                    html_stim = "<div style='font-size:3rem;letter-spacing:.3em'>L&nbsp;&nbsp;B&nbsp;&nbsp;T&nbsp;&nbsp;R</div>"
+                elif t["tipo"] == "forme":
+                    html_stim = "<div style='font-size:2.6rem;letter-spacing:.3em'>✚&nbsp;&nbsp;●&nbsp;&nbsp;✳&nbsp;&nbsp;■&nbsp;&nbsp;♡</div>"
                 else:
-                    st.caption("🔴 Da approfondire")
-                    n_anomale += 1
-    if n_anomale:
-        st.warning(f"{n_anomale}/8 schede fuori norma — coerente con un possibile deficit di integrazione binoculare.")
+                    html_stim = "<div style='font-size:2.6rem;letter-spacing:.3em'>32&nbsp;&nbsp;&nbsp;79&nbsp;&nbsp;&nbsp;23</div>"
+                st.markdown(f"<div style='text-align:center;padding:10px'>{html_stim}</div>", unsafe_allow_html=True)
+                if bottone_secondo_monitor:
+                    bottone_secondo_monitor(html_stim, key=f"tb14_{pid}_{t['n']}")
+            with c2:
+                if t["tipo"] == "foria":
+                    prec = salvate.get(f"t{t['n']}", "Nei limiti")
+                    risp = st.select_slider("Esito", _TB_SCALA_FORIA,
+                                             value=prec if prec in _TB_SCALA_FORIA else "Nei limiti",
+                                             key=f"tb14q_{pid}_{t['n']}")
+                    fuori = risp not in ("Nei limiti", "Ottimale")
+                elif t["tipo"] in ("lettere", "forme"):
+                    opzioni = ["Vede tutto (entrambi gli occhi)"] + t["extra_opzioni"] + ["Solo alcuni elementi"]
+                    if not t["extra_opzioni"]:
+                        opzioni = ["Vede tutto (entrambi gli occhi)", "Solo OS", "Solo OD", "Solo alcuni elementi"]
+                    prec = salvate.get(f"t{t['n']}", opzioni[0])
+                    risp = st.radio("Esito", opzioni, index=opzioni.index(prec) if prec in opzioni else 0,
+                                    key=f"tb14q_{pid}_{t['n']}")
+                    fuori = risp != opzioni[0]
+                else:
+                    opzioni = ["Tutti i numeri (fusione buona)", "Solo alcuni numeri", "Nessuno / soppressione"]
+                    prec = salvate.get(f"t{t['n']}", opzioni[0])
+                    risp = st.radio("Esito", opzioni, index=opzioni.index(prec) if prec in opzioni else 0,
+                                    key=f"tb14q_{pid}_{t['n']}")
+                    fuori = risp != opzioni[0]
+                risposte[f"t{t['n']}"] = risp
+                if fuori:
+                    st.caption("🔴 Fuori norma")
+                    n_fuori_norma += 1
+                else:
+                    st.caption("🟢 Nella norma")
+    if n_fuori_norma:
+        st.warning(f"{n_fuori_norma}/14 test fuori norma — coerente con un possibile deficit di integrazione binoculare.")
     else:
-        st.success("8/8 schede nella norma.")
+        st.success("14/14 test nella norma.")
     return risposte
 
 
