@@ -21,7 +21,8 @@ import datetime
 import streamlit as st
 
 APPROCCI = ["Terapia visiva", "INPP / Riflessi primitivi", "Movimenti ritmici",
-            "Terapia miofunzionale", "MAPS", "Castagnini", "Altro"]
+            "Terapia miofunzionale", "MAPS", "Castagnini", "Brain Gym",
+            "Terapia psicologica / psicoterapia", "Altro"]
 STEP_VISIVA = ["🔵 Monoculare", "🟢 Bioculare", "🟣 Binoculare"]
 STATI = ["⚪ Da iniziare", "🟦 In corso", "🟢 Acquisita", "⏸️ Sospesa"]
 
@@ -30,6 +31,10 @@ STATI = ["⚪ Da iniziare", "🟦 In corso", "🟢 Acquisita", "⏸️ Sospesa"]
 # reale (modules/vt_procedure_data.py). Qui restano solo gli approcci ancora
 # da popolare, come esempi-base da correggere.
 _SEED = [
+    # Brain Gym
+    ("Brain Gym", "—", "Movimenti di base (introduzione)",
+     "Sequenza introduttiva Brain Gym — cross crawl, 8 pigro, pompa del polpaccio e affini. "
+     "Video di riferimento fornito dallo studio."),
     # INPP
     ("INPP / Riflessi primitivi", "—", "Inibizione TLR",
      "Integrazione del riflesso tonico labirintico"),
@@ -61,6 +66,13 @@ _SEED = [
     # Castagnini
     ("Castagnini", "—", "Sequenze Castagnini",
      "Sequenze motorie secondo Castagnini"),
+    # Terapia psicologica / psicoterapia
+    ("Terapia psicologica / psicoterapia", "—", "Diario emotivo",
+     "Annotare quotidianamente stato d'animo e situazioni scatenanti"),
+    ("Terapia psicologica / psicoterapia", "—", "Esercizio di respirazione/rilassamento",
+     "Tecnica di autoregolazione assegnata in seduta"),
+    ("Terapia psicologica / psicoterapia", "—", "Compito comportamentale della settimana",
+     "Attività specifica assegnata dal terapeuta da svolgere a casa"),
 ]
 
 
@@ -117,6 +129,15 @@ def _assicura_tabelle(conn):
             for appr, step, nome, ob in _SEED:
                 cur.execute("INSERT INTO terapia_libreria(approccio, step, nome, obiettivo) "
                             "VALUES(%s,%s,%s,%s)", (appr, step, nome, ob))
+
+        # Migrazione mirata: assicura Brain Gym anche se la libreria era già popolata
+        cur.execute("SELECT COUNT(*) FROM terapia_libreria WHERE approccio='Brain Gym'")
+        if (cur.fetchone()[0] or 0) == 0:
+            cur.execute("""INSERT INTO terapia_libreria(approccio, step, nome, obiettivo, video_url)
+                           VALUES(%s,%s,%s,%s,%s)""",
+                        ("Brain Gym", "—", "Movimenti di base (introduzione)",
+                         "Sequenza introduttiva Brain Gym — cross crawl, 8 pigro, pompa del polpaccio e affini.",
+                         "https://www.youtube.com/watch?v=VL4an7UC3wA"))
             _seed_visive(cur)
             conn.commit()
     except Exception:
