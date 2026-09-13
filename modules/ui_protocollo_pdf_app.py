@@ -52,18 +52,65 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
         st.error(f"File del protocollo non trovato: {e}")
         return
 
+    # Selettore paziente dall'anagrafica del gestionale: precompila Cognome/Nome
+    # e Data di nascita nell'HTML statico (che di per sé non ha accesso al DB).
+    nome_precompilato = data_nascita_precompilata = ""
+    if conn is not None:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT id, cognome, nome, data_nascita FROM pazienti "
+                        "ORDER BY cognome, nome LIMIT 3000")
+            righe = cur.fetchall() or []
+        except Exception:
+            righe = []
+            try: conn.rollback()
+            except Exception: pass
+        if righe:
+            def _g(r, i, k):
+                return r.get(k) if hasattr(r, "get") else r[i]
+            opzioni = ["— nessuno (compilo a mano) —"] + [
+                f"{_g(r,1,'cognome') or ''} {_g(r,2,'nome') or ''} — #{_g(r,0,'id')}" for r in righe
+            ]
+            scelta = st.selectbox("👤 Precompila da anagrafica", opzioni, key="pv_html_pick_paziente")
+            if scelta != opzioni[0]:
+                idx_sel = opzioni.index(scelta) - 1
+                r = righe[idx_sel]
+                cognome_sel = _g(r, 1, "cognome") or ""
+                nome_sel = _g(r, 2, "nome") or ""
+                dn_sel = _g(r, 3, "data_nascita")
+                nome_precompilato = f"{cognome_sel} {nome_sel}".strip()
+                data_nascita_precompilata = dn_sel.strftime("%d/%m/%Y") if dn_sel else ""
+
+    _precompila_js = ""
+    if nome_precompilato:
+        _safe_nome = nome_precompilato.replace("\\", "").replace("`", "'")
+        _safe_dn = (data_nascita_precompilata or "").replace("\\", "").replace("`", "'")
+        _precompila_js = f"""
+<script>
+(function(){{
+  function fill(){{
+    var f1 = document.querySelector('[data-k="f1"]');
+    var f2 = document.querySelector('[data-k="f2"]');
+    if (f1 && !f1.value) f1.value = `{_safe_nome}`;
+    if (f2 && !f2.value) f2.value = `{_safe_dn}`;
+    if (f1) f1.dispatchEvent(new Event('input', {{bubbles:true}}));
+    if (f2) f2.dispatchEvent(new Event('input', {{bubbles:true}}));
+  }}
+  if (document.readyState === 'complete') fill(); else window.addEventListener('load', fill);
+}})();
+</script>
+"""
+
     _second_monitor_js = """
 <style>
-#pnev_sm_btn{position:fixed;bottom:16px;right:16px;z-index:9999;background:#1D6B44;color:#fff;
-border:0;border-radius:999px;padding:10px 16px;font-size:13px;font-family:sans-serif;cursor:pointer;
-box-shadow:0 2px 10px rgba(0,0,0,.25)}
-#pnev_sm_hint{position:fixed;bottom:60px;right:16px;z-index:9999;background:#123a6b;color:#fff;
+#pnev_sm_btn{background:#1D6B44;color:#fff;border:0;border-radius:4px;padding:6px 11px;
+font-size:12px;font-family:inherit;cursor:pointer;margin-left:6px}
+#pnev_sm_hint{position:fixed;top:50px;right:16px;z-index:9999;background:#123a6b;color:#fff;
 font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-width:220px;display:none}
 .pnev_sm_ico{cursor:pointer;margin-left:5px;font-size:.85em;opacity:.7;text-decoration:none;user-select:none}
 .pnev_sm_ico:hover{opacity:1}
 </style>
-<button id="pnev_sm_btn" class="noprint" type="button">🖥️ Seleziona testo → secondo monitor</button>
-<div id="pnev_sm_hint" class="noprint">Seleziona un testo/stimolo nella pagina, poi clicca di nuovo questo bottone.</div>
+<div id="pnev_sm_hint" class="noprint">Seleziona un testo/stimolo nella pagina, poi clicca di nuovo il bottone "Secondo monitor".</div>
 <script>
 (function(){
   function openMonitor(text){
@@ -84,14 +131,20 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
     }
   }
 
-  // Bottone flottante generico: invia il testo selezionato con il mouse
-  var btn = document.getElementById('pnev_sm_btn');
+  // Bottone dentro la barra in alto (sticky), sempre visibile: invia il testo selezionato
+  var topbar = document.querySelector('.topbar');
   var hint = document.getElementById('pnev_sm_hint');
-  btn.addEventListener('click', function(){
-    var sel = window.getSelection ? window.getSelection().toString().trim() : '';
-    if (!sel){ hint.style.display='block'; setTimeout(function(){hint.style.display='none';}, 3500); return; }
-    openMonitor(sel);
-  });
+  if (topbar){
+    var btn = document.createElement('button');
+    btn.id = 'pnev_sm_btn'; btn.type = 'button'; btn.className = 'noprint';
+    btn.textContent = '🖥️ Secondo monitor (testo selezionato)';
+    btn.addEventListener('click', function(){
+      var sel = window.getSelection ? window.getSelection().toString().trim() : '';
+      if (!sel){ hint.style.display='block'; setTimeout(function(){hint.style.display='none';}, 3500); return; }
+      openMonitor(sel);
+    });
+    topbar.appendChild(btn);
+  }
 
   // Icona dedicata su ogni stimolo (.stim): un clic, senza dover selezionare nulla —
   // usata per liste di parole/non parole, bilancio fonetico, frasi, ecc.
@@ -106,6 +159,37 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
     });
     el.appendChild(ico);
   });
+
+  // 4.1c — le tavole IReST sono materiale protetto e non sono riprodotte in questo
+  // documento (uso obbligatorio delle tavole originali dello studio). Offriamo un
+  // testo di lettura ALTERNATIVO, originale, solo per quando le tavole non sono
+  // disponibili — chiaramente etichettato come non-IReST.
+  var TESTI_ALT = [
+    "Ogni sabato Marta andava con il nonno a raccogliere le castagne nel bosco vicino casa. Camminavano piano, guardando tra le foglie secche, mentre il nonno le raccontava di quando lui era piccolo e faceva lo stesso percorso con suo padre. Alla fine tornavano a casa con il cesto pieno, pronti per arrostirle la sera davanti al fuoco.",
+    "Da quando aveva iniziato ad allenarsi in piscina, Luca notava di riuscire a nuotare più a lungo senza fermarsi. L'allenatore gli aveva insegnato a respirare con calma, girando la testa di lato ad ogni bracciata, invece di alzarla in avanti come faceva prima. Con il tempo, quel piccolo cambiamento gli aveva fatto guadagnare molta più resistenza.",
+    "Il giardino botanico della città ospitava piante arrivate da ogni parte del mondo, alcune delle quali erano lì da più di cento anni. I visitatori passeggiavano lungo i sentieri, leggendo le targhette che spiegavano da dove venisse ciascuna specie. Nella serra centrale, l'aria calda e umida faceva crescere piante che altrove non sarebbero sopravvissute."
+  ];
+  var h4s = document.querySelectorAll('h4');
+  for (var i=0;i<h4s.length;i++){
+    if (h4s[i].textContent.indexOf('4.1c') !== -1){
+      var box = document.createElement('div');
+      box.className = 'note noprint';
+      box.style.marginTop = '4px';
+      var idx = 0;
+      var span = document.createElement('span');
+      span.textContent = 'Testo alternativo (NON IReST, uso solo se le tavole originali non sono disponibili): ';
+      var btn2 = document.createElement('button');
+      btn2.type = 'button'; btn2.textContent = '🖥️ Mostra sul secondo monitor';
+      btn2.style.cssText = 'background:#1D6B44;color:#fff;border:0;border-radius:4px;padding:4px 9px;font-size:11px;cursor:pointer;margin-left:6px';
+      btn2.addEventListener('click', function(){
+        openMonitor(TESTI_ALT[idx % TESTI_ALT.length]);
+        idx++;
+      });
+      box.appendChild(span); box.appendChild(btn2);
+      h4s[i].parentNode.insertBefore(box, h4s[i].nextSibling);
+      break;
+    }
+  }
 })();
 </script>
 </body>
@@ -114,5 +198,8 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
         html = html.replace("</body>", _second_monitor_js, 1)
     else:
         html += _second_monitor_js
+
+    if _precompila_js:
+        html = html.replace("</body>", _precompila_js + "</body>", 1) if "</body>" in html else html + _precompila_js
 
     components.html(html, height=1400, scrolling=True)
