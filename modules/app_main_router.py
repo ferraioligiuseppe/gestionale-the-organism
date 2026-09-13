@@ -862,6 +862,12 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "👁️ Eye tracking":
         from .sections.ui_cliniche import render_gaze_section
         render_gaze_section(); return True
+    if sotto == "🩶 Postura (Wii Balance Board)":
+        from .ui_postura_wiifit import render_postura_wiifit
+        render_postura_wiifit(conn, paz_id); return True
+    if sotto == "📋 Protocollo di valutazione (completo)":
+        from .ui_protocollo_valutazione import render_protocollo_valutazione
+        render_protocollo_valutazione(conn, paz_id); return True
     if sotto == "📸 Photoref AI":
         try:
             from .paziente_attivo import header_paziente_attivo, paziente_attivo_record

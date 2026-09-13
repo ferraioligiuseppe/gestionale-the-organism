@@ -315,6 +315,11 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             "verso il bambino — dove previsto trova qui sotto lo stimolo da leggere/guardare, "
             "identico a quello che vedi tu.")
 
+    with st.expander("📋 Serve il protocollo completo (33 pagine, copia fedele del PDF)?"):
+        st.caption("Screening resta la scheda breve per eventi/scuola. Per la valutazione clinica "
+                   "completa con tutte le tabelle del protocollo, vai al menu a sinistra → "
+                   "\"📋 Protocollo di valutazione (completo)\" (accanto a Eye tracking).")
+
     if conn is None:
         st.info("Connessione non disponibile.")
         return
@@ -350,18 +355,53 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
         ]
         esiti_opz = ["✓ corretto", "S sostituzione", "O omissione", "D distorsione", "I instabile", "NR"]
         bilancio_dati = {}
+        import pandas as pd
         for categoria, foni in _LISTA_FONI:
             st.markdown(f"**{categoria}**")
-            for fono, parola_in, parola_interv in foni:
-                c1, c2, c3 = st.columns([1, 2, 2])
-                c1.markdown(f"**{fono}**")
-                with c2:
-                    st.caption(f"Iniziale: *{parola_in}*")
-                    v1 = st.selectbox(" ", esiti_opz, key=f"scr_bf_{fono}_in", label_visibility="collapsed")
-                with c3:
-                    st.caption(f"Intervocalica: *{parola_interv}*")
-                    v2 = st.selectbox(" ", esiti_opz, key=f"scr_bf_{fono}_iv", label_visibility="collapsed")
-                bilancio_dati[fono] = {"iniziale": v1, "intervocalica": v2}
+            df_base = pd.DataFrame([
+                {"Fono": fono, "Iniziale": parola_in, "Esito iniziale": "✓ corretto",
+                 "Intervocalica": parola_interv, "Esito intervocalica": "✓ corretto", "Note": ""}
+                for fono, parola_in, parola_interv in foni
+            ])
+            df_out = st.data_editor(
+                df_base, key=f"scr_bf_tab_{categoria}", hide_index=True, use_container_width=True,
+                column_config={
+                    "Fono": st.column_config.TextColumn(disabled=True),
+                    "Iniziale": st.column_config.TextColumn(disabled=True),
+                    "Esito iniziale": st.column_config.SelectboxColumn(options=esiti_opz, required=True),
+                    "Intervocalica": st.column_config.TextColumn(disabled=True),
+                    "Esito intervocalica": st.column_config.SelectboxColumn(options=esiti_opz, required=True),
+                },
+            )
+            for _, row in df_out.iterrows():
+                bilancio_dati[row["Fono"]] = {"iniziale": row["Esito iniziale"],
+                                               "intervocalica": row["Esito intervocalica"],
+                                               "note": row["Note"]}
+
+        st.markdown("**1.3 Prove di struttura**")
+        st.markdown("_1.3.1 Gruppi consonantici_")
+        df_gruppi = st.data_editor(pd.DataFrame([
+            {"Tipo": "Muta + liquida", "Stimoli": "blu · treno · drago · prato · grande · fragola · clarinetto · fiocco", "Riduzioni osservate": ""},
+            {"Tipo": "s + consonante", "Stimoli": "scala · spugna · stella · sveglia · smalto · scivolo", "Riduzioni osservate": ""},
+            {"Tipo": "Nessi complessi", "Stimoli": "strada · scrivere · sprecare · splendere · struzzo", "Riduzioni osservate": ""},
+            {"Tipo": "Nasale + cons.", "Stimoli": "campana · bambino · pianta · fungo · tenda", "Riduzioni osservate": ""},
+        ]), key="scr_bf_gruppi", hide_index=True, use_container_width=True,
+            column_config={"Tipo": st.column_config.TextColumn(disabled=True),
+                           "Stimoli": st.column_config.TextColumn(disabled=True)})
+
+        st.markdown("_1.3.2 Dittonghi e iati_")
+        st.caption("uovo · piede · fiore · guanto · aiuola · aquilone · buio")
+        note_dittonghi = st.text_input("Osservazioni dittonghi/iati", key="scr_bf_dittonghi")
+
+        st.markdown("_1.3.3 Polisillabi (tenuta della struttura)_")
+        df_polisillabi = st.data_editor(pd.DataFrame([
+            {"Sillabe": "3", "Stimoli": "farfalla · ospedale · bicchiere", "Produzione del soggetto": ""},
+            {"Sillabe": "4", "Stimoli": "cioccolato · apparecchio · termometro", "Produzione del soggetto": ""},
+            {"Sillabe": "5", "Stimoli": "elicottero · rinoceronte · frigorifero · acquerello", "Produzione del soggetto": ""},
+            {"Sillabe": "5+", "Stimoli": "televisione · automobilista · particolarmente", "Produzione del soggetto": ""},
+        ]), key="scr_bf_polisillabi", hide_index=True, use_container_width=True,
+            column_config={"Sillabe": st.column_config.TextColumn(disabled=True),
+                           "Stimoli": st.column_config.TextColumn(disabled=True)})
 
         st.markdown("**Processi di semplificazione — frequenza**")
         st.caption("0 assente · 1 sporadico (<25%) · 2 frequente (25-75%) · 3 sistematico (>75%)")
@@ -664,6 +704,9 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
         "linguaggio": {
             "bilancio_fonetico_completo": bilancio_dati if ling_bilancio else None,
             "processi_semplificazione": processi_dati if ling_bilancio else None,
+            "gruppi_consonantici": df_gruppi.to_dict("records"),
+            "dittonghi_iati_note": note_dittonghi,
+            "polisillabi": df_polisillabi.to_dict("records"),
             "semplificazioni_sistema": semp_sist, "semplificazioni_struttura": semp_strut,
             "livello_lessicale": livello_lex, "livello_morfosintattico": livello_morfo,
             "balbuzie": balbuzie, "tachilalia": tachilalia, "extra_verbale": extra_verbale,
