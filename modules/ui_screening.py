@@ -23,6 +23,13 @@ def _big(html: str):
                 unsafe_allow_html=True)
 
 
+def _finestra_bambino(html_inner: str, key: str):
+    """Compatibilità: usa ora il modulo condiviso finestra_bambino, così tutti
+    i test del gestionale riusano la stessa finestra sul secondo monitor."""
+    from .finestra_bambino import bottone_secondo_monitor
+    bottone_secondo_monitor(html_inner, key)
+
+
 def _significato(testo: str):
     st.caption(f"ℹ️ **Cosa significa:** {testo}")
 
@@ -289,6 +296,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             with st.expander("📺 Materiale da mostrare al bambino"):
                 _big("🐶 cane · 🚗 macchina · 🌳 albero · 🍎 mela")
                 st.caption("Chiedi di nominare le immagini/parole: osserva come pronuncia i suoni.")
+                _finestra_bambino("🐶 cane &nbsp; 🚗 macchina &nbsp; 🌳 albero &nbsp; 🍎 mela", "linguaggio")
 
         ling_livelli = st.checkbox("Eseguito — Livello lessicale/morfosintattico", key="scr_ling_livelli_on")
         livello_lex = livello_morfo = ""
@@ -326,6 +334,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
                 _big(brano["testo"])
                 st.caption(f"IReST · \"{brano['nome']}\" · {brano['parole']} parole · "
                            f"norma tempo: {brano['tempo_medio']} · norma velocità: {brano['velocita_media']}")
+                _finestra_bambino(brano["testo"], "lettura")
 
         appr_scrittura = st.checkbox("Eseguito — Scrittura", key="scr_appr_scrittura_on")
         scr_parole = scr_nonparole = scr_omofone = grafia = ""
@@ -353,6 +362,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
                     st.session_state["scr_calcolo_probl"] = random.sample(_PROBLEMI_CALCOLO, 3)
                 probl = st.session_state.get("scr_calcolo_probl", _PROBLEMI_CALCOLO[:3])
                 _big(" &nbsp;&nbsp; ".join(probl))
+                _finestra_bambino(" &nbsp;&nbsp;&nbsp; ".join(probl), "calcolo")
 
     with t_vp:
         vp_cover = st.checkbox("Eseguito — Cover Test", key="scr_vp_cover_on")
@@ -373,6 +383,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             with st.expander("📺 Mira da mostrare (schermo grande)"):
                 _big("➕")
                 st.caption("Il bambino fissa la mira mentre l'operatore avvicina/copre alternativamente gli occhi.")
+                _finestra_bambino("➕", "covertest")
 
         vp_nsuco = st.checkbox("Eseguito — NSUCO (Pursuit/Saccadi)", key="scr_vp_nsuco_on")
         nsuco_pursuit = nsuco_saccadi = ""
@@ -385,6 +396,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
             with st.expander("📺 Bersaglio da mostrare (schermo grande)"):
                 _big("● &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ●")
                 st.caption("Muovi/alterna la mira mentre il bambino la segue solo con gli occhi, testa ferma.")
+                _finestra_bambino("● &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ●", "nsuco")
 
         vp_dem = st.checkbox("Eseguito — DEM / K-D Test / Clinical Fusion", key="scr_vp_dem_on")
         dem = kd = cft = ""
@@ -406,6 +418,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
                 )
                 for riga in righe_numeri:
                     _big(riga)
+                _finestra_bambino("<br>".join(righe_numeri), "demkd")
 
         tb_eseguito = st.checkbox("Eseguito — Telebinocular", key="scr_vp_tb_eseguito")
         tb_fus_per = tb_fus_cen = tb_sopp_od = tb_sopp_os = tb_stereo = ""

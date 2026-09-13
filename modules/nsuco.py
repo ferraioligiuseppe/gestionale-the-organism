@@ -106,6 +106,15 @@ def render_nsuco(skey, eta, sesso, stored: dict | None = None) -> dict:
     with c0a:
         st.caption(f"Norme per **{_norma_eta(eta)} anni** · sesso **{sesso or 'M'}** "
                    "(Maples). Ogni parametro 1–5.")
+    with c0b:
+        try:
+            from .finestra_bambino import bottone_secondo_monitor
+            bottone_secondo_monitor(
+                "● &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ●<br>"
+                "<span style='font-size:.5em;opacity:.7'>Segui la mira solo con gli occhi</span>",
+                key="nsuco_target")
+        except Exception:
+            pass
     sacc, ns_p = _blocco("Saccadi", "sac", eta, sesso, "saccadi", d, skey)
     purs, np_p = _blocco("Inseguimenti", "pur", eta, sesso, "inseguimenti", d, skey)
 

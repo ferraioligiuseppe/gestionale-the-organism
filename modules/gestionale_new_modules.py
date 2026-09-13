@@ -1714,6 +1714,14 @@ def render_kd_widget() -> dict:
             label = "Demo" if idx == 0 else f"Card {idx}"
             kd_html = _build_kd_html(f"kd_{idx}", card_data, label)
             st.components.v1.html(kd_html, height=420, scrolling=False)
+            try:
+                from .finestra_bambino import bottone_secondo_monitor
+                righe_txt = "<br>".join(
+                    " ".join(str(n) for n in riga) for riga in card_data
+                )
+                bottone_secondo_monitor(righe_txt, key=f"kd_win_{idx}")
+            except Exception:
+                pass
 
             c1, c2 = st.columns(2)
             with c1:
