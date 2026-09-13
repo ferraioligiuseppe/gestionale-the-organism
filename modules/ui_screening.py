@@ -331,115 +331,93 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
          "💆 Miofunzionale", "🦴 Osteopatico"])
 
     with t_ling:
-        ling_bilancio = st.checkbox("Eseguito — Bilancio fonetico (protocollo completo)", key="scr_ling_bilancio_on")
+        st.caption("Segui l'ordine: è lo stesso del protocollo su carta, una parte dopo l'altra.")
+
+        st.markdown("### PARTE 1 — Bilancio fonetico")
+        _significato("per ogni fono, in posizione iniziale e intervocalica, chiedi al bambino di "
+                     "dire la parola-stimolo (denominazione su figura o ripetizione) e segna l'esito: "
+                     "✓ corretto, S sostituzione, O omissione, D distorsione, I instabile.")
+        _LISTA_FONI = [
+            ("Occlusivi", [("p", "pane", "lupo"), ("b", "barca", "tubo"), ("t", "tavolo", "moto"),
+                            ("d", "dado", "nido"), ("k", "casa", "fuoco"), ("g", "gatto", "ago")]),
+            ("Fricativi", [("f", "fiore", "telefono"), ("v", "vaso", "uva"), ("s", "sole", "sasso"),
+                            ("sc [ʃ]", "sciarpa", "pesce")]),
+            ("Affricati", [("z [ts]", "zampa", "pizza"), ("z [dz]", "zebra", "azzurro"),
+                            ("ci [tʃ]", "cena", "braccio"), ("gi [dʒ]", "giraffa", "valigia")]),
+            ("Nasali", [("m", "mano", "lumaca"), ("n", "naso", "luna"), ("gn [ɲ]", "gnomo", "bagno")]),
+            ("Liquidi", [("l", "luna", "gelato"), ("gl [ʎ]", "gli occhi", "foglia"),
+                          ("r (vibr.)", "rana", "faro"), ("r (tenuta)", "ferro", "arrotolare")]),
+        ]
+        esiti_opz = ["✓ corretto", "S sostituzione", "O omissione", "D distorsione", "I instabile", "NR"]
         bilancio_dati = {}
-        if ling_bilancio:
-            _significato("per ogni fono, in posizione iniziale e intervocalica, chiedi al bambino di "
-                         "dire la parola-stimolo (denominazione su figura o ripetizione) e segna l'esito: "
-                         "✓ corretto, S sostituzione, O omissione, D distorsione, I instabile.")
-            _LISTA_FONI = [
-                ("Occlusivi", [("p", "pane", "lupo"), ("b", "barca", "tubo"), ("t", "tavolo", "moto"),
-                                ("d", "dado", "nido"), ("k", "casa", "fuoco"), ("g", "gatto", "ago")]),
-                ("Fricativi", [("f", "fiore", "telefono"), ("v", "vaso", "uva"), ("s", "sole", "sasso"),
-                                ("sc [ʃ]", "sciarpa", "pesce")]),
-                ("Affricati", [("z [ts]", "zampa", "pizza"), ("z [dz]", "zebra", "azzurro"),
-                                ("ci [tʃ]", "cena", "braccio"), ("gi [dʒ]", "giraffa", "valigia")]),
-                ("Nasali", [("m", "mano", "lumaca"), ("n", "naso", "luna"), ("gn [ɲ]", "gnomo", "bagno")]),
-                ("Liquidi", [("l", "luna", "gelato"), ("gl [ʎ]", "gli occhi", "foglia"),
-                              ("r (vibr.)", "rana", "faro"), ("r (tenuta)", "ferro", "arrotolare")]),
-            ]
-            esiti_opz = ["✓ corretto", "S sostituzione", "O omissione", "D distorsione", "I instabile", "NR"]
-            for categoria, foni in _LISTA_FONI:
-                st.markdown(f"**{categoria}**")
-                for fono, parola_in, parola_interv in foni:
-                    c1, c2, c3 = st.columns([1, 2, 2])
-                    c1.markdown(f"**{fono}**")
-                    with c2:
-                        st.caption(f"Iniziale: *{parola_in}*")
-                        v1 = st.selectbox(" ", esiti_opz, key=f"scr_bf_{fono}_in", label_visibility="collapsed")
-                    with c3:
-                        st.caption(f"Intervocalica: *{parola_interv}*")
-                        v2 = st.selectbox(" ", esiti_opz, key=f"scr_bf_{fono}_iv", label_visibility="collapsed")
-                    bilancio_dati[fono] = {"iniziale": v1, "intervocalica": v2}
+        for categoria, foni in _LISTA_FONI:
+            st.markdown(f"**{categoria}**")
+            for fono, parola_in, parola_interv in foni:
+                c1, c2, c3 = st.columns([1, 2, 2])
+                c1.markdown(f"**{fono}**")
+                with c2:
+                    st.caption(f"Iniziale: *{parola_in}*")
+                    v1 = st.selectbox(" ", esiti_opz, key=f"scr_bf_{fono}_in", label_visibility="collapsed")
+                with c3:
+                    st.caption(f"Intervocalica: *{parola_interv}*")
+                    v2 = st.selectbox(" ", esiti_opz, key=f"scr_bf_{fono}_iv", label_visibility="collapsed")
+                bilancio_dati[fono] = {"iniziale": v1, "intervocalica": v2}
 
-            st.markdown("**Processi di semplificazione — frequenza**")
-            st.caption("0 assente · 1 sporadico (<25%) · 2 frequente (25-75%) · 3 sistematico (>75%)")
-            _PROCESSI = [
-                ("Stopping", "sole → «tole»", "3;6–4;0"), ("Fricazione", "cena → «sena»", "4;0"),
-                ("Affricazione", "sole → «zole»", "4;0"), ("Anteriorizzazione", "casa → «tasa»", "4;0"),
-                ("Posteriorizzazione", "tavolo → «cavolo»", "3;6"), ("Desonorizzazione", "barca → «parca»", "3;6"),
-                ("Gliding", "rana → «jana»", "5;0"), ("Elim. sillaba debole", "elefante → «fante»", "4;0"),
-                ("Armonia consonantica", "tavolo → «lavolo»", "3;6"), ("Armonia vocalica", "bambino → «bimbino»", "3;6"),
-                ("Riduzione gruppi", "treno → «teno»", "4;6–5;0"), ("Riduzione dittonghi", "uovo → «ovo»", "4;0"),
-                ("Metatesi", "ospedale → «opsedale»", "4;6"), ("Epentesi", "blu → «belu»", "4;0"),
-                ("Cancellazione", "pane → «ane»", "3;6"),
-            ]
-            processi_dati = {}
-            for nome, esempio, limite in _PROCESSI:
-                cp1, cp2, cp3 = st.columns([2, 2, 1])
-                cp1.markdown(f"**{nome}** — _{esempio}_")
-                cp2.caption(f"Limite indicativo: {limite}")
-                freq = cp3.selectbox(" ", [0, 1, 2, 3], key=f"scr_proc_{nome}", label_visibility="collapsed")
-                processi_dati[nome] = freq
+        st.markdown("**Processi di semplificazione — frequenza**")
+        st.caption("0 assente · 1 sporadico (<25%) · 2 frequente (25-75%) · 3 sistematico (>75%)")
+        with st.expander("📅 A che età è normale (canovaccio per i genitori)"):
+            st.markdown(
+                "- **2;6–3 anni**: quasi tutte le semplificazioni sono normali "
+                "(Stopping, Riduzione gruppi consonantici, Eliminazione sillaba debole, "
+                "Riduzione dittonghi, Armonia consonantica/vocalica).\n"
+                "- **3–3;6 anni**: si risolvono anche Affricazione, Desonorizzazione, "
+                "Metatesi, Epentesi.\n"
+                "- **3;6–4;6 anni**: Gliding e gruppi consonantici con /r/ (gli ultimi ad "
+                "acquisirsi) restano normali fino a questa età.\n"
+                "- **Dopo i 5 anni**: qualunque semplificazione ancora presente merita "
+                "un approfondimento; dopo i 6 anni è un campanello d'allarme.\n"
+                "- **Posteriorizzazione**: atipica a qualunque età, anche prima dei 3;6 anni."
+            )
+        _PROCESSI = [
+            ("Stopping", "sole → «tole»", "3;6–4;0"), ("Fricazione", "cena → «sena»", "4;0"),
+            ("Affricazione", "sole → «zole»", "4;0"), ("Anteriorizzazione", "casa → «tasa»", "4;0"),
+            ("Posteriorizzazione", "tavolo → «cavolo»", "3;6"), ("Desonorizzazione", "barca → «parca»", "3;6"),
+            ("Gliding", "rana → «jana»", "5;0"), ("Elim. sillaba debole", "elefante → «fante»", "4;0"),
+            ("Armonia consonantica", "tavolo → «lavolo»", "3;6"), ("Armonia vocalica", "bambino → «bimbino»", "3;6"),
+            ("Riduzione gruppi", "treno → «teno»", "4;6–5;0"), ("Riduzione dittonghi", "uovo → «ovo»", "4;0"),
+            ("Metatesi", "ospedale → «opsedale»", "4;6"), ("Epentesi", "blu → «belu»", "4;0"),
+            ("Cancellazione", "pane → «ane»", "3;6"),
+        ]
+        processi_dati = {}
+        for nome, esempio, limite in _PROCESSI:
+            cp1, cp2, cp3 = st.columns([2, 2, 1])
+            cp1.markdown(f"**{nome}** — _{esempio}_")
+            cp2.caption(f"Limite indicativo: {limite}")
+            freq = cp3.selectbox(" ", [0, 1, 2, 3], key=f"scr_proc_{nome}", label_visibility="collapsed")
+            processi_dati[nome] = freq
 
-        ling_semp = st.checkbox("Eseguito — Semplificazioni fonologiche (versione rapida)", key="scr_ling_semp_on")
+        st.markdown("---")
+        st.markdown("### PARTE 2 — Linguaggio")
+        _significato("osserva quante parole conosce e usa (lessico) e come costruisce "
+                      "le frasi (grammatica) rispetto all'età.")
+        with st.expander("📺 Materiale per la denominazione (schermo grande)"):
+            _big("🐶 cane · 🚗 macchina · 🌳 albero · 🍎 mela")
+            st.caption("Chiedi di nominare le immagini: osserva lessico e pronuncia dei suoni.")
+            _finestra_bambino("🐶 cane &nbsp; 🚗 macchina &nbsp; 🌳 albero &nbsp; 🍎 mela", "linguaggio")
+        livello_lex = st.text_area("Livello lessicale-semantico", key="scr_ling_lex", height=68)
+        livello_morfo = st.text_area("Livello morfosintattico e narrativo", key="scr_ling_morfo", height=68)
+
+        st.markdown("---")
+        st.markdown("### PARTE 3 — Disturbi della fluenza")
+        _significato("osserva se il bambino ripete, blocca o allunga suoni/parole mentre parla "
+                     "(balbuzie) o parla troppo rapidamente in modo confuso (tachilalia/cluttering).")
+        balbuzie = st.text_input("Balbuzie (familiarità, epoca insorgenza)", key="scr_ling_balbuzie")
+        tachilalia = st.text_input("Tachilalia / cluttering", key="scr_ling_tachilalia")
+        extra_verbale = st.text_input("Sintomatologia extra-verbale", key="scr_ling_extra")
+
         semp_sist = semp_strut = []
-        if ling_semp:
-            _significato("valuta come il bambino semplifica i suoni difficili nel parlato "
-                          "spontaneo — normale fino a una certa età, un campanello d'allarme se persiste.")
-            with st.expander("📅 A che età è normale (canovaccio per i genitori)"):
-                st.markdown(
-                    "- **2;6–3 anni**: quasi tutte le semplificazioni sono normali "
-                    "(Stopping, Riduzione gruppi consonantici, Eliminazione sillaba debole, "
-                    "Riduzione dittonghi, Armonia consonantica/vocalica).\n"
-                    "- **3–3;6 anni**: si risolvono anche Affricazione, Desonorizzazione, "
-                    "Metatesi, Epentesi.\n"
-                    "- **3;6–4;6 anni**: Gliding e gruppi consonantici con /r/ (gli ultimi ad "
-                    "acquisirsi) restano normali fino a questa età.\n"
-                    "- **Dopo i 5 anni**: qualunque semplificazione ancora presente merita "
-                    "un approfondimento; dopo i 6 anni è un campanello d'allarme.\n"
-                    "- **Posteriorizzazione**: atipica a qualunque età, anche prima dei 3;6 anni."
-                )
-            st.markdown("**Semplificazioni di sistema**")
-            semp_sist = st.multiselect("Semplificazioni", [
-                "Stopping", "Fricazione", "Affricazione", "Anteriorizzazione",
-                "Posteriorizzazione", "Desonorizzazione", "Gliding"],
-                key="scr_ling_semp_sist")
-            st.markdown("**Semplificazioni di struttura**")
-            semp_strut = st.multiselect("Semplificazioni", [
-                "Eliminazione sillaba debole", "Armonia consonantica", "Armonia vocalica",
-                "Riduzione gruppi consonantici", "Riduzione dittonghi", "Metatesi",
-                "Epentesi", "Cancellazione consonante e/o vocale"],
-                key="scr_ling_semp_strut")
-            with st.expander("📺 Materiale da mostrare al bambino"):
-                _big("🐶 cane · 🚗 macchina · 🌳 albero · 🍎 mela")
-                st.caption("Chiedi di nominare le immagini/parole: osserva come pronuncia i suoni.")
-                _finestra_bambino("🐶 cane &nbsp; 🚗 macchina &nbsp; 🌳 albero &nbsp; 🍎 mela", "linguaggio")
-
-        ling_livelli = st.checkbox("Eseguito — Livello lessicale/morfosintattico", key="scr_ling_livelli_on")
-        livello_lex = livello_morfo = ""
-        if ling_livelli:
-            _significato("osserva quante parole conosce e usa (lessico) e come costruisce "
-                          "le frasi (grammatica) rispetto all'età.")
-            livello_lex = st.text_area("Livello lessicale-semantico", key="scr_ling_lex", height=68)
-            livello_morfo = st.text_area("Livello morfosintattico e narrativo", key="scr_ling_morfo", height=68)
-
-        ling_fluenza = st.checkbox("Eseguito — Disturbi della fluenza", key="scr_ling_fluenza_on")
-        balbuzie = tachilalia = extra_verbale = ""
-        if ling_fluenza:
-            _significato("osserva se il bambino ripete, blocca o allunga suoni/parole mentre parla "
-                         "(balbuzie) o parla troppo rapidamente in modo confuso (tachilalia/cluttering).")
-            balbuzie = st.text_input("Balbuzie (familiarità, epoca insorgenza)", key="scr_ling_balbuzie")
-            tachilalia = st.text_input("Tachilalia / cluttering", key="scr_ling_tachilalia")
-            extra_verbale = st.text_input("Sintomatologia extra-verbale", key="scr_ling_extra")
-
-        ling_fonetico = st.checkbox("Eseguito — Bilancio fonetico", key="scr_ling_fonetico_on")
+        ling_bilancio = ling_semp = ling_livelli = ling_fluenza = True
         bilancio_fonetico = {}
-        if ling_fonetico:
-            _significato("fotografa quali fonemi dell'italiano il bambino produce correttamente, "
-                         "raggruppati per categoria articolatoria (occlusivi, fricativi, affricati, nasali, liquidi).")
-            from .ui_valutazione_visuo_percettiva import render_bilancio_fonetico
-            bilancio_fonetico = render_bilancio_fonetico(f"scr_{paz_id}")
 
     with t_appr:
         appr_lettura = st.checkbox("Eseguito — Lettura", key="scr_appr_lettura_on")
