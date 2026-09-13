@@ -238,9 +238,9 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
         scr_parole = c4.text_input("Parole", key="scr_appr_scr_parole")
         scr_nonparole = c5.text_input("Non parole", key="scr_appr_scr_nonparole")
         scr_omofone = c6.text_input("Omofone non omografe", key="scr_appr_scr_omofone")
-        grafia = st.text_area("Grafia", key="scr_appr_grafia", height=50)
+        grafia = st.text_area("Grafia", key="scr_appr_grafia", height=68)
         st.markdown("**Calcolo**")
-        calc_scritto = st.text_area("Calcolo scritto e a mente", key="scr_appr_calc_scritto", height=50)
+        calc_scritto = st.text_area("Calcolo scritto e a mente", key="scr_appr_calc_scritto", height=68)
         enumerazione = st.text_input("Enumerazione", key="scr_appr_enum")
         fatti_proc = st.text_input("Fatti e procedure", key="scr_appr_fatti")
 
@@ -285,7 +285,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
 
     with t_osteo:
         st.markdown("**Anamnesi**")
-        gravidanza = st.text_area("Gravidanza / parto", key="scr_osteo_grav", height=50)
+        gravidanza = st.text_area("Gravidanza / parto", key="scr_osteo_grav", height=68)
         crescita = st.text_input("Crescita e sviluppo (peso, tappe motorie)", key="scr_osteo_crescita")
         patologie = st.text_input("Patologie note / visite specialistiche", key="scr_osteo_patologie")
         st.markdown("**Indicazioni**")
