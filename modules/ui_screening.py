@@ -73,6 +73,120 @@ def _storico(conn, paz_id, limit=10):
         return []
 
 
+def _dati_paziente(conn, paz_id):
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT cognome, nome, data_nascita, email FROM pazienti WHERE id=%s""",
+                    (paz_id,))
+        r = cur.fetchone()
+        if not r:
+            return {}
+        if hasattr(r, "get"):
+            return dict(r)
+        return {"cognome": r[0], "nome": r[1], "data_nascita": r[2], "email": r[3]}
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return {}
+
+
+def _email_consenso(conn, paz_id):
+    """Email del genitore/tutore dal consenso privacy più recente."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT tutore_email FROM consensi_privacy
+                       WHERE paziente_id=%s ORDER BY data_ora DESC NULLS LAST, id DESC LIMIT 1""",
+                    (paz_id,))
+        r = cur.fetchone()
+        email = (r["tutore_email"] if hasattr(r, "get") else r[0]) if r else None
+        return (email or "").strip() or None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
+
+
+def _questionari_paziente(conn, paz_id, limit=5):
+    """Ultimi questionari compilati dal paziente, se la tabella esiste."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT tipo, risposte, creato_il FROM questionari_risposte
+                       WHERE paziente_id=%s ORDER BY creato_il DESC LIMIT %s""",
+                    (paz_id, limit))
+        return cur.fetchall() or []
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return []
+
+
+def _genera_e_invia_relazione(conn, paz_id, sezioni, note):
+    try:
+        from .ai_estrazione import genera_testo, ai_disponibile
+    except Exception:
+        st.error("Motore AI non disponibile.")
+        return
+    if not ai_disponibile():
+        st.error("AI non configurata (manca la chiave nei Secrets, sezione [ai]).")
+        return
+
+    paziente = _dati_paziente(conn, paz_id)
+    nome_completo = f"{paziente.get('cognome','')} {paziente.get('nome','')}".strip() or "il/la bambino/a"
+    questionari = _questionari_paziente(conn, paz_id)
+    q_riassunto = "\n".join(
+        f"- {q.get('tipo') if hasattr(q,'get') else q[0]}: compilato" for q in questionari
+    ) or "Nessun questionario aggiuntivo disponibile."
+
+    prompt = (
+        f"Scrivi una relazione sintetica e comprensibile per un genitore, a partire dai risultati "
+        f"di uno screening rapido multidisciplinare svolto su {nome_completo}.\n\n"
+        f"DATI RACCOLTI (per area):\n"
+        f"Linguaggio: {sezioni.get('linguaggio')}\n"
+        f"Apprendimento: {sezioni.get('apprendimento')}\n"
+        f"Visuo-posturale: {sezioni.get('visuo_posturale')}\n"
+        f"Miofunzionale: {sezioni.get('miofunzionale')}\n"
+        f"Osteopatico: {sezioni.get('osteopatico')}\n"
+        f"Note dell'operatore: {note or '—'}\n\n"
+        f"Questionari già compilati dalla famiglia:\n{q_riassunto}\n\n"
+        f"Scrivi in italiano semplice e diretto, senza tecnicismi non spiegati. Per ciascuna area "
+        f"segnala se i risultati sono nella norma o se emerge un'area da approfondire, e chiudi con "
+        f"3-5 consigli pratici concreti da poter già iniziare a casa. Non scrivere una diagnosi: "
+        f"è uno screening orientativo, non una valutazione clinica completa."
+    )
+    sistema = ("Sei un assistente clinico dello Studio The Organism (Metodo PNEV). "
+               "Scrivi relazioni chiare per genitori non specialisti, mai allarmistiche, "
+               "sempre orientate a un'azione concreta successiva (valutazione o consigli pratici).")
+
+    with st.spinner("Genero la relazione con l'AI…"):
+        testo = genera_testo(prompt, sistema)
+    if testo.startswith("⚠️"):
+        st.error(testo)
+        return
+
+    st.text_area("Bozza relazione generata", value=testo, height=320, key="scr_bozza_relazione")
+
+    email_dest = _email_consenso(conn, paz_id)
+    if not email_dest:
+        st.warning("Nessuna email trovata nel consenso privacy del paziente: "
+                   "correggi il testo sopra e invia manualmente.")
+        return
+
+    if st.button(f"📤 Invia ora a {email_dest}", key="scr_invia_conferma", type="primary"):
+        try:
+            from .email_otp import invia_email
+            invia_email(email_dest,
+                        f"Risultati screening — {nome_completo}",
+                        testo + "\n\n— Studio The Organism")
+            for staff in ("aps@theorganism.com", "dr.ferraioligiuseppe@gmail.com"):
+                try:
+                    invia_email(staff, f"[Screening] Relazione inviata — {nome_completo}", testo)
+                except Exception:
+                    pass
+            st.success(f"Relazione inviata a {email_dest}.")
+        except Exception as e:
+            st.error(f"Errore invio: {e}")
+
+
 def render_screening(conn=None, paz_id=None, paziente=None) -> None:
     st.header("🩺 Screening rapido")
     st.caption("Scheda breve multi-area per una prima rilevazione — evento, scuola, "
@@ -181,6 +295,7 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
 
     note = st.text_area("Note generali", key="scr_note", height=70)
 
+    salvato = False
     if st.button("💾 Salva screening", type="primary", key="scr_salva"):
         sezioni = {
             "linguaggio": {
@@ -213,7 +328,21 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
         }
         if _salva(conn, paz_id, operatore, sezioni, note):
             st.success("Screening salvato.")
-            st.rerun()
+            st.session_state["scr_ultima_sezioni"] = sezioni
+            st.session_state["scr_ultima_note"] = note
+            salvato = True
+
+    if salvato or st.session_state.get("scr_ultima_sezioni"):
+        st.markdown("---")
+        st.markdown("#### 🤖 Relazione con consigli (AI) — invio immediato")
+        st.caption("Usa i dati appena inseriti + privacy e questionari già compilati "
+                   "dal paziente per generare e inviare subito una relazione con consigli.")
+        if st.button("✉️ Genera relazione AI e invia al genitore", key="scr_genera_invia"):
+            _genera_e_invia_relazione(
+                conn, paz_id,
+                st.session_state.get("scr_ultima_sezioni", sezioni),
+                st.session_state.get("scr_ultima_note", note),
+            )
 
     st.markdown("---")
     st.markdown("#### Storico screening di questo paziente")
