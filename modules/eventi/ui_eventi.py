@@ -304,6 +304,16 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
 # ----- TAB ISCRITTI -----
 
 def _render_tab_iscritti(conn, ev: dict):
+    with st.popover("✉️ Test notifiche email"):
+        from modules.email_otp import diagnostica_email, invia_email as _ie
+        ok, msg = diagnostica_email()
+        (st.success if ok else st.error)(msg)
+        dest_test = st.text_input("Invia una mail di prova a", key=f"test_mail_{ev['id']}")
+        if st.button("Invia prova", key=f"btn_test_mail_{ev['id']}") and dest_test.strip():
+            esito = _ie(dest_test.strip(), "[Test] Notifiche gestionale",
+                        "Se leggi questa mail, le notifiche del gestionale funzionano.")
+            (st.success if esito else st.error)("Inviata." if esito else "Invio fallito.")
+
     if st.toggle("➕ Aggiungi iscrizione manualmente", key=f"tg_man_{ev['id']}"):
         with st.form(f"form_manuale_{ev['id']}"):
             c1, c2 = st.columns(2)
@@ -383,7 +393,7 @@ def _render_tab_iscritti(conn, ev: dict):
                             f"Stato: {(forza or 'automatico').upper()}\n"
                             f"Note: {m_note.strip() or '—'}"
                         )
-                        for dest in ("aps@theorganism.com", "dr.ferraioligiuseppe@gmail.com"):
+                        for dest in ("dr.ferraioligiuseppe@gmail.com",):
                             try:
                                 invia_email(dest, f"[Iscrizione manuale] {ev['titolo']}", corpo_staff)
                             except Exception:
