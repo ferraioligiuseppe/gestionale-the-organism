@@ -31,6 +31,7 @@ ROME_TZ = ZoneInfo("Europe/Rome")
 from .db_eventi import (
     TIPI_VALIDI,
     crea_evento,
+    crea_iscrizione,
     get_evento_by_id,
     lista_eventi,
     aggiorna_evento,
@@ -303,6 +304,50 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
 # ----- TAB ISCRITTI -----
 
 def _render_tab_iscritti(conn, ev: dict):
+    with st.expander("➕ Aggiungi iscrizione manualmente"):
+        with st.form(f"form_manuale_{ev['id']}"):
+            c1, c2 = st.columns(2)
+            m_nome = c1.text_input("Nome", key=f"man_nome_{ev['id']}")
+            m_cognome = c2.text_input("Cognome", key=f"man_cognome_{ev['id']}")
+            c3, c4 = st.columns(2)
+            m_email = c3.text_input("Email", key=f"man_email_{ev['id']}")
+            m_telefono = c4.text_input("Telefono", key=f"man_tel_{ev['id']}")
+            m_slot = None
+            if ev.get("slot_abilitati"):
+                from .slots import slot_con_disponibilita
+                opzioni_slot = [s for s in slot_con_disponibilita(conn, ev) if s["liberi"] > 0]
+                if opzioni_slot:
+                    m_slot = st.selectbox(
+                        "Fascia oraria", options=opzioni_slot,
+                        format_func=lambda s: f"{s['orario'].strftime('%d/%m/%Y %H:%M')} ({s['liberi']} liberi)",
+                        key=f"man_slot_{ev['id']}")
+                else:
+                    st.caption("Nessuna fascia con posti disponibili.")
+            m_note = st.text_area("Note", key=f"man_note_{ev['id']}", height=68)
+            m_stato_forzato = st.selectbox("Stato", ["Automatico", "Confermata", "Lista d'attesa"],
+                                            key=f"man_stato_{ev['id']}")
+            invia = st.form_submit_button("Aggiungi", type="primary")
+        if invia:
+            if not m_nome.strip() or not m_cognome.strip() or not m_email.strip():
+                st.error("Nome, cognome ed email sono obbligatori.")
+            else:
+                try:
+                    forza = {"Automatico": None, "Confermata": "confermata",
+                             "Lista d'attesa": "lista_attesa"}[m_stato_forzato]
+                    nuova = crea_iscrizione(
+                        conn, evento_id=ev["id"], nome=m_nome.strip(), cognome=m_cognome.strip(),
+                        email=m_email.strip(), telefono=m_telefono.strip() or None,
+                        note=m_note.strip() or None, consenso_privacy=True,
+                        sorgente="manuale_studio", forza_stato=forza,
+                    )
+                    if m_slot:
+                        from .slots import assegna_slot
+                        assegna_slot(conn, nuova["id"], m_slot["orario"])
+                    st.success("Iscrizione aggiunta.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore: {e}")
+
     filtro_stato = st.radio(
         "Filtra per stato",
         options=["Tutti", "Confermati", "Lista attesa", "Annullati"],
