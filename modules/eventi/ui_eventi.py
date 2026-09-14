@@ -304,7 +304,7 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
 # ----- TAB ISCRITTI -----
 
 def _render_tab_iscritti(conn, ev: dict):
-    with st.expander("➕ Aggiungi iscrizione manualmente"):
+    if st.toggle("➕ Aggiungi iscrizione manualmente", key=f"tg_man_{ev['id']}"):
         with st.form(f"form_manuale_{ev['id']}"):
             c1, c2 = st.columns(2)
             m_nome = c1.text_input("Nome", key=f"man_nome_{ev['id']}")
