@@ -20,6 +20,7 @@ Limiti da sapere:
 """
 from __future__ import annotations
 import os
+import json
 import datetime
 import streamlit as st
 import streamlit.components.v1 as components
@@ -242,10 +243,88 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
 })();
 </script>
 """
-    _script_completo = _second_monitor_js + (_precompila_js or "")
+
+    _salva_db_js = """
+<script>
+(function(){
+  var topbar3 = document.querySelector('.topbar');
+  if (!topbar3) return;
+  var btn3 = document.createElement('button');
+  btn3.type = 'button'; btn3.className = 'noprint';
+  btn3.textContent = '📤 Prepara dati per il salvataggio';
+  btn3.style.cssText = 'background:#123a6b;color:#fff;border:0;border-radius:4px;padding:6px 11px;font-size:12px;font-family:inherit;cursor:pointer;margin-left:6px';
+  btn3.addEventListener('click', function(){
+    try {
+      var payload = JSON.stringify({V: window.V || {}, C: window.C || {}});
+      var box = document.createElement('textarea');
+      box.value = payload;
+      box.style.cssText = 'position:fixed;top:60px;left:16px;right:16px;z-index:9999;height:120px;font-size:11px;';
+      box.readOnly = true;
+      document.body.appendChild(box);
+      box.select();
+      try { document.execCommand('copy'); } catch(e){}
+      alert('Dati pronti e copiati (se il browser lo consente). Se non si sono copiati da soli, seleziona il testo nel riquadro apparso e copialo manualmente, poi incollalo nel gestionale qui sotto.');
+      setTimeout(function(){ box.remove(); }, 15000);
+    } catch(e){ alert('Errore preparazione dati: ' + e.message); }
+  });
+  topbar3.appendChild(btn3);
+})();
+</script>
+"""
+    _script_completo = _second_monitor_js + (_precompila_js or "") + _salva_db_js
     if "</body>" in html:
         html = html.replace("</body>", _script_completo + "</body>", 1)
     else:
         html += _script_completo
 
     components.html(html, height=1400, scrolling=True)
+
+    st.markdown("---")
+    st.markdown("#### 💾 Salva questo screening nel gestionale")
+    st.caption("Registra i dati compilati collegati a un'anagrafica leggera (nome, data di nascita, "
+               "contatto) — se il bambino diventerà paziente dello studio, potrai agganciare questo "
+               "screening al suo fascicolo senza reinserire nulla.")
+    dati_json_incollati = st.text_area(
+        "1) Clicca '📤 Prepara dati per il salvataggio' nella barra della app qui sopra, poi copia "
+        "il testo che appare e incollalo qui:", key="pv_html_dati_export", height=90)
+    c_s1, c_s2 = st.columns(2)
+    contatto_screening = c_s1.text_input("Telefono/email di contatto (facoltativo)", key="pv_html_contatto")
+    if c_s2.button("💾 Salva nel gestionale", key="pv_html_salva_db", type="primary"):
+        if not dati_json_incollati.strip():
+            st.warning("Incolla prima i dati esportati dalla barra della app.")
+        elif conn is None:
+            st.error("Connessione al database non disponibile.")
+        else:
+            try:
+                payload = json.loads(dati_json_incollati)
+            except Exception:
+                st.error("Il testo incollato non è un JSON valido — copialo di nuovo dal bottone 'Prepara dati'.")
+                payload = None
+            if payload is not None:
+                try:
+                    cur = conn.cursor()
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS screening_esterni (
+                            id BIGSERIAL PRIMARY KEY,
+                            paziente_id BIGINT NULL,
+                            nome_cognome TEXT, data_nascita TEXT, contatto TEXT,
+                            dati JSONB, creato_il TIMESTAMPTZ DEFAULT now()
+                        )
+                    """)
+                    valori = payload.get("V", {})
+                    nome_reg = valori.get("f1", "") or nome_precompilato
+                    dn_reg = valori.get("f2", "") or data_nascita_precompilata
+                    cur.execute("""
+                        INSERT INTO screening_esterni (paziente_id, nome_cognome, data_nascita, contatto, dati)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (paz_id if paz_id else None, nome_reg, dn_reg, contatto_screening,
+                          json.dumps(payload)))
+                    conn.commit()
+                    st.success(f"Screening salvato per **{nome_reg or 'senza nome'}**"
+                               + (f" — agganciato al paziente #{paz_id}." if paz_id else
+                                  " — non ancora agganciato a un paziente: se diventerà paziente, "
+                                  "potrai collegarlo in seguito da Pazienti → Screening in attesa."))
+                except Exception as e:
+                    try: conn.rollback()
+                    except Exception: pass
+                    st.error(f"Errore salvataggio: {e}")
