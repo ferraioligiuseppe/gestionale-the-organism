@@ -465,6 +465,48 @@ def _render_tab_iscritti(conn, ev: dict):
         key=f"sel_iscr_{ev['id']}",
     )
     if sel:
+        if st.toggle("✏️ Modifica dati di questa iscrizione", key=f"tg_edit_{sel['id']}"):
+            with st.form(f"form_edit_iscr_{sel['id']}"):
+                e1, e2 = st.columns(2)
+                e_nome = e1.text_input("Nome genitore", value=sel.get("nome") or "", key=f"ed_nome_{sel['id']}")
+                e_cognome = e2.text_input("Cognome genitore", value=sel.get("cognome") or "", key=f"ed_cog_{sel['id']}")
+                e3, e4 = st.columns(2)
+                e_email = e3.text_input("Email", value=sel.get("email") or "", key=f"ed_email_{sel['id']}")
+                e_tel = e4.text_input("Telefono", value=sel.get("telefono") or "", key=f"ed_tel_{sel['id']}")
+                e_note = st.text_area("Note (incluso nome del bambino)", value=sel.get("note") or "",
+                                       key=f"ed_note_{sel['id']}", height=68)
+                e_slot = None
+                if ev.get("slot_abilitati"):
+                    from .slots import slot_con_disponibilita
+                    tutti_slot = slot_con_disponibilita(conn, ev)
+                    attuale = sel.get("slot_orario")
+                    opzioni = [s for s in tutti_slot if s["liberi"] > 0 or (attuale and s["orario"] == attuale)]
+                    if opzioni:
+                        idx_def = next((i for i, s in enumerate(opzioni) if attuale and s["orario"] == attuale), 0)
+                        e_slot = st.selectbox(
+                            "Fascia oraria", options=opzioni, index=idx_def,
+                            format_func=lambda s: f"{s['orario'].strftime('%d/%m/%Y %H:%M')} ({s['liberi']} liberi)",
+                            key=f"ed_slot_{sel['id']}")
+                salva_mod = st.form_submit_button("💾 Salva modifiche", type="primary")
+            if salva_mod:
+                try:
+                    cur_e = conn.cursor()
+                    cur_e.execute(
+                        "UPDATE ev_iscrizioni SET nome=%s, cognome=%s, email=%s, telefono=%s, note=%s "
+                        "WHERE id=%s",
+                        (e_nome.strip(), e_cognome.strip(), e_email.strip(),
+                         e_tel.strip() or None, e_note.strip() or None, sel["id"]))
+                    conn.commit()
+                    if e_slot:
+                        from .slots import assegna_slot
+                        assegna_slot(conn, sel["id"], e_slot["orario"])
+                    st.success("Iscrizione aggiornata.")
+                    st.rerun()
+                except Exception as e:
+                    try: conn.rollback()
+                    except Exception: pass
+                    st.error(f"Errore: {e}")
+
         col1, col2, col3 = st.columns(3)
         with col1:
             if sel["stato"] != "annullata":
