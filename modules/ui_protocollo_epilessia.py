@@ -251,7 +251,7 @@ def _pdf_calendario_crisi(nome_paziente, righe, anno, mese, professionista="") -
     griglia_top = y_tit - 1.6*cm
     margine_lat = 1.8*cm
     larghezza_cella = (W - 2*margine_lat) / 7
-    altezza_cella = 2.4*cm
+    altezza_cella = 3.1*cm
 
     c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.white)
     for i, g in enumerate(giorni_settimana):
@@ -280,13 +280,23 @@ def _pdf_calendario_crisi(nome_paziente, righe, anno, mese, professionista="") -
                 c.setFillColor(colors.HexColor("#C8453A") if ha_crisi else colors.black)
                 c.drawString(x + 0.15*cm, y_riga + altezza_cella - 0.35*cm, str(giorno))
                 if ha_crisi:
-                    c.setFont("Helvetica", 7)
+                    c.setFont("Helvetica", 6.5)
                     c.setFillColor(colors.HexColor("#8b3a2e"))
-                    for j, r in enumerate(giorni_con_crisi[giorno][:2]):
-                        ora_c = r[1] or ""
-                        tipo_c = (r[3] or "")[:14]
-                        c.drawString(x + 0.15*cm, y_riga + altezza_cella - 0.75*cm - j*0.32*cm,
-                                     f"⚡ {ora_c} {tipo_c}")
+                    riga_y = y_riga + altezza_cella - 0.75*cm
+                    for r in giorni_con_crisi[giorno][:2]:
+                        ora_c = r[1] or "—"
+                        durata_c = r[2] or "—"
+                        tipo_c = (r[3] or "")[:12]
+                        note_c = (r[8] or "")[:22]
+                        c.drawString(x + 0.13*cm, riga_y, f"⚡ {ora_c} · {durata_c}")
+                        riga_y -= 0.28*cm
+                        if tipo_c:
+                            c.drawString(x + 0.13*cm, riga_y, tipo_c)
+                            riga_y -= 0.26*cm
+                        if note_c:
+                            c.drawString(x + 0.13*cm, riga_y, note_c)
+                            riga_y -= 0.26*cm
+                        riga_y -= 0.05*cm
         y_riga -= altezza_cella
 
     # Elenco sintetico sotto il calendario
