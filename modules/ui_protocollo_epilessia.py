@@ -203,6 +203,113 @@ def _render_diario_crisi(conn, paz_id, paziente):
                         file_name="diario_crisi_epilessia.pdf", mime="application/pdf",
                         key="pe_diario_pdf_btn")
 
+    st.markdown("##### 📅 Calendario mensile")
+    import datetime as _dt
+    oggi = _dt.date.today()
+    cc1, cc2 = st.columns(2)
+    mese_sel = cc1.selectbox("Mese", list(range(1, 13)), index=oggi.month - 1,
+                              format_func=lambda m: ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
+                                                      "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"][m-1],
+                              key="pe_cal_mese")
+    anno_sel = cc2.number_input("Anno", min_value=2020, max_value=2100, value=oggi.year, step=1, key="pe_cal_anno")
+    professionista = st.session_state.get("utente_nome") or "Studio The Organism"
+    pdf_calendario = _pdf_calendario_crisi(nome_paziente, righe, int(anno_sel), int(mese_sel), professionista)
+    st.download_button("🖨️ Scarica calendario del mese in PDF (con intestazione)", data=pdf_calendario,
+                        file_name=f"calendario_crisi_{anno_sel}_{mese_sel:02d}.pdf", mime="application/pdf",
+                        key="pe_cal_pdf_btn")
+
+
+def _pdf_calendario_crisi(nome_paziente, righe, anno, mese, professionista="") -> bytes:
+    """Calendario mensile con intestazione The Organism / PNEV — giorni con
+    crisi evidenziati, elenco sintetico sotto il mese."""
+    import io
+    import calendar
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.pdfgen import canvas as rl_canvas
+    from .pdf_templates import draw_intestazione, VERDE, GRIGIO, GRIGIO_L, W, H
+
+    giorni_con_crisi = {}
+    for r in righe:
+        data_c = r[0]
+        if data_c and data_c.month == mese and data_c.year == anno:
+            giorni_con_crisi.setdefault(data_c.day, []).append(r)
+
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    draw_intestazione(c, professionista, "Calendario delle crisi — pnev.it")
+
+    mesi_it = ["", "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+               "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+    y_tit = H - 5.2*cm
+    c.setFont("Helvetica-Bold", 14); c.setFillColor(VERDE)
+    c.drawCentredString(W/2, y_tit, f"{mesi_it[mese]} {anno}")
+    c.setFont("Helvetica", 10); c.setFillColor(colors.black)
+    c.drawCentredString(W/2, y_tit - 0.6*cm, f"Paziente: {nome_paziente or '—'}")
+
+    giorni_settimana = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+    griglia_top = y_tit - 1.6*cm
+    margine_lat = 1.8*cm
+    larghezza_cella = (W - 2*margine_lat) / 7
+    altezza_cella = 2.4*cm
+
+    c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.white)
+    for i, g in enumerate(giorni_settimana):
+        x = margine_lat + i*larghezza_cella
+        c.setFillColor(VERDE)
+        c.rect(x, griglia_top, larghezza_cella, 0.7*cm, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.drawCentredString(x + larghezza_cella/2, griglia_top + 0.22*cm, g)
+
+    cal = calendar.Calendar(firstweekday=0)
+    settimane = cal.monthdayscalendar(anno, mese)
+    y_riga = griglia_top - altezza_cella
+    for settimana in settimane:
+        for i, giorno in enumerate(settimana):
+            x = margine_lat + i*larghezza_cella
+            c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.4)
+            c.rect(x, y_riga, larghezza_cella, altezza_cella, fill=0, stroke=1)
+            if giorno != 0:
+                ha_crisi = giorno in giorni_con_crisi
+                if ha_crisi:
+                    c.setFillColor(colors.HexColor("#FBEFEA"))
+                    c.rect(x, y_riga, larghezza_cella, altezza_cella, fill=1, stroke=0)
+                    c.setStrokeColor(GRIGIO_L)
+                    c.rect(x, y_riga, larghezza_cella, altezza_cella, fill=0, stroke=1)
+                c.setFont("Helvetica-Bold", 9)
+                c.setFillColor(colors.HexColor("#C8453A") if ha_crisi else colors.black)
+                c.drawString(x + 0.15*cm, y_riga + altezza_cella - 0.35*cm, str(giorno))
+                if ha_crisi:
+                    c.setFont("Helvetica", 7)
+                    c.setFillColor(colors.HexColor("#8b3a2e"))
+                    for j, r in enumerate(giorni_con_crisi[giorno][:2]):
+                        ora_c = r[1] or ""
+                        tipo_c = (r[3] or "")[:14]
+                        c.drawString(x + 0.15*cm, y_riga + altezza_cella - 0.75*cm - j*0.32*cm,
+                                     f"⚡ {ora_c} {tipo_c}")
+        y_riga -= altezza_cella
+
+    # Elenco sintetico sotto il calendario
+    y_elenco = y_riga - 0.8*cm
+    c.setFont("Helvetica-Bold", 11); c.setFillColor(VERDE)
+    c.drawString(margine_lat, y_elenco, f"Episodi del mese: {sum(len(v) for v in giorni_con_crisi.values())}")
+    y_elenco -= 0.6*cm
+    c.setFont("Helvetica", 8); c.setFillColor(colors.black)
+    for giorno in sorted(giorni_con_crisi.keys()):
+        for r in giorni_con_crisi[giorno]:
+            if y_elenco < 2*cm:
+                c.showPage()
+                draw_intestazione(c, professionista, "Calendario delle crisi — pnev.it")
+                y_elenco = H - 5.5*cm
+            testo = f"{giorno}/{mese}/{anno} · {r[1] or '—'} · {r[3] or '—'} · durata {r[2] or '—'} · note: {r[8] or '—'}"
+            c.drawString(margine_lat, y_elenco, testo[:140])
+            y_elenco -= 0.42*cm
+
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
 
 def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
     st.header("⚡ Protocollo Epilessia")
