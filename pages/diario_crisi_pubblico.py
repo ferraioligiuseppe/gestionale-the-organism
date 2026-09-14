@@ -79,7 +79,9 @@ with st.form("diario_pubblico_form"):
     stato_postcritico = st.text_input("Come è stato dopo (confuso, ha dormito, quanto ci ha messo a riprendersi)",
                                        key="dp_postcritico")
     note = st.text_area("Altre annotazioni", key="dp_note", height=68)
-    invia = st.form_submit_button("📤 Invia allo Studio", type="primary")if invia:
+    invia = st.form_submit_button("📤 Invia allo Studio", type="primary")
+
+if invia:
     try:
         cur.execute("""
             INSERT INTO crisi_epilessia_diario
