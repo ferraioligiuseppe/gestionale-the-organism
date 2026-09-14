@@ -307,11 +307,14 @@ def _render_tab_iscritti(conn, ev: dict):
     if st.toggle("➕ Aggiungi iscrizione manualmente", key=f"tg_man_{ev['id']}"):
         with st.form(f"form_manuale_{ev['id']}"):
             c1, c2 = st.columns(2)
-            m_nome = c1.text_input("Nome", key=f"man_nome_{ev['id']}")
-            m_cognome = c2.text_input("Cognome", key=f"man_cognome_{ev['id']}")
+            m_nome = c1.text_input("Nome genitore", key=f"man_nome_{ev['id']}")
+            m_cognome = c2.text_input("Cognome genitore", key=f"man_cognome_{ev['id']}")
             c3, c4 = st.columns(2)
             m_email = c3.text_input("Email", key=f"man_email_{ev['id']}")
             m_telefono = c4.text_input("Telefono", key=f"man_tel_{ev['id']}")
+            c5, c6 = st.columns(2)
+            m_nome_b = c5.text_input("Nome bambino/a", key=f"man_nomeb_{ev['id']}")
+            m_cognome_b = c6.text_input("Cognome bambino/a", key=f"man_cognomeb_{ev['id']}")
             m_slot = None
             if ev.get("slot_abilitati"):
                 from .slots import slot_con_disponibilita
@@ -334,30 +337,34 @@ def _render_tab_iscritti(conn, ev: dict):
                 try:
                     forza = {"Automatico": None, "Confermata": "confermata",
                              "Lista d'attesa": "lista_attesa"}[m_stato_forzato]
+                    nota_completa = (f"Bambino/a: {m_nome_b.strip()} {m_cognome_b.strip()}"
+                                      if (m_nome_b.strip() or m_cognome_b.strip()) else "")
+                    if m_note.strip():
+                        nota_completa = (nota_completa + " · " + m_note.strip()).strip(" ·")
                     nuova = crea_iscrizione(
                         conn, evento_id=ev["id"], nome=m_nome.strip(), cognome=m_cognome.strip(),
                         email=m_email.strip(), telefono=m_telefono.strip() or None,
-                        note=m_note.strip() or None, consenso_privacy=True,
+                        note=nota_completa or None, consenso_privacy=True,
                         sorgente="manuale_studio", forza_stato=forza,
                     )
                     if m_slot:
                         from .slots import assegna_slot
                         assegna_slot(conn, nuova["id"], m_slot["orario"])
-                    # Anagrafica automatica anche per l'inserimento manuale
+                    # Anagrafica automatica anche per l'inserimento manuale —
+                    # usa i dati del BAMBINO (il paziente), non del genitore.
                     try:
                         cur_an = conn.cursor()
-                        cog_m = m_cognome.strip().upper()
-                        nom_m = m_nome.strip().upper()
+                        cog_m = (m_cognome_b.strip() or m_cognome.strip()).upper()
+                        nom_m = (m_nome_b.strip() or m_nome.strip()).upper()
                         cur_an.execute(
-                            "SELECT id FROM pazienti WHERE (email IS NOT NULL AND LOWER(email)=%s) "
-                            "OR (UPPER(cognome)=%s AND UPPER(nome)=%s) LIMIT 1",
-                            (m_email.strip().lower(), cog_m, nom_m))
+                            "SELECT id FROM pazienti WHERE UPPER(cognome)=%s AND UPPER(nome)=%s LIMIT 1",
+                            (cog_m, nom_m))
                         esistente = cur_an.fetchone()
                         if esistente:
                             paz_auto_id = int(esistente["id"] if isinstance(esistente, dict) else esistente[0])
                         else:
                             paz_auto_id = _crea_paziente_da_iscrizione(conn, {
-                                "cognome": m_cognome, "nome": m_nome,
+                                "cognome": cog_m, "nome": nom_m,
                                 "email": m_email, "telefono": m_telefono})
                         aggancia_paziente(conn, nuova["id"], paz_auto_id)
                     except Exception:
@@ -370,7 +377,8 @@ def _render_tab_iscritti(conn, ev: dict):
                         corpo_staff = (
                             f"Nuova iscrizione inserita manualmente dallo studio.\n\n"
                             f"Evento: {ev['titolo']}\n{riga_slot}"
-                            f"Nome: {m_cognome.strip()} {m_nome.strip()}\n"
+                            f"Genitore: {m_cognome.strip()} {m_nome.strip()}\n"
+                            f"Bambino/a: {m_cognome_b.strip()} {m_nome_b.strip()}\n"
                             f"Email: {m_email.strip()} · Tel: {m_telefono.strip() or '—'}\n"
                             f"Stato: {(forza or 'automatico').upper()}\n"
                             f"Note: {m_note.strip() or '—'}"
