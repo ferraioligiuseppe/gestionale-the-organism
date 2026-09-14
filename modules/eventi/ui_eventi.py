@@ -959,6 +959,49 @@ def _render_tab_azioni(conn, ev: dict):
                     st.code(voce["messaggio"], language=None)
 
     st.divider()
+    st.markdown("**📋 Duplica evento in un'altra data**")
+    st.caption("Copia titolo, tipo, sede, descrizione, posti e configurazione delle fasce orarie. "
+               "Le iscrizioni NON vengono copiate.")
+    with st.form(f"form_dup_{ev['id']}"):
+        d1, d2 = st.columns(2)
+        dup_data = d1.date_input("Nuova data", value=datetime.now().date(), key=f"dup_data_{ev['id']}")
+        _ora_orig = ev["data_ora"].time() if ev.get("data_ora") else time(9, 0)
+        dup_ora = d2.time_input("Nuovo orario", value=_ora_orig, key=f"dup_ora_{ev['id']}")
+        dup_titolo = st.text_input("Titolo del nuovo evento",
+                                    value=f"{ev.get('titolo','')} — {dup_data.strftime('%d/%m/%Y')}"
+                                    if ev.get("titolo") else "",
+                                    key=f"dup_tit_{ev['id']}")
+        duplica = st.form_submit_button("📋 Crea copia", type="primary")
+    if duplica:
+        try:
+            nuovo = crea_evento(
+                conn,
+                titolo=dup_titolo.strip() or ev.get("titolo", "Evento"),
+                tipo=ev.get("tipo", "altro"),
+                data_ora=datetime.combine(dup_data, dup_ora),
+                durata_minuti=ev.get("durata_minuti"),
+                sede=ev.get("sede"),
+                descrizione=ev.get("descrizione"),
+                posti_max=ev.get("posti_max"),
+                prezzo=ev.get("prezzo"),
+                conduttore=ev.get("conduttore"),
+                attivo=True,
+                iscrizioni_aperte=True,
+                note_interne=ev.get("note_interne"),
+                slot_abilitati=bool(ev.get("slot_abilitati")),
+                slot_durata_minuti=ev.get("slot_durata_minuti"),
+                slot_ora_inizio=ev.get("slot_ora_inizio"),
+                slot_ora_fine=ev.get("slot_ora_fine"),
+                slot_ora_inizio_2=ev.get("slot_ora_inizio_2"),
+                slot_ora_fine_2=ev.get("slot_ora_fine_2"),
+                slot_posti=ev.get("slot_posti"),
+            )
+            st.success(f"Evento duplicato (ID {nuovo['id']}) — lo trovi nella lista eventi.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Errore duplicazione: {e}")
+
+    st.divider()
     st.markdown("**⚠️ Zona pericolosa**")
     with st.popover("🗑️ Elimina evento definitivamente"):
         st.error(
