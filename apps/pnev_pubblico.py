@@ -70,8 +70,8 @@ def invia_email_sicura(funzione, *args):
     return funzione(api_key, mitt_email, mitt_nome, *args)
 
 st.set_page_config(
-    page_title="MAPS-CLEAR · I miei progressi",
-    page_icon="🎧",
+    page_title="Studio The Organism · PNEV",
+    page_icon="🌿",
     layout="centered",
 )
 
