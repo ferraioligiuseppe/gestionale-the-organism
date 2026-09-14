@@ -505,7 +505,7 @@ def azione_iscrizione_evento(conn):
                         f"[Lista attesa] {ev['titolo']}" if stato_iscr == "lista_attesa"
                         else f"[Iscrizione] {ev['titolo']}"
                     )
-                    for dest in ("aps@theorganism.com", "dr.ferraioligiuseppe@gmail.com"):
+                    for dest in ("apstheorganism@gmail.com", "dr.ferraioligiuseppe@gmail.com"):
                         try:
                             invia_email(dest, oggetto_staff, corpo_staff)
                         except Exception:
