@@ -9,6 +9,27 @@ import smtplib
 from email.mime.text import MIMEText
 
 
+def diagnostica_email() -> tuple[bool, str]:
+    """Verifica se la configurazione Gmail è presente e funzionante."""
+    try:
+        import streamlit as st
+        try:
+            cfg = st.secrets.get("gmail", {})
+        except Exception:
+            return False, "Secrets non disponibili (secrets.toml assente)."
+        mittente = cfg.get("EMAIL")
+        app_password = cfg.get("APP_PASSWORD")
+        if not mittente:
+            return False, "Manca [gmail] EMAIL nei Secrets."
+        if not app_password:
+            return False, "Manca [gmail] APP_PASSWORD nei Secrets."
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(mittente, app_password)
+        return True, f"Configurazione OK — mittente: {mittente}"
+    except Exception as e:
+        return False, f"Errore login SMTP: {e}"
+
+
 def invia_email(to_email: str, oggetto: str, corpo: str) -> bool:
     """Invio email generico (conferme, notifiche) via lo stesso Gmail SMTP
     usato per i codici OTP."""
