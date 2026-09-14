@@ -7,9 +7,10 @@ Entry point: render_eventi_section()
 
 Funzionalità:
 - Tab Lista eventi: visualizza eventi con filtri, espande per dettaglio
-- Tab Nuovo evento: form di creazione
+- Tab Nuovo evento: form di creazione (con fasce orarie opzionali)
 - Dettaglio evento: modifica, lista iscritti, export CSV, link pubblico,
-  promozione lista attesa, annullamento iscrizioni, eliminazione evento
+  occupazione slot, promozione lista attesa, annullamento iscrizioni,
+  eliminazione evento
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ ROME_TZ = ZoneInfo("Europe/Rome")
 from .db_eventi import (
     TIPI_VALIDI,
     crea_evento,
+    crea_iscrizione,
     get_evento_by_id,
     lista_eventi,
     aggiorna_evento,
@@ -46,6 +48,10 @@ from .db_eventi import (
 
 logger = logging.getLogger(__name__)
 
+# URL dell'app pubblica dove gira la pagina di iscrizione (apps/pnev_pubblico.py).
+# Sovrascrivibile dai secrets con APP_URL_PUBBLICO se cambia il deploy.
+APP_URL_PUBBLICO_DEFAULT = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck7n.streamlit.app"
+
 
 # =============================================================================
 # ENTRY POINT
@@ -55,8 +61,8 @@ def render_eventi_section():
     """Entry point UI eventi — chiamata dal router app_main."""
     st.title("📣 Marketing — Eventi e iscrizioni")
     st.caption(
-        "Gestisci eventi pubblici (costellazioni, webinar, workshop) "
-        "e raccolta iscrizioni online."
+        "Gestisci eventi pubblici (costellazioni, webinar, workshop, screening) "
+        "e raccolta iscrizioni online — con fasce orarie opzionali."
     )
 
     try:
@@ -65,6 +71,12 @@ def render_eventi_section():
     except Exception as e:
         st.error(f"❌ Connessione DB fallita: {e}")
         return
+
+    try:
+        from .slots import ensure_slot_schema
+        ensure_slot_schema(conn)
+    except Exception as e:
+        st.warning(f"Schema fasce orarie non applicato: {e}")
 
     tab_lista, tab_nuovo = st.tabs(["📅 Lista eventi", "🆕 Nuovo evento"])
 
@@ -156,6 +168,8 @@ def _render_evento_card(conn, ev: dict):
         badges.append("🚫 nascosto")
     if not iscrizioni_aperte:
         badges.append("🔒 iscrizioni chiuse")
+    if ev.get("slot_abilitati"):
+        badges.append("🕐 fasce orarie")
     if posti_max and confermati >= posti_max:
         badges.append("🎟️ sold out")
     badges_str = " · ".join(badges)
@@ -224,16 +238,42 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
     for label, val in info_table:
         st.markdown(f"**{label}:** {val}")
 
+    # ── Occupazione fasce orarie ───────────────────────────────────────
+    if ev.get("slot_abilitati"):
+        st.divider()
+        st.markdown("**🕐 Occupazione fasce orarie**")
+        try:
+            from .slots import slot_con_disponibilita
+            slots = slot_con_disponibilita(conn, ev)
+        except Exception as e:
+            slots = []
+            st.error(f"Errore lettura slot: {e}")
+        if not slots:
+            st.caption("Nessuno slot generato: controlla ora inizio/fine nella tab Azioni.")
+        else:
+            cols = st.columns(4)
+            for i, s in enumerate(slots):
+                with cols[i % 4]:
+                    etichetta = s["orario"].strftime("%H:%M")
+                    if s["liberi"] == 0:
+                        st.error(f"🔴 {etichetta} — pieno ({s['occupati']}/{s['posti_max']})")
+                    elif s["occupati"] > 0:
+                        st.warning(f"🟡 {etichetta} — {s['occupati']}/{s['posti_max']}")
+                    else:
+                        st.success(f"🟢 {etichetta} — libero")
+
     st.divider()
 
     # Link pubblico
     st.markdown("**🔗 Link pubblico per iscrizioni**")
-    base = st.secrets.get("app", {}).get("BASE_URL", "https://testgestionale.streamlit.app")
-    link_pubblico = f"{base.rstrip('/')}/iscrizione_evento?slug={ev['slug']}"
+    base_pubblico = st.secrets.get("APP_URL_PUBBLICO", APP_URL_PUBBLICO_DEFAULT).rstrip("/")
+    link_pubblico = f"{base_pubblico}/?azione=iscrizione_evento&slug={ev['slug']}"
     st.code(link_pubblico, language=None)
     st.caption(
-        "Copia questo link e incollalo nel post Facebook, in email, "
-        "su WhatsApp, ecc. (La pagina pubblica verrà attivata allo step 4.)"
+        "Copia questo link e incollalo nel post Facebook, in email, su WhatsApp, ecc. "
+        + ("Chi lo apre scegli la fascia oraria libera e l'appuntamento viene creato "
+           "in automatico anche sul Google Calendar dello studio."
+           if ev.get("slot_abilitati") else "")
     )
 
     st.markdown("**🌐 Pubblicazione su pnev.it**")
@@ -264,6 +304,50 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
 # ----- TAB ISCRITTI -----
 
 def _render_tab_iscritti(conn, ev: dict):
+    with st.expander("➕ Aggiungi iscrizione manualmente"):
+        with st.form(f"form_manuale_{ev['id']}"):
+            c1, c2 = st.columns(2)
+            m_nome = c1.text_input("Nome", key=f"man_nome_{ev['id']}")
+            m_cognome = c2.text_input("Cognome", key=f"man_cognome_{ev['id']}")
+            c3, c4 = st.columns(2)
+            m_email = c3.text_input("Email", key=f"man_email_{ev['id']}")
+            m_telefono = c4.text_input("Telefono", key=f"man_tel_{ev['id']}")
+            m_slot = None
+            if ev.get("slot_abilitati"):
+                from .slots import slot_con_disponibilita
+                opzioni_slot = [s for s in slot_con_disponibilita(conn, ev) if s["liberi"] > 0]
+                if opzioni_slot:
+                    m_slot = st.selectbox(
+                        "Fascia oraria", options=opzioni_slot,
+                        format_func=lambda s: f"{s['orario'].strftime('%d/%m/%Y %H:%M')} ({s['liberi']} liberi)",
+                        key=f"man_slot_{ev['id']}")
+                else:
+                    st.caption("Nessuna fascia con posti disponibili.")
+            m_note = st.text_area("Note", key=f"man_note_{ev['id']}", height=68)
+            m_stato_forzato = st.selectbox("Stato", ["Automatico", "Confermata", "Lista d'attesa"],
+                                            key=f"man_stato_{ev['id']}")
+            invia = st.form_submit_button("Aggiungi", type="primary")
+        if invia:
+            if not m_nome.strip() or not m_cognome.strip() or not m_email.strip():
+                st.error("Nome, cognome ed email sono obbligatori.")
+            else:
+                try:
+                    forza = {"Automatico": None, "Confermata": "confermata",
+                             "Lista d'attesa": "lista_attesa"}[m_stato_forzato]
+                    nuova = crea_iscrizione(
+                        conn, evento_id=ev["id"], nome=m_nome.strip(), cognome=m_cognome.strip(),
+                        email=m_email.strip(), telefono=m_telefono.strip() or None,
+                        note=m_note.strip() or None, consenso_privacy=True,
+                        sorgente="manuale_studio", forza_stato=forza,
+                    )
+                    if m_slot:
+                        from .slots import assegna_slot
+                        assegna_slot(conn, nuova["id"], m_slot["orario"])
+                    st.success("Iscrizione aggiunta.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore: {e}")
+
     filtro_stato = st.radio(
         "Filtra per stato",
         options=["Tutti", "Confermati", "Lista attesa", "Annullati"],
@@ -290,6 +374,7 @@ def _render_tab_iscritti(conn, ev: dict):
             "Nome": f"{i['cognome']} {i['nome']}",
             "Email": i["email"],
             "Telefono": i.get("telefono") or "",
+            "Orario": i["slot_orario"].strftime("%d/%m %H:%M") if i.get("slot_orario") else "",
             "Stato": i["stato"],
             "Iscritto il": i["created_at"].strftime("%d/%m/%Y %H:%M") if i.get("created_at") else "",
             "Email conferma": "✅" if i.get("email_conferma_inviata") else "—",
@@ -360,9 +445,47 @@ def _render_tab_iscritti(conn, ev: dict):
                             st.rerun()
                         except Exception as e:
                             st.error(f"Errore: {e}")
+                if st.button("➕ Crea anagrafica da questa iscrizione", key=f"crea_paz_{sel['id']}"):
+                    try:
+                        nuovo_id = _crea_paziente_da_iscrizione(conn, sel)
+                        aggancia_paziente(conn, sel["id"], nuovo_id)
+                        st.success(f"Anagrafica creata (ID {nuovo_id}) e collegata.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore: {e}")
 
 
 # ----- TAB AZIONI -----
+
+def _crea_paziente_da_iscrizione(conn, sel: dict) -> int:
+    """Crea una nuova anagrafica dai dati dell'iscrizione a un evento.
+    Il consenso privacy risulta già firmato al momento dell'iscrizione
+    (spunta obbligatoria nel form pubblico), quindi viene registrato subito
+    anche in consensi_privacy."""
+    cur = conn.cursor()
+    cognome = (sel.get("cognome") or "").strip().upper()
+    nome = (sel.get("nome") or "").strip().upper()
+    email = (sel.get("email") or "").strip().lower()
+    tel = (sel.get("telefono") or "").strip()
+    cur.execute(
+        "INSERT INTO pazienti (cognome, nome, telefono, email, stato_paziente) "
+        "VALUES (%s,%s,%s,%s,'ATTIVO') RETURNING id",
+        (cognome, nome, tel or None, email or None),
+    )
+    row = cur.fetchone()
+    nuovo_id = int(row["id"] if isinstance(row, dict) else row[0])
+    try:
+        cur.execute("""
+            INSERT INTO consensi_privacy
+            (paziente_id, tipo, consenso_trattamento, consenso_comunicazioni,
+             canale_email, canale_whatsapp, data_ora, note)
+            VALUES (%s,'adulto',1,1,1,1,NOW(),'Consenso firmato in fase di iscrizione evento')
+        """, (nuovo_id,))
+    except Exception:
+        pass
+    conn.commit()
+    return nuovo_id
+
 
 def _render_tab_azioni(conn, ev: dict):
     st.markdown("**Modifica evento**")
@@ -378,7 +501,7 @@ def _render_tab_azioni(conn, ev: dict):
             )
         with col2:
             posti_max = st.number_input(
-                "Posti max (0 = illimitati)",
+                "Posti max (0 = illimitati — lascia 0 se usi le fasce orarie)",
                 min_value=0, max_value=999,
                 value=ev.get("posti_max") or 0,
             )
@@ -409,6 +532,31 @@ def _render_tab_azioni(conn, ev: dict):
         immagine_url = st.text_input("URL immagine (opzionale)", value=ev.get("immagine_url") or "")
         note_interne = st.text_area("Note interne (non pubbliche)", value=ev.get("note_interne") or "", height=80)
 
+        st.divider()
+        st.markdown("**🕐 Fasce orarie** — es. screening scolastico: 4 slot all'ora, ogni 15 minuti")
+        slot_abilitati = st.checkbox("Abilita fasce orarie per questo evento", value=bool(ev.get("slot_abilitati")))
+        cs1, cs2, cs3, cs4 = st.columns(4)
+        with cs1:
+            slot_ora_inizio = st.time_input("Fascia 1 — Dalle", value=ev.get("slot_ora_inizio") or time(9, 0))
+        with cs2:
+            slot_ora_fine = st.time_input("Fascia 1 — Alle", value=ev.get("slot_ora_fine") or time(13, 0))
+        with cs3:
+            slot_durata_minuti = st.number_input(
+                "Durata slot (min)", min_value=5, max_value=120,
+                value=int(ev.get("slot_durata_minuti") or 15),
+            )
+        with cs4:
+            slot_posti = st.number_input(
+                "Posti per slot", min_value=1, max_value=20,
+                value=int(ev.get("slot_posti") or 1),
+            )
+        st.caption("Seconda fascia (opzionale) — es. pomeriggio 16:00-18:00. Lascia vuoto/uguale se non serve.")
+        cs5, cs6 = st.columns(2)
+        with cs5:
+            slot_ora_inizio_2 = st.time_input("Fascia 2 — Dalle", value=ev.get("slot_ora_inizio_2") or time(0, 0), key=f"s2i_{ev['id']}")
+        with cs6:
+            slot_ora_fine_2 = st.time_input("Fascia 2 — Alle", value=ev.get("slot_ora_fine_2") or time(0, 0), key=f"s2f_{ev['id']}")
+
         if st.form_submit_button("💾 Salva modifiche", type="primary"):
             try:
                 aggiorna_evento(
@@ -425,6 +573,13 @@ def _render_tab_azioni(conn, ev: dict):
                     immagine_url=immagine_url or None,
                     conduttore=conduttore or None,
                     note_interne=note_interne or None,
+                    slot_abilitati=slot_abilitati,
+                    slot_durata_minuti=slot_durata_minuti,
+                    slot_ora_inizio=slot_ora_inizio,
+                    slot_ora_fine=slot_ora_fine,
+                    slot_ora_inizio_2=slot_ora_inizio_2 if slot_ora_inizio_2 != time(0, 0) else None,
+                    slot_ora_fine_2=slot_ora_fine_2 if slot_ora_fine_2 != time(0, 0) else None,
+                    slot_posti=slot_posti,
                 )
                 st.success("✅ Evento aggiornato")
                 st.rerun()
@@ -686,7 +841,10 @@ def _render_form_crea_evento(conn):
         with col1:
             tipo = st.selectbox("Tipo ✱", options=list(TIPI_VALIDI))
         with col2:
-            posti_max = st.number_input("Posti max (0 = illimitati)", min_value=0, max_value=999, value=0)
+            posti_max = st.number_input(
+                "Posti max (0 = illimitati — lascia 0 se usi le fasce orarie)",
+                min_value=0, max_value=999, value=0,
+            )
 
         col3, col4 = st.columns(2)
         with col3:
@@ -713,6 +871,29 @@ def _render_form_crea_evento(conn):
         with col8:
             iscrizioni_aperte = st.checkbox("Iscrizioni aperte", value=True)
 
+        st.divider()
+        st.markdown(
+            "**🕐 Fasce orarie** (opzionale) — es. screening scolastico: 4 appuntamenti "
+            "all'ora, ogni 15 minuti. Chi si iscrive scieglie l'orario libero e "
+            "l'appuntamento viene creato anche sul Google Calendar dello studio."
+        )
+        slot_abilitati = st.checkbox("Abilita fasce orarie per questo evento", value=False)
+        cs1, cs2, cs3, cs4 = st.columns(4)
+        with cs1:
+            slot_ora_inizio = st.time_input("Fascia 1 — Dalle", value=time(9, 0))
+        with cs2:
+            slot_ora_fine = st.time_input("Fascia 1 — Alle", value=time(13, 0))
+        with cs3:
+            slot_durata_minuti = st.number_input("Durata slot (min)", min_value=5, max_value=120, value=15)
+        with cs4:
+            slot_posti = st.number_input("Posti per slot", min_value=1, max_value=20, value=1)
+        st.caption("Seconda fascia (opzionale) — es. pomeriggio 16:00-18:00. Lascia le 00:00 se non serve.")
+        cs5, cs6 = st.columns(2)
+        with cs5:
+            slot_ora_inizio_2 = st.time_input("Fascia 2 — Dalle", value=time(0, 0))
+        with cs6:
+            slot_ora_fine_2 = st.time_input("Fascia 2 — Alle", value=time(0, 0))
+
         if st.form_submit_button("🆕 Crea evento", type="primary"):
             if not titolo or not titolo.strip():
                 st.error("Il titolo è obbligatorio")
@@ -734,6 +915,13 @@ def _render_form_crea_evento(conn):
                     attivo=attivo,
                     iscrizioni_aperte=iscrizioni_aperte,
                     note_interne=note_interne or None,
+                    slot_abilitati=slot_abilitati,
+                    slot_durata_minuti=slot_durata_minuti,
+                    slot_ora_inizio=slot_ora_inizio,
+                    slot_ora_fine=slot_ora_fine,
+                    slot_ora_inizio_2=slot_ora_inizio_2 if slot_ora_inizio_2 != time(0, 0) else None,
+                    slot_ora_fine_2=slot_ora_fine_2 if slot_ora_fine_2 != time(0, 0) else None,
+                    slot_posti=slot_posti,
                 )
                 st.success(f"✅ Evento creato — id #{nuovo['id']}, slug: `{nuovo['slug']}`")
                 st.balloons()
@@ -765,8 +953,6 @@ def _selettore_paziente(conn, key_suffix: str = "") -> Optional[int]:
         rows = cur.fetchall() or []
         cur.close()
     except Exception as e:
-        try: conn.rollback()
-        except Exception: pass
         st.error(f"Errore caricamento pazienti: {e}")
         return None
 
