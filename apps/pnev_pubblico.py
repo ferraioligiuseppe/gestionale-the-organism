@@ -415,6 +415,46 @@ def azione_iscrizione_evento(conn):
                 if gcal_id:
                     salva_gcal_event_id(conn, iscr["id"], gcal_id)
 
+                # Anagrafica automatica: crea il paziente se non esiste già
+                # (match su email o su cognome+nome del bambino), senza intervento manuale.
+                try:
+                    cur_an = conn.cursor()
+                    cog_b = cognome_b.strip().upper()
+                    nom_b = nome_b.strip().upper()
+                    cur_an.execute(
+                        "SELECT id FROM pazienti WHERE (email IS NOT NULL AND LOWER(email)=%s) "
+                        "OR (UPPER(cognome)=%s AND UPPER(nome)=%s) LIMIT 1",
+                        (email.strip().lower(), cog_b, nom_b))
+                    esistente = cur_an.fetchone()
+                    if esistente:
+                        paz_auto_id = int(esistente["id"] if isinstance(esistente, dict) else esistente[0])
+                    else:
+                        cur_an.execute(
+                            "INSERT INTO pazienti (cognome, nome, telefono, email, stato_paziente) "
+                            "VALUES (%s,%s,%s,%s,'ATTIVO') RETURNING id",
+                            (cog_b, nom_b, telefono or None, email.strip().lower() or None))
+                        r_new = cur_an.fetchone()
+                        paz_auto_id = int(r_new["id"] if isinstance(r_new, dict) else r_new[0])
+                        try:
+                            cur_an.execute("""
+                                INSERT INTO consensi_privacy
+                                (paziente_id, tipo, consenso_trattamento, consenso_comunicazioni,
+                                 canale_email, canale_whatsapp, data_ora, note)
+                                VALUES (%s,'minore',1,1,1,1,NOW(),
+                                        'Consenso firmato in fase di iscrizione evento')
+                            """, (paz_auto_id,))
+                        except Exception:
+                            pass
+                    conn.commit()
+                    try:
+                        from modules.eventi.db_eventi import aggancia_paziente
+                        aggancia_paziente(conn, iscr["id"], paz_auto_id)
+                    except Exception:
+                        pass
+                except Exception:
+                    try: conn.rollback()
+                    except Exception: pass
+
                 # Email di conferma al genitore (non bloccante se fallisce)
                 stato_iscr = iscr.get("stato", "confermata")
                 try:
