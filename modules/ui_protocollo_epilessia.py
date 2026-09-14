@@ -85,9 +85,9 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
     eta_esordio = c3.text_input("Età di esordio delle crisi", key="pe_eta_esordio")
     familiarita = c4.text_input("Familiarità per epilessia/convulsioni febbrili", key="pe_familiarita")
     anamnesi_perinatale = st.text_area("Anamnesi perinatale (gravidanza, parto, sofferenza neonatale)",
-                                        key="pe_anamnesi_perinatale", height=60)
+                                        key="pe_anamnesi_perinatale", height=68)
     sviluppo_psicomotorio = st.text_area("Sviluppo psicomotorio (tappe, eventuale regressione)",
-                                          key="pe_sviluppo", height=60)
+                                          key="pe_sviluppo", height=68)
     c5, c6 = st.columns(2)
     convulsioni_febbrili = c5.selectbox("Convulsioni febbrili in anamnesi", ["", "No", "Sì semplici", "Sì complesse"],
                                          key="pe_convuls_febbrili")
@@ -130,7 +130,7 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
         {"Farmaco": "", "Dose": "", "Da quando": "", "Efficacia/effetti collaterali": ""},
         {"Farmaco": "", "Dose": "", "Da quando": "", "Efficacia/effetti collaterali": ""},
     ], [], "pe_terapia_farmaci")
-    farmaci_precedenti = st.text_area("Farmaci precedenti sospesi e motivo", key="pe_farmaci_precedenti", height=60)
+    farmaci_precedenti = st.text_area("Farmaci precedenti sospesi e motivo", key="pe_farmaci_precedenti", height=68)
     aderenza_terapeutica = st.selectbox("Aderenza terapeutica", ["", "Buona", "Parziale", "Scarsa"],
                                          key="pe_aderenza")
 
@@ -143,8 +143,8 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
                                      key="pe_scuola_informata")
 
     st.markdown("### 6. Impatto funzionale e quotidiano")
-    impatto_scolastico = st.text_area("Impatto su apprendimento, attenzione, memoria", key="pe_impatto_scolastico", height=60)
-    impatto_psicologico = st.text_area("Impatto emotivo/psicologico (paziente e famiglia)", key="pe_impatto_psic", height=60)
+    impatto_scolastico = st.text_area("Impatto su apprendimento, attenzione, memoria", key="pe_impatto_scolastico", height=68)
+    impatto_psicologico = st.text_area("Impatto emotivo/psicologico (paziente e famiglia)", key="pe_impatto_psic", height=68)
     limitazioni = st.multiselect("Limitazioni/precauzioni indicate", [
         "Attività in acqua solo con supervisione", "Evitare altezze", "Restrizioni sportive specifiche",
         "Attenzione a deprivazione di sonno", "Restrizioni alla guida (se pertinente)", "Nessuna limitazione particolare",
