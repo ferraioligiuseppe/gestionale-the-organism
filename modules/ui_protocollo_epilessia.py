@@ -187,21 +187,20 @@ def _render_diario_crisi(conn, paz_id, paziente):
                 st.rerun()
 
     righe = _elenco_crisi(conn, paz_id)
-    if not righe:
-        st.caption("Nessun episodio registrato finora.")
-        return
-
-    st.dataframe(righe, use_container_width=True,
-                 column_config=None, hide_index=True)
 
     nome_paziente = ""
     if paziente:
         nome_paziente = f"{paziente.get('cognome','') if hasattr(paziente,'get') else ''} " \
                          f"{paziente.get('nome','') if hasattr(paziente,'get') else ''}".strip()
-    pdf_bytes = _pdf_diario_crisi(nome_paziente, righe)
-    st.download_button("🖨️ Scarica diario delle crisi in PDF", data=pdf_bytes,
-                        file_name="diario_crisi_epilessia.pdf", mime="application/pdf",
-                        key="pe_diario_pdf_btn")
+
+    if not righe:
+        st.caption("Nessun episodio registrato finora.")
+    else:
+        st.dataframe(righe, use_container_width=True, column_config=None, hide_index=True)
+        pdf_bytes = _pdf_diario_crisi(nome_paziente, righe)
+        st.download_button("🖨️ Scarica diario delle crisi in PDF", data=pdf_bytes,
+                            file_name="diario_crisi_epilessia.pdf", mime="application/pdf",
+                            key="pe_diario_pdf_btn")
 
     st.markdown("##### 📅 Calendario mensile")
     import datetime as _dt
