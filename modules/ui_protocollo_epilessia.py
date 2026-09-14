@@ -124,100 +124,90 @@ def _elenco_crisi(conn, paz_id):
         return []
 
 
-def _pdf_diario_crisi(nome_paziente, righe, professionista="") -> bytes:
-    """Diario clinico delle crisi — un blocco per episodio, con intestazione
-    The Organism/PNEV, leggibile e stampabile (non una tabella compressa)."""
+def _pdf_diario_crisi(nome_paziente, righe, professionista="", data_nascita="") -> bytes:
+    """Diario delle crisi epilettiche — stesso formato del modulo cartaceo
+    PNEV: intestazione pnev.it, istruzioni, tabella Data/Ora/Durata/Note."""
     import io
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.units import cm
-    from reportlab.pdfgen import canvas as rl_canvas
-    from .pdf_templates import draw_intestazione, VERDE, GRIGIO, GRIGIO_L, W, H
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_JUSTIFY
+
+    VERDE = colors.HexColor("#1D6B44")
+    GRIGIO = colors.HexColor("#5b6b63")
+
+    def _header_footer(canvas_obj, doc):
+        canvas_obj.saveState()
+        canvas_obj.setFont("Helvetica-Bold", 11)
+        canvas_obj.setFillColor(VERDE)
+        canvas_obj.drawString(1.8*cm, 28.3*cm, "Metodo Psico-Neuro-Evolutivo")
+        canvas_obj.setFont("Helvetica", 9)
+        canvas_obj.drawString(1.8*cm, 27.85*cm, "pnev.it")
+        canvas_obj.setFont("Helvetica", 7.5)
+        canvas_obj.setFillColor(GRIGIO)
+        canvas_obj.drawString(1.8*cm, 27.4*cm,
+            "Via De Rosa 46, Pagani (SA) · Piano di Sorrento (NA) · WhatsApp 391 3598767 · "
+            f"apstheorganism@gmail.com · theorganism.it · pnev.it   pag. {doc.page}")
+        canvas_obj.setStrokeColor(VERDE); canvas_obj.setLineWidth(0.6)
+        canvas_obj.line(1.8*cm, 27.2*cm, 19.4*cm, 27.2*cm)
+        canvas_obj.restoreState()
 
     buf = io.BytesIO()
-    c = rl_canvas.Canvas(buf, pagesize=A4)
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                             leftMargin=1.8*cm, rightMargin=1.8*cm, topMargin=4.0*cm, bottomMargin=1.6*cm)
+    styles = getSampleStyleSheet()
+    s_titolo = ParagraphStyle("titolo", fontName="Helvetica-Bold", fontSize=14, textColor=VERDE, spaceAfter=4)
+    s_sub = ParagraphStyle("sub", fontName="Helvetica", fontSize=9, textColor=GRIGIO, spaceAfter=10)
+    s_info = ParagraphStyle("info", fontName="Helvetica", fontSize=9.5, spaceAfter=10)
+    s_istr = ParagraphStyle("istr", fontName="Helvetica", fontSize=8.3, leading=11.5, alignment=TA_JUSTIFY, spaceAfter=8)
+    s_cella = ParagraphStyle("cella", fontName="Helvetica", fontSize=8.3, leading=10.5)
+    s_cella_hdr = ParagraphStyle("cella_hdr", fontName="Helvetica-Bold", fontSize=9, textColor=colors.white)
 
-    def nuova_pagina(sottotitolo="Diario delle crisi epilettiche"):
-        draw_intestazione(c, professionista, sottotitolo)
-        y = H - 5.2*cm
-        c.setFont("Helvetica-Bold", 14); c.setFillColor(VERDE)
-        c.drawString(1.8*cm, y, sottotitolo)
-        c.setFont("Helvetica", 10); c.setFillColor(colors.black)
-        c.drawString(1.8*cm, y - 0.6*cm, f"Paziente: {nome_paziente or '—'}")
-        c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.5)
-        c.line(1.8*cm, y - 0.9*cm, W - 1.8*cm, y - 0.9*cm)
-        return y - 1.6*cm
-
-    y = nuova_pagina()
-    c.setFont("Helvetica-Bold", 11); c.setFillColor(VERDE)
-    c.drawString(1.8*cm, y, f"Totale episodi registrati: {len(righe)}")
-    y -= 0.9*cm
-
-    margine = 1.8*cm
-    larghezza = W - 2*margine
-    campi = [
-        ("Data", lambda r: str(r[0] or "—")),
-        ("Ora", lambda r: r[1] or "—"),
-        ("Durata", lambda r: r[2] or "—"),
-        ("Tipo di crisi", lambda r: r[3] or "—"),
-        ("Descrizione", lambda r: r[4] or "—"),
-        ("Fattore scatenante", lambda r: r[5] or "—"),
-        ("Farmaco al bisogno", lambda r: r[6] or "—"),
-        ("Stato post-critico", lambda r: r[7] or "—"),
-        ("Note", lambda r: r[8] or "—"),
+    elementi = [
+        Paragraph("Diario delle crisi epilettiche", s_titolo),
+        Paragraph("Modulo di automonitoraggio · Dott. Giuseppe Ferraioli — Psicologo, Neuropsicologo", s_sub),
+        Paragraph(f"<b>Nome e cognome:</b> {nome_paziente or '—'} &nbsp;&nbsp;&nbsp; "
+                  f"<b>Data di nascita:</b> {data_nascita or '—'}", s_info),
+        Paragraph(
+            "Compila subito dopo ogni crisi. La durata è il tempo dall'inizio alla fine dei sintomi, non il "
+            "recupero: se puoi usa il cronometro del telefono, altrimenti scrivi una stima. Registra anche gli "
+            "episodi brevissimi o dubbi. Se qualcuno ha assistito, annota cosa ha visto. "
+            "<b>Chiama il 112</b> se la crisi supera i 5 minuti, si ripete senza ripresa di coscienza, compaiono "
+            "difficoltà respiratorie, avviene in acqua, c'è un trauma, o è la prima crisi.", s_istr),
     ]
 
-    from reportlab.pdfbase.pdfmetrics import stringWidth
+    intestazione = [Paragraph(t, s_cella_hdr) for t in ["Data", "Ora d'inizio", "Durata", "Note"]]
+    dati_tabella = [intestazione]
+    for r in righe:
+        nota_completa = " · ".join([x for x in [
+            f"Tipo: {r[3]}" if r[3] else "", f"Fattore: {r[5]}" if r[5] else "",
+            f"Farmaco: {r[6]}" if r[6] else "", f"Post-crisi: {r[7]}" if r[7] else "",
+            r[8] or "",
+        ] if x])
+        dati_tabella.append([
+            Paragraph(str(r[0] or "—"), s_cella),
+            Paragraph(r[1] or "—", s_cella),
+            Paragraph(r[2] or "—", s_cella),
+            Paragraph(nota_completa or "—", s_cella),
+        ])
+    righe_vuote_min = 3 if righe else 12
+    for _ in range(righe_vuote_min):
+        dati_tabella.append([Paragraph("&nbsp;", s_cella)]*1 + [Paragraph("", s_cella)]*3)
 
-    def wrap_text(testo, font, size, max_width):
-        parole = str(testo).split()
-        righe_w, corrente = [], ""
-        for parola in parole:
-            prova = (corrente + " " + parola).strip()
-            if stringWidth(prova, font, size) <= max_width:
-                corrente = prova
-            else:
-                if corrente:
-                    righe_w.append(corrente)
-                corrente = parola
-        if corrente:
-            righe_w.append(corrente)
-        return righe_w or ["—"]
-
-    for idx, r in enumerate(righe, start=1):
-        blocco_altezza = 0.7*cm
-        valori_wrap = {}
-        for etichetta, getter in campi:
-            testo = getter(r)
-            righe_testo = wrap_text(testo, "Helvetica", 9, larghezza - 4.5*cm)
-            valori_wrap[etichetta] = righe_testo
-            blocco_altezza += max(1, len(righe_testo)) * 0.38*cm + 0.05*cm
-        blocco_altezza += 0.3*cm
-
-        if y - blocco_altezza < 2.5*cm:
-            c.showPage()
-            y = nuova_pagina()
-
-        c.setFillColor(colors.HexColor("#F4F8F6"))
-        c.rect(margine, y - blocco_altezza + 0.3*cm, larghezza, blocco_altezza - 0.3*cm, fill=1, stroke=0)
-        c.setStrokeColor(GRIGIO_L)
-        c.rect(margine, y - blocco_altezza + 0.3*cm, larghezza, blocco_altezza - 0.3*cm, fill=0, stroke=1)
-
-        c.setFont("Helvetica-Bold", 10); c.setFillColor(VERDE)
-        c.drawString(margine + 0.25*cm, y - 0.15*cm, f"Episodio {idx} — {campi[0][1](r)}")
-        yy = y - 0.75*cm
-        for etichetta, _ in campi[1:]:
-            c.setFont("Helvetica-Bold", 8.5); c.setFillColor(colors.HexColor("#2f4b3d"))
-            c.drawString(margine + 0.25*cm, yy, f"{etichetta}:")
-            c.setFont("Helvetica", 8.5); c.setFillColor(colors.black)
-            for j, riga_testo in enumerate(valori_wrap[etichetta]):
-                c.drawString(margine + 3.4*cm, yy - j*0.38*cm, riga_testo)
-            yy -= max(1, len(valori_wrap[etichetta])) * 0.38*cm + 0.05*cm
-
-        y -= blocco_altezza + 0.35*cm
-
-    c.showPage()
-    c.save()
+    tabella = Table(dati_tabella, colWidths=[2.3*cm, 2.6*cm, 2.2*cm, None], repeatRows=1)
+    tabella.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), VERDE),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#c9d6cf")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ROWHEIGHT", (0, 1), (-1, -1), 0.9*cm),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F4F8F6")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    elementi.append(tabella)
+    doc.build(elementi, onFirstPage=_header_footer, onLaterPages=_header_footer)
     return buf.getvalue()
 
 
@@ -255,7 +245,8 @@ def _render_diario_crisi(conn, paz_id, paziente):
         st.caption("Nessun episodio registrato finora.")
     else:
         st.dataframe(righe, use_container_width=True, column_config=None, hide_index=True)
-        pdf_bytes = _pdf_diario_crisi(nome_paziente, righe, st.session_state.get("utente_nome") or "Studio The Organism")
+        pdf_bytes = _pdf_diario_crisi(nome_paziente, righe, st.session_state.get("utente_nome") or "Studio The Organism",
+                                       (paziente.get("data_nascita") if paziente and hasattr(paziente, "get") else "") or "")
         st.download_button("🖨️ Scarica diario delle crisi in PDF", data=pdf_bytes,
                             file_name="diario_crisi_epilessia.pdf", mime="application/pdf",
                             key="pe_diario_pdf_btn")
