@@ -343,6 +343,45 @@ def _render_tab_iscritti(conn, ev: dict):
                     if m_slot:
                         from .slots import assegna_slot
                         assegna_slot(conn, nuova["id"], m_slot["orario"])
+                    # Anagrafica automatica anche per l'inserimento manuale
+                    try:
+                        cur_an = conn.cursor()
+                        cog_m = m_cognome.strip().upper()
+                        nom_m = m_nome.strip().upper()
+                        cur_an.execute(
+                            "SELECT id FROM pazienti WHERE (email IS NOT NULL AND LOWER(email)=%s) "
+                            "OR (UPPER(cognome)=%s AND UPPER(nome)=%s) LIMIT 1",
+                            (m_email.strip().lower(), cog_m, nom_m))
+                        esistente = cur_an.fetchone()
+                        if esistente:
+                            paz_auto_id = int(esistente["id"] if isinstance(esistente, dict) else esistente[0])
+                        else:
+                            paz_auto_id = _crea_paziente_da_iscrizione(conn, {
+                                "cognome": m_cognome, "nome": m_nome,
+                                "email": m_email, "telefono": m_telefono})
+                        aggancia_paziente(conn, nuova["id"], paz_auto_id)
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
+                    try:
+                        from modules.email_otp import invia_email
+                        riga_slot = (f"Slot: {m_slot['orario'].strftime('%d/%m/%Y alle %H:%M')}\n"
+                                     if m_slot else "")
+                        corpo_staff = (
+                            f"Nuova iscrizione inserita manualmente dallo studio.\n\n"
+                            f"Evento: {ev['titolo']}\n{riga_slot}"
+                            f"Nome: {m_cognome.strip()} {m_nome.strip()}\n"
+                            f"Email: {m_email.strip()} · Tel: {m_telefono.strip() or '—'}\n"
+                            f"Stato: {(forza or 'automatico').upper()}\n"
+                            f"Note: {m_note.strip() or '—'}"
+                        )
+                        for dest in ("aps@theorganism.com", "dr.ferraioligiuseppe@gmail.com"):
+                            try:
+                                invia_email(dest, f"[Iscrizione manuale] {ev['titolo']}", corpo_staff)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                     st.success("Iscrizione aggiunta.")
                     st.rerun()
                 except Exception as e:
