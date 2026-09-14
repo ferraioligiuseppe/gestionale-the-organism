@@ -867,6 +867,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "📋 Protocollo di valutazione":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(conn, paz_id); return True
+    if sotto == "⚡ Protocollo Epilessia":
+        from .ui_protocollo_epilessia import render_protocollo_epilessia
+        render_protocollo_epilessia(conn, paz_id); return True
     if sotto == "📸 Photoref AI":
         try:
             from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
@@ -1274,6 +1277,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📋 Protocollo di valutazione":
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             render_protocollo_pdf_app(conn, paz_id); return
+        if sotto == "⚡ Protocollo Epilessia":
+            from .ui_protocollo_epilessia import render_protocollo_epilessia
+            render_protocollo_epilessia(conn, paz_id); return
 
     # ── AREA TEST NEUROEVOLUTIVI ──────────────────────────────────────
     elif area == AREA_TEST_NEUROEVOL:
