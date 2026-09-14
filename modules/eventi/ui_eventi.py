@@ -393,7 +393,7 @@ def _render_tab_iscritti(conn, ev: dict):
                             f"Stato: {(forza or 'automatico').upper()}\n"
                             f"Note: {m_note.strip() or '—'}"
                         )
-                        for dest in ("dr.ferraioligiuseppe@gmail.com",):
+                        for dest in ("apstheorganism@gmail.com", "dr.ferraioligiuseppe@gmail.com"):
                             try:
                                 invia_email(dest, f"[Iscrizione manuale] {ev['titolo']}", corpo_staff)
                             except Exception:
