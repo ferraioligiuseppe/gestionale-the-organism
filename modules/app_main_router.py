@@ -463,6 +463,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🥁 PNEV Metronomo",
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
+        "⚡ Protocollo Epilessia",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
