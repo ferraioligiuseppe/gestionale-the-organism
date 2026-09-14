@@ -516,8 +516,14 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
             email_paz = (paziente.get("email") if paziente and hasattr(paziente, "get") else "") or f"paziente{paz_id}@theorganism.local"
             utente_id = db_link.crea_utente(conn, nome=f"{nom} {cog}".strip() or f"Paziente {paz_id}", email=email_paz)
             token = db_link.crea_magic_link(conn, utente_id)
-            link = f"https://gestionale-the-organism.streamlit.app/diario_crisi_pubblico?t={token}"
-            st.success("Link generato — valido 9 giorni, poi vanne generato uno nuovo.")
-            st.code(link)
+            st.session_state["pe_link_generato"] = (
+                f"https://gestionale-the-organism.streamlit.app/diario_crisi_pubblico?t={token}")
         except Exception as e:
-            st.error(f"Errore generazione link: {e}")
+            st.session_state["pe_link_generato"] = None
+            st.session_state["pe_link_errore"] = str(e)
+
+    if st.session_state.get("pe_link_generato"):
+        st.success("Link generato — valido 9 giorni, poi va rigenerato.")
+        st.code(st.session_state["pe_link_generato"])
+    elif st.session_state.get("pe_link_errore"):
+        st.error(f"Errore generazione link: {st.session_state['pe_link_errore']}")
