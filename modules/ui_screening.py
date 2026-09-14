@@ -279,7 +279,7 @@ def _genera_e_invia_relazione(conn, paz_id, sezioni, note):
             invia_email(email_dest,
                         f"Risultati screening — {nome_completo}",
                         testo_finale + "\n\n— Studio The Organism")
-            for staff in ("aps@theorganism.com", "dr.ferraioligiuseppe@gmail.com"):
+            for staff in ("apstheorganism@gmail.com", "dr.ferraioligiuseppe@gmail.com"):
                 try:
                     invia_email(staff, f"[Screening] Relazione inviata — {nome_completo}", testo_finale)
                 except Exception:
