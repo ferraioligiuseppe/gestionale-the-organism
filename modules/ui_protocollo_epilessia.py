@@ -124,42 +124,100 @@ def _elenco_crisi(conn, paz_id):
         return []
 
 
-def _pdf_diario_crisi(nome_paziente, righe) -> bytes:
+def _pdf_diario_crisi(nome_paziente, righe, professionista="") -> bytes:
+    """Diario clinico delle crisi — un blocco per episodio, con intestazione
+    The Organism/PNEV, leggibile e stampabile (non una tabella compressa)."""
     import io
-    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.pdfgen import canvas as rl_canvas
+    from .pdf_templates import draw_intestazione, VERDE, GRIGIO, GRIGIO_L, W, H
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
-                             leftMargin=14*mm, rightMargin=14*mm, topMargin=14*mm, bottomMargin=14*mm)
-    styles = getSampleStyleSheet()
-    titolo = ParagraphStyle("titolo", parent=styles["Heading1"], textColor=colors.HexColor("#1D6B44"), fontSize=16)
-    normale = ParagraphStyle("normale", parent=styles["Normal"], fontSize=8, leading=10)
+    c = rl_canvas.Canvas(buf, pagesize=A4)
 
-    elementi = [
-        Paragraph("Diario delle crisi epilettiche", titolo),
-        Paragraph(f"Paziente: {nome_paziente or '—'}", styles["Normal"]),
-        Spacer(1, 8),
+    def nuova_pagina(sottotitolo="Diario delle crisi epilettiche"):
+        draw_intestazione(c, professionista, sottotitolo)
+        y = H - 5.2*cm
+        c.setFont("Helvetica-Bold", 14); c.setFillColor(VERDE)
+        c.drawString(1.8*cm, y, sottotitolo)
+        c.setFont("Helvetica", 10); c.setFillColor(colors.black)
+        c.drawString(1.8*cm, y - 0.6*cm, f"Paziente: {nome_paziente or '—'}")
+        c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.5)
+        c.line(1.8*cm, y - 0.9*cm, W - 1.8*cm, y - 0.9*cm)
+        return y - 1.6*cm
+
+    y = nuova_pagina()
+    c.setFont("Helvetica-Bold", 11); c.setFillColor(VERDE)
+    c.drawString(1.8*cm, y, f"Totale episodi registrati: {len(righe)}")
+    y -= 0.9*cm
+
+    margine = 1.8*cm
+    larghezza = W - 2*margine
+    campi = [
+        ("Data", lambda r: str(r[0] or "—")),
+        ("Ora", lambda r: r[1] or "—"),
+        ("Durata", lambda r: r[2] or "—"),
+        ("Tipo di crisi", lambda r: r[3] or "—"),
+        ("Descrizione", lambda r: r[4] or "—"),
+        ("Fattore scatenante", lambda r: r[5] or "—"),
+        ("Farmaco al bisogno", lambda r: r[6] or "—"),
+        ("Stato post-critico", lambda r: r[7] or "—"),
+        ("Note", lambda r: r[8] or "—"),
     ]
-    intestazione = ["Data", "Ora", "Durata", "Tipo", "Descrizione", "Fattore scat.", "Farmaco", "Post-critico", "Note"]
-    dati_tabella = [intestazione]
-    for r in righe:
-        dati_tabella.append([Paragraph(str(c or "—"), normale) for c in r])
 
-    tabella = Table(dati_tabella, repeatRows=1)
-    tabella.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1D6B44")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTSIZE", (0, 0), (-1, 0), 9),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F4F8F6")]),
-    ]))
-    elementi.append(tabella)
-    doc.build(elementi)
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    def wrap_text(testo, font, size, max_width):
+        parole = str(testo).split()
+        righe_w, corrente = [], ""
+        for parola in parole:
+            prova = (corrente + " " + parola).strip()
+            if stringWidth(prova, font, size) <= max_width:
+                corrente = prova
+            else:
+                if corrente:
+                    righe_w.append(corrente)
+                corrente = parola
+        if corrente:
+            righe_w.append(corrente)
+        return righe_w or ["—"]
+
+    for idx, r in enumerate(righe, start=1):
+        blocco_altezza = 0.7*cm
+        valori_wrap = {}
+        for etichetta, getter in campi:
+            testo = getter(r)
+            righe_testo = wrap_text(testo, "Helvetica", 9, larghezza - 4.5*cm)
+            valori_wrap[etichetta] = righe_testo
+            blocco_altezza += max(1, len(righe_testo)) * 0.38*cm + 0.05*cm
+        blocco_altezza += 0.3*cm
+
+        if y - blocco_altezza < 2.5*cm:
+            c.showPage()
+            y = nuova_pagina()
+
+        c.setFillColor(colors.HexColor("#F4F8F6"))
+        c.rect(margine, y - blocco_altezza + 0.3*cm, larghezza, blocco_altezza - 0.3*cm, fill=1, stroke=0)
+        c.setStrokeColor(GRIGIO_L)
+        c.rect(margine, y - blocco_altezza + 0.3*cm, larghezza, blocco_altezza - 0.3*cm, fill=0, stroke=1)
+
+        c.setFont("Helvetica-Bold", 10); c.setFillColor(VERDE)
+        c.drawString(margine + 0.25*cm, y - 0.15*cm, f"Episodio {idx} — {campi[0][1](r)}")
+        yy = y - 0.75*cm
+        for etichetta, _ in campi[1:]:
+            c.setFont("Helvetica-Bold", 8.5); c.setFillColor(colors.HexColor("#2f4b3d"))
+            c.drawString(margine + 0.25*cm, yy, f"{etichetta}:")
+            c.setFont("Helvetica", 8.5); c.setFillColor(colors.black)
+            for j, riga_testo in enumerate(valori_wrap[etichetta]):
+                c.drawString(margine + 3.4*cm, yy - j*0.38*cm, riga_testo)
+            yy -= max(1, len(valori_wrap[etichetta])) * 0.38*cm + 0.05*cm
+
+        y -= blocco_altezza + 0.35*cm
+
+    c.showPage()
+    c.save()
     return buf.getvalue()
 
 
@@ -197,7 +255,7 @@ def _render_diario_crisi(conn, paz_id, paziente):
         st.caption("Nessun episodio registrato finora.")
     else:
         st.dataframe(righe, use_container_width=True, column_config=None, hide_index=True)
-        pdf_bytes = _pdf_diario_crisi(nome_paziente, righe)
+        pdf_bytes = _pdf_diario_crisi(nome_paziente, righe, st.session_state.get("utente_nome") or "Studio The Organism")
         st.download_button("🖨️ Scarica diario delle crisi in PDF", data=pdf_bytes,
                             file_name="diario_crisi_epilessia.pdf", mime="application/pdf",
                             key="pe_diario_pdf_btn")
