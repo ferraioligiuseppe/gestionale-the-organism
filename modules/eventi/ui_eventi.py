@@ -553,8 +553,68 @@ def _render_tab_iscritti(conn, ev: dict):
                     except Exception as e:
                         st.error(f"Errore: {e}")
 
+    st.markdown("---")
+    st.markdown("**🔧 Sanatoria iscrizioni già presenti**")
+    st.caption("Per gli iscritti inseriti prima degli aggiornamenti: crea le anagrafiche mancanti "
+               "e reinvia le email di conferma non ancora partite.")
+    sa1, sa2 = st.columns(2)
+    if sa1.button("➕ Crea anagrafiche mancanti (tutti)", key=f"sanatoria_anag_{ev['id']}"):
+        creati, gia_ok, errori = 0, 0, 0
+        for i in iscrizioni:
+            if i.get("paziente_id") or i["stato"] == "annullata":
+                gia_ok += 1
+                continue
+            try:
+                cur_s = conn.cursor()
+                cur_s.execute(
+                    "SELECT id FROM pazienti WHERE (email IS NOT NULL AND LOWER(email)=%s) "
+                    "OR (UPPER(cognome)=%s AND UPPER(nome)=%s) LIMIT 1",
+                    ((i.get("email") or "").lower(), (i.get("cognome") or "").upper(),
+                     (i.get("nome") or "").upper()))
+                ex = cur_s.fetchone()
+                pid = int(ex["id"] if isinstance(ex, dict) else ex[0]) if ex else _crea_paziente_da_iscrizione(conn, i)
+                aggancia_paziente(conn, i["id"], pid)
+                creati += 1
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+                errori += 1
+        st.success(f"Anagrafiche collegate: {creati} · già a posto: {gia_ok} · errori: {errori}")
+        st.rerun()
 
-# ----- TAB AZIONI -----
+    if sa2.button("✉️ Reinvia conferme mancanti", key=f"sanatoria_mail_{ev['id']}"):
+        from modules.email_otp import invia_email as _invia
+        from .db_eventi import mark_email_conferma_inviata
+        inviate, saltate, falliti = 0, 0, 0
+        for i in iscrizioni:
+            if i.get("email_conferma_inviata") or i["stato"] == "annullata" or not i.get("email"):
+                saltate += 1
+                continue
+            try:
+                slot_txt = (f"Appuntamento: {i['slot_orario'].strftime('%d/%m/%Y alle %H:%M')}\n"
+                            if i.get("slot_orario") else
+                            (f"Data: {ev['data_ora'].strftime('%d/%m/%Y alle %H:%M')}\n" if ev.get("data_ora") else ""))
+                if i["stato"] == "lista_attesa":
+                    corpo = (f"Ciao {i.get('nome','')},\n\nla tua iscrizione a \"{ev['titolo']}\" è stata "
+                             f"registrata in LISTA D'ATTESA.\nTi contatteremo se si libera un posto.\n")
+                    ogg = f"Sei in lista d'attesa — {ev['titolo']}"
+                else:
+                    corpo = (f"Ciao {i.get('nome','')},\n\nla tua iscrizione a \"{ev['titolo']}\" è confermata.\n"
+                             + slot_txt)
+                    ogg = f"Iscrizione confermata — {ev['titolo']}"
+                if ev.get("sede"):
+                    corpo += f"Sede: {ev['sede']}\n"
+                corpo += "\nPer qualsiasi domanda scrivi a apstheorganism@gmail.com.\n\nStudio The Organism"
+                if _invia(i["email"], ogg, corpo):
+                    try: mark_email_conferma_inviata(conn, i["id"])
+                    except Exception: pass
+                    inviate += 1
+                else:
+                    falliti += 1
+            except Exception:
+                falliti += 1
+        st.success(f"Email inviate: {inviate} · saltate (già inviate/annullate): {saltate} · fallite: {falliti}")
+        st.rerun()
 
 def _crea_paziente_da_iscrizione(conn, sel: dict) -> int:
     """Crea una nuova anagrafica dai dati dell'iscrizione a un evento.
