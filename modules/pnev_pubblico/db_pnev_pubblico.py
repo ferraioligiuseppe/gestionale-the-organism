@@ -134,21 +134,33 @@ def init_pnev_pubblico_db(conn):
             "pnev_pubblico_magic_links",
         ]
         for t in tabelle:
-            cur.execute(f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY;")
-            cur.execute(f"ALTER TABLE {t} FORCE ROW LEVEL SECURITY;")
-            cur.execute(f"""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM pg_policies
-                        WHERE tablename = '{t}' AND policyname = '{t}_studio'
-                    ) THEN
-                        CREATE POLICY {t}_studio ON {t}
-                            USING      (studio_id = current_setting('app.current_studio', true)::bigint)
-                            WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
-                    END IF;
-                END $$;
-            """)
+            # Le policy RLS esistono già dopo la prima esecuzione: se un altro
+            # processo tiene il lock (Streamlit Cloud + Render sullo stesso DB),
+            # salta senza far fallire tutta l'inizializzazione.
+            try:
+                cur.execute("SET LOCAL lock_timeout = '2s';")
+                cur.execute(f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY;")
+                cur.execute(f"ALTER TABLE {t} FORCE ROW LEVEL SECURITY;")
+            except Exception:
+                conn.rollback()
+                continue
+            try:
+                cur.execute(f"""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_policies
+                            WHERE tablename = '{t}' AND policyname = '{t}_studio'
+                        ) THEN
+                            CREATE POLICY {t}_studio ON {t}
+                                USING      (studio_id = current_setting('app.current_studio', true)::bigint)
+                                WITH CHECK (studio_id = current_setting('app.current_studio', true)::bigint);
+                        END IF;
+                    END $$;
+                """)
+            except Exception:
+                conn.rollback()
+                continue
 
         conn.commit()
     except Exception:
