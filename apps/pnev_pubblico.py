@@ -331,35 +331,49 @@ def azione_iscrizione_evento(conn):
         if ev.get("data_ora"):
             st.info(f"Orario: **{ev['data_ora'].strftime('%H:%M')}**")
 
-    st.markdown("### 👦 Dati del bambino/a")
-    c1, c2 = st.columns(2)
-    nome_b = c1.text_input("Nome bambino/a *")
-    cognome_b = c2.text_input("Cognome bambino/a *")
-    c3, c4 = st.columns(2)
-    scuola = c3.text_input("Scuola")
-    classe = c4.text_input("Classe")
+    # Tutto dentro un form: Streamlit NON ricarica la pagina ad ogni campo
+    # compilato (prima ogni uscita da un campo rifaceva le query su evento e
+    # slot, dando l'impressione di un errore/blocco).
+    with st.form("iscrizione_evento_form"):
+        st.markdown("### 👦 Dati del bambino/a")
+        c1, c2 = st.columns(2)
+        nome_b = c1.text_input("Nome bambino/a *")
+        cognome_b = c2.text_input("Cognome bambino/a *")
+        c3, c4 = st.columns(2)
+        scuola = c3.text_input("Scuola")
+        classe = c4.text_input("Classe")
 
-    st.markdown("### 👤 Dati del genitore/tutore")
-    c5, c6 = st.columns(2)
-    nome_g = c5.text_input("Nome genitore *")
-    cognome_g = c6.text_input("Cognome genitore *")
-    c7, c8 = st.columns(2)
-    email = c7.text_input("Email *")
-    telefono = c8.text_input("Telefono *")
+        st.markdown("### 👤 Dati del genitore/tutore")
+        c5, c6 = st.columns(2)
+        nome_g = c5.text_input("Nome genitore *")
+        cognome_g = c6.text_input("Cognome genitore *")
+        c7, c8 = st.columns(2)
+        email = c7.text_input("Email *")
+        telefono = c8.text_input("Telefono *")
 
-    st.markdown("### 🔒 Consensi")
-    cons_privacy = st.checkbox(
-        "Acconsento al trattamento dei dati personali del minore per le finalità dello "
-        "screening scolastico, secondo l'informativa privacy dello Studio The Organism. *"
-    )
-    cons_contatto = st.checkbox(
-        "Acconsento a essere ricontattato/a per comunicare l'esito e un eventuale approfondimento."
-    )
+        st.markdown("### 🔒 Consensi")
+        cons_privacy = st.checkbox(
+            "Acconsento al trattamento dei dati personali del minore per le finalità dello "
+            "screening scolastico, secondo l'informativa privacy dello Studio The Organism. *"
+        )
+        cons_contatto = st.checkbox(
+            "Acconsento a essere ricontattato/a per comunicare l'esito e un eventuale approfondimento."
+        )
 
-    if st.button("✅ Conferma iscrizione", type="primary", use_container_width=True):
-        obbligatori = [nome_b, cognome_b, nome_g, cognome_g, email, telefono]
-        if not all((v or "").strip() for v in obbligatori):
-            st.error("Compila tutti i campi obbligatori (*).")
+        inviato = st.form_submit_button("✅ Conferma iscrizione", type="primary",
+                                         use_container_width=True)
+
+    if inviato:
+        campi = {
+            "Nome bambino/a": nome_b, "Cognome bambino/a": cognome_b,
+            "Nome genitore": nome_g, "Cognome genitore": cognome_g,
+            "Email": email, "Telefono": telefono,
+        }
+        mancanti = [etichetta for etichetta, valore in campi.items() if not (valore or "").strip()]
+        if mancanti:
+            st.error("Mancano questi campi obbligatori: **" + ", ".join(mancanti) + "**. "
+                     "Se il testo appare già scritto in grigio, è il completamento automatico del "
+                     "browser: clicca nel campo e riscrivilo a mano.")
             st.stop()
         if "@" not in (email or ""):
             st.error("Email non valida.")
