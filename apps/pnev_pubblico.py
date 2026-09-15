@@ -113,6 +113,12 @@ def _init_schema():
     conn = get_connection()
     try:
         db.init_pnev_pubblico_db(conn)
+    except Exception:
+        # Deadlock/lock contention quando più ambienti (Streamlit Cloud + Render)
+        # o più utenti aprono la pagina insieme: lo schema esiste già, quindi
+        # non deve bloccare l'iscrizione.
+        try: conn.rollback()
+        except Exception: pass
     finally:
         conn.close()
     _schema_pronto = True
