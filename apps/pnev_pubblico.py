@@ -453,8 +453,8 @@ def azione_iscrizione_evento(conn):
                         paz_auto_id = int(esistente["id"] if isinstance(esistente, dict) else esistente[0])
                     else:
                         cur_an.execute(
-                            "INSERT INTO pazienti (cognome, nome, telefono, email, stato_paziente, studio_id) "
-                            "VALUES (%s,%s,%s,%s,'ATTIVO',1) RETURNING id",
+                            "INSERT INTO pazienti (cognome, nome, telefono, email, stato_paziente) "
+                            "VALUES (%s,%s,%s,%s,'ATTIVO') RETURNING id",
                             (cog_b, nom_b, telefono or None, email.strip().lower() or None))
                         r_new = cur_an.fetchone()
                         paz_auto_id = int(r_new["id"] if isinstance(r_new, dict) else r_new[0])
