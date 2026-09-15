@@ -190,7 +190,7 @@ def azione_registra(conn):
     ip = _client_ip()
     if ip and db.conta_registrazioni_ip_oggi(conn, ip) >= LIMITE_REGISTRAZIONI_IP_GIORNO:
         st.error("Hai già raggiunto il numero massimo di registrazioni da questa rete oggi. "
-                 "Se hai bisogno di più accessi, scrivi a info@theorganism.com.")
+                 "Se hai bisogno di più accessi, scrivi a apstheorganism@gmail.com.")
         st.stop()
 
     utente_id = db.crea_utente(
@@ -318,21 +318,17 @@ def azione_iscrizione_evento(conn):
     st.divider()
 
     slot_scelto = None
+    opzioni_slot = None
     if ev.get("slot_abilitati"):
-        st.markdown("### 🕐 Scegli l'orario")
         slots = slot_con_disponibilita(conn, ev)
         liberi = [s for s in slots if s["liberi"] > 0]
         if not liberi:
             st.warning(
                 "Tutti gli orari sono al momento occupati. "
-                "Scrivici a info@theorganism.com per essere messo in lista d'attesa."
+                "Scrivici a apstheorganism@gmail.com per essere messo in lista d'attesa."
             )
             st.stop()
-        opzioni = {s["orario"].strftime("%H:%M"): s["orario"] for s in liberi}
-        scelta_lbl = st.radio(
-            "Orari disponibili", options=list(opzioni.keys()), horizontal=True,
-        )
-        slot_scelto = opzioni[scelta_lbl]
+        opzioni_slot = {s["orario"].strftime("%H:%M"): s["orario"] for s in liberi}
     else:
         if ev.get("data_ora"):
             st.info(f"Orario: **{ev['data_ora'].strftime('%H:%M')}**")
@@ -341,6 +337,13 @@ def azione_iscrizione_evento(conn):
     # compilato (prima ogni uscita da un campo rifaceva le query su evento e
     # slot, dando l'impressione di un errore/blocco).
     with st.form("iscrizione_evento_form"):
+        if opzioni_slot:
+            st.markdown("### 🕐 Scegli l'orario")
+            scelta_lbl = st.radio(
+                "Orari disponibili", options=list(opzioni_slot.keys()), horizontal=True,
+            )
+            slot_scelto = opzioni_slot[scelta_lbl]
+
         st.markdown("### 👦 Dati del bambino/a")
         c1, c2 = st.columns(2)
         nome_b = c1.text_input("Nome bambino/a *")
@@ -497,14 +500,17 @@ def azione_iscrizione_evento(conn):
                         corpo_email += f"Data: {ev['data_ora'].strftime('%d/%m/%Y alle %H:%M')}\n"
                     if ev.get("sede"):
                         corpo_email += f"Sede: {ev['sede']}\n"
-                    corpo_email += "\nPer qualsiasi domanda scrivi a info@theorganism.com.\n\nStudio The Organism"
+                    corpo_email += "\nPer qualsiasi domanda scrivi a apstheorganism@gmail.com.\n\nStudio The Organism"
                     oggetto_genitore = (
                         f"Sei in lista d'attesa — {ev['titolo']}" if stato_iscr == "lista_attesa"
                         else f"Iscrizione confermata — {ev['titolo']}"
                     )
-                    invia_email(email.strip(), oggetto_genitore, corpo_email)
-                except Exception:
-                    pass
+                    ok_m, dett_m = invia_email(email.strip(), oggetto_genitore, corpo_email,
+                                               dettaglio=True)
+                    if not ok_m:
+                        st.warning(f"Iscrizione salvata, ma l'email di conferma non è partita: {dett_m}")
+                except Exception as _e_mail:
+                    st.warning(f"Iscrizione salvata, ma l'email di conferma non è partita: {_e_mail}")
 
                 # Notifica interna allo studio, ad ogni iscrizione (confermata o lista d'attesa)
                 try:
@@ -525,18 +531,20 @@ def azione_iscrizione_evento(conn):
                         f"[Lista attesa] {ev['titolo']}" if stato_iscr == "lista_attesa"
                         else f"[Iscrizione] {ev['titolo']}"
                     )
-                    for dest in ("apstheorganism@gmail.com", "dr.ferraioligiuseppe@gmail.com"):
+                    for dest in ("dr.ferraioligiuseppe@gmail.com",):
                         try:
-                            invia_email(dest, oggetto_staff, corpo_staff)
-                        except Exception:
-                            pass
+                            ok_s, dett_s = invia_email(dest, oggetto_staff, corpo_staff, dettaglio=True)
+                            if not ok_s:
+                                st.caption(f"Notifica interna a {dest} non inviata: {dett_s}")
+                        except Exception as _e_staff:
+                            st.caption(f"Notifica interna a {dest} non inviata: {_e_staff}")
                 except Exception:
                     pass
 
             st.success("🎉 Iscrizione confermata!")
             if slot_scelto:
                 st.markdown(f"**Il tuo appuntamento:** {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}")
-            st.info("Ti abbiamo inviato una email di conferma. Se non arriva controlla anche lo spam, oppure scrivi a info@theorganism.com.")
+            st.info("Ti abbiamo inviato una email di conferma. Se non arriva controlla anche lo spam, oppure scrivi a apstheorganism@gmail.com.")
             st.stop()
         except ValueError as e:
             st.error(str(e))
@@ -662,7 +670,7 @@ def main():
         utente_id = db.valida_magic_link(conn, token)
         if not utente_id:
             st.error("Link non valido o scaduto. Se il tuo percorso è ancora in corso, "
-                     "richiedi un nuovo link scrivendo a info@theorganism.com.")
+                     "richiedi un nuovo link scrivendo a apstheorganism@gmail.com.")
             st.stop()
 
         # 3. Azioni di salvataggio prima della dashboard
