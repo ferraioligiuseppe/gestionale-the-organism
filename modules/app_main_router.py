@@ -728,6 +728,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
         except Exception as e:
             st.error(f"Errore valutazione visuo-percettiva: {e}")
+            import traceback; st.code(traceback.format_exc())
         _assistente_coda(conn, paz_id)
         _bottone_prossimo_passo(conn, paz_id, sotto)
         return True
@@ -1254,6 +1255,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
             except Exception as e:
                 st.error(f"Errore valutazione visuo-percettiva: {e}")
+                import traceback; st.code(traceback.format_exc())
             return
         if sotto == "🔢 DEM interattivo":
             try:
@@ -1300,6 +1302,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 render_valutazione_visuo_percettiva(conn, paz_id, paz_rec or {})
             except Exception as e:
                 st.error(f"Errore valutazione visuo-percettiva: {e}")
+                import traceback; st.code(traceback.format_exc())
             return
         if sotto == "🧬 INPP — Valutazione diagnostica":
             try:
