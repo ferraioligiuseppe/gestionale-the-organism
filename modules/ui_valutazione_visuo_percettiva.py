@@ -219,12 +219,12 @@ def _intestazione(conn, pid, paziente, stored):
             return label, spec, dn or un
 
         opzioni_prof = [_build_prof_option(u) for u in utenti_db]
-        labels_prof  = [f"{l} — {s}" if s else l for l,s,_ in opzioni_prof]
+        labels_prof  = [f"{l} — {sp}" if sp else l for l,sp,_ in opzioni_prof]
 
         # Default: utente loggato
         prof_loggato = _prof()
         default_idx  = 0
-        for i,(l,s,dn) in enumerate(opzioni_prof):
+        for i,(l,sp,dn) in enumerate(opzioni_prof):
             if dn == prof_loggato or l == prof_loggato:
                 default_idx = i; break
 
