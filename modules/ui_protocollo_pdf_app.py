@@ -334,3 +334,20 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
                     try: conn.rollback()
                     except Exception: pass
                     st.error(f"Errore salvataggio: {e}")
+
+    st.markdown("---")
+    try:
+        from .ui_relazione_screening import render_relazione
+        dati_per_relazione = {}
+        if dati_json_incollati.strip():
+            try:
+                dati_per_relazione = json.loads(dati_json_incollati)
+            except Exception:
+                pass
+        if not dati_per_relazione:
+            st.caption("Per una relazione ricca di dettagli, incolla prima i dati esportati qui sopra: "
+                       "l'AI li usa per scrivere le sezioni descrittive.")
+        render_relazione(conn, paz_id, dati_valutazione=dati_per_relazione,
+                         fonte=html_file, kp=f"{kp}_rel")
+    except Exception as e:
+        st.warning(f"Relazione funzionale non disponibile: {e}")

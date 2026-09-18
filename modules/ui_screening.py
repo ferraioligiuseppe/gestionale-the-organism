@@ -1012,6 +1012,15 @@ def render_screening(conn=None, paz_id=None, paziente=None) -> None:
         _genera_e_invia_relazione(conn, paz_id, sezioni, note)
 
     st.markdown("---")
+    try:
+        from .ui_relazione_screening import render_relazione
+        render_relazione(conn, paz_id,
+                         dati_valutazione={"sezioni": sezioni, "note": note},
+                         fonte="screening_rapido", kp="scr_rel")
+    except Exception as e:
+        st.warning(f"Relazione funzionale non disponibile: {e}")
+
+    st.markdown("---")
     st.markdown("#### Storico screening di questo paziente")
     righe = _storico(conn, paz_id)
     if not righe:
