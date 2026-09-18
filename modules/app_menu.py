@@ -218,6 +218,7 @@ SOTTOSEZIONI = {
     ],
     AREA_SCREENING: [
         "🩺 Screening rapido",
+        "🩺 Screening breve (15 min)",
         "🩺 Screening completo",
     ],
     AREA_TNPEE: [

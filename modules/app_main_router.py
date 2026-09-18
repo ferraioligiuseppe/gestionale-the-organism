@@ -474,7 +474,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🎧 Audiometria tonale calibrata",
         "🤖 Relazioni cliniche (AI)", "📝 Relazione clinica",
         "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
-        "🩺 Screening rapido",
+        "🩺 Screening rapido", "🩺 Screening breve (15 min)",
     }
 
     paz_id = None
@@ -1013,6 +1013,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             st.error(f"Errore screening: {e}")
         return True
+    if sotto == "🩺 Screening breve (15 min)":
+        from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+        render_protocollo_pdf_app(
+            conn, paz_id,
+            html_file="Screening_BREVE_15min_app_MASTER.html",
+            pdf_file="Screening_BREVE_15min.pdf",
+            titolo="🩺 Screening breve (15 minuti) — app stampabile",
+            sottotitolo="Versione rapida a impaginazione A4, con calcolatori e stampa diretta.",
+            kp="sb")
+        return True
     if sotto == "🩺 Screening completo":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(conn, paz_id); return True
@@ -1277,6 +1287,16 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🩶 Postura (Wii Balance Board)":
             from .ui_postura_wiifit import render_postura_wiifit
             render_postura_wiifit(conn, paz_id); return
+        if sotto == "🩺 Screening breve (15 min)":
+            from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+            render_protocollo_pdf_app(
+                conn, paz_id,
+                html_file="Screening_BREVE_15min_app_MASTER.html",
+                pdf_file="Screening_BREVE_15min.pdf",
+                titolo="🩺 Screening breve (15 minuti) — app stampabile",
+                sottotitolo="Versione rapida a impaginazione A4, con calcolatori e stampa diretta.",
+                kp="sb")
+            return
         if sotto == "📋 Protocollo di valutazione":
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             render_protocollo_pdf_app(conn, paz_id); return

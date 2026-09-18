@@ -25,30 +25,36 @@ import datetime
 import streamlit as st
 import streamlit.components.v1 as components
 
-_HTML_PATH = os.path.join(os.path.dirname(__file__), "..", "static_protocollo",
-                          "PNEV_protocollo_app_MASTER.html")
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static_protocollo")
+_HTML_PATH = os.path.join(_STATIC_DIR, "PNEV_protocollo_app_MASTER.html")
 
 
-def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
-    st.header("📋 Protocollo di valutazione — app stampabile")
-    st.caption("Versione a impaginazione A4 fedele al documento, con calcolatori automatici "
-               "(PCC, %SS, indici) e stampa diretta.")
+def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
+                               html_file="PNEV_protocollo_app_MASTER.html",
+                               pdf_file="Protocollo_valutazione_TheOrganism.pdf",
+                               titolo="📋 Protocollo di valutazione — app stampabile",
+                               sottotitolo=("Versione a impaginazione A4 fedele al documento, con "
+                                            "calcolatori automatici (PCC, %SS, indici) e stampa diretta."),
+                               kp="pv") -> None:
+    """kp = prefisso delle chiavi widget: serve per poter montare più varianti
+    (protocollo completo, screening breve) senza collisioni di key."""
+    st.header(titolo)
+    st.caption(sottotitolo)
     st.warning("⚠️ Salvataggio: usa **Esporta** per scaricare i dati come file, e **Importa** per "
                "riaprirli — così restano legati al paziente indipendentemente dal browser usato. "
                "\"Salva\"/\"Riapri\" nella barra della app usano solo la memoria di questo browser.")
 
-    _pdf_path = os.path.join(os.path.dirname(__file__), "..", "static_protocollo",
-                              "Protocollo_valutazione_TheOrganism.pdf")
+    _pdf_path = os.path.join(_STATIC_DIR, pdf_file)
     try:
         with open(_pdf_path, "rb") as f:
-            st.download_button("📄 Scarica il protocollo in PDF (bianco, da compilare a mano)",
-                                data=f.read(), file_name="Protocollo_valutazione_TheOrganism.pdf",
-                                mime="application/pdf")
+            st.download_button("📄 Scarica il PDF (bianco, da compilare a mano)",
+                                data=f.read(), file_name=pdf_file,
+                                mime="application/pdf", key=f"{kp}_dl_pdf")
     except Exception:
         pass
 
     try:
-        with open(_HTML_PATH, "r", encoding="utf-8") as f:
+        with open(os.path.join(_STATIC_DIR, html_file), "r", encoding="utf-8") as f:
             html = f.read()
     except Exception as e:
         st.error(f"File del protocollo non trovato: {e}")
@@ -60,11 +66,11 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
     if conn is not None:
         with st.expander("➕ Nuovo paziente (non ancora in anagrafica)"):
             cn1, cn2 = st.columns(2)
-            nuovo_cognome = cn1.text_input("Cognome", key="pv_html_nuovo_cognome")
-            nuovo_nome = cn2.text_input("Nome", key="pv_html_nuovo_nome")
-            nuova_dn = st.date_input("Data di nascita", key="pv_html_nuova_dn",
+            nuovo_cognome = cn1.text_input("Cognome", key=f"{kp}_html_nuovo_cognome")
+            nuovo_nome = cn2.text_input("Nome", key=f"{kp}_html_nuovo_nome")
+            nuova_dn = st.date_input("Data di nascita", key=f"{kp}_html_nuova_dn",
                                       value=None, min_value=datetime.date(1930, 1, 1))
-            if st.button("Crea e usa questo paziente", key="pv_html_crea_paziente"):
+            if st.button("Crea e usa questo paziente", key=f"{kp}_html_crea_paziente"):
                 if not nuovo_cognome or not nuovo_nome:
                     st.warning("Cognome e nome sono obbligatori.")
                 else:
@@ -98,7 +104,7 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None) -> None:
             opzioni = ["— nessuno (compilo a mano) —"] + [
                 f"{_g(r,1,'cognome') or ''} {_g(r,2,'nome') or ''} — #{_g(r,0,'id')}" for r in righe
             ]
-            scelta = st.selectbox("👤 Precompila da anagrafica", opzioni, key="pv_html_pick_paziente")
+            scelta = st.selectbox("👤 Precompila da anagrafica", opzioni, key=f"{kp}_html_pick_paziente")
             if scelta != opzioni[0]:
                 idx_sel = opzioni.index(scelta) - 1
                 r = righe[idx_sel]
@@ -286,10 +292,10 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
                "screening al suo fascicolo senza reinserire nulla.")
     dati_json_incollati = st.text_area(
         "1) Clicca '📤 Prepara dati per il salvataggio' nella barra della app qui sopra, poi copia "
-        "il testo che appare e incollalo qui:", key="pv_html_dati_export", height=90)
+        "il testo che appare e incollalo qui:", key=f"{kp}_html_dati_export", height=90)
     c_s1, c_s2 = st.columns(2)
-    contatto_screening = c_s1.text_input("Telefono/email di contatto (facoltativo)", key="pv_html_contatto")
-    if c_s2.button("💾 Salva nel gestionale", key="pv_html_salva_db", type="primary"):
+    contatto_screening = c_s1.text_input("Telefono/email di contatto (facoltativo)", key=f"{kp}_html_contatto")
+    if c_s2.button("💾 Salva nel gestionale", key=f"{kp}_html_salva_db", type="primary"):
         if not dati_json_incollati.strip():
             st.warning("Incolla prima i dati esportati dalla barra della app.")
         elif conn is None:
