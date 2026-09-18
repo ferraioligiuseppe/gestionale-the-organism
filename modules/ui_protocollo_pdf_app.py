@@ -121,19 +121,43 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
         _precompila_js = f"""
 <script>
 (function(){{
+  var NOME = `{_safe_nome}`, DN = `{_safe_dn}`;
+
   function fill(){{
+    var fatto = false;
+
+    // Struttura A — protocollo completo: campi con attributo data-k
     var f1 = document.querySelector('[data-k="f1"]');
     var f2 = document.querySelector('[data-k="f2"]');
-    if (f1) {{ f1.value = `{_safe_nome}`;
-      f1.dispatchEvent(new Event('input', {{bubbles:true}}));
-      f1.dispatchEvent(new Event('change', {{bubbles:true}}));
-      f1.dispatchEvent(new Event('blur', {{bubbles:true}})); }}
-    if (f2) {{ f2.value = `{_safe_dn}`;
-      f2.dispatchEvent(new Event('input', {{bubbles:true}}));
-      f2.dispatchEvent(new Event('change', {{bubbles:true}}));
-      f2.dispatchEvent(new Event('blur', {{bubbles:true}})); }}
+    if (f1 || f2) {{
+      [[f1, NOME], [f2, DN]].forEach(function(p){{
+        if (!p[0]) return;
+        p[0].value = p[1];
+        ['input','change','blur'].forEach(function(ev){{
+          p[0].dispatchEvent(new Event(ev, {{bubbles:true}}));
+        }});
+      }});
+      fatto = true;
+    }}
+
+    // Struttura B — screening breve: valori nell'oggetto V, campi ridisegnati
+    // da draw(). Scriviamo in V e forziamo il redisegno.
+    if (!fatto && typeof window.V === 'object' && window.V !== null) {{
+      window.V.nome = NOME;
+      if (DN) {{
+        window.V.dn = DN;
+        // il campo 'data' della scheda è la data della valutazione, non la
+        // nascita: non lo sovrascriviamo.
+      }}
+      try {{ if (typeof window.sl === 'function') window.sl(); }} catch(e){{}}
+      try {{ if (typeof window.draw === 'function') window.draw(); }} catch(e){{}}
+      try {{ if (typeof window.prog === 'function') window.prog(); }} catch(e){{}}
+      fatto = true;
+    }}
+    return fatto;
   }}
-  // Esegue subito, poi ripete più volte: alcune app ripristinano i campi da
+
+  // Esegue subito, poi ripete: alcune app ripristinano i campi da
   // localStorage dopo il caricamento, e dobbiamo vincere anche su quello.
   fill();
   window.addEventListener('load', fill);
@@ -141,18 +165,24 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
   setTimeout(fill, 800);
   setTimeout(fill, 1500);
 
-  // Bottone manuale nella topbar: garantisce il riempimento anche se i
-  // tentativi automatici sono partiti troppo presto/tardi rispetto al
-  // caricamento reale della pagina.
-  var topbar2 = document.querySelector('.topbar');
-  if (topbar2) {{
-    var btn2 = document.createElement('button');
-    btn2.type = 'button'; btn2.className = 'noprint';
-    btn2.textContent = '📋 Inserisci dati anagrafica selezionati';
-    btn2.style.cssText = 'background:#1D6B44;color:#fff;border:0;border-radius:4px;padding:6px 11px;font-size:12px;font-family:inherit;cursor:pointer;margin-left:6px';
-    btn2.addEventListener('click', fill);
-    topbar2.appendChild(btn2);
+  // Bottone manuale: cercato in .topbar (protocollo completo) o in
+  // header/.bar (screening breve), così c'è sempre un modo esplicito.
+  function montaBottone(){{
+    var host = document.querySelector('.topbar') || document.querySelector('header')
+               || document.querySelector('.bar');
+    if (!host || host.querySelector('.pnev-fill-btn')) return;
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'noprint pnev-fill-btn';
+    b.textContent = '📋 Inserisci dati anagrafica';
+    b.style.cssText = 'background:#1D6B44;color:#fff;border:0;border-radius:5px;padding:6px 11px;font-size:12.5px;font-family:inherit;cursor:pointer;margin-left:8px';
+    b.addEventListener('click', function(){{
+      if (!fill()) alert('Campi anagrafici non trovati in questa scheda.');
+    }});
+    host.appendChild(b);
   }}
+  montaBottone();
+  setTimeout(montaBottone, 600);
+  setTimeout(montaBottone, 1600);
 }})();
 </script>
 """
@@ -188,7 +218,8 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
   }
 
   // Bottone dentro la barra in alto (sticky), sempre visibile: invia il testo selezionato
-  var topbar = document.querySelector('.topbar');
+  var topbar = document.querySelector('.topbar') || document.querySelector('header')
+               || document.querySelector('.bar');
   var hint = document.getElementById('pnev_sm_hint');
   if (topbar){
     var btn = document.createElement('button');
@@ -253,7 +284,8 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
     _salva_db_js = """
 <script>
 (function(){
-  var topbar3 = document.querySelector('.topbar');
+  var topbar3 = document.querySelector('.topbar') || document.querySelector('header')
+                || document.querySelector('.bar');
   if (!topbar3) return;
   var btn3 = document.createElement('button');
   btn3.type = 'button'; btn3.className = 'noprint';
