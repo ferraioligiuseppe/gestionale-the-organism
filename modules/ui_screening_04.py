@@ -111,7 +111,7 @@ def _email_consenso(conn, paz_id):
 
 
 def _relazione_semplice(nome, esito, dati) -> str:
-    righe = [f"Screening 0-4 anni — {nome}", f"Esito: {esito}", ""]
+    righe = [f"Esito complessivo: {esito}", ""]
     for titolo, contenuto in dati.items():
         if not contenuto:
             continue
@@ -126,6 +126,13 @@ def _relazione_semplice(nome, esito, dati) -> str:
     righe.append("Questo screening è una prima osservazione orientativa, non una diagnosi. "
                  "A questa età il quadro evolve rapidamente: il senso della rilevazione è decidere "
                  "se monitorare o approfondire, non etichettare.")
+    if esito and ("Giallo" in esito or "Rosso" in esito):
+        righe.append("")
+        righe.append("Segnaliamo che la valutazione neuropsichiatrica infantile e l'eventuale presa "
+                     "in carico possono avvenire direttamente presso lo Studio The Organism, con la "
+                     "Dott.ssa Chiara Scarpa (Neuropsichiatra Infantile), garantendo continuità con "
+                     "il percorso già avviato. Resta naturalmente possibile rivolgersi al pediatra "
+                     "curante per il percorso presso il servizio territoriale.")
     return "\n".join(righe)
 
 
@@ -144,7 +151,14 @@ def _genera_relazione(conn, paz_id, esito, dati):
                 f"Scrivi in italiano semplice, mai allarmistico. Spiega cosa è stato osservato, cosa è "
                 f"nella norma per l'età e cosa merita attenzione. A questa età NON si formulano diagnosi: "
                 f"chiudi con indicazioni pratiche concrete e, se l'esito è giallo o rosso, con quali "
-                f"approfondimenti considerare e in quali tempi. Massimo 400 parole."
+                f"approfondimenti considerare e in quali tempi.\n\n"
+                f"IMPORTANTE — se l'esito è giallo o rosso, informa i genitori che la valutazione "
+                f"neuropsichiatrica infantile e l'eventuale presa in carico possono avvenire "
+                f"direttamente presso lo Studio The Organism, con la Dott.ssa Chiara Scarpa (NPI), "
+                f"senza dover attendere i tempi del servizio territoriale: presentalo come "
+                f"un'opportunità di continuità di percorso, non come un obbligo, e ricorda che "
+                f"resta libera la scelta di rivolgersi al pediatra per il percorso pubblico.\n\n"
+                f"Massimo 450 parole."
             )
             sistema = ("Sei un assistente clinico dello Studio The Organism (Metodo PNEV). Scrivi per "
                        "genitori di bambini molto piccoli: chiaro, concreto, mai allarmistico, sempre "
@@ -160,6 +174,18 @@ def _genera_relazione(conn, paz_id, esito, dati):
         st.info("AI non disponibile: uso una relazione semplice basata sui dati inseriti.")
         testo = _relazione_semplice(nome, esito, dati)
 
+    try:
+        from .intestazione_relazioni import incornicia
+        _dn = paz.get("data_nascita")
+        testo = incornicia(
+            testo, "Screening 0-4 anni — relazione",
+            nome_paziente=nome,
+            data_nascita=(_dn.strftime("%d/%m/%Y") if hasattr(_dn, "strftime") else str(_dn or "")),
+            includi_npi_interna=bool(esito and ("Giallo" in esito or "Rosso" in esito)),
+        )
+    except Exception:
+        pass
+
     st.text_area("Bozza relazione (modificabile prima dell'invio)", value=testo,
                  height=320, key="s04_bozza")
     finale = st.session_state.get("s04_bozza", testo)
@@ -171,7 +197,7 @@ def _genera_relazione(conn, paz_id, esito, dati):
     if st.button(f"📤 Invia ora a {dest}", key="s04_invia", type="primary"):
         try:
             from .email_otp import invia_email
-            invia_email(dest, f"Screening 0-4 anni — {nome}", finale + "\n\n— Studio The Organism")
+            invia_email(dest, f"Screening 0-4 anni — {nome}", finale)
             try:
                 invia_email("dr.ferraioligiuseppe@gmail.com",
                             f"[Screening 0-4] {nome} — esito {esito}", finale)
@@ -377,7 +403,9 @@ def render_screening_04(conn=None, paz_id=None, paziente=None) -> None:
             "Visivo funzionale", "Uditivo funzionale", "Regolazione e sonno",
             "Riflessi primitivi residui"], key="s04_aree")
         invii = st.multiselect("Invii/approfondimenti proposti", [
-            "Neuropsichiatria infantile (NPI)", "Logopedia", "Audiologia / esame audiometrico",
+            "NPI interna — Dott.ssa Chiara Scarpa (presso di noi)",
+            "Pediatra curante per impegnativa NPI territoriale",
+            "Logopedia", "Audiologia / esame audiometrico",
             "Oculistica pediatrica", "Osteopatia", "Terapia miofunzionale",
             "Fisioterapia / psicomotricità", "Percorso PNEV — riflessi primitivi",
             "Percorso PNEV — stimolazione uditiva (MAPS)",

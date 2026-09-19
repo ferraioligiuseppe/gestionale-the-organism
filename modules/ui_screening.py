@@ -178,11 +178,7 @@ def _relazione_template(nome_completo, sezioni, note) -> str:
     """Relazione senza AI, nello stile Studio The Organism (intestazione,
     aree valutate A-F, conclusioni, consigli) — sempre disponibile anche
     se l'AI non è configurata o non risponde."""
-    righe = [
-        "Dott. Giuseppe Ferraioli — Psicologo Optometrista Comportamentale",
-        "Studio Associato The Organism", "",
-        f"SCREENING — {nome_completo}", "",
-    ]
+    righe = []
     etichette = {
         "linguaggio": "B. Abilità del linguaggio", "apprendimento": "C. Apprendimenti",
         "visuo_posturale": "A/D. Visuo-posturale", "miofunzionale": "E. Valutazione miofunzionale",
@@ -263,6 +259,19 @@ def _genera_e_invia_relazione(conn, paz_id, sezioni, note):
         st.info("AI non disponibile in questo momento: uso una relazione semplice basata sui dati inseriti.")
         testo = _relazione_template(nome_completo, sezioni, note)
 
+    try:
+        from .intestazione_relazioni import incornicia
+        testo = incornicia(
+            testo, "Relazione di screening",
+            nome_paziente=nome_completo,
+            data_nascita=(paziente.get("data_nascita").strftime("%d/%m/%Y")
+                          if hasattr(paziente.get("data_nascita"), "strftime")
+                          else str(paziente.get("data_nascita") or "")),
+            includi_npi_interna=True,
+        )
+    except Exception:
+        pass
+
     st.text_area("Bozza relazione (modificabile prima dell'invio)", value=testo,
                  height=320, key="scr_bozza_relazione")
     testo_finale = st.session_state.get("scr_bozza_relazione", testo)
@@ -278,7 +287,7 @@ def _genera_e_invia_relazione(conn, paz_id, sezioni, note):
             from .email_otp import invia_email
             invia_email(email_dest,
                         f"Risultati screening — {nome_completo}",
-                        testo_finale + "\n\n— Studio The Organism")
+                        testo_finale)
             for staff in ("apstheorganism@gmail.com", "dr.ferraioligiuseppe@gmail.com"):
                 try:
                     invia_email(staff, f"[Screening] Relazione inviata — {nome_completo}", testo_finale)
