@@ -575,3 +575,85 @@ def get_paziente(studio_id: int, paziente_id: int) -> Optional[Dict[str, Any]]:
         cur.execute(sql, (paziente_id,))
         row = cur.fetchone()
     return dict(row) if row else None
+
+# ---------------------------------------------------------------------------
+# FOTO ITEM (sostituzione del pittogramma ARASAAC con una foto reale)
+# ---------------------------------------------------------------------------
+
+def get_foto_item(studio_id: int, paziente_id: int, nome_item: str):
+    """Foto personalizzata dell'item, o None se si usa il pittogramma."""
+    try:
+        with _cursor(studio_id) as cur:
+            cur.execute(
+                "SELECT foto FROM pecs_foto_item "
+                "WHERE studio_id=%s AND paziente_id=%s AND nome_item=%s",
+                (studio_id, paziente_id, nome_item))
+            row = cur.fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    foto = row["foto"] if hasattr(row, "get") else row[0]
+    return bytes(foto) if foto is not None else None
+
+
+def salva_foto_item(studio_id: int, paziente_id: int, nome_item: str, foto: bytes) -> None:
+    with _cursor(studio_id, commit=True) as cur:
+        cur.execute(
+            "INSERT INTO pecs_foto_item (studio_id, paziente_id, nome_item, foto) "
+            "VALUES (%s, %s, %s, %s) "
+            "ON CONFLICT (studio_id, paziente_id, nome_item) DO UPDATE "
+            "SET foto = EXCLUDED.foto, aggiornato_il = NOW()",
+            (studio_id, paziente_id, nome_item, foto))
+
+
+def elimina_foto_item(studio_id: int, paziente_id: int, nome_item: str) -> None:
+    with _cursor(studio_id, commit=True) as cur:
+        cur.execute(
+            "DELETE FROM pecs_foto_item "
+            "WHERE studio_id=%s AND paziente_id=%s AND nome_item=%s",
+            (studio_id, paziente_id, nome_item))
+
+# ---------------------------------------------------------------------------
+# CACHE ID ARASAAC (il pittogramma si cerca per parola italiana una volta sola)
+# ---------------------------------------------------------------------------
+
+def _assicura_cache_arasaac(cur) -> None:
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS pecs_arasaac_cache ("
+        " id BIGSERIAL PRIMARY KEY,"
+        " studio_id BIGINT NOT NULL,"
+        " nome_item TEXT NOT NULL,"
+        " arasaac_id BIGINT NOT NULL,"
+        " aggiornato_il TIMESTAMPTZ NOT NULL DEFAULT NOW(),"
+        " UNIQUE (studio_id, nome_item))")
+
+
+def get_arasaac_id(studio_id: int, nome_item: str):
+    try:
+        with _cursor(studio_id, commit=True) as cur:
+            _assicura_cache_arasaac(cur)
+            cur.execute(
+                "SELECT arasaac_id FROM pecs_arasaac_cache "
+                "WHERE studio_id=%s AND nome_item=%s", (studio_id, nome_item))
+            row = cur.fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    val = row["arasaac_id"] if hasattr(row, "get") else row[0]
+    return int(val) if val is not None else None
+
+
+def salva_arasaac_id(studio_id: int, nome_item: str, arasaac_id: int) -> None:
+    try:
+        with _cursor(studio_id, commit=True) as cur:
+            _assicura_cache_arasaac(cur)
+            cur.execute(
+                "INSERT INTO pecs_arasaac_cache (studio_id, nome_item, arasaac_id) "
+                "VALUES (%s, %s, %s) "
+                "ON CONFLICT (studio_id, nome_item) DO UPDATE "
+                "SET arasaac_id = EXCLUDED.arasaac_id, aggiornato_il = NOW()",
+                (studio_id, nome_item, int(arasaac_id)))
+    except Exception:
+        pass

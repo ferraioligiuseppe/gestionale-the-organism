@@ -656,3 +656,106 @@ def valuta_criterio(fase: str, sessioni: List[Dict[str, Any]]) -> EsitoCriterio:
     requisiti += motore(finestra)
     soddisfatto = all(r.soddisfatto for r in requisiti)
     return EsitoCriterio(fase, soddisfatto, requisiti, len(finestra))
+
+# ---------------------------------------------------------------------------
+# VOCABOLARIO INIZIALE
+# ---------------------------------------------------------------------------
+# Pittogrammi ARASAAC (arasaac.org) - licenza CC BY-NC-SA, Governo di Aragona.
+# Ogni item puo' essere sostituito in scheda con una foto reale del paziente:
+# per molti bambini la foto dell'oggetto vero funziona meglio del pittogramma.
+
+def url_arasaac(nome_o_id, risoluzione: int = 500):
+    """URL del pittogramma. Accetta il NOME italiano dell'item (ricerca su
+    ARASAAC, con cache) oppure direttamente un ID numerico."""
+    from .pecs_arasaac import url_da_id, url_pittogramma
+    if isinstance(nome_o_id, int):
+        return url_da_id(nome_o_id, risoluzione)
+    return url_pittogramma(str(nome_o_id), risoluzione)
+
+
+@dataclass(frozen=True)
+class ItemVocabolario:
+    nome: str
+    categoria: str
+    # Il pittogramma si risolve cercando il nome italiano su ARASAAC
+    # (vedi pecs_arasaac.url_pittogramma): niente ID fissi da mantenere.
+
+
+VOCABOLARIO_INIZIALE: List[ItemVocabolario] = [
+    # Cibo
+    ItemVocabolario("Acqua", "Cibo e bevande"),
+    ItemVocabolario("Succo", "Cibo e bevande"),
+    ItemVocabolario("Latte", "Cibo e bevande"),
+    ItemVocabolario("Biscotto", "Cibo e bevande"),
+    ItemVocabolario("Pane", "Cibo e bevande"),
+    ItemVocabolario("Mela", "Cibo e bevande"),
+    ItemVocabolario("Banana", "Cibo e bevande"),
+    ItemVocabolario("Patatine", "Cibo e bevande"),
+    ItemVocabolario("Cioccolato", "Cibo e bevande"),
+    ItemVocabolario("Gelato", "Cibo e bevande"),
+    ItemVocabolario("Pasta", "Cibo e bevande"),
+    ItemVocabolario("Pizza", "Cibo e bevande"),
+    # Giochi
+    ItemVocabolario("Palla", "Giochi"),
+    ItemVocabolario("Bolle di sapone", "Giochi"),
+    ItemVocabolario("Macchinina", "Giochi"),
+    ItemVocabolario("Costruzioni", "Giochi"),
+    ItemVocabolario("Puzzle", "Giochi"),
+    ItemVocabolario("Pupazzo", "Giochi"),
+    ItemVocabolario("Libro", "Giochi"),
+    ItemVocabolario("Musica", "Giochi"),
+    ItemVocabolario("Tablet", "Giochi"),
+    ItemVocabolario("Altalena", "Giochi"),
+    ItemVocabolario("Colori", "Giochi"),
+    ItemVocabolario("Plastilina", "Giochi"),
+    # Attivita'
+    ItemVocabolario("Uscire", "Attivita'"),
+    ItemVocabolario("Giocare", "Attivita'"),
+    ItemVocabolario("Mangiare", "Attivita'"),
+    ItemVocabolario("Bere", "Attivita'"),
+    ItemVocabolario("Dormire", "Attivita'"),
+    ItemVocabolario("Bagno", "Attivita'"),
+    ItemVocabolario("Coccole", "Attivita'"),
+    ItemVocabolario("Guardare la TV", "Attivita'"),
+    # Persone
+    ItemVocabolario("Mamma", "Persone"),
+    ItemVocabolario("Papa'", "Persone"),
+    ItemVocabolario("Nonna", "Persone"),
+    ItemVocabolario("Nonno", "Persone"),
+    ItemVocabolario("Maestra", "Persone"),
+    # Bisogni e stati
+    ItemVocabolario("Aiuto", "Bisogni e stati"),
+    ItemVocabolario("Basta", "Bisogni e stati"),
+    ItemVocabolario("Ancora", "Bisogni e stati"),
+    ItemVocabolario("Pausa", "Bisogni e stati"),
+    ItemVocabolario("Male", "Bisogni e stati"),
+    ItemVocabolario("Bagno (WC)", "Bisogni e stati"),
+    ItemVocabolario("Contento", "Bisogni e stati"),
+    ItemVocabolario("Triste", "Bisogni e stati"),
+    # Attributi (dalla Fase VI)
+    ItemVocabolario("Grande", "Attributi"),
+    ItemVocabolario("Piccolo", "Attributi"),
+    ItemVocabolario("Rosso", "Attributi"),
+    ItemVocabolario("Blu", "Attributi"),
+    ItemVocabolario("Giallo", "Attributi"),
+    ItemVocabolario("Verde", "Attributi"),
+    # Frase
+    ItemVocabolario("Io voglio", "Striscia-frase"),
+    ItemVocabolario("Io vedo", "Striscia-frase"),
+    ItemVocabolario("Io sento", "Striscia-frase"),
+    ItemVocabolario("Ho", "Striscia-frase"),
+    ItemVocabolario("E'", "Striscia-frase"),
+]
+
+
+def categorie_vocabolario() -> List[str]:
+    """Categorie presenti nel vocabolario iniziale, nell'ordine di comparsa."""
+    viste: List[str] = []
+    for item in VOCABOLARIO_INIZIALE:
+        if item.categoria not in viste:
+            viste.append(item.categoria)
+    return viste
+
+
+def vocabolario_per_categoria(categoria: str) -> List[ItemVocabolario]:
+    return [i for i in VOCABOLARIO_INIZIALE if i.categoria == categoria]

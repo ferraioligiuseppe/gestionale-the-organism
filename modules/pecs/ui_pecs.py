@@ -501,7 +501,11 @@ def _tab_vocabolario(sid, protocollo) -> None:
             if foto:
                 st.image(foto, use_container_width=True)
             else:
-                st.image(pc.url_arasaac(item.arasaac_id), use_container_width=True)
+                _url = pc.url_arasaac(item.nome)
+                if _url:
+                    st.image(_url, use_container_width=True)
+                else:
+                    st.caption("⚠️ pittogramma non trovato su ARASAAC")
             st.caption(f"**{item.nome}**")
             up = st.file_uploader("Sostituisci con una foto", type=["png", "jpg", "jpeg"],
                                   key=f"pecs_upl_{item.nome}", label_visibility="collapsed")
@@ -511,6 +515,47 @@ def _tab_vocabolario(sid, protocollo) -> None:
             if foto and st.button("Ripristina pittogramma", key=f"pecs_reset_{item.nome}"):
                 db.elimina_foto_item(sid, paziente_id, item.nome)
                 st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### 🖨️ Stampa tessere")
+    st.caption("Stampa su cartoncino, plastifica e applica il velcro sul retro. "
+               "Le tessere con foto personalizzata usano la foto, le altre il pittogramma.")
+    from .pecs_arasaac import foglio_tessere_html, misure_disponibili, striscia_frase_html
+    import base64 as _b64
+
+    misure = misure_disponibili()
+    c_st1, c_st2 = st.columns([2, 1])
+    scelta_misura = c_st1.selectbox(
+        "Dimensione tessera", [m[0] for m in misure],
+        format_func=lambda k: dict(misure)[k], key="pecs_misura_tessere")
+    solo_categoria = c_st2.checkbox("Solo categoria mostrata", value=True,
+                                     key="pecs_stampa_solo_cat")
+
+    da_stampare = items if solo_categoria else list(pc.VOCABOLARIO_INIZIALE)
+    if st.button(f"📄 Genera foglio ({len(da_stampare)} tessere)", key="pecs_genera_tessere"):
+        tessere = []
+        with st.spinner("Preparo le tessere…"):
+            for it in da_stampare:
+                f = db.get_foto_item(sid, paziente_id, it.nome)
+                if f:
+                    url_img = "data:image/png;base64," + _b64.b64encode(f).decode()
+                else:
+                    url_img = pc.url_arasaac(it.nome) or ""
+                tessere.append({"nome": it.nome, "url": url_img})
+        html_foglio = foglio_tessere_html(tessere, scelta_misura)
+        st.components.v1.html(html_foglio, height=900, scrolling=True)
+        st.download_button("⬇️ Scarica il foglio (HTML da stampare)",
+                           data=html_foglio.encode("utf-8"),
+                           file_name=f"tessere_pecs_{scelta_misura}.html",
+                           mime="text/html", key="pecs_dl_tessere")
+
+    if st.button("📄 Genera striscia-frase", key="pecs_genera_striscia"):
+        html_striscia = striscia_frase_html()
+        st.components.v1.html(html_striscia, height=600, scrolling=True)
+        st.download_button("⬇️ Scarica la striscia-frase (HTML da stampare)",
+                           data=html_striscia.encode("utf-8"),
+                           file_name="striscia_frase_pecs.html",
+                           mime="text/html", key="pecs_dl_striscia")
 
 
 def _tab_scheda(fase_corrente: str) -> None:
