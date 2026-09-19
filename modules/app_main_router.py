@@ -1294,7 +1294,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🧸 Screening 0-4 anni":
             from .ui_screening_04 import render_screening_04
             render_screening_04(conn, paz_id); return
-    if sotto == "🩺 Screening breve (15 min)":
+        if sotto == "🩺 Screening breve (15 min)":
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             render_protocollo_pdf_app(
                 conn, paz_id,
