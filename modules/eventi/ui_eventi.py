@@ -1041,7 +1041,11 @@ def _render_form_crea_evento(conn):
 
         col1, col2 = st.columns(2)
         with col1:
-            tipo = st.selectbox("Tipo ✱", options=list(TIPI_VALIDI))
+            tipo = st.selectbox(
+                "Tipo ✱", options=list(TIPI_VALIDI),
+                help="«screening» → il form pubblico chiede i dati del bambino/a "
+                     "e della scuola. Gli altri tipi chiedono i dati del "
+                     "partecipante adulto.")
         with col2:
             posti_max = st.number_input(
                 "Posti max (0 = illimitati — lascia 0 se usi le fasce orarie)",

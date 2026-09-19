@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 ROME_TZ = ZoneInfo("Europe/Rome")
 
-TIPI_VALIDI = ("costellazioni", "webinar", "workshop", "altro")
+TIPI_VALIDI = ("screening", "costellazioni", "webinar", "workshop", "altro")
 STATI_VALIDI = ("confermata", "lista_attesa", "annullata")
 
 
