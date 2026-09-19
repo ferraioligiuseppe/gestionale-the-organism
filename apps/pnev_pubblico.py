@@ -336,6 +336,25 @@ def azione_iscrizione_evento(conn):
     # Tutto dentro un form: Streamlit NON ricarica la pagina ad ogni campo
     # compilato (prima ogni uscita da un campo rifaceva le query su evento e
     # slot, dando l'impressione di un errore/blocco).
+    # Tipo di evento: per minori (screening scolastico, giornata del bambino) oppure
+    # per adulti (costellazioni familiari, incontri, corsi). Determina le etichette
+    # del form e il testo dei consensi.
+    # Si decide dal TIPO dell'evento impostato nel gestionale: è un dato
+    # esplicito, non un indovinello sul titolo. Solo per i tipi generici
+    # ("altro", o tipo mancante sui vecchi eventi) si ripiega sulle parole
+    # chiave del titolo/descrizione.
+    _tipo_ev = (ev.get("tipo") or "").strip().lower()
+    if _tipo_ev == "screening":
+        evento_minori = True
+    elif _tipo_ev in ("costellazioni", "webinar", "workshop"):
+        evento_minori = False
+    else:
+        _testo_ev = f"{ev.get('titolo','')} {ev.get('descrizione','') or ''}".lower()
+        _kw_minori = ("bambin", "screening", "scolastic", "pediatr", "infanzia", "ragazz")
+        _kw_adulti = ("costellazion", "adulti", "genitori", "corso", "formazione", "serata")
+        evento_minori = (any(k in _testo_ev for k in _kw_minori)
+                         and not any(k in _testo_ev for k in _kw_adulti))
+
     with st.form("iscrizione_evento_form"):
         if opzioni_slot:
             st.markdown("### 🕐 Scegli l'orario")
@@ -344,29 +363,42 @@ def azione_iscrizione_evento(conn):
             )
             slot_scelto = opzioni_slot[scelta_lbl]
 
-        st.markdown("### 👦 Dati del bambino/a")
-        c1, c2 = st.columns(2)
-        nome_b = c1.text_input("Nome bambino/a *")
-        cognome_b = c2.text_input("Cognome bambino/a *")
-        c3, c4 = st.columns(2)
-        scuola = c3.text_input("Scuola")
-        classe = c4.text_input("Classe")
+        if evento_minori:
+            st.markdown("### 👦 Dati del bambino/a")
+            c1, c2 = st.columns(2)
+            nome_b = c1.text_input("Nome bambino/a *")
+            cognome_b = c2.text_input("Cognome bambino/a *")
+            c3, c4 = st.columns(2)
+            scuola = c3.text_input("Scuola")
+            classe = c4.text_input("Classe")
 
-        st.markdown("### 👤 Dati del genitore/tutore")
-        c5, c6 = st.columns(2)
-        nome_g = c5.text_input("Nome genitore *")
-        cognome_g = c6.text_input("Cognome genitore *")
+            st.markdown("### 👤 Dati del genitore/tutore")
+            c5, c6 = st.columns(2)
+            nome_g = c5.text_input("Nome genitore *")
+            cognome_g = c6.text_input("Cognome genitore *")
+        else:
+            st.markdown("### 👤 I tuoi dati")
+            c5, c6 = st.columns(2)
+            nome_g = c5.text_input("Nome *")
+            cognome_g = c6.text_input("Cognome *")
+            nome_b = cognome_b = scuola = classe = ""
+
         c7, c8 = st.columns(2)
         email = c7.text_input("Email *")
         telefono = c8.text_input("Telefono *")
 
         st.markdown("### 🔒 Consensi")
         cons_privacy = st.checkbox(
-            "Acconsento al trattamento dei dati personali del minore per le finalità dello "
-            "screening scolastico, secondo l'informativa privacy dello Studio The Organism. *"
+            ("Acconsento al trattamento dei dati personali del minore per le finalità dello "
+             "screening scolastico, secondo l'informativa privacy dello Studio The Organism. *")
+            if evento_minori else
+            ("Acconsento al trattamento dei miei dati personali per le finalità di questo "
+             "incontro, secondo l'informativa privacy dello Studio The Organism. *")
         )
         cons_contatto = st.checkbox(
             "Acconsento a essere ricontattato/a per comunicare l'esito e un eventuale approfondimento."
+            if evento_minori else
+            "Acconsento a essere ricontattato/a per informazioni sulle attività dello Studio."
         )
 
         inviato = st.form_submit_button("✅ Conferma iscrizione", type="primary",
@@ -374,10 +406,11 @@ def azione_iscrizione_evento(conn):
 
     if inviato:
         campi = {
-            "Nome bambino/a": nome_b, "Cognome bambino/a": cognome_b,
-            "Nome genitore": nome_g, "Cognome genitore": cognome_g,
+            "Nome": nome_g, "Cognome": cognome_g,
             "Email": email, "Telefono": telefono,
         }
+        if evento_minori:
+            campi = {"Nome bambino/a": nome_b, "Cognome bambino/a": cognome_b, **campi}
         mancanti = [etichetta for etichetta, valore in campi.items() if not (valore or "").strip()]
         if mancanti:
             st.error("Mancano questi campi obbligatori: **" + ", ".join(mancanti) + "**. "
@@ -413,7 +446,8 @@ def azione_iscrizione_evento(conn):
                 iscr = dbev.crea_iscrizione(
                     conn, ev["id"],
                     nome=nome_g, cognome=cognome_g, email=email, telefono=telefono,
-                    note=f"Bambino/a: {cognome_b.strip()} {nome_b.strip()} · Scuola: {scuola or '—'} {classe or ''}".strip(),
+                    note=(f"Bambino/a: {cognome_b.strip()} {nome_b.strip()} · Scuola: {scuola or '—'} {classe or ''}".strip()
+                          if evento_minori else ""),
                     consenso_privacy=cons_privacy, consenso_marketing=cons_contatto,
                     sorgente="web_slot",
                 )
@@ -423,7 +457,8 @@ def azione_iscrizione_evento(conn):
 
                 orario_evento = slot_scelto or ev["data_ora"]
                 durata = ev.get("slot_durata_minuti") if slot_scelto else (ev.get("durata_minuti") or 15)
-                titolo_cal = f"Screening — {cognome_b.strip()} {nome_b.strip()}"
+                titolo_cal = (f"Screening — {cognome_b.strip()} {nome_b.strip()}" if evento_minori
+                              else f"{ev['titolo']} — {cognome_g.strip()} {nome_g.strip()}")
                 gcal_id = None
                 if orario_evento:
                     gcal_id = crea_evento_calendario(
@@ -432,7 +467,7 @@ def azione_iscrizione_evento(conn):
                         durata_minuti=int(durata or 15),
                         descrizione=(
                             f"Genitore: {cognome_g.strip()} {nome_g.strip()} · Tel: {telefono} · Email: {email}\n"
-                            f"Scuola: {scuola or '—'} {classe or ''}"
+                            + (f"Scuola: {scuola or '—'} {classe or ''}" if evento_minori else "")
                         ),
                     )
                 if gcal_id:
@@ -442,8 +477,8 @@ def azione_iscrizione_evento(conn):
                 # (match su email o su cognome+nome del bambino), senza intervento manuale.
                 try:
                     cur_an = conn.cursor()
-                    cog_b = cognome_b.strip().upper()
-                    nom_b = nome_b.strip().upper()
+                    cog_b = (cognome_b if evento_minori else cognome_g).strip().upper()
+                    nom_b = (nome_b if evento_minori else nome_g).strip().upper()
                     cur_an.execute(
                         "SELECT id FROM pazienti WHERE (email IS NOT NULL AND LOWER(email)=%s) "
                         "OR (UPPER(cognome)=%s AND UPPER(nome)=%s) LIMIT 1",
@@ -486,14 +521,17 @@ def azione_iscrizione_evento(conn):
                     if stato_iscr == "lista_attesa":
                         corpo_email = (
                             f"Ciao {nome_g.strip()},\n\n"
-                            f"la tua iscrizione a \"{ev['titolo']}\" per {nome_b.strip()} {cognome_b.strip()} "
-                            f"è stata registrata in LISTA D'ATTESA (i posti disponibili sono terminati).\n"
-                            f"Ti contatteremo se si libera un posto.\n"
+                            f"la tua iscrizione a \"{ev['titolo']}\""
+                            + (f" per {nome_b.strip()} {cognome_b.strip()}" if evento_minori else "")
+                            + " è stata registrata in LISTA D'ATTESA (i posti disponibili sono terminati).\n"
+                            "Ti contatteremo se si libera un posto.\n"
                         )
                     else:
                         corpo_email = (
                             f"Ciao {nome_g.strip()},\n\n"
-                            f"la tua iscrizione a \"{ev['titolo']}\" per {nome_b.strip()} {cognome_b.strip()} è confermata.\n"
+                            f"la tua iscrizione a \"{ev['titolo']}\""
+                            + (f" per {nome_b.strip()} {cognome_b.strip()}" if evento_minori else "")
+                            + " è confermata.\n"
                         )
                     if slot_scelto:
                         corpo_email += f"Appuntamento: {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}\n"
@@ -525,8 +563,8 @@ def azione_iscrizione_evento(conn):
                         f"Evento: {ev['titolo']}\n"
                         f"{riga_slot}"
                         f"Genitore: {cognome_g.strip()} {nome_g.strip()} · Tel: {telefono} · Email: {email}\n"
-                        f"Bambino/a: {nome_b.strip()} {cognome_b.strip()}\n"
-                        f"Scuola: {scuola or '—'} {classe or ''}"
+                        + (f"Bambino/a: {nome_b.strip()} {cognome_b.strip()}\n"
+                           f"Scuola: {scuola or '—'} {classe or ''}" if evento_minori else "")
                     )
                     oggetto_staff = (
                         f"[Lista attesa] {ev['titolo']}" if stato_iscr == "lista_attesa"
