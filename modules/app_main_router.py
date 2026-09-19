@@ -475,6 +475,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🤖 Relazioni cliniche (AI)", "📝 Relazione clinica",
         "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
         "🩺 Screening rapido", "🩺 Screening breve (15 min)",
+        "🧸 Screening 0-4 anni",
     }
 
     paz_id = None
@@ -1013,6 +1014,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             st.error(f"Errore screening: {e}")
         return True
+    if sotto == "🧸 Screening 0-4 anni":
+        from .ui_screening_04 import render_screening_04
+        render_screening_04(conn, paz_id); return True
     if sotto == "🩺 Screening breve (15 min)":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(
@@ -1287,7 +1291,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🩶 Postura (Wii Balance Board)":
             from .ui_postura_wiifit import render_postura_wiifit
             render_postura_wiifit(conn, paz_id); return
-        if sotto == "🩺 Screening breve (15 min)":
+        if sotto == "🧸 Screening 0-4 anni":
+        from .ui_screening_04 import render_screening_04
+        render_screening_04(conn, paz_id); return True
+    if sotto == "🩺 Screening breve (15 min)":
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             render_protocollo_pdf_app(
                 conn, paz_id,
