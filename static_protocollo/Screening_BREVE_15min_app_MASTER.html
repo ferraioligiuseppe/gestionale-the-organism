@@ -58,6 +58,19 @@ button.act.g{background:var(--green)}button.act.o{background:#fff;color:var(--na
 .sem.r{background:#fbe9e7;color:var(--alert)}.sem.n{background:#f1f3f6;color:#64707d}
 .mut{color:#64707d;font-size:12.5px}
 .sig{text-align:center;font-size:11.5px;color:#7a8594;margin-top:16px}.sig b{color:var(--green)}
+.scbtn{margin-top:4px;background:var(--green);color:#fff;border:0;border-radius:5px;padding:6px 10px;font-size:12.5px;cursor:pointer;width:100%}
+#scov{position:fixed;inset:0;background:#0d1b2a;color:#fff;z-index:99;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+#scov.on{display:flex}
+#scval{font-size:74px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+#scval small{font-size:24px;font-weight:400;opacity:.75}
+#scov .hint{font-size:14px;opacity:.8;max-width:420px;line-height:1.5}
+#scov .rowb{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
+#scov button{border:0;border-radius:7px;padding:11px 18px;font-size:15px;cursor:pointer}
+#scov .b1{background:#fff;color:#123A6B;font-weight:600}
+#scov .b2{background:#274b6d;color:#fff}
+#scov .b3{background:var(--green);color:#fff;font-weight:600}
+#scov .ax{font-size:13px;opacity:.8}
+#scov .warn{background:#5a3b1c;border-radius:7px;padding:10px 14px;font-size:13.5px;max-width:460px}
 @media print{header,nav,.bar,.noprint{display:none!important}body{background:#fff}
  .card{border:0;border-bottom:1px solid #ccc;border-radius:0;page-break-inside:avoid}
  .tbo span{border:1px solid #999}.tbo span.sel{background:#123a6b;color:#fff}}
@@ -67,6 +80,21 @@ button.act.g{background:var(--green)}button.act.o{background:#fff;color:var(--na
 <span class="mut" id="prog"></span></header>
 <nav id="nav"></nav>
 <main id="main"></main>
+<div id="scov">
+ <div class="hint"><b>Scoliometro</b><br>Azzera su un piano orizzontale, poi appoggia il telefono di traverso sul dorso, perpendicolare alla colonna, nel punto di massima asimmetria.</div>
+ <div id="scval">0,0<small>°</small></div>
+ <div class="ax">asse in uso: <span id="scax">trasversale</span> — se il numero non cambia inclinando il telefono, cambia asse</div>
+ <div class="rowb">
+  <button class="b2" onclick="scZero()">Azzera</button>
+  <button class="b2" onclick="scAsse()">Cambia asse</button>
+  <button class="b1" onclick="scHold()"><span id="scholdlab">Blocca</span></button>
+ </div>
+ <div class="rowb">
+  <button class="b3" onclick="scUsa()">Usa questo valore</button>
+  <button class="b2" onclick="scChiudi()">Annulla</button>
+ </div>
+ <div id="scmsg" class="warn" style="display:none"></div>
+</div>
 <div class="bar noprint">
  <button class="act g" onclick="salva()">Salva</button>
  <button class="act o" onclick="apri()">Riapri</button>
@@ -81,7 +109,7 @@ button.act.g{background:var(--green)}button.act.o{background:#fff;color:var(--na
 "use strict";
 /* Screening breve 15 minuti — Associazione The Organism · www.pnev.it
    Copyright (c) 2026 Giuseppe Ferraioli — tutti i diritti riservati. */
-var TBSERIE=[{"id": "5100", "nome": "5100 · Visual Skills", "desc": "Batteria completa, 14 test. Dalla primaria in su, richiede la lettura.", "test": [{"n": "1", "ab": "Visione simultanea / soppressione", "d": "L", "o": ["solo OD", "solo OS", "entrambe"], "ko": ["solo OD", "solo OS"]}, {"n": "2", "ab": "Squilibrio verticale", "d": "L", "o": ["ipo dx", "nei limiti", "ipo sx"], "ko": ["ipo dx", "ipo sx"]}, {"n": "3", "ab": "Squilibrio laterale (foria orizzontale)", "d": "L", "o": ["exo", "nei limiti", "ottimale", "eso"], "ko": ["exo", "eso"], "num": "n. tavola"}, {"n": "4", "ab": "Fusione", "d": "L", "o": ["exo", "nei limiti", "ottimale", "eso", "soppressione"], "ko": ["exo", "eso", "soppressione"]}, {"n": "4/5", "ab": "Visione utilizzabile — binoculare", "d": "L", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "5", "ab": "Visione utilizzabile — OD", "d": "L", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "6", "ab": "Visione utilizzabile — OS", "d": "L", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "7", "ab": "Stereopsi / percezione della profondità", "d": "L", "o": ["ottimale", "nei limiti", "ridotta", "assente"], "ko": ["ridotta", "assente"]}, {"n": "8", "ab": "Percezione del colore — prima tavola", "d": "L", "o": ["tutti", "parziale", "errata"], "ko": ["parziale", "errata"]}, {"n": "9", "ab": "Percezione del colore — seconda tavola", "d": "L", "o": ["tutti", "parziale", "errata"], "ko": ["parziale", "errata"]}, {"n": "10", "ab": "Squilibrio laterale (foria orizzontale)", "d": "V", "o": ["exo", "nei limiti", "ottimale", "eso"], "ko": ["exo", "eso"], "num": "n. tavola"}, {"n": "11", "ab": "Fusione", "d": "V", "o": ["exo", "nei limiti", "ottimale", "eso", "soppressione"], "ko": ["exo", "eso", "soppressione"]}, {"n": "12", "ab": "Visione utilizzabile — binoculare", "d": "V", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "13", "ab": "Visione utilizzabile — OD", "d": "V", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "14", "ab": "Visione utilizzabile — OS", "d": "V", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}]}, {"id": "5170", "nome": "5170 · Peek-A-Boo", "desc": "Batteria figurata per prescolari e non lettori. Il test 4 è facoltativo nei più piccoli.", "test": [{"n": "1", "ab": "Acuità visiva figurata", "d": "L", "o": ["20/40", "20/70", "20/100", "non valutabile"], "ko": ["20/70", "20/100", "non valutabile"]}, {"n": "2", "ab": "Coordinamento laterale", "d": "L", "o": ["exo", "nei limiti", "eso"], "ko": ["exo", "eso"]}, {"n": "3", "ab": "Fusione", "d": "L", "o": ["presente", "instabile", "soppressione"], "ko": ["instabile", "soppressione"]}, {"n": "4", "ab": "Stereopsi e visione dei colori (facoltativo)", "d": "L", "o": ["nei limiti", "ridotta", "assente", "non eseguito"], "ko": ["ridotta", "assente"]}, {"n": "5", "ab": "Coordinamento verticale", "d": "L", "o": ["ipo dx", "nei limiti", "ipo sx"], "ko": ["ipo dx", "ipo sx"]}, {"n": "6", "ab": "Coordinamento verticale — controllo", "d": "L", "o": ["ipo dx", "nei limiti", "ipo sx"], "ko": ["ipo dx", "ipo sx"]}, {"n": "7", "ab": "Fusione", "d": "V", "o": ["presente", "instabile", "soppressione"], "ko": ["instabile", "soppressione"]}, {"n": "8", "ab": "Coordinamento laterale", "d": "V", "o": ["exo", "nei limiti", "eso"], "ko": ["exo", "eso"]}, {"n": "9", "ab": "Acuità visiva figurata", "d": "V", "o": ["20/40", "20/70", "20/100", "non valutabile"], "ko": ["20/70", "20/100", "non valutabile"]}]}, {"id": "5135", "nome": "5135 · Screening rapido", "desc": "Quattro obiettivi, criterio a eliminazione: una prova fallita indica l'esame visivo completo.", "test": [{"n": "1", "ab": "Percezione simultanea", "d": "L", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "2", "ab": "Percezione della profondità (stereopsi)", "d": "L", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "3", "ab": "Fusione", "d": "V", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "4", "ab": "Visione utilizzabile", "d": "V", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "—", "ab": "Visione utilizzabile", "d": "L", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "—", "ab": "Percezione del colore (non concorre all'eliminazione)", "d": "L", "o": ["superato", "non superato"], "ko": []}, {"n": "—", "ab": "Postura verticale", "d": "L", "o": ["superato", "non superato"], "ko": ["non superato"]}]}, {"id": "5155", "nome": "5155 · Clinical Fusion", "desc": "Riserve fusionali prismatiche: rottura e recupero in diottrie prismatiche.", "test": [{"n": "1", "ab": "Convergenza (base esterna)", "d": "L", "o": [], "ko": [], "prisma": true}, {"n": "2", "ab": "Divergenza (base interna)", "d": "L", "o": [], "ko": [], "prisma": true}, {"n": "3", "ab": "Convergenza (base esterna)", "d": "V", "o": [], "ko": [], "prisma": true}, {"n": "4", "ab": "Divergenza (base interna)", "d": "V", "o": [], "ko": [], "prisma": true}]}], SCHEMA=[{"id": "ana", "t": "1 · Anamnesi lampo", "m": "1'", "s": [{"f": [{"k": "nome", "l": "Cognome e nome", "t": "txt"}, {"k": "eta", "l": "Età", "t": "txt"}, {"k": "classe", "l": "Classe", "t": "txt"}, {"k": "data", "l": "Data", "t": "date"}, {"k": "esam", "l": "Esaminatore", "t": "txt"}, {"k": "inviato", "l": "Inviato da", "t": "txt"}, {"k": "parto", "l": "Parto", "t": "sel", "o": ["", "eutocico", "cesareo", "distocico"]}, {"k": "gatton", "l": "Gattonamento", "t": "sel", "o": ["", "sì", "no"]}, {"k": "parole", "l": "Prime parole (mesi)", "t": "num"}, {"k": "cammino", "l": "Cammino (mesi)", "t": "num"}, {"k": "otiti", "l": "Otiti ricorrenti", "t": "sel", "o": ["", "no", "sì"]}, {"k": "fam", "l": "Familiarità DSA / linguaggio", "t": "sel", "o": ["", "no", "sì"]}, {"k": "bil", "l": "Bilinguismo", "t": "sel", "o": ["", "no", "sì"]}, {"k": "terapie", "l": "Occhiali / terapie in corso", "t": "txt"}]}]}, {"id": "tb", "t": "2 · Telebinocular", "m": "4'", "widget": true, "s": []}, {"id": "vis", "t": "3 · Convergenza, motilità, dominanze", "m": "2'", "s": [{"f": [{"k": "ppc", "l": "PPC rottura (cm)", "t": "num"}, {"k": "ppcr", "l": "PPC recupero (cm)", "t": "num"}, {"k": "ns_ia", "l": "NSUCO insegu. abilità", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "ns_ip", "l": "NSUCO insegu. precisione", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "ns_sa", "l": "NSUCO saccadi abilità", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "ns_sp", "l": "NSUCO saccadi precisione", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "domocc", "l": "Dominanza oculare", "t": "sel", "o": ["", "OD", "OS", "incerta"]}, {"k": "rdx", "l": "Voce da dietro — rotazioni dx (/5)", "t": "num"}, {"k": "rsx", "l": "Voce da dietro — rotazioni sx (/5)", "t": "num"}, {"k": "mano", "l": "Mano dominante", "t": "sel", "o": ["", "dx", "sx"]}, {"k": "piede", "l": "Piede dominante", "t": "sel", "o": ["", "dx", "sx"]}]}]}, {"id": "lin", "t": "4 · Linguaggio (area ridotta)", "m": "2'", "s": [{"h": "Ripetizione di frasi", "cons": "Adesso ti dico una frase e tu la ripeti uguale. Ascolta bene, la dico una volta sola.", "max": 2, "lab": ["0", "1", "2"], "k": "fr", "tot": "Frasi", "items": ["Il gatto dorme sul divano.", "La bambina ha perso il cappello rosso.", "Il cane che abbaia è del vicino.", "Gliela ha regalata la nonna per il compleanno.", "La finestra è stata chiusa dal maestro.", "Il libro che mi hai prestato l'ho lasciato a scuola."]}, {"h": "Ripetizione di non parole", "cons": "Adesso ti dico delle parole finte, che non vogliono dire niente. Tu le ripeti come le ho dette io.", "max": 1, "lab": ["no", "sì"], "k": "np", "tot": "Non parole", "items": ["lomo", "sapre", "dinu", "velto", "mudo", "calse", "gremo", "lavri"]}, {"f": [{"k": "intell", "l": "Intelligibilità (1 sempre — 5 mai)", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "suoni", "l": "Suoni assenti o sostituiti", "t": "txt"}]}]}, {"id": "app", "t": "5 · Apprendimenti", "m": "3'", "s": [{"f": [{"k": "t_par", "l": "Lettura parole — tempo (s)", "t": "num"}, {"k": "e_par", "l": "Errori parole", "t": "num"}, {"k": "t_np", "l": "Lettura non parole — tempo (s)", "t": "num"}, {"k": "e_np", "l": "Errori non parole", "t": "num"}]}, {"h": "Dettato di otto parole", "cons": "Adesso ti detto otto parole, una alla volta. Scrivile come pensi che si scrivano.", "max": 1, "lab": ["no", "sì"], "k": "dt", "tot": "Dettato", "items": ["chiave", "ghiaccio", "famiglia", "pesce", "bicchiere", "quaderno", "perché", "acqua"]}, {"f": [{"k": "lele", "l": "«le le le» 30\" — grafemi", "t": "num"}, {"k": "lele2", "l": "Senza staccare — grafemi", "t": "num"}, {"k": "stacchi", "l": "Stacchi involontari", "t": "num"}, {"k": "presa", "l": "Presa", "t": "sel", "o": ["", "tripode dinamico", "tripode statico", "quadripode", "a pugno"]}, {"k": "copia", "l": "Copia di figure (/6)", "t": "num"}, {"k": "fatti", "l": "Fatti aritmetici entro 3\" (/8)", "t": "num"}, {"k": "enum", "l": "Enumerazione 1→20", "t": "sel", "o": ["", "ok", "incerta"]}, {"k": "enumi", "l": "Indietro da 20", "t": "sel", "o": ["", "ok", "incerta"]}]}]}, {"id": "nm", "t": "6 · Neuromotorio e posturale", "m": "2'", "s": [{"h": "Prove (0 nessuna anomalia — 4 non esegue)", "max": 4, "lab": ["0", "1", "2", "3", "4"], "k": "nm", "tot": "Somma", "items": ["Romberg — occhi aperti", "Romberg — occhi chiusi", "Stazione su un piede — dx", "Stazione su un piede — sx", "Movimenti crociati (30\")", "Movimenti omolaterali (30\")", "Pronosupinazione alternata", "ATNR", "STNR"]}, {"f": [{"k": "allin", "l": "Allineamento", "t": "sel", "o": ["", "nei limiti", "asimmetria lieve", "asimmetria evidente"]}, {"k": "appog", "l": "Appoggio plantare", "t": "sel", "o": ["", "neutro", "pronato", "supinato", "cavo", "piatto"]}, {"k": "cerv", "l": "Rotazione cervicale", "t": "sel", "o": ["", "simmetrica", "ridotta a dx", "ridotta a sx"]}, {"k": "fuk", "l": "Fukuda — gradi", "t": "num"}, {"k": "fukv", "l": "Fukuda — verso", "t": "sel", "o": ["", "dx", "sx"]}]}]}, {"id": "mio", "t": "7 · Miofunzionale e fluenza (osservati)", "m": "1'", "s": [{"f": [{"k": "resp", "l": "Respirazione", "t": "sel", "o": ["", "nasale", "orale", "mista"]}, {"k": "labbra", "l": "Labbra a riposo", "t": "sel", "o": ["", "competenti", "incompetenti", "lingua interposta"]}, {"k": "degl", "l": "Deglutizione", "t": "sel", "o": ["", "fisiologica", "atipica"]}, {"k": "palato", "l": "Palato", "t": "sel", "o": ["", "normale", "ogivale"]}, {"k": "abit", "l": "Abitudini viziate", "t": "sel", "o": ["", "nessuna", "ciuccio", "dito", "onicofagia"]}, {"k": "atm", "l": "ATM", "t": "sel", "o": ["", "nessun rilievo", "clic"]}, {"k": "flu", "l": "Fluenza nel parlato", "t": "sel", "o": ["", "fluente", "disfluenze comuni", "disfluenze tipiche della balbuzie"]}, {"k": "vel", "l": "Velocità di eloquio", "t": "sel", "o": ["", "adeguata", "elevata"]}]}]}], PNEVBOX=" <b>Chi siamo.</b> Associazione The Organism — équipe multidisciplinare (psicologia e neuropsicologia, optometria comportamentale, logopedia, osteopatia, terapia miofunzionale), sedi di Pagani (SA) e Piano di Sorrento (NA). Lavoriamo secondo il metodo <b>PNEV</b>, Psico-Neuro-Evolutivo.<br> <b>Come guardiamo un bambino.</b> Leggere, scrivere e stare attenti non sono funzioni che poggiano su sé stesse: si costruiscono su equilibrio, ascolto, vista, movimento degli occhi e respirazione. Quando uno di questi fondamenti è instabile, la difficoltà non compare lì, ma più in alto, dove il bambino viene valutato. Per questo esaminiamo linguaggio, visione, riflessi e assetto posturale nella stessa sessione e leggiamo gli incroci fra le aree.<br> <b>Che cos'è questo screening.</b> Una prima osservazione breve, non una diagnosi: serve a individuare i bambini per i quali conviene guardare meglio. &nbsp;—&nbsp; <b>www.pnev.it</b>";
+var TBSERIE=[{"id": "5100", "nome": "5100 · Visual Skills", "desc": "Batteria completa, 14 test. Dalla primaria in su, richiede la lettura.", "test": [{"n": "1", "ab": "Visione simultanea / soppressione", "d": "L", "o": ["solo OD", "solo OS", "entrambe"], "ko": ["solo OD", "solo OS"]}, {"n": "2", "ab": "Squilibrio verticale", "d": "L", "o": ["ipo dx", "nei limiti", "ipo sx"], "ko": ["ipo dx", "ipo sx"]}, {"n": "3", "ab": "Squilibrio laterale (foria orizzontale)", "d": "L", "o": ["exo", "nei limiti", "ottimale", "eso"], "ko": ["exo", "eso"], "num": "n. tavola"}, {"n": "4", "ab": "Fusione", "d": "L", "o": ["exo", "nei limiti", "ottimale", "eso", "soppressione"], "ko": ["exo", "eso", "soppressione"]}, {"n": "4/5", "ab": "Visione utilizzabile — binoculare", "d": "L", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "5", "ab": "Visione utilizzabile — OD", "d": "L", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "6", "ab": "Visione utilizzabile — OS", "d": "L", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "7", "ab": "Stereopsi / percezione della profondità", "d": "L", "o": ["ottimale", "nei limiti", "ridotta", "assente"], "ko": ["ridotta", "assente"]}, {"n": "8", "ab": "Percezione del colore — prima tavola", "d": "L", "o": ["tutti", "parziale", "errata"], "ko": ["parziale", "errata"]}, {"n": "9", "ab": "Percezione del colore — seconda tavola", "d": "L", "o": ["tutti", "parziale", "errata"], "ko": ["parziale", "errata"]}, {"n": "10", "ab": "Squilibrio laterale (foria orizzontale)", "d": "V", "o": ["exo", "nei limiti", "ottimale", "eso"], "ko": ["exo", "eso"], "num": "n. tavola"}, {"n": "11", "ab": "Fusione", "d": "V", "o": ["exo", "nei limiti", "ottimale", "eso", "soppressione"], "ko": ["exo", "eso", "soppressione"]}, {"n": "12", "ab": "Visione utilizzabile — binoculare", "d": "V", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "13", "ab": "Visione utilizzabile — OD", "d": "V", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}, {"n": "14", "ab": "Visione utilizzabile — OS", "d": "V", "o": ["nei limiti", "ridotta"], "ko": ["ridotta"]}]}, {"id": "5170", "nome": "5170 · Peek-A-Boo", "desc": "Batteria figurata per prescolari e non lettori. Il test 4 è facoltativo nei più piccoli.", "test": [{"n": "1", "ab": "Acuità visiva figurata", "d": "L", "o": ["20/40", "20/70", "20/100", "non valutabile"], "ko": ["20/70", "20/100", "non valutabile"]}, {"n": "2", "ab": "Coordinamento laterale", "d": "L", "o": ["exo", "nei limiti", "eso"], "ko": ["exo", "eso"]}, {"n": "3", "ab": "Fusione", "d": "L", "o": ["presente", "instabile", "soppressione"], "ko": ["instabile", "soppressione"]}, {"n": "4", "ab": "Stereopsi e visione dei colori (facoltativo)", "d": "L", "o": ["nei limiti", "ridotta", "assente", "non eseguito"], "ko": ["ridotta", "assente"]}, {"n": "5", "ab": "Coordinamento verticale", "d": "L", "o": ["ipo dx", "nei limiti", "ipo sx"], "ko": ["ipo dx", "ipo sx"]}, {"n": "6", "ab": "Coordinamento verticale — controllo", "d": "L", "o": ["ipo dx", "nei limiti", "ipo sx"], "ko": ["ipo dx", "ipo sx"]}, {"n": "7", "ab": "Fusione", "d": "V", "o": ["presente", "instabile", "soppressione"], "ko": ["instabile", "soppressione"]}, {"n": "8", "ab": "Coordinamento laterale", "d": "V", "o": ["exo", "nei limiti", "eso"], "ko": ["exo", "eso"]}, {"n": "9", "ab": "Acuità visiva figurata", "d": "V", "o": ["20/40", "20/70", "20/100", "non valutabile"], "ko": ["20/70", "20/100", "non valutabile"]}]}, {"id": "5135", "nome": "5135 · Screening rapido", "desc": "Quattro obiettivi, criterio a eliminazione: una prova fallita indica l'esame visivo completo.", "test": [{"n": "1", "ab": "Percezione simultanea", "d": "L", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "2", "ab": "Percezione della profondità (stereopsi)", "d": "L", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "3", "ab": "Fusione", "d": "V", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "4", "ab": "Visione utilizzabile", "d": "V", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "—", "ab": "Visione utilizzabile", "d": "L", "o": ["superato", "non superato"], "ko": ["non superato"]}, {"n": "—", "ab": "Percezione del colore (non concorre all'eliminazione)", "d": "L", "o": ["superato", "non superato"], "ko": []}, {"n": "—", "ab": "Postura verticale", "d": "L", "o": ["superato", "non superato"], "ko": ["non superato"]}]}, {"id": "5155", "nome": "5155 · Clinical Fusion", "desc": "Riserve fusionali prismatiche: rottura e recupero in diottrie prismatiche.", "test": [{"n": "1", "ab": "Convergenza (base esterna)", "d": "L", "o": [], "ko": [], "prisma": true}, {"n": "2", "ab": "Divergenza (base interna)", "d": "L", "o": [], "ko": [], "prisma": true}, {"n": "3", "ab": "Convergenza (base esterna)", "d": "V", "o": [], "ko": [], "prisma": true}, {"n": "4", "ab": "Divergenza (base interna)", "d": "V", "o": [], "ko": [], "prisma": true}]}], SCHEMA=[{"id": "ana", "t": "1 · Anamnesi lampo", "m": "1'", "s": [{"f": [{"k": "nome", "l": "Cognome e nome", "t": "txt"}, {"k": "eta", "l": "Età", "t": "txt"}, {"k": "classe", "l": "Classe", "t": "txt"}, {"k": "data", "l": "Data", "t": "date"}, {"k": "esam", "l": "Esaminatore", "t": "txt"}, {"k": "inviato", "l": "Inviato da", "t": "txt"}, {"k": "parto", "l": "Parto", "t": "sel", "o": ["", "eutocico", "cesareo", "distocico"]}, {"k": "gatton", "l": "Gattonamento", "t": "sel", "o": ["", "sì", "no"]}, {"k": "parole", "l": "Prime parole (mesi)", "t": "num"}, {"k": "cammino", "l": "Cammino (mesi)", "t": "num"}, {"k": "otiti", "l": "Otiti ricorrenti", "t": "sel", "o": ["", "no", "sì"]}, {"k": "fam", "l": "Familiarità DSA / linguaggio", "t": "sel", "o": ["", "no", "sì"]}, {"k": "bil", "l": "Bilinguismo", "t": "sel", "o": ["", "no", "sì"]}, {"k": "terapie", "l": "Occhiali / terapie in corso", "t": "txt"}]}]}, {"id": "tb", "t": "2 · Telebinocular", "m": "4'", "widget": true, "s": []}, {"id": "vis", "t": "3 · Convergenza, motilità, dominanze", "m": "2'", "s": [{"f": [{"k": "ppc", "l": "PPC rottura (cm)", "t": "num"}, {"k": "ppcr", "l": "PPC recupero (cm)", "t": "num"}, {"k": "ns_ia", "l": "NSUCO insegu. abilità", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "ns_ip", "l": "NSUCO insegu. precisione", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "ns_sa", "l": "NSUCO saccadi abilità", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "ns_sp", "l": "NSUCO saccadi precisione", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "domocc", "l": "Dominanza oculare", "t": "sel", "o": ["", "OD", "OS", "incerta"]}, {"k": "rdx", "l": "Voce da dietro — rotazioni dx (/5)", "t": "num"}, {"k": "rsx", "l": "Voce da dietro — rotazioni sx (/5)", "t": "num"}, {"k": "mano", "l": "Mano dominante", "t": "sel", "o": ["", "dx", "sx"]}, {"k": "piede", "l": "Piede dominante", "t": "sel", "o": ["", "dx", "sx"]}]}]}, {"id": "lin", "t": "4 · Linguaggio (area ridotta)", "m": "2'", "s": [{"h": "Ripetizione di frasi", "cons": "Adesso ti dico una frase e tu la ripeti uguale. Ascolta bene, la dico una volta sola.", "max": 2, "lab": ["0", "1", "2"], "k": "fr", "tot": "Frasi", "items": ["Il gatto dorme sul divano.", "La bambina ha perso il cappello rosso.", "Il cane che abbaia è del vicino.", "Gliela ha regalata la nonna per il compleanno.", "La finestra è stata chiusa dal maestro.", "Il libro che mi hai prestato l'ho lasciato a scuola."]}, {"h": "Ripetizione di non parole", "cons": "Adesso ti dico delle parole finte, che non vogliono dire niente. Tu le ripeti come le ho dette io.", "max": 1, "lab": ["no", "sì"], "k": "np", "tot": "Non parole", "items": ["lomo", "sapre", "dinu", "velto", "mudo", "calse", "gremo", "lavri"]}, {"f": [{"k": "intell", "l": "Intelligibilità (1 sempre — 5 mai)", "t": "sel", "o": ["", "1", "2", "3", "4", "5"]}, {"k": "suoni", "l": "Suoni assenti o sostituiti", "t": "txt"}]}]}, {"id": "app", "t": "5 · Apprendimenti", "m": "3'", "s": [{"f": [{"k": "t_par", "l": "Lettura parole — tempo (s)", "t": "num"}, {"k": "e_par", "l": "Errori parole", "t": "num"}, {"k": "t_np", "l": "Lettura non parole — tempo (s)", "t": "num"}, {"k": "e_np", "l": "Errori non parole", "t": "num"}]}, {"h": "Dettato di otto parole", "cons": "Adesso ti detto otto parole, una alla volta. Scrivile come pensi che si scrivano.", "max": 1, "lab": ["no", "sì"], "k": "dt", "tot": "Dettato", "items": ["chiave", "ghiaccio", "famiglia", "pesce", "bicchiere", "quaderno", "perché", "acqua"]}, {"f": [{"k": "lele", "l": "«le le le» 30\" — grafemi", "t": "num"}, {"k": "lele2", "l": "Senza staccare — grafemi", "t": "num"}, {"k": "stacchi", "l": "Stacchi involontari", "t": "num"}, {"k": "presa", "l": "Presa", "t": "sel", "o": ["", "tripode dinamico", "tripode statico", "quadripode", "a pugno"]}, {"k": "copia", "l": "Copia di figure (/6)", "t": "num"}, {"k": "fatti", "l": "Fatti aritmetici entro 3\" (/8)", "t": "num"}, {"k": "enum", "l": "Enumerazione 1→20", "t": "sel", "o": ["", "ok", "incerta"]}, {"k": "enumi", "l": "Indietro da 20", "t": "sel", "o": ["", "ok", "incerta"]}]}]}, {"id": "nm", "t": "6 · Neuromotorio e posturale", "m": "2'", "s": [{"h": "Prove (0 nessuna anomalia — 4 non esegue)", "max": 4, "lab": ["0", "1", "2", "3", "4"], "k": "nm", "tot": "Somma", "items": ["Romberg — occhi aperti", "Romberg — occhi chiusi", "Stazione su un piede — dx", "Stazione su un piede — sx", "Movimenti crociati (30\")", "Movimenti omolaterali (30\")", "Pronosupinazione alternata", "ATNR", "STNR"]}, {"f": [{"k": "allin", "l": "Allineamento", "t": "sel", "o": ["", "nei limiti", "asimmetria lieve", "asimmetria evidente"]}, {"k": "appog", "l": "Appoggio plantare", "t": "sel", "o": ["", "neutro", "pronato", "supinato", "cavo", "piatto"]}, {"k": "cerv", "l": "Rotazione cervicale", "t": "sel", "o": ["", "simmetrica", "ridotta a dx", "ridotta a sx"]}, {"k": "fuk", "l": "Fukuda — gradi", "t": "num"}, {"k": "fukv", "l": "Fukuda — verso", "t": "sel", "o": ["", "dx", "sx"]}, {"k": "adams", "l": "Test di Adams — gibbo", "t": "sel", "o": ["", "assente", "presente"]}, {"k": "adsede", "l": "Adams — sede", "t": "sel", "o": ["", "dorsale dx", "dorsale sx", "lombare dx", "lombare sx", "doppia curva"]}, {"k": "atr", "l": "ATR — angolo di rotazione (gradi)", "t": "scolio"}, {"k": "dismetria", "l": "Dismetria arti inferiori (cm)", "t": "num"}]}]}, {"id": "mio", "t": "7 · Miofunzionale e fluenza (osservati)", "m": "1'", "s": [{"f": [{"k": "resp", "l": "Respirazione", "t": "sel", "o": ["", "nasale", "orale", "mista"]}, {"k": "labbra", "l": "Labbra a riposo", "t": "sel", "o": ["", "competenti", "incompetenti", "lingua interposta"]}, {"k": "degl", "l": "Deglutizione", "t": "sel", "o": ["", "fisiologica", "atipica"]}, {"k": "palato", "l": "Palato", "t": "sel", "o": ["", "normale", "ogivale"]}, {"k": "abit", "l": "Abitudini viziate", "t": "sel", "o": ["", "nessuna", "ciuccio", "dito", "onicofagia"]}, {"k": "atm", "l": "ATM", "t": "sel", "o": ["", "nessun rilievo", "clic"]}, {"k": "flu", "l": "Fluenza nel parlato", "t": "sel", "o": ["", "fluente", "disfluenze comuni", "disfluenze tipiche della balbuzie"]}, {"k": "vel", "l": "Velocità di eloquio", "t": "sel", "o": ["", "adeguata", "elevata"]}]}]}], PNEVBOX=" <b>Chi siamo.</b> Associazione The Organism — équipe multidisciplinare (psicologia e neuropsicologia, optometria comportamentale, logopedia, osteopatia, terapia miofunzionale), sedi di Pagani (SA) e Piano di Sorrento (NA). Lavoriamo secondo il metodo <b>PNEV</b>, Psico-Neuro-Evolutivo.<br> <b>Come guardiamo un bambino.</b> Leggere, scrivere e stare attenti non sono funzioni che poggiano su sé stesse: si costruiscono su equilibrio, ascolto, vista, movimento degli occhi e respirazione. Quando uno di questi fondamenti è instabile, la difficoltà non compare lì, ma più in alto, dove il bambino viene valutato. Per questo esaminiamo linguaggio, visione, riflessi e assetto posturale nella stessa sessione e leggiamo gli incroci fra le aree.<br> <b>Che cos'è questo screening.</b> Una prima osservazione breve, non una diagnosi: serve a individuare i bambini per i quali conviene guardare meglio. &nbsp;—&nbsp; <b>www.pnev.it</b>";
 var V={}, view=0;
 
 function n(k){var x=parseFloat(V[k]);return isFinite(x)?x:null}
@@ -147,12 +175,12 @@ function flag(id){
   var disc=(tp&&tn&&(tn/tp)>1.6);
   return (d.c===8&&d.s<=4)||disc||(n("copia")!==null&&n("copia")<=3)||
          (n("stacchi")!==null&&n("stacchi")>=6)||(n("fatti")!==null&&n("fatti")<=4)||V.presa==="a pugno"}
- if(id==="nm"){var g=somma("nm",9);if(!g.c&&!V.allin&&n("fuk")===null)return null;
+ if(id==="nm"){var g=somma("nm",9);if(!g.c&&!V.allin&&n("fuk")===null&&!V.adams&&n("atr")===null)return null;
   var due=0;for(var i2=0;i2<9;i2++){if(parseInt(V["nm"+i2]||0,10)>=2)due++}
   var cro=V.nm4!==undefined&&V.nm4!==""?parseInt(V.nm4,10):-1,
       omo=V.nm5!==undefined&&V.nm5!==""?parseInt(V.nm5,10):-1;
   return due>=2||parseInt(V.nm7||0,10)>=2||parseInt(V.nm8||0,10)>=2||
-         (cro>=0&&omo>=0&&cro>omo)||(n("fuk")>45)}
+         (cro>=0&&omo>=0&&cro>omo)||(n("fuk")>45)||V.adams==="presente"||(n("atr")>=5)}
  if(id==="mio"){if(!V.resp&&!V.flu)return null;
   return (V.resp==="orale"&&V.labbra==="incompetenti")||V.degl==="atipica"||
          V.flu==="disfluenze tipiche della balbuzie"}
@@ -163,7 +191,7 @@ function CRIT(id){return {
  vis:"PPC rottura oltre 10 cm, oppure una voce NSUCO a 3 o meno.",
  lin:"Frasi ≤ 8/12, oppure non parole ≤ 4/8, oppure intelligibilità 3 o superiore.",
  app:"Non parole marcatamente più lente delle parole, dettato ≤ 4/8, copia ≤ 3/6, 6 o più stacchi, fatti ≤ 4/8, presa a pugno.",
- nm:"Due o più prove a 2 o più, ATNR o STNR a 2 o più, crociati peggiori degli omolaterali, Fukuda oltre 45 gradi.",
+ nm:"Due o più prove a 2 o più, ATNR o STNR a 2 o più, crociati peggiori degli omolaterali, Fukuda oltre 45 gradi, gibbo al test di Adams o ATR di 5 gradi o più.",
  mio:"Respirazione orale con labbra incompetenti, deglutizione atipica, disfluenze tipiche della balbuzie."}[id]||""}
 
 function semaforo(){
@@ -184,11 +212,17 @@ function nav(){
  });
  var b=document.createElement("button");b.textContent="Esito";b.className=(view==="e"?"on":"");
  b.onclick=function(){view="e";draw()};e.appendChild(b);
+ var r=document.createElement("button");r.textContent="Relazione";r.className=(view==="r"?"on":"");
+ r.onclick=function(){view="r";draw()};e.appendChild(r);
 }
 function set(k,v){V[k]=v;sl();draw()}
 function setq(k,v){V[k]=v;sl();prog()}
 function fldHTML(f){
  var h='<div class="fld"><label>'+f.l+'</label>';
+ if(f.t==="scolio"){
+  return h+'<input type="number" step="0.1" value="'+(V[f.k]||"")+'" oninput="setq(\''+f.k+'\',this.value)">'+
+   '<button class="scbtn noprint" onclick="scApri()">Misura con il telefono</button></div>';
+ }
  if(f.t==="sel"){h+='<select onchange="set(\''+f.k+'\',this.value)">'+
    f.o.map(function(o){return '<option'+(V[f.k]===o?" selected":"")+'>'+o+'</option>'}).join("")+'</select>'}
  else{h+='<input type="'+(f.t==="num"?"number":f.t==="date"?"date":"text")+'" value="'+(V[f.k]||"")+
@@ -198,6 +232,7 @@ function fldHTML(f){
 function draw(){
  nav();var m=document.getElementById("main");
  if(view==="e"){m.innerHTML=esito();prog();return}
+ if(view==="r"){m.innerHTML=relView();prog();return}
  var s=SCHEMA[view],h='';
  if(view===0)h+='<div class="pnevbox">'+PNEVBOX+'</div>';
  h+='<div class="card"><h2>'+s.t+'</h2><div class="mut">tempo previsto '+s.m+'</div>';
@@ -253,6 +288,171 @@ function esito(){
 function prog(){
  var sem=semaforo();
  document.getElementById("prog").textContent=(V.nome?V.nome+" — ":"")+sem.t;
+}
+
+/* ---------- relazione ---------- */
+var TESTI={
+ tb:{t:"la collaborazione fra i due occhi",
+  p:"Nelle prove sulla visione binoculare sono emersi elementi che meritano attenzione. Vedere bene, nel senso di distinguere le lettere da lontano, è solo una parte: perché la lettura funzioni i due occhi devono lavorare insieme sulla stessa parola, e quando questo non accade in modo stabile il bambino può leggere con fatica sproporzionata pur avendo una vista normale a un controllo dell'acuità visiva.",
+  b:["Scheiman, M., Wick, B. — Clinical Management of Binocular Vision: Heterophoric, Accommodative and Eye Movement Disorders. Lippincott Williams & Wilkins."]},
+ vis:{t:"la messa a fuoco da vicino e i movimenti degli occhi",
+  p:"Sono emersi elementi relativi alla capacità di mantenere la messa a fuoco da vicino e di muovere gli occhi lungo la riga in modo preciso. Sono funzioni che una visita oculistica di controllo non indaga, e che quando sono deboli si manifestano come stanchezza dopo pochi minuti di lettura, salti di riga, riletture, rifiuto del compito scritto: comportamenti che vengono facilmente letti come scarso impegno.",
+  b:["Maples, W.C., Atchley, J., Ficklin, T. (1992). Northeastern State University College of Optometry's oculomotor norms. Journal of Behavioral Optometry, 3, 143-150."]},
+ lin:{t:"il linguaggio",
+  p:"Nelle prove sul linguaggio sono emersi elementi che meritano un approfondimento. Le prove impiegate non misurano quanto un bambino parli o quanto sia ricco il suo vocabolario: chiedono di ripetere frasi e sequenze di suoni, e mettono alla prova la capacità di tenere a mente e riorganizzare il materiale verbale. È una capacità che sostiene la lettura e la scrittura e che non si può compensare con un ambiente familiare favorevole.",
+  b:["Conti-Ramsden, G., Botting, N., Faragher, B. (2001). Psycholinguistic markers for specific language impairment (SLI). Journal of Child Psychology and Psychiatry, 42(6), 741-748.",
+     "Bishop, D.V.M., North, T., Donlan, C. (1996). Nonword repetition as a behavioural marker for inherited language impairment. Journal of Child Psychology and Psychiatry, 37, 391-403."]},
+ app:{t:"la lettura, la scrittura o il calcolo",
+  p:"Nelle prove sugli apprendimenti sono emersi elementi da approfondire. Ciò che si osserva in questi casi non è quasi mai la mancanza di impegno: più spesso è un costo. Il bambino arriva al risultato, ma consumando attenzione che dovrebbe restare disponibile per il contenuto, e questo si vede sui compiti lunghi più che su quelli brevi.",
+  b:["Istituto Superiore di Sanità (2011). Consensus Conference sui Disturbi Specifici dell'Apprendimento. Sistema Nazionale Linee Guida; Legge 170/2010.",
+     "Graham, S., Berninger, V.W. et al. (1997). Role of mechanics in composing of elementary school students. Journal of Educational Psychology, 89, 170-182."]},
+ nm:{t:"l'equilibrio, la coordinazione e l'assetto della colonna",
+  p:"Nelle prove motorie e posturali sono emersi elementi che meritano attenzione. Riguardano l'equilibrio, la coordinazione fra i due lati del corpo e la simmetria del dorso. Sono aspetti che sostengono la postura al banco e la capacità di stare fermi e concentrati, e alcuni di essi, in fase di crescita, possono modificarsi rapidamente: per questo vanno guardati adesso e non fra un anno.",
+  b:["Ayres, A.J. (2005). Sensory Integration and the Child. Los Angeles: Western Psychological Services.",
+     "Goddard Blythe, S. Attention, Balance and Coordination: The A.B.C. of Learning Success. Chichester: Wiley."]},
+ mio:{t:"la respirazione, la postura della bocca o la fluenza",
+  p:"Sono emersi elementi relativi al modo di respirare, alla postura della bocca e della lingua o alla fluenza dell'eloquio. Sono aspetti che si osservano facilmente ma di cui raramente si parla, e che incidono sul sonno, sullo sviluppo del palato e, nel tempo, sull'assetto posturale.",
+  b:["Ward, D., Scaler Scott, K. (a cura di) (2011). Cluttering: A Handbook of Research, Intervention and Education. Hove: Psychology Press."]}
+};
+var NOMIAREE={tb:"Telebinocular",vis:"Convergenza, motilità, dominanze",lin:"Linguaggio",
+ app:"Apprendimenti",nm:"Neuromotorio e posturale",mio:"Miofunzionale e fluenza"};
+
+function relTesto(){
+ var sem=semaforo(),ids=["tb","vis","lin","app","nm","mio"];
+ var ko=ids.filter(function(id){return flag(id)===true});
+ var nd=ids.filter(function(id){return flag(id)===null});
+ var nome=V.nome||"_______________________";
+ var L=[];
+ L.push("Gentili genitori di "+nome+",");
+ L.push("");
+ L.push("vostro figlio ha partecipato a uno screening funzionale gratuito della durata di circa quindici minuti. "+
+  "Si tratta di una prima osservazione, non di una valutazione: serve a capire se ci sono aree che conviene guardare "+
+  "con più tempo e strumenti adeguati. Non contiene una diagnosi e non la sostituisce.");
+ L.push("");
+ L.push("Che cosa abbiamo guardato e perché");
+ L.push("Leggere, scrivere e stare attenti non sono capacità che poggiano su sé stesse: si costruiscono su sistemi "+
+  "più elementari — l'equilibrio, l'ascolto, la vista, il movimento degli occhi, la respirazione — che si formano molto prima. "+
+  "Quando uno di questi fondamenti è instabile, la difficoltà non compare lì: compare più in alto, dove il bambino viene "+
+  "valutato ogni giorno. Per questo abbiamo esaminato visione, linguaggio, apprendimenti, assetto motorio e posturale "+
+  "nella stessa sessione, e abbiamo letto i rilievi incrociandoli fra loro.");
+ L.push("");
+ if(!ko.length){
+  L.push("Che cosa è emerso");
+  L.push("Nelle aree esaminate non sono emersi elementi che richiedano un approfondimento. Questo non significa che "+
+   "non possa emergere nulla in futuro: un'osservazione di quindici minuti fotografa una mattina. Se a casa o a scuola "+
+   "notate fatica persistente nella lettura, nei compiti o nell'attenzione, vale comunque la pena parlarne.");
+ }else{
+  L.push("Che cosa è emerso");
+  ko.forEach(function(id){L.push("— "+TESTI[id].p)});
+  if(ko.length>1){
+   L.push("");
+   L.push("Gli elementi emersi non vanno letti separatamente. Quando compaiono insieme, spesso l'uno spiega l'altro: "+
+    "è questa relazione, più del singolo rilievo, a indicare da dove conviene cominciare.");
+  }
+ }
+ if(nd.length&&nd.length<6){
+  L.push("");
+  L.push("Aree non esaminate in questa sede: "+nd.map(function(id){return TESTI[id].t}).join("; ")+".");
+ }
+ L.push("");
+ L.push("A chi mostrare questa relazione");
+ L.push("Vi suggeriamo di portarla al pediatra, che conosce la storia di vostro figlio e può indirizzarvi, e di parlarne "+
+  "con gli insegnanti, che osservano ogni giorno comportamenti che a noi sfuggono: la fatica sui compiti lunghi, "+
+  "la stanchezza nella seconda parte della mattinata, il rifiuto del quaderno. Dove indicato, il pediatra potrà valutare "+
+  "l'invio al servizio di neuropsichiatria infantile. Questo documento è pensato per essere letto da loro: descrive "+
+  "osservazioni, non conclusioni, e lascia a chi ha titolo la decisione diagnostica.");
+ L.push("");
+ if(ko.length){
+  L.push("Che cosa proponiamo");
+  L.push("Restiamo disponibili a effettuare l'approfondimento funzionale nelle aree segnalate presso il nostro studio, "+
+   "con strumenti e tempi adeguati. Non è un passaggio obbligato né l'unico possibile: potete rivolgervi a qualunque "+
+   "professionista o servizio di vostra fiducia, e in molti casi il pediatra saprà indicarvi il percorso più breve. "+
+   "Se scegliete noi, il vantaggio è che il confronto avviene con gli stessi rilievi già raccolti, quindi si parte da dove "+
+   "questa osservazione si è fermata anziché ricominciare da capo.");
+  L.push("");
+  L.push("Un'ultima cosa, che diciamo a tutte le famiglie: una segnalazione non è una diagnosi. Uno screening pensato "+
+   "per non lasciare indietro nessuno segnala anche bambini che, guardati meglio, non hanno alcuna difficoltà. "+
+   "Il senso di approfondire è proprio questo: sapere, invece di aspettare.");
+  L.push("");
+ }
+ L.push("Restiamo a disposizione per qualsiasi chiarimento.");
+ L.push("");
+ L.push("Associazione The Organism — www.pnev.it");
+ L.push("apstheorganism@gmail.com");
+ L.push("");
+ L.push("Data ____ / ____ / ________            Firma ______________________________");
+ var bib=[];
+ (ko.length?ko:ids).forEach(function(id){TESTI[id].b.forEach(function(x){if(bib.indexOf(x)<0)bib.push(x)})});
+ L.push("");
+ L.push("Riferimenti");
+ L.push("Le prove impiegate in questo screening si basano sui criteri descritti nei lavori seguenti. "+
+  "Sono indicati per chi legge questa relazione a titolo professionale; le prove restano criteriali e non sostituiscono strumenti tarati.");
+ bib.forEach(function(x){L.push("· "+x)});
+ return L.join("\n");
+}
+function relView(){
+ var t=relTesto();
+ return '<div class="card"><h2>Relazione per la famiglia</h2>'+
+  '<div class="mut" style="margin-bottom:8px">Generata dagli esiti, senza riportare prove né punteggi. Modificabile prima di stampare.</div>'+
+  '<textarea id="rel" style="width:100%;min-height:460px;border:1px solid var(--line);border-radius:6px;padding:11px;font:inherit;font-size:14px;line-height:1.55" oninput="V.reltxt=this.value;sl()">'+
+  (V.reltxt||t).replace(/</g,"&lt;")+'</textarea>'+
+  '<div style="margin-top:8px" class="noprint">'+
+  '<button class="act g" onclick="relRigenera()">Rigenera dagli esiti</button> '+
+  '<button class="act o" onclick="relCopia()">Copia</button> '+
+  '<button class="act o" onclick="window.print()">Stampa</button></div>'+
+  '<div class="crit" style="margin-top:8px">Il testo non nomina i test né i punteggi: descrive che cosa è stato osservato e perché conviene guardare meglio. '+
+  'La bibliografia in calce è filtrata sulle aree segnalate.</div></div>';
+}
+function relRigenera(){V.reltxt="";sl();draw();msg("Rigenerata")}
+function relCopia(){var x=V.reltxt||relTesto();
+ navigator.clipboard.writeText(x).then(function(){msg("Copiata")},function(){msg("Copia non riuscita")})}
+
+/* ---------- scoliometro ---------- */
+var scOn=false, scHeld=false, scZ=0, scAxis=0, scRaw=0, scLast=0;
+function scDeg(e){
+ var g=e.accelerationIncludingGravity||e.acceleration;
+ if(!g||g.x===null)return null;
+ var x=g.x,y=g.y,z=g.z,r=Math.PI/180;
+ var roll=Math.atan2(x,Math.sqrt(y*y+z*z))/r;
+ var pitch=Math.atan2(y,Math.sqrt(x*x+z*z))/r;
+ return scAxis===0?roll:pitch;
+}
+function scTick(e){
+ if(!scOn||scHeld)return;
+ var d=scDeg(e);if(d===null)return;
+ scRaw=d;scLast=d-scZ;
+ var v=Math.abs(scLast);
+ document.getElementById("scval").innerHTML=(Math.round(v*10)/10).toString().replace(".",",")+"<small>°</small>";
+}
+function scMsg(t){var m=document.getElementById("scmsg");m.style.display="block";m.innerHTML=t}
+function scApri(){
+ document.getElementById("scov").classList.add("on");
+ scOn=true;scHeld=false;document.getElementById("scholdlab").textContent="Blocca";
+ document.getElementById("scmsg").style.display="none";
+ if(typeof DeviceMotionEvent==="undefined"){
+  scMsg("Questo dispositivo non espone i sensori di movimento. Usa lo scoliometro fisico e scrivi il valore nel campo.");return}
+ if(typeof DeviceMotionEvent.requestPermission==="function"){
+  DeviceMotionEvent.requestPermission().then(function(r){
+   if(r==="granted"){window.addEventListener("devicemotion",scTick,true)}
+   else{scMsg("Accesso ai sensori negato. Usa lo scoliometro fisico e scrivi il valore nel campo.")}
+  }).catch(function(){scMsg("I sensori sono accessibili solo da un indirizzo sicuro (https). Aprendo il file in locale la misura non è disponibile: usa lo scoliometro fisico.")});
+ }else{
+  window.addEventListener("devicemotion",scTick,true);
+  setTimeout(function(){if(scRaw===0)scMsg("Nessun dato dai sensori. Se hai aperto il file in locale, i browser bloccano l'accesso: serve un indirizzo https. Usa intanto lo scoliometro fisico.")},1600);
+ }
+}
+function scZero(){scZ=scRaw;scLast=0;document.getElementById("scval").innerHTML="0,0<small>°</small>"}
+function scAsse(){scAxis=scAxis===0?1:0;scZ=0;
+ document.getElementById("scax").textContent=scAxis===0?"trasversale":"longitudinale"}
+function scHold(){scHeld=!scHeld;document.getElementById("scholdlab").textContent=scHeld?"Riprendi":"Blocca"}
+function scUsa(){
+ var v=Math.round(Math.abs(scLast)*10)/10;
+ V.atr=String(v).replace(".",",");V.atr=String(v);sl();scChiudi();draw();
+ msg("ATR "+String(v).replace(".",",")+"° registrato");
+}
+function scChiudi(){
+ scOn=false;document.getElementById("scov").classList.remove("on");
+ window.removeEventListener("devicemotion",scTick,true);
 }
 
 /* ---------- persistenza ---------- */
