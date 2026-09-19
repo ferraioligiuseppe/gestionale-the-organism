@@ -62,7 +62,7 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
 
     # Selettore paziente dall'anagrafica del gestionale: precompila Cognome/Nome
     # e Data di nascita nell'HTML statico (che di per sé non ha accesso al DB).
-    nome_precompilato = data_nascita_precompilata = ""
+    nome_precompilato = data_nascita_precompilata = eta_precompilata = ""
     if conn is not None:
         with st.expander("➕ Nuovo paziente (non ancora in anagrafica)"):
             cn1, cn2 = st.columns(2)
@@ -113,15 +113,27 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
                 dn_sel = _g(r, 3, "data_nascita")
                 nome_precompilato = f"{cognome_sel} {nome_sel}".strip()
                 data_nascita_precompilata = dn_sel.strftime("%d/%m/%Y") if hasattr(dn_sel, "strftime") else (str(dn_sel) if dn_sel else "")
+                try:
+                    _dn = dn_sel
+                    if isinstance(_dn, str):
+                        _dn = datetime.date.fromisoformat(_dn[:10])
+                    if hasattr(_dn, "year"):
+                        _oggi = datetime.date.today()
+                        _anni = _oggi.year - _dn.year - ((_oggi.month, _oggi.day) < (_dn.month, _dn.day))
+                        _mesi = (_oggi.month - _dn.month) % 12
+                        eta_precompilata = f"{_anni};{_mesi:02d}"
+                except Exception:
+                    pass
 
     _precompila_js = ""
     if nome_precompilato:
+        _safe_eta = (eta_precompilata or "").replace("\\", "").replace("`", "'")
         _safe_nome = nome_precompilato.replace("\\", "").replace("`", "'")
         _safe_dn = (data_nascita_precompilata or "").replace("\\", "").replace("`", "'")
         _precompila_js = f"""
 <script>
 (function(){{
-  var NOME = `{_safe_nome}`, DN = `{_safe_dn}`;
+  var NOME = `{_safe_nome}`, DN = `{_safe_dn}`, ETA = `{_safe_eta}`;
 
   function fill(){{
     var fatto = false;
@@ -144,10 +156,12 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
     // da draw(). Scriviamo in V e forziamo il redisegno.
     if (!fatto && typeof window.V === 'object' && window.V !== null) {{
       window.V.nome = NOME;
-      if (DN) {{
-        window.V.dn = DN;
-        // il campo 'data' della scheda è la data della valutazione, non la
-        // nascita: non lo sovrascriviamo.
+      if (ETA) window.V.eta = ETA;
+      if (!window.V.data) {{
+        var oggi = new Date();
+        window.V.data = oggi.getFullYear() + '-' +
+          String(oggi.getMonth()+1).padStart(2,'0') + '-' +
+          String(oggi.getDate()).padStart(2,'0');
       }}
       try {{ if (typeof window.sl === 'function') window.sl(); }} catch(e){{}}
       try {{ if (typeof window.draw === 'function') window.draw(); }} catch(e){{}}
