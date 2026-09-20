@@ -83,9 +83,9 @@ def _testo_conoscenza(agg) -> str:
 
 
 def render_apprendimento(conn=None, paz_id=None, paziente=None):
-    st.header("🧪 Apprendimento PNEV — casi e pattern")
-    st.caption("Cosa ha funzionato, su tutti i tuoi pazienti. La base cresce a ogni "
-               "esito che registri. Dati aggregati e anonimi.")
+    st.header("🧭 Bussola degli esiti")
+    st.caption("Cosa ha funzionato davvero, su tutti i tuoi pazienti. Ogni follow-up "
+               "che registri orienta il suggerimento successivo. Dati aggregati e anonimi.")
 
     if conn is None:
         st.info("Connessione non disponibile.")
@@ -93,8 +93,13 @@ def render_apprendimento(conn=None, paz_id=None, paziente=None):
 
     agg = _aggrega(conn)
     if not agg:
-        st.info("Ancora nessun esito registrato. Più follow-up inserisci "
-                "(📈 Esiti), più questa base diventa intelligente.")
+        st.info(
+            "**La bussola è ancora ferma: nessun esito registrato.**\n\n"
+            "Si orienta da sola man mano che chiudi i follow-up in "
+            "**Pazienti → Scheda clinica → 📈 Esiti / Follow-up**. Ogni esito "
+            "che registri — migliorato, stabile, peggiorato — entra nel conteggio, "
+            "e da lì in avanti questa pagina ti dice quali interventi, nel tuo "
+            "studio e sui tuoi pazienti, hanno reso di più.")
         return
 
     # ── Tabella conoscenza (funziona senza AI) ────────────────────────
