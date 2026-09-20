@@ -252,22 +252,36 @@ def _render_diario_crisi(conn, paz_id, paziente):
                             key="pe_diario_pdf_btn")
 
     st.markdown("##### 📅 Calendario mensile")
+    st.caption("Una griglia di giorni si legge a colpo d'occhio: è il formato da "
+               "mandare alla famiglia. Vuoto lo compilano loro, pieno serve a te "
+               "per vedere come si distribuiscono le crisi nel mese.")
     import datetime as _dt
     oggi = _dt.date.today()
-    cc1, cc2 = st.columns(2)
+    cc0, cc1, cc2 = st.columns([2, 1, 1])
+    _tipo_cal = cc0.radio(
+        "Versione", ["Vuoto da compilare (per la famiglia)",
+                     "Con le crisi già registrate (per te)"],
+        key="pe_cal_tipo", label_visibility="collapsed")
     mese_sel = cc1.selectbox("Mese", list(range(1, 13)), index=oggi.month - 1,
                               format_func=lambda m: ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
                                                       "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"][m-1],
                               key="pe_cal_mese")
-    anno_sel = cc2.number_input("Anno", min_value=2020, max_value=2100, value=oggi.year, step=1, key="pe_cal_anno")
+    anno_sel = cc2.number_input("Anno", min_value=2020, max_value=2100,
+                                 value=oggi.year, step=1, key="pe_cal_anno")
     professionista = st.session_state.get("utente_nome") or "Studio The Organism"
-    pdf_calendario = _pdf_calendario_crisi(nome_paziente, righe, int(anno_sel), int(mese_sel), professionista)
-    st.download_button("🖨️ Scarica calendario del mese in PDF (con intestazione)", data=pdf_calendario,
-                        file_name=f"calendario_crisi_{anno_sel}_{mese_sel:02d}.pdf", mime="application/pdf",
-                        key="pe_cal_pdf_btn")
+    _vuoto = _tipo_cal.startswith("Vuoto")
+    pdf_calendario = _pdf_calendario_crisi(
+        nome_paziente, [] if _vuoto else righe,
+        int(anno_sel), int(mese_sel), professionista, vuoto=_vuoto)
+    st.download_button(
+        "🖨️ Scarica il calendario del mese in PDF",
+        data=pdf_calendario,
+        file_name=f"calendario_crisi_{anno_sel}_{mese_sel:02d}.pdf",
+        mime="application/pdf", key="pe_cal_pdf_btn")
 
 
-def _pdf_calendario_crisi(nome_paziente, righe, anno, mese, professionista="") -> bytes:
+def _pdf_calendario_crisi(nome_paziente, righe, anno, mese, professionista="",
+                           vuoto=False) -> bytes:
     """Calendario mensile con intestazione The Organism / PNEV — giorni con
     crisi evidenziati, elenco sintetico sotto il mese."""
     import io
