@@ -14,7 +14,7 @@ schermo o sul secondo monitor e resta lì, mentre nel gestionale compili.
 """
 from __future__ import annotations
 
-import base64
+import json
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -40,17 +40,23 @@ def _apri_finestra(nome_finestra: str, html: str = "", url: str = "",
                    larghezza: int = 460, altezza: int = 680) -> None:
     """Apre (o riporta in primo piano) una finestra separata.
 
-    L'HTML viene passato come data-URL in base64 invece che con
-    document.write: il metronomo contiene JavaScript con template
-    literal, e qualunque `${...}` dentro una stringa JS verrebbe
-    interpretato e romperebbe la pagina. Il base64 non ha questo problema.
+    Due trappole evitate qui:
+
+    1. NON si usa un data-URL: Chrome blocca la navigazione di primo
+       livello verso "data:" e la finestra resterebbe su about:blank.
+    2. NON si usa un template literal JavaScript: il metronomo contiene
+       codice con `${...}`, che verrebbe interpretato spezzando la
+       pagina. Il contenuto passa da json.dumps, che produce una stringa
+       JS già correttamente sfuggita.
     """
     if url:
-        sorgente = f"w = window.open({url!r}, {nome_finestra!r}, opts);"
+        sorgente = f"w = window.open({json.dumps(url)}, {json.dumps(nome_finestra)}, opts);"
     else:
-        b64 = base64.b64encode(html.encode("utf-8")).decode()
-        sorgente = (f"w = window.open('data:text/html;base64,{b64}', "
-                    f"{nome_finestra!r}, opts);")
+        payload = json.dumps(html)
+        sorgente = (f"w = window.open('', {json.dumps(nome_finestra)}, opts);\n"
+                    f"      if (w) {{ w.document.open(); w.document.write({payload});"
+                    f" w.document.close(); }}")
+
     components.html(f"""<script>
       var opts = 'width={larghezza},height={altezza},menubar=no,toolbar=no,location=no';
       var w;
@@ -149,6 +155,10 @@ def cintura_strumenti() -> None:
             else:
                 st.error("Metronomo non trovato: serve "
                          "static/pnev_metronomo/index.html nel repo.")
+
+        st.caption("[Versione per il paziente](https://www.pnev.it/wp-content/"
+                   "uploads/pnev_metronomo/index.html) — da mandare per il "
+                   "lavoro a casa.")
 
         if st.button("⏱️ Cronometro", key="cintura_crono", use_container_width=True):
             _apri_finestra("pnev_cronometro", html=_CRONOMETRO,
