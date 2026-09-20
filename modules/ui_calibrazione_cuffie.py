@@ -178,11 +178,9 @@ def ui_calibrazione_cuffie(conn=None):
     st.caption("Wizard per calibrare CUFFIE + DEVICE con fonometro dB(A). Uso funzionale (non certificato).")
 
     if conn is None:
-        try:
-            from modules.app_core import get_connection; conn = get_connection()
-        except Exception:
-            import sys, os; root=os.path.dirname(os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0,root)
-            from app_patched import get_connection; conn = get_connection()
+        # Solo la connessione vera: nessun ripiego su database alternativi.
+        from modules.app_core import get_connection
+        conn = get_connection()
     _ensure_calibration_tables(conn)
     _seed_default_devices_if_empty(conn)
 
