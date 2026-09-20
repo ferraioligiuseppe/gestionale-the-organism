@@ -21,6 +21,31 @@ import streamlit as st
 KEY_ID = "paziente_attivo_id"
 KEY_REC = "paziente_attivo_record"
 
+# Flag di sessione per le colonne aggiunte al volo. Senza questo, ogni
+# cambio paziente e ogni scadenza della cache lanciavano quattro ALTER
+# TABLE: DDL sulle tabelle piu' lette dell'app, con produzione e staging
+# sullo stesso Postgres. E' la ricetta per lock e timeout. Le colonne o
+# ci sono gia' o si creano al primo giro della sessione.
+KEY_SCHEMA_OK = "_paziente_attivo_schema_ok"
+
+
+def _assicura_colonne(conn) -> None:
+    """Crea le colonne accessorie se mancano. Una volta per sessione."""
+    if st.session_state.get(KEY_SCHEMA_OK):
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
+        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS ultimo_accesso TIMESTAMPTZ;")
+        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;")
+        conn.commit()
+        st.session_state[KEY_SCHEMA_OK] = True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
 
 # ════════════════════════════════════════════════════════════════════
 #  HELPERS DATI
@@ -74,16 +99,9 @@ def _carica_paziente_record(conn, paz_id):
 def _carica_lista_pazienti(_conn):
     """Lista pazienti ATTIVI per il dialog di selezione."""
     conn = _conn
+    _assicura_colonne(conn)
     try:
         cur = conn.cursor()
-        try:
-            cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
-            conn.commit()
-        except Exception:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
         cur.execute(
             "SELECT id, cognome, nome, data_nascita, telefono, stato_paziente, creato_il "
             "FROM pazienti "
@@ -136,10 +154,9 @@ def set_paziente_attivo(conn, paz_id: int) -> None:
     st.session_state[KEY_ID] = int(paz_id)
     rec = _carica_paziente_record(conn, paz_id)
     st.session_state[KEY_REC] = rec or {}
+    _assicura_colonne(conn)
     try:
         cur = conn.cursor()
-        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS ultimo_accesso TIMESTAMPTZ;")
-        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
         cur.execute("UPDATE pazienti SET ultimo_accesso=NOW() WHERE id=%s", (int(paz_id),))
         conn.commit()
     except Exception:
@@ -158,8 +175,8 @@ def _salva_ultimo_paziente_utente(conn, paz_id: int) -> None:
         uid = u.get("id")
         if not uid:
             return
+        _assicura_colonne(conn)
         cur = conn.cursor()
-        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;")
         cur.execute("UPDATE auth_users SET ultimo_paziente_id=%s WHERE id=%s",
                     (int(paz_id), int(uid)))
         conn.commit()
@@ -180,8 +197,8 @@ def ripristina_ultimo_paziente(conn) -> None:
         uid = u.get("id")
         if not uid:
             return
+        _assicura_colonne(conn)
         cur = conn.cursor()
-        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;")
         cur.execute("SELECT ultimo_paziente_id FROM auth_users WHERE id=%s", (int(uid),))
         row = cur.fetchone()
         conn.commit()
@@ -455,7 +472,11 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
             )
         with c2:
             with st.popover("👤 Seleziona paziente"):
-                _corpo_seleziona(conn, ns=f"gpa_{_hpa_n}")
+                # Chiave fissa: qui non esiste il contatore _hpa_n, che e'
+                # locale a header_paziente_attivo. Riferirlo sollevava un
+                # NameError ogni volta che un modulo chiamava questa
+                # funzione senza paziente selezionato.
+                _corpo_seleziona(conn, ns="gpa")
     return pid
 
 
