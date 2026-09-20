@@ -108,7 +108,6 @@ PNEV_RAMI = {
         "🎧 Libreria calibrazioni cuffie",
     ],
     "📚 Apprendimenti": [
-        "🧪 Apprendimento PNEV",
         "📚 DSA — Apprendimento",
         "📖 Lettura avanzata",
     ],
@@ -134,6 +133,10 @@ PAZIENTI_RAMI = {
         "🏠 Dashboard",
         "👤 Anagrafica pazienti",
         "🧩 Quadro storico",
+        # Statistiche sull'efficacia dei trattamenti dello studio: stava
+        # sotto "Apprendimenti", dove "apprendimento" indica quello del
+        # bambino — due significati opposti sotto la stessa parola.
+        "🧭 Bussola degli esiti",
     ],
     "📁 Scheda clinica": [
         "📎 Documenti clinici",
