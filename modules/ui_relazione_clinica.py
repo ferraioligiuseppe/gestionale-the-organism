@@ -129,7 +129,7 @@ def _firma(prof, spec, luogo="Pagani"):
 {prof}
 {spec}
 Studio The Organism
-Via Balsamo, 19 – 80065 Sant'Agnello (NA) | Via De Rosa, 46 – 84016 Pagani (SA) | Viale Marconi, 55 – 84013 Cava de' Tirreni SA
+Via De Rosa 46, Pagani (SA) · Via Tino di Camaino 23, Napoli · Studio Della Ragione, Via Balsamo 19, Sant'Agnello (NA)
 Tel. 0815152334 – 3935817157 | apstheorganism@gmail.com | www.theorganism.it
 
 Firma e timbro: ___________________________"""
