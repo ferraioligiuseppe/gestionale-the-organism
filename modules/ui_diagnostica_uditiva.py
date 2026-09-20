@@ -553,6 +553,55 @@ function toggle(){if(playing)stop();else start();}
 </script></body></html>"""
 
 
+
+# ── Da dB SPL letti al fonometro a dB HL ─────────────────────────────
+# Lo zero audiometrico non è lo zero fisico: 0 dB HL corrisponde a una
+# pressione sonora diversa a ogni frequenza, perché l'orecchio umano non
+# è ugualmente sensibile. I valori qui sotto (RETSPL — Reference
+# Equivalent Threshold SPL) sono quelli normativi per tipo di cuffia:
+#   dB HL = dB SPL misurato − RETSPL(frequenza)
+# Senza questa conversione il numero mostrato non è dB HL, ed è per
+# questo che i livelli sembrano "bassi": a 125 Hz servono 45 dB SPL per
+# fare 0 dB HL con una cuffia sovraurale.
+RETSPL = {
+    # ISO 389-1 — sovraurali tipo TDH-39, cuscinetto su padiglione
+    "sovraurale": {125: 45.0, 250: 25.5, 500: 11.5, 750: 8.0, 1000: 7.0,
+                   1500: 6.5, 2000: 9.0, 3000: 10.0, 4000: 9.5,
+                   6000: 15.5, 8000: 13.0},
+    # ISO 389-8 — circumaurali tipo HDA200, padiglione racchiuso
+    "circumaurale": {125: 30.5, 250: 18.0, 500: 11.0, 750: 6.0, 1000: 5.5,
+                     1500: 5.5, 2000: 4.5, 3000: 2.5, 4000: 9.5,
+                     6000: 17.0, 8000: 17.5},
+    # ISO 389-2 — auricolari a inserzione tipo ER-3A
+    "inserzione": {125: 26.0, 250: 14.0, 500: 5.5, 750: 2.0, 1000: 0.0,
+                   1500: 2.0, 2000: 3.0, 3000: 3.5, 4000: 5.5,
+                   6000: 2.0, 8000: 0.0},
+}
+
+ETICHETTE_TRASDUTTORE = {
+    "sovraurale": "Sovraurale (cuscinetto appoggiato sull'orecchio)",
+    "circumaurale": "Circumaurale (padiglione racchiuso — la maggior parte delle cuffie da studio)",
+    "inserzione": "Auricolari a inserzione (in-ear)",
+}
+
+
+def _retspl(tipo, freq):
+    """RETSPL alla frequenza indicata; interpola se la frequenza non è in tabella."""
+    tab = RETSPL.get(tipo) or RETSPL["circumaurale"]
+    if freq in tab:
+        return tab[freq]
+    note = sorted(tab)
+    if freq <= note[0]:
+        return tab[note[0]]
+    if freq >= note[-1]:
+        return tab[note[-1]]
+    for a, b in zip(note, note[1:]):
+        if a <= freq <= b:
+            q = (freq - a) / (b - a)
+            return tab[a] + q * (tab[b] - tab[a])
+    return 0.0
+
+
 def _ui_calibrazione(conn):
     st.subheader("Calibrazione cuffie")
     st.caption("Misura l'uscita reale delle cuffie con un fonometro e salva l'offset globale")
@@ -563,13 +612,32 @@ def _ui_calibrazione(conn):
         st.markdown(
             "- Cuffie collegate, **volume del PC al massimo**\n"
             "- EQ di sistema e \"audio enhancer\" **disattivati**\n"
-            "- Fonometro pronto (app: Decibel X, NIOSH SLM, Sound Meter)\n"
+            "- Fonometro impostato su **ponderazione C oppure Z (flat)**, "
+            "risposta **slow**\n"
             "- Stanza silenziosa\n"
             "- Microfono al **centro del padiglione**, premuto leggermente per sigillare")
+        st.warning(
+            "**Non usare la ponderazione A.** La curva A attenua di proposito i "
+            "gravi (−16 dB a 125 Hz, −8,6 a 250) per imitare la sensibilità "
+            "dell'orecchio a basso volume: applicarla qui significa misurare "
+            "soglie sbagliate di quindici decibel proprio dove la cuffia è più "
+            "debole. Serve la pressione reale: C o Z.")
+        st.caption(
+            "Nota onesta sui limiti: una calibrazione a norma si fa con orecchio "
+            "artificiale e accoppiatore (IEC 60318). Un fonometro appoggiato al "
+            "padiglione dà una stima utile e ripetibile per uso funzionale — che "
+            "è lo scopo qui — non un certificato metrologico.")
+
+    _tipo_cuffia = st.selectbox(
+        "Tipo di cuffia", list(RETSPL.keys()),
+        format_func=lambda k: ETICHETTE_TRASDUTTORE[k],
+        index=1, key="cal_tipo_trasd",
+        help="Determina i valori RETSPL con cui la pressione misurata diventa dB HL.")
+    ss["cal_tipo_trasduttore"] = _tipo_cuffia
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        cf = st.selectbox("Frequenza", [1000, 2000, 4000, 500, 250, 6000, 8000],
+        cf = st.selectbox("Frequenza", FREQS_TON,
                           format_func=lambda f: f"{f//1000}k Hz" if f >= 1000 else f"{f} Hz",
                           key="cal_f")
     with c2:
@@ -595,31 +663,58 @@ def _ui_calibrazione(conn):
     m1, m2 = st.columns([2, 1])
     with m1:
         measured = st.number_input(
-            f"dB(A) letto sul fonometro — {flbl} {ce_code}", 30, 120, int(level), 1, key="cal_meas")
+            f"dB SPL letto sul fonometro (pond. C o Z) — {flbl} {ce_code}",
+            20, 130, int(level), 1, key="cal_meas")
+        _atteso = int(round(level + _retspl(_tipo_cuffia, cf)))
+        st.caption(f"Con questa cuffia, {int(level)} dB HL a {flbl} dovrebbe leggere "
+                   f"circa **{_atteso} dB SPL** (RETSPL {_retspl(_tipo_cuffia, cf):.1f}).")
     with m2:
         st.write("")
         st.write("")
         if st.button("Registra misura", use_container_width=True, key="cal_reg"):
-            ss["cal_misure"][f"{cf}_{ce_code}"] = {"measured": int(measured), "level": int(level)}
-            st.success(f"Registrata: {flbl} {ce_code} → letto {int(measured)} dB(A) a {int(level)} dB HL")
+            _off = int(round((level + _retspl(_tipo_cuffia, cf)) - measured))
+            ss["cal_misure"][f"{cf}_{ce_code}"] = {
+                "measured": int(measured), "level": int(level),
+                "freq": int(cf), "tipo": _tipo_cuffia, "offset": _off}
+            st.success(f"Registrata: {flbl} {ce_code} → letto {int(measured)} dB SPL · "
+                       f"scarto {_off:+d} dB da correggere")
 
-    # Misure registrate
+    # ── Misure registrate, frequenza per frequenza ──────────────────
+    # La correzione resta legata alla singola frequenza. Mediarla su tutta
+    # la banda, come si faceva prima, butta via proprio il dato raccolto:
+    # nessuna cuffia ha risposta piatta, e lo scarto fra 125 Hz e 4 kHz
+    # arriva facilmente a quindici o venti decibel.
+    def _off_misura(v):
+        if "offset" in v:
+            return int(v["offset"])
+        return int(v["level"] - v["measured"])
+
     if ss["cal_misure"]:
-        st.markdown("**Misure registrate**")
-        for k, v in sorted(ss["cal_misure"].items()):
-            off = v["level"] - v["measured"]
-            st.markdown(
-                f"<span style='border:1px solid #1d9e75;border-radius:6px;padding:2px 7px;"
-                f"font-size:12px;color:#0f6e56;display:inline-block;margin:2px'>"
-                f"{k.replace('_',' ')} · letto {v['measured']} dB(A) · offset {off:+d}</span>",
-                unsafe_allow_html=True)
+        st.markdown("**Curva di correzione misurata**")
+        _righe_cal = []
+        for k, v in sorted(ss["cal_misure"].items(), key=lambda x: (x[0].split("_")[1], int(x[0].split("_")[0]))):
+            _f, _e = k.split("_")
+            _righe_cal.append({
+                "Frequenza": f"{int(_f)//1000}k" if int(_f) >= 1000 else _f,
+                "Orecchio": _e,
+                "Letto (dB SPL)": v["measured"],
+                "Correzione": f"{_off_misura(v):+d} dB",
+            })
+        st.dataframe(pd.DataFrame(_righe_cal), hide_index=True, use_container_width=True)
+
+        _mancanti = [f for f in FREQS_TON
+                     if not any(k.startswith(f"{f}_") for k in ss["cal_misure"])]
+        if _mancanti:
+            st.caption("Frequenze non ancora misurate (useranno la correzione "
+                       "interpolata dalle vicine): "
+                       + ", ".join(f"{f//1000}k" if f >= 1000 else str(f) for f in _mancanti))
+
         if st.button("Azzera misure", key="cal_clear"):
             ss["cal_misure"] = {}
             st.rerun()
 
-    # Offset per orecchio: offset = livello presentato − misurato (sposta verso l'alto se le cuffie sono basse)
-    od = [v["level"] - v["measured"] for k, v in ss["cal_misure"].items() if k.endswith("_OD")]
-    os_ = [v["level"] - v["measured"] for k, v in ss["cal_misure"].items() if k.endswith("_OS")]
+    od = [_off_misura(v) for k, v in ss["cal_misure"].items() if k.endswith("_OD")]
+    os_ = [_off_misura(v) for k, v in ss["cal_misure"].items() if k.endswith("_OS")]
     off_od = round(sum(od) / len(od)) if od else 0
     off_os = round(sum(os_) / len(os_)) if os_ else 0
 
@@ -823,7 +918,7 @@ button.primary{background:#1d9e75;border-color:#1d9e75;color:#fff;font-size:16px
   <div class="sub">Orecchio __EAR__ &middot; Via __VIA__ &middot; durata __DUR__s</div>
   <div class="db" id="dbVal">__DBINIT__</div>
   <div class="dblbl">dB HL &middot; offset cuffie __CALOFF__ dB</div>
-  <input type="range" id="dbSlider" min="-20" max="90" step="5" value="__DBINIT__" oninput="setDb(this.value)">
+  <input type="range" id="dbSlider" min="-20" max="__DBMAX__" step="5" value="__DBINIT__" oninput="setDb(this.value)">
   <button class="primary" onclick="play()">&#9654;&nbsp; Invia tono &nbsp;<small style="opacity:.8">[Spazio]</small></button>
   <div class="row">
     <button onclick="step(-5)">&minus;5</button>
@@ -1010,14 +1105,54 @@ def _ui_test_tonale(conn, paz_id, operatore):
                              key="tt_freq_v3")
         fi = FREQS_TON.index(cur_f)
 
-    # Offset di calibrazione (per orecchio), iniettato nella console
-    cal_offset = ss.get("cal_profilo_globale", {}).get(f"offset_{ear_code.lower()}", 0)
+    # Offset di calibrazione della FREQUENZA in corso, non la media di banda.
+    def _offset_calibrato(profilo, orecchio, freq):
+        if not profilo:
+            return 0
+        misure = profilo.get("misure") or {}
+        punti = []
+        for chiave, v in misure.items():
+            try:
+                f_txt, e_txt = str(chiave).split("_")
+                if e_txt != orecchio:
+                    continue
+                off = v.get("offset")
+                if off is None:
+                    off = v.get("level", 0) - v.get("measured", 0)
+                punti.append((int(f_txt), int(off)))
+            except Exception:
+                continue
+        if not punti:
+            # Nessuna misura per frequenza: resta la media salvata nel profilo.
+            return int(profilo.get(f"offset_{orecchio.lower()}", 0) or 0)
+        punti.sort()
+        if len(punti) == 1 or freq <= punti[0][0]:
+            return punti[0][1]
+        if freq >= punti[-1][0]:
+            return punti[-1][1]
+        for (fa, oa), (fb, ob) in zip(punti, punti[1:]):
+            if fa <= freq <= fb:
+                q = (freq - fa) / (fb - fa) if fb != fa else 0
+                return int(round(oa + q * (ob - oa)))
+        return punti[-1][1]
+
+    cal_offset = _offset_calibrato(ss.get("cal_profilo_globale"), ear_code, int(cur_f))
     pan_val = 0.9 if ear_code == "OD" else -0.9
 
     if modalita.startswith("🤖"):
         db_init = int(auto["level"])
     else:
         db_init = int(ss.get(f"tt_soglie_{ear_code}_{via_code}_v3", {}).get(fi, 30))
+
+    # ── Massimo livello realmente erogabile ─────────────────────────────────
+    # Il motore audio mappa 90 dB HL sul fondo scala digitale: oltre non si
+    # va, si distorce soltanto. Con la correzione di calibrazione il tetto si
+    # sposta — cuffie deboli, che vanno spinte (+dB), arrivano più in basso;
+    # cuffie efficienti (−dB) arrivano più in alto. Mostrarlo evita di credere
+    # che un "non sentito" a 90 sia una soglia, quando è il limite dell'hardware.
+    _FONDO_SCALA_DB = 91
+    _max_reale = int(_FONDO_SCALA_DB - cal_offset)
+    _max_reale = max(40, min(120, _max_reale))
 
     # ── Console audio autonoma: AudioContext persistente, zero ricariche ─────
     console = (_TONALE_CONSOLE_HTML
@@ -1029,16 +1164,30 @@ def _ui_test_tonale(conn, paz_id, operatore):
                .replace("__DUR__", str(dur))
                .replace("__CALOFF__", f"{cal_offset:+d}")
                .replace("__CALOFFNUM__", str(cal_offset))
-               .replace("__DBINIT__", str(db_init)))
+               .replace("__DBMAX__", str(_max_reale))
+               .replace("__DBINIT__", str(min(db_init, _max_reale))))
     _sc.html(console, height=340)
 
     _prof_att = ss.get("cal_profilo_globale") or {}
     if cal_offset:
         st.caption(f"🎧 {_prof_att.get('nome') or _prof_att.get('brand') or 'Cuffia calibrata'} — "
-                   f"offset {cal_offset:+d} dB applicato su {ear_code}")
+                   f"correzione {cal_offset:+d} dB a {FLABELS_TON[fi]} Hz su {ear_code} "
+                   "(propria di questa frequenza, non una media)")
     elif not _prof_att:
         st.caption("⚠️ Nessuna cuffia calibrata: i valori sono relativi all'uscita del "
                    "dispositivo, non a dB HL reali. Calibra in «Calibrazione cuffie».")
+
+    st.caption(f"Massimo erogabile a {FLABELS_TON[fi]} Hz su {ear_code}: "
+               f"**{_max_reale} dB HL**" +
+               ("" if cal_offset == 0 else
+                f" (fondo scala {_FONDO_SCALA_DB} dB meno {cal_offset:+d} dB di correzione)"))
+    if _max_reale < 80:
+        st.warning(
+            f"Oltre {_max_reale} dB HL queste cuffie non vanno: a questa frequenza "
+            "il sistema è già al massimo. Un «non sentito» qui indica il limite "
+            "dell'apparecchiatura, non necessariamente una soglia del paziente — "
+            "per soglie più profonde serve una cuffia più efficiente o un "
+            "amplificatore.")
 
     key_s = f"tt_soglie_{ear_code}_{via_code}_v3"
     if key_s not in ss:
@@ -1055,7 +1204,10 @@ def _ui_test_tonale(conn, paz_id, operatore):
 
         if non_sentito:
             # Non sentito: si sale. È l'unico movimento del metodo ascendente.
-            auto["level"] = min(_TT_MAX, auto["level"] + _TT_PASSO)
+            auto["level"] = min(_max_reale, auto["level"] + _TT_PASSO)
+            if auto["level"] >= _max_reale:
+                st.info(f"Raggiunto il massimo erogabile ({_max_reale} dB HL): se il "
+                        "paziente non sente, registra «non testabile» invece di una soglia.")
             st.rerun()
 
         if sentito:
