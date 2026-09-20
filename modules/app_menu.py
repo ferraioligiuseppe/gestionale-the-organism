@@ -218,7 +218,11 @@ SOTTOSEZIONI = {
         "📋 Consenso screening scolastico",
     ],
     AREA_OCULISTICA: [
-        "👁️ Oculistica",
+        # Non e' solo un nome: la scheda contiene sia la parte oculistica
+        # (tono, CCT, fondo, OCT, esame obiettivo) sia quella optometrica
+        # (accomodazione, vergenze, AC/A, dominanza). Il tipo di visita si
+        # sceglie in cima alla schermata, non qui.
+        "👁️ Visita oculistica / optometrica",
         "👁️ Contattologia",
     ],
     AREA_OSTEOPATIA: [
