@@ -125,7 +125,15 @@ def _media_soglie(righe_soglie):
 
 
 def render_calibrazioni_condivise(conn):
-    st.subheader("🎧 Libreria calibrazioni cuffie (condivisa)")
+    st.subheader("🌐 Curve cuffie condivise (da pnev.it)")
+    st.info(
+        "**Questa non è la calibrazione del tuo studio.** È la raccolta delle curve "
+        "inviate dagli utenti che usano lo strumento di audiometria pubblico su "
+        "pnev.it, mediate per modello di cuffia: serve come riferimento se stai "
+        "scegliendo una cuffia o vuoi confrontare la tua misura con quella di altri.\n\n"
+        "La calibrazione che l'audiometria in studio usa davvero si fa in "
+        "**🔉 Diagnostica uditiva completa → Calibrazione cuffie**, con il fonometro "
+        "e frequenza per frequenza. È l'unica che il test tonale legge.")
     st.caption("Ogni volta che un utente calibra una cuffia su PNEV-audiometria-v1.html, la curva arriva qui. "
                "Più calibrazioni per lo stesso modello, più affidabile diventa il profilo medio.")
     try:
