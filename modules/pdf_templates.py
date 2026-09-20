@@ -15,7 +15,7 @@ VERDE    = colors.HexColor("#1D6B44")
 GRIGIO   = colors.HexColor("#888780")
 GRIGIO_L = colors.HexColor("#D3D1C7")
 
-INDIRIZZO = "Via Balsamo, 19 - 80065 Sant'Agnello (NA)  |  Via De Rosa, 46 - 84016 Pagani (SA)  |  Viale Marconi, 55 - 84013 Cava de Tirreni SA"
+INDIRIZZO = "Via De Rosa 46, Pagani (SA) · Via Tino di Camaino 23, Napoli · Studio Della Ragione, Via Balsamo 19, Sant'Agnello (NA)"
 CONTATTI  = "Tel. 0815152334  |  Cell. 3921873914  |  apstheorganism@gmail.com"
 
 def _logo_path():
