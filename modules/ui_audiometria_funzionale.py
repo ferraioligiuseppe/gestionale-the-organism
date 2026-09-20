@@ -267,22 +267,62 @@ def _ui_test_dicotico(conn, cur, paz_id):
     if "joh_risposte" not in st.session_state:
         st.session_state.joh_risposte = {}
 
-    opts_resp = ["", "OD", "OS", "Entrambi"]
+    # Griglia unica invece di tre menu a tendina per riga.
+    #
+    # Prima ogni riga aveva tre selectbox: con trenta coppie fanno novanta
+    # widget, e in Streamlit OGNI selezione ricarica l'intera pagina. Fra un
+    # clic e il successivo il foglio si ridisegnava e si perdeva il segno —
+    # impossibile stare al passo con un paziente che risponde ogni pochi
+    # secondi. Il data_editor è un widget solo: si compila tutta la griglia
+    # muovendosi con Tab e la pagina si ricarica una volta sola.
+    #
+    # Etichette di una lettera: D destra, S sinistra, E entrambi. Si scelgono
+    # a colpo d'occhio e si scrivono da tastiera.
+    import pandas as pd
+
+    _SIGLE = {"": "", "OD": "D", "OS": "S", "Entrambi": "E"}
+    _ESTESE = {"": "", "D": "OD", "S": "OS", "E": "Entrambi"}
+    _OPZIONI = ["", "D", "S", "E"]
+
+    _righe = []
     for i, coppia in enumerate(JOHANSEN_COPPIE):
-        c0, c1, c2, c3, c4, c5 = st.columns([0.5, 1, 1, 1.5, 1.5, 1.5])
-        c0.markdown(f"<div style='font-size:11px;color:#888;padding-top:8px'>{i+1}</div>", unsafe_allow_html=True)
-        c1.markdown(f"<div style='color:#c0392b;font-weight:600;font-size:13px;padding-top:6px'>{coppia['od']}</div>", unsafe_allow_html=True)
-        c2.markdown(f"<div style='color:#2980b9;font-weight:600;font-size:13px;padding-top:6px'>{coppia['os']}</div>", unsafe_allow_html=True)
         r = st.session_state.joh_risposte.get(i, {})
-        with c3:
-            v = st.selectbox("Comp.3", opts_resp, key=f"jc3_{i}", index=opts_resp.index(r.get("c3","")) if r.get("c3","") in opts_resp else 0, label_visibility="collapsed")
-            if v: st.session_state.joh_risposte.setdefault(i, {})["c3"] = v
-        with c4:
-            v = st.selectbox("Comp.4", opts_resp, key=f"jc4_{i}", index=opts_resp.index(r.get("c4","")) if r.get("c4","") in opts_resp else 0, label_visibility="collapsed")
-            if v: st.session_state.joh_risposte.setdefault(i, {})["c4"] = v
-        with c5:
-            v = st.selectbox("Comp.5", opts_resp, key=f"jc5_{i}", index=opts_resp.index(r.get("c5","")) if r.get("c5","") in opts_resp else 0, label_visibility="collapsed")
-            if v: st.session_state.joh_risposte.setdefault(i, {})["c5"] = v
+        _righe.append({
+            "#": i + 1,
+            "Destra": coppia["od"],
+            "Sinistra": coppia["os"],
+            "Comp.3": _SIGLE.get(r.get("c3", ""), ""),
+            "Comp.4": _SIGLE.get(r.get("c4", ""), ""),
+            "Comp.5": _SIGLE.get(r.get("c5", ""), ""),
+        })
+
+    st.caption("**D** = ha risposto la parola di destra · **S** = quella di sinistra · "
+               "**E** = entrambe. Muoviti con Tab, la pagina non si ricarica a ogni scelta.")
+
+    _editate = st.data_editor(
+        pd.DataFrame(_righe),
+        key="joh_griglia",
+        hide_index=True,
+        use_container_width=True,
+        height=min(620, 42 * len(JOHANSEN_COPPIE) + 40),
+        column_config={
+            "#": st.column_config.NumberColumn(width="small", disabled=True),
+            "Destra": st.column_config.TextColumn(width="small", disabled=True),
+            "Sinistra": st.column_config.TextColumn(width="small", disabled=True),
+            "Comp.3": st.column_config.SelectboxColumn(options=_OPZIONI, width="small"),
+            "Comp.4": st.column_config.SelectboxColumn(options=_OPZIONI, width="small"),
+            "Comp.5": st.column_config.SelectboxColumn(options=_OPZIONI, width="small"),
+        },
+    )
+
+    for _, _riga in _editate.iterrows():
+        i = int(_riga["#"]) - 1
+        for _campo in ("c3", "c4", "c5"):
+            _val = _ESTESE.get(str(_riga["Comp." + _campo[-1]] or "").strip().upper(), "")
+            if _val:
+                st.session_state.joh_risposte.setdefault(i, {})[_campo] = _val
+            elif i in st.session_state.joh_risposte:
+                st.session_state.joh_risposte[i].pop(_campo, None)
 
     # Calcolo punteggi
     jod, jos = 0, 0
