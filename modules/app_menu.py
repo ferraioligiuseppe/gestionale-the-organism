@@ -101,6 +101,7 @@ PNEV_RAMI = {
         "⚡ Protocollo Epilessia",
     ],
     "🎧 Uditiva": [
+        "🔉 Diagnostica uditiva completa",
         "📊 Audiometria funzionale",
         "🎧 Bilancio uditivo",
         "🎧 Audiometria tonale calibrata",
