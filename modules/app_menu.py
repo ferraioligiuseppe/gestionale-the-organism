@@ -41,6 +41,7 @@ AREA_ORTOTTICA     = "🩺 Ortottica"
 AREA_TNPEE         = "🗣️ Logopedia / TNPEE"
 AREA_PECS          = "🖼️ PECS — CAA"
 AREA_OSTEOPATIA    = "🦴 Osteopatia"
+AREA_MATERIALI     = "📚 Materiali"
 AREA_ACADEMY       = "🎓 PNEV Academy"
 AREA_FISIOTERAPIA  = "🏃 Fisioterapia"
 AREA_TEST_LIVE     = "🖥️ Test live"
@@ -74,6 +75,7 @@ AREE_ORDINE = [
     AREA_OSTEOPATIA,
     AREA_SCREENING,
     AREA_TEST_LIVE,
+    AREA_MATERIALI,
     AREA_TERAPIA,
     AREA_ACADEMY,
     AREA_STUDIO,
@@ -85,7 +87,6 @@ PNEV_RAMI = {
     "🧬 Riflessi primitivi": [
         "📋 Anamnesi PNEV",
         "🧬 INPP — Valutazione diagnostica",
-        "🎬 Animazioni dei riflessi",
     ],
     "👁️ Visiva": [
         "👁️ Anamnesi visiva",
@@ -94,10 +95,10 @@ PNEV_RAMI = {
         "👁️ Getman (manipolazione visiva)",
         "👁️ Groffman (visual tracing)",
         "👁️ Eye tracking",
+    ],
+    "🧠 Neurologica e posturale": [
         "🩶 Postura (Wii Balance Board)",
         "⚡ Protocollo Epilessia",
-        "📐 PNEV-Chart (schede stampabili)",
-        "🥁 PNEV Metronomo",
     ],
     "🎧 Uditiva": [
         "📊 Audiometria funzionale",
@@ -113,11 +114,6 @@ PNEV_RAMI = {
     "🔬 Test psicologici": [
         "🧠 NPS — Neuropsicologica",
         "🌐 WHODAS 2.0",
-    ],
-    "🎮 PNEV Games": [
-        "🎮 Esercizi Wordwall",
-        "🕹️ PNEV Game Center",
-        "🏃 PNEV Sport Vision",
     ],
 }
 
@@ -227,6 +223,14 @@ SOTTOSEZIONI = {
     ],
     AREA_PECS: [
         "🖼️ PECS — CAA",
+    ],
+    AREA_MATERIALI: [
+        "📐 PNEV-Chart (schede stampabili)",
+        "🥁 PNEV Metronomo",
+        "🎬 Animazioni dei riflessi",
+        "🕹️ PNEV Game Center",
+        "🎮 Esercizi Wordwall",
+        "🏃 PNEV Sport Vision",
     ],
     AREA_ACADEMY: [
         "📅 Eventi e iscrizioni",

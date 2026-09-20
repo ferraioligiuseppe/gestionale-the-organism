@@ -1539,8 +1539,6 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
 
     if sezione == "Intestazione":
         dati.update(_intestazione(conn, paz_id, paziente, stored))
-        if st.button("Salva intestazione", key=f"sv_int_{paz_id}"):
-            _salva(conn, paz_id, dati)
 
     elif sezione == "👁️ Anamnesi":
         try:
@@ -1551,28 +1549,18 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
 
     elif sezione == "A. Stato refrattivo":
         dati.update(_sez_a(paz_id, stored))
-        if st.button("Salva sezione A", key=f"sv_a_{paz_id}"):
-            _salva(conn, paz_id, dati)
 
     elif sezione == "B. Equilibrio binoculare":
         dati.update(_sez_b(paz_id, stored))
-        if st.button("Salva sezione B", key=f"sv_b_{paz_id}"):
-            _salva(conn, paz_id, dati)
 
     elif sezione == "C. Accomodazione":
         dati.update(_sez_c(paz_id, stored))
-        if st.button("Salva sezione C", key=f"sv_c_{paz_id}"):
-            _salva(conn, paz_id, dati)
 
     elif sezione == "D. Oculomotricita":
         dati.update(_sez_d(paz_id, stored, paziente))
-        if st.button("Salva sezione D", key=f"sv_d_{paz_id}"):
-            _salva(conn, paz_id, dati)
 
     elif sezione == "E. Esame obiettivo":
         dati.update(_sez_e(paz_id, stored))
-        if st.button("Salva sezione E", key=f"sv_e_{paz_id}"):
-            _salva(conn, paz_id, dati)
 
     elif sezione == "F. Profilo funzionale":
         dati.update(_sez_f(paz_id, dati))
@@ -1580,13 +1568,9 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
     elif sezione == "G. Prescrizione":
         extra = _sez_g(conn, paz_id, dati, paziente)
         dati.update(extra)
-        if st.button("Salva diagnosi e piano", key=f"sv_g_{paz_id}", type="primary"):
-            _salva(conn, paz_id, dati)
 
     elif sezione == "H. Sports Vision":
         dati.update(_sez_h(paz_id, stored))
-        if st.button("Salva note Sports Vision", key=f"sv_h_{paz_id}"):
-            _salva(conn, paz_id, dati)
 
     elif sezione == "🖥️ Test online":
         st.markdown("#### 🖥️ Esami visuo-percettivi online")
@@ -1646,3 +1630,25 @@ def render_valutazione_visuo_percettiva(conn, paz_id, paziente=None):
                     st.warning("Salva prima almeno una sezione della valutazione, poi registra l'incasso.")
         except Exception as _e_tab_inc:
             st.error(f"Blocco incasso non disponibile: {_e_tab_inc}")
+
+    # ── Salvataggio unico ────────────────────────────────────────────
+    # Prima ogni sezione aveva il suo bottone: compilavi B, passavi a C e
+    # perdevi B se non ti eri ricordato di premere. Il salvataggio ha
+    # sempre scritto l'intera scheda (dati = stored + sezione corrente),
+    # quindi gli otto bottoni non servivano a nulla se non a creare
+    # l'occasione di sbagliare. Ora è uno solo, in fondo a ogni sezione.
+    if sezione not in ("👁️ Anamnesi", "🖥️ Test online", "💶 Incasso"):
+        st.markdown("---")
+        col_sv, col_msg = st.columns([1, 2])
+        with col_sv:
+            if st.button("💾 Salva valutazione", key=f"sv_tutto_{paz_id}",
+                         type="primary", use_container_width=True):
+                _salva(conn, paz_id, dati)
+                st.session_state[f"_vv_salvato_{paz_id}"] = datetime.datetime.now().strftime("%H:%M")
+                st.rerun()
+        with col_msg:
+            _ora = st.session_state.get(f"_vv_salvato_{paz_id}")
+            if _ora:
+                st.caption(f"✅ Salvato alle {_ora} — l'intera scheda, non solo questa sezione.")
+            else:
+                st.caption("Salva l'intera scheda: puoi compilare più sezioni e salvare una volta sola.")
