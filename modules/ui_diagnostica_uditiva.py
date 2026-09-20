@@ -1669,43 +1669,106 @@ def _ui_johansen(conn, paz_id, operatore):
     st.subheader("Test dicotico di Johansen")
     st.caption("20 coppie sillabe OD/OS simultanee · 5 compiti · Tracce MP3 stereo")
 
-    # Tracce audio
-    st.markdown("**Riproduci le tracce in ordine:**")
-    for info in JOHANSEN_TRACCE:
-        n = info["n"]
-        data, mime = _load_johansen_track(n)
-        c1,c2 = st.columns([3,2])
-        c1.markdown(f"**Traccia {n}** — {info['desc']} ({info['dur']})")
-        with c2:
-            if data: c2.audio(data, format=mime)
-            else: c2.caption("File non trovato")
+    # ── Navigazione per traccia ─────────────────────────────────────
+    # Sei lettori impilati costringevano a scorrere per trovare quello in
+    # uso. Qui si sceglie la traccia e parte solo quella. In più ogni
+    # traccia corrisponde a una colonna di risposte (la 4 al Comp.3, la 5
+    # al Comp.4, la 6 al Comp.5): selezionandola, la griglia si restringe
+    # alla colonna che stai davvero compilando.
+    _COLONNA_DI_TRACCIA = {4: "c3", 5: "c4", 6: "c5"}
+
+    _n_sel = st.radio(
+        "Traccia", [t["n"] for t in JOHANSEN_TRACCE],
+        format_func=lambda n: f"{n} · {JOHANSEN_TRACCE[n-1]['desc']}",
+        horizontal=True, key="joh_traccia_sel", label_visibility="collapsed")
+
+    _t = JOHANSEN_TRACCE[_n_sel - 1]
+    _dati, _mime = _load_johansen_track(_n_sel)
+    tc1, tc2 = st.columns([2, 3])
+    tc1.caption(f"**{_t['desc']}** · durata {_t['dur']}")
+    with tc2:
+        if _dati:
+            st.audio(_dati, format=_mime)
+        else:
+            st.caption("⚠️ File non trovato in assets/johansen/")
 
     st.divider()
-    st.markdown("**Registra le risposte** — Comp.3=DX · Comp.4=SX · Comp.5=Entrambi")
+
+    _col_attiva = _COLONNA_DI_TRACCIA.get(_n_sel)
+    if _col_attiva:
+        _tutte = st.checkbox("Mostra tutte e tre le colonne", value=False,
+                              key="joh_tutte_col")
+        if _tutte:
+            _col_attiva = None
+
+    if _col_attiva:
+        st.markdown(f"**Risposte — Comp.{_col_attiva[-1]}** "
+                    f"({'DX' if _col_attiva=='c3' else 'SX' if _col_attiva=='c4' else 'Entrambi'})")
+    else:
+        st.markdown("**Registra le risposte** — Comp.3=DX · Comp.4=SX · Comp.5=Entrambi")
 
     if "joh_risp_v3" not in st.session_state:
         st.session_state.joh_risp_v3 = {}
 
-    opts = ["","OD","OS","Entrambi"]
+    # Griglia unica invece di tre menu a tendina per riga.
+    #
+    # Con venti coppie i menu erano sessanta, e in Streamlit ogni scelta
+    # ricarica la pagina: fra un clic e il successivo il foglio si
+    # ridisegnava e si perdeva il segno, impossibile stare dietro a un
+    # paziente che risponde ogni pochi secondi. Il data_editor è un widget
+    # solo: si compila tutto muovendosi con Tab, una ricarica alla fine.
+    #
+    # Sigle di una lettera perché vanno lette e scelte in un secondo.
+    _SIGLE = {"": "", "OD": "D", "OS": "S", "Entrambi": "E"}
+    _ESTESE = {"": "", "D": "OD", "S": "OS", "E": "Entrambi"}
+    _OPZ = ["", "D", "S", "E"]
 
-    # Header
-    h = st.columns([0.4,0.7,0.7,1.2,1.2,1.2])
-    for lbl,col in zip(["#","OD","OS","Comp.3","Comp.4","Comp.5"],h):
-        col.markdown(f"<div style='font-size:11px;font-weight:600;color:var(--color-text-secondary)'>{lbl}</div>",
-                     unsafe_allow_html=True)
+    st.caption("**D** = ha risposto la parola di destra · **S** = quella di sinistra · "
+               "**E** = entrambe. Muoviti con Tab: la pagina non si ricarica a ogni scelta.")
 
+    _colonne = [_col_attiva] if _col_attiva else ["c3", "c4", "c5"]
+
+    _righe = []
     for i, coppia in enumerate(JOHANSEN_COPPIE):
-        c0,c1,c2,c3,c4,c5 = st.columns([0.4,0.7,0.7,1.2,1.2,1.2])
-        c0.markdown(f"<div style='font-size:11px;color:#888;padding-top:8px'>{i+1}</div>", unsafe_allow_html=True)
-        c1.markdown(f"<div style='color:#c0392b;font-weight:600;font-size:13px;padding-top:6px'>{coppia['od']}</div>", unsafe_allow_html=True)
-        c2.markdown(f"<div style='color:#2980b9;font-weight:600;font-size:13px;padding-top:6px'>{coppia['os']}</div>", unsafe_allow_html=True)
         r = st.session_state.joh_risp_v3.get(i, {})
-        for comp,col in [("c3",c3),("c4",c4),("c5",c5)]:
-            cur_v = r.get(comp,"")
-            idx_v = opts.index(cur_v) if cur_v in opts else 0
-            v = col.selectbox("", opts, index=idx_v, key=f"joh_{comp}_{i}_v3",
-                               label_visibility="collapsed")
-            if v: st.session_state.joh_risp_v3.setdefault(i,{})[comp] = v
+        _riga = {"#": i + 1, "Destra": coppia["od"], "Sinistra": coppia["os"]}
+        for _c in _colonne:
+            _riga["Comp." + _c[-1]] = _SIGLE.get(r.get(_c, ""), "")
+        _righe.append(_riga)
+
+    _cfg = {
+        "#": st.column_config.NumberColumn(width="small", disabled=True),
+        "Destra": st.column_config.TextColumn(width="small", disabled=True),
+        "Sinistra": st.column_config.TextColumn(width="small", disabled=True),
+    }
+    for _c in _colonne:
+        _cfg["Comp." + _c[-1]] = st.column_config.SelectboxColumn(
+            options=_OPZ, width="small")
+
+    _ed = st.data_editor(
+        pd.DataFrame(_righe),
+        key=f"joh_griglia_v3_{'-'.join(_colonne)}",
+        hide_index=True, use_container_width=True,
+        height=min(620, 36 * len(JOHANSEN_COPPIE) + 44),
+        column_config=_cfg,
+    )
+
+    for _, _r in _ed.iterrows():
+        i = int(_r["#"]) - 1
+        for _c in _colonne:
+            _v = _ESTESE.get(str(_r["Comp." + _c[-1]] or "").strip().upper(), "")
+            if _v:
+                st.session_state.joh_risp_v3.setdefault(i, {})[_c] = _v
+            elif i in st.session_state.joh_risp_v3:
+                st.session_state.joh_risp_v3[i].pop(_c, None)
+
+    # Avanzamento: quante risposte mancano, colonna per colonna
+    _fatte = {c: sum(1 for r in st.session_state.joh_risp_v3.values() if r.get(c))
+              for c in ("c3", "c4", "c5")}
+    _tot = len(JOHANSEN_COPPIE)
+    st.caption(" · ".join(
+        f"{'✅' if _fatte[c] == _tot else '○'} Comp.{c[-1]}: {_fatte[c]}/{_tot}"
+        for c in ("c3", "c4", "c5")))
 
     # Punteggi
     jod, jos = 0, 0
