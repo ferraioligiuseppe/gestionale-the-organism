@@ -99,10 +99,36 @@ def chiusura(includi_pnev: bool = True, includi_equipe: bool = True,
     return "\n".join(righe)
 
 
+def premessa_metodo() -> str:
+    """Inquadramento PNEV in apertura.
+
+    In una relazione di screening chi legge — un genitore, un insegnante,
+    a volte un collega — deve sapere dentro quale cornice sono stati letti
+    quei numeri prima di incontrarli, non dopo.
+    """
+    return (
+        "PREMESSA — L'INQUADRAMENTO\n\n"
+        + TRAFILETTO_PNEV + "\n\n"
+        "Per questo i risultati che seguono non vanno letti come prestazioni "
+        "isolate: ogni dato è messo in relazione con gli altri sistemi, e il "
+        "profilo che ne esce orienta il percorso più di quanto non faccia il "
+        "singolo punteggio.\n\n"
+        + "─" * 64 + "\n"
+    )
+
+
 def incornicia(corpo: str, titolo_documento: str, nome_paziente: str = "",
                data_nascita: str = "", eta: str = "",
-               includi_npi_interna: bool = False) -> str:
-    """Avvolge un testo di relazione fra intestazione e chiusura."""
+               includi_npi_interna: bool = False,
+               metodo_in_apertura: bool = False) -> str:
+    """Avvolge un testo di relazione fra intestazione e chiusura.
+
+    metodo_in_apertura: mette l'inquadramento PNEV prima del corpo (e non
+    lo ripete in fondo). Utile negli screening, dove chi legge spesso non
+    conosce il metodo.
+    """
     return (intestazione(titolo_documento, nome_paziente, data_nascita, eta)
+            + (premessa_metodo() + "\n" if metodo_in_apertura else "")
             + corpo.strip()
-            + chiusura(includi_npi_interna=includi_npi_interna))
+            + chiusura(includi_pnev=not metodo_in_apertura,
+                       includi_npi_interna=includi_npi_interna))
