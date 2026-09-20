@@ -310,8 +310,22 @@ def _pdf_calendario_crisi(nome_paziente, righe, anno, mese, professionista="",
     c.setFont("Helvetica", 10); c.setFillColor(colors.black)
     c.drawCentredString(W/2, y_tit - 0.6*cm, f"Paziente: {nome_paziente or '—'}")
 
+    # Sul foglio vuoto le istruzioni devono stare sulla pagina: chi compila
+    # a casa, settimane dopo la consegna, non ha nessun altro riferimento.
+    if vuoto:
+        c.setFont("Helvetica", 7.5); c.setFillColor(colors.HexColor("#555555"))
+        c.drawCentredString(
+            W/2, y_tit - 1.05*cm,
+            "Nel giorno in cui c'è una crisi scrivi: ORA d'inizio · DURATA "
+            "(dall'inizio alla fine dei sintomi) · cosa l'ha preceduta e come si è ripreso.")
+        c.drawCentredString(
+            W/2, y_tit - 1.42*cm,
+            "Segna anche gli episodi brevissimi o dubbi. Chiama il 112 se la crisi supera "
+            "i 5 minuti, si ripete senza ripresa di coscienza, o è la prima.")
+        c.setFillColor(colors.black)
+
     giorni_settimana = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
-    griglia_top = y_tit - 1.6*cm
+    griglia_top = y_tit - (2.1*cm if vuoto else 1.6*cm)
     margine_lat = 1.8*cm
     larghezza_cella = (W - 2*margine_lat) / 7
     altezza_cella = 3.1*cm
