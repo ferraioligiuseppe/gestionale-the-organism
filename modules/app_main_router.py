@@ -452,6 +452,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
         "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
+        "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
         "🧠 NPS — Neuropsicologica", "🌐 WHODAS 2.0", "🖼️ PECS — CAA", "📚 DSA — Apprendimento", "📚 Strumenti open",
@@ -895,6 +896,17 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         return True
 
     # ── TERAPIA & RELAZIONE ───────────────────────────────────────────
+    if sotto == "🎯 Piano di trattamento":
+        try:
+            from .ui_piano_trattamento import render_piano_trattamento
+            render_piano_trattamento(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore piano di trattamento: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        _assistente_coda(conn, paz_id)
+        return True
     if sotto == "🧘 Percorsi terapeutici":
         try:
             from .terapia import render_terapia
