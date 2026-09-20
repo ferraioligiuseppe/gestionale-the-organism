@@ -20,9 +20,17 @@ monitoraggio sì, diagnosi no.
 """
 from __future__ import annotations
 
+import base64
 import json
+
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
+
+try:
+    import psycopg2
+except Exception:
+    psycopg2 = None
 
 # ── Catalogo ─────────────────────────────────────────────────────────
 # "puo": cosa lo strumento sostiene legittimamente
@@ -248,6 +256,134 @@ STRUMENTI = {
 }
 
 
+
+# ── Materiali caricati una volta e poi sempre a portata ──────────────
+# I PDF delle prove restano quelli originali: le tarature valgono per
+# quegli stimoli, non per versioni rigenerate. Quello che si può evitare
+# è di ripescarli dal disco a ogni somministrazione — si caricano una
+# volta nel gestionale e da lì si aprono a schermo, anche sul secondo
+# monitor rivolto al bambino.
+
+def _assicura_tabella_materiali(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS apprendimenti_open_materiali (
+                id         BIGSERIAL PRIMARY KEY,
+                studio_id  BIGINT NOT NULL DEFAULT 1,
+                strumento  TEXT NOT NULL,
+                nome_file  TEXT NOT NULL,
+                mime       TEXT,
+                dati       BYTEA NOT NULL,
+                caricato_il TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (studio_id, strumento, nome_file)
+            );
+        """)
+        conn.commit()
+        return True
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return False
+
+
+def _salva_materiale(conn, studio_id, strumento, nome_file, mime, dati):
+    if not _assicura_tabella_materiali(conn):
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO apprendimenti_open_materiali
+                (studio_id, strumento, nome_file, mime, dati)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (studio_id, strumento, nome_file) DO UPDATE
+               SET dati = EXCLUDED.dati, mime = EXCLUDED.mime,
+                   caricato_il = now();
+        """, (studio_id, strumento, nome_file, mime, psycopg2.Binary(dati)
+              if psycopg2 else dati))
+        conn.commit()
+        return True
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        st.error(f"Errore caricamento: {e}")
+        return False
+
+
+def _materiali_di(conn, studio_id, strumento):
+    if not _assicura_tabella_materiali(conn):
+        return []
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT nome_file, mime, dati FROM apprendimenti_open_materiali
+                        WHERE studio_id=%s AND strumento=%s ORDER BY nome_file;""",
+                    (studio_id, strumento))
+        righe = cur.fetchall() or []
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return []
+    fuori = []
+    for r in righe:
+        if hasattr(r, "get"):
+            fuori.append(dict(r))
+        else:
+            fuori.append({"nome_file": r[0], "mime": r[1], "dati": r[2]})
+    return fuori
+
+
+def _elimina_materiale(conn, studio_id, strumento, nome_file):
+    try:
+        cur = conn.cursor()
+        cur.execute("""DELETE FROM apprendimenti_open_materiali
+                        WHERE studio_id=%s AND strumento=%s AND nome_file=%s;""",
+                    (studio_id, strumento, nome_file))
+        conn.commit()
+        return True
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return False
+
+
+def _mostra_materiale(dati, nome_file, mime, chiave):
+    """PDF a schermo pieno nella pagina, più il bottone per il secondo monitor."""
+    b64 = base64.b64encode(bytes(dati)).decode()
+    if (mime or "").endswith("pdf") or nome_file.lower().endswith(".pdf"):
+        st.markdown(
+            f'<iframe src="data:application/pdf;base64,{b64}" '
+            f'width="100%" height="780" style="border:1px solid #d8e5de;'
+            f'border-radius:8px"></iframe>',
+            unsafe_allow_html=True)
+    else:
+        st.image(bytes(dati), use_container_width=True)
+
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.download_button("⬇️ Scarica", data=bytes(dati), file_name=nome_file,
+                            mime=mime or "application/octet-stream",
+                            key=f"dl_{chiave}", use_container_width=True)
+    with c2:
+        # Stessa finestra usata dagli altri test: si sposta una volta sul
+        # secondo schermo e resta lì.
+        if st.button("🖥️ Apri sul secondo monitor", key=f"sm_{chiave}",
+                     use_container_width=True):
+            components.html(f"""<script>
+              var w = window.open('', 'finestra_screening_bambino');
+              if (w) {{
+                w.document.open();
+                w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8">'
+                  + '<title>{nome_file}</title><style>html,body{{margin:0;height:100%}}'
+                  + 'iframe{{border:0;width:100%;height:100%}}</style></head><body>'
+                  + '<iframe src="data:{mime or "application/pdf"};base64,{b64}"></iframe>'
+                  + '</body></html>');
+                w.document.close(); w.focus();
+              }} else {{
+                alert('Il browser ha bloccato la finestra: consenti i popup.');
+              }}
+            </script>""", height=0)
+
+
 def _assicura_tabella(conn):
     try:
         cur = conn.cursor()
@@ -337,8 +473,8 @@ def render_apprendimenti_open(conn=None, paz_id=None, paziente=None) -> None:
         st.info("Connessione non disponibile.")
         return
 
-    t_cat, t_somm, t_stor = st.tabs(
-        ["📋 Catalogo", "✏️ Somministra e registra", "📈 Storico paziente"])
+    t_cat, t_mat, t_somm, t_stor = st.tabs(
+        ["📋 Catalogo", "📂 Materiali", "✏️ Somministra e registra", "📈 Storico paziente"])
 
     # ── Catalogo ─────────────────────────────────────────────────────
     with t_cat:
@@ -356,6 +492,42 @@ def render_apprendimenti_open(conn=None, paz_id=None, paziente=None) -> None:
                         st.markdown(f"[Scarica il materiale]({s['link']})")
                     st.divider()
 
+    # ── Materiali ────────────────────────────────────────────────────
+    with t_mat:
+        st.caption("Carica una volta i PDF scaricati dai siti di Padova, Santa Lucia e "
+                   "AIRIPA: restano qui e si aprono a schermo, anche sul monitor "
+                   "rivolto al bambino. Niente più ricerca nel Finder a paziente seduto.")
+        st.info("Le tavole vanno usate **nella versione originale**: le tarature valgono "
+                "per quegli stimoli esatti. Per questo il gestionale conserva i tuoi PDF "
+                "invece di generare prove equivalenti.")
+
+        _studio = st.session_state.get("studio_id", 1)
+        _tutti = [s["nome"] for elenco in STRUMENTI.values() for s in elenco]
+        _str_sel = st.selectbox("Strumento", _tutti, key="ao_mat_strumento")
+
+        _f = st.file_uploader("Aggiungi un PDF o un'immagine",
+                               type=["pdf", "png", "jpg", "jpeg"], key="ao_mat_up")
+        if _f is not None and st.button("💾 Carica", key="ao_mat_save", type="primary"):
+            if _salva_materiale(conn, _studio, _str_sel, _f.name,
+                                 _f.type, _f.getvalue()):
+                st.success(f"«{_f.name}» caricato per {_str_sel}.")
+                st.rerun()
+
+        _mat = _materiali_di(conn, _studio, _str_sel)
+        if not _mat:
+            _link = next((s.get("link") for e in STRUMENTI.values() for s in e
+                          if s["nome"] == _str_sel), "")
+            st.caption("Nessun materiale caricato per questo strumento." +
+                       (f" [Scaricalo qui]({_link}) e poi caricalo sopra." if _link else ""))
+        else:
+            for _i, _m in enumerate(_mat):
+                with st.expander(_m["nome_file"], expanded=(len(_mat) == 1)):
+                    _mostra_materiale(_m["dati"], _m["nome_file"], _m["mime"],
+                                      f"{_str_sel}_{_i}")
+                    if st.button("🗑 Rimuovi", key=f"ao_mat_del_{_i}"):
+                        _elimina_materiale(conn, _studio, _str_sel, _m["nome_file"])
+                        st.rerun()
+
     # ── Somministrazione ─────────────────────────────────────────────
     with t_somm:
         if not paz_id:
@@ -371,6 +543,19 @@ def render_apprendimenti_open(conn=None, paz_id=None, paziente=None) -> None:
             with st.expander("Cosa può e non può sostenere"):
                 st.markdown(f"✅ {s['puo']}")
                 st.markdown(f"⛔ {s['non_puo']}")
+
+            # Il materiale della prova, apribile senza cambiare scheda:
+            # durante la somministrazione non si esce dalla pagina.
+            _mat_s = _materiali_di(conn, st.session_state.get("studio_id", 1), nome_sel)
+            if _mat_s:
+                with st.expander(f"📂 Materiale della prova ({len(_mat_s)})"):
+                    for _i, _m in enumerate(_mat_s):
+                        st.markdown(f"**{_m['nome_file']}**")
+                        _mostra_materiale(_m["dati"], _m["nome_file"], _m["mime"],
+                                          f"somm_{nome_sel}_{_i}")
+            else:
+                st.caption("📂 Nessun materiale caricato: lo carichi una volta dalla "
+                           "scheda **Materiali** e da lì in poi lo apri da qui.")
 
             # Le ultime due somministrazioni accanto ai campi: il senso di
             # queste prove è il confronto nel tempo, non il singolo numero.
