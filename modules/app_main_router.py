@@ -1224,8 +1224,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Modulo PECS non disponibile: {e}")
             return
         if sotto == "📚 Strumenti open":
-        from .ui_apprendimenti_open import render_apprendimenti_open
-        render_apprendimenti_open(conn, paz_id); return True
+            from .ui_apprendimenti_open import render_apprendimenti_open
+            render_apprendimenti_open(conn, paz_id); return
     if sotto == "📚 DSA — Apprendimento":
             try:
                 from .ui_dsa import render_dsa
