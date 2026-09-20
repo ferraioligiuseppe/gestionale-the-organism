@@ -54,7 +54,18 @@ def _badge(label: str, valore, colore: str = "#0969da") -> None:
 
 
 def _ci_da_scalati(scalati: list[float], media: float = 10.0, ds: float = 3.0) -> float:
-    """Converte media punteggi scalati in indice composito (μ=100, σ=15)."""
+    """STIMA lineare dell'indice dalla media dei punteggi scalati.
+
+    ⚠️ NON è l'indice WISC-IV. Nella WISC l'indice si ricava dalla SOMMA
+    dei punteggi scalati tramite le tabelle di conversione del manuale,
+    che tengono conto delle intercorrelazioni fra subtest: una formula
+    lineare sulla media se ne discosta, e tanto più quanto ci si allontana
+    dalla media — proprio dove la differenza pesa di più.
+
+    Serve solo come controllo d'ordine di grandezza mentre si inseriscono
+    i dati. L'indice da mettere in relazione va letto dalle tabelle del
+    manuale (o dal software di scoring) e trascritto nel campo apposito.
+    """
     if not scalati:
         return 100.0
     m = sum(scalati) / len(scalati)
@@ -215,16 +226,36 @@ def render_wisc4(conn, paziente_id: int) -> None:
                 col_idx += 1
 
             ci = _ci_da_scalati(scalati_principali)
-            indici[chiave_indice] = ci
-            cl, col = _classifica_ci(ci)
-            pct = _pct_da_z((ci - 100) / 15)
-            _badge(f"{chiave_indice}", f"{ci:.0f}  ·  {cl}  ·  {pct:.0f}°pct", col)
+            somma = int(sum(scalati_principali))
+            cu1, cu2 = st.columns([1, 1])
+            with cu1:
+                st.caption(f"Somma punteggi scalati: **{somma}** — "
+                           "è questo il valore da cercare nelle tabelle del manuale.")
+            with cu2:
+                _uff = st.number_input(
+                    f"Indice ufficiale {chiave_indice} (dalle tabelle)",
+                    min_value=40, max_value=160, value=100, step=1,
+                    key=f"w4_uff_{chiave_indice}",
+                    help="Leggi l'indice dalla tabella di conversione del manuale "
+                         "WISC-IV (o dal software di scoring) e trascrivilo qui: è "
+                         "questo che finisce in relazione.")
+                dati_subtest[f"{chiave_indice}_ufficiale"] = int(_uff)
+            # In relazione va l'indice ufficiale; la stima resta accanto
+            # come controllo, dichiarata per quello che è.
+            indici[chiave_indice] = float(_uff)
+            cl, col = _classifica_ci(_uff)
+            pct = _pct_da_z((_uff - 100) / 15)
+            _badge(f"{chiave_indice} (ufficiale)",
+                   f"{_uff}  ·  {cl}  ·  {pct:.0f}°pct", col)
+            st.caption(f"Stima lineare dai punteggi scalati: {ci:.0f} — solo controllo, "
+                       "non è l'indice WISC.")
 
     # QI Totale
     st.markdown("---")
     st.markdown("#### QI Totale (QIT)")
-    qi = _ci_da_scalati(list(indici.values()), media=100.0, ds=15.0)
-    # approx: media degli indici
+    st.caption("Anche il QIT si legge dalle tabelle del manuale, sulla somma dei "
+               "punteggi scalati dei dieci subtest principali: la media dei quattro "
+               "indici è una stima, non il QIT.")
     qi = round(sum(indici.values()) / len(indici), 1) if indici else 100.0
     cl, col = _classifica_ci(qi)
     pct = _pct_da_z((qi - 100) / 15)
