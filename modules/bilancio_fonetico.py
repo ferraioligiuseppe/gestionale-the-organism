@@ -59,7 +59,9 @@ def render_bilancio_fonetico(pid_key: str, salvato: dict | None = None):
     return esiti
 
 
-def _telebinocular_quick_test(pid, salvate: dict):
+def _NON_USATA_telebinocular_quick_test(pid, salvate: dict):
+    # Spostata in ui_valutazione_visuo_percettiva.py, dove viene usata.
+    # Questa copia resta inerte: rimuovila pure al prossimo giro di pulizia.
     """14 test Telebinocular (struttura reale dello strumento: percezione
     simultanea, foria lontano/vicino su scala graduata, identificazione
     lettere/forme/numeri per la soppressione) — con secondo monitor per
