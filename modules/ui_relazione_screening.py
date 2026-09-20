@@ -20,7 +20,7 @@ import streamlit.components.v1 as components
 # ── Testo fisso del modello (invariante, non generato dall'AI) ──────────
 
 _INTRO_CHI_SIAMO = (
-    "Studio The Organism è un centro multidisciplinare con sedi a Pagani (SA) e Piano di Sorrento (NA). "
+    "Studio The Organism è un centro multidisciplinare con sedi a Pagani (SA) e Sant'Agnello (NA) (NA). "
     "L'équipe riunisce competenze di psicologia e neuropsicologia, optometria comportamentale, logopedia, "
     "osteopatia e terapia miofunzionale, e lavora secondo il metodo PNEV.\n\n"
     "PNEV è l'acronimo di Psico-Neuro-Evolutivo. Indica un approccio che guarda il bambino come un sistema "
@@ -365,7 +365,7 @@ somministrata sia tarata: le prove costruite per questo protocollo restano crite
 <p style="margin-top:14px">Pagani, lì {_html.escape(campi.get('data',''))}</p>
 
 <div class="pie">
-  Studio Associato The Organism — Via De Rosa, 46 — Pagani (SA) — Tel. 081 5152334 · 393 581 7157 —
+  Studio Associato The Organism — Via Balsamo 19, Sant'Agnello (NA) · Via De Rosa 46, Pagani (SA) — Tel. 081 5152334 · 393 581 7157 —
   dr.ferraioligiuseppe@gmail.com<br>
   www.pnev.it · www.theorganism.it · www.ferraioligiuseppe.it
 </div>
