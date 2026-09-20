@@ -140,6 +140,13 @@ def _assicura_tabelle(conn):
             descrizione TEXT, baseline INT, attuale INT, target INT,
             stato TEXT, data_inizio DATE, data_rivalut DATE,
             note TEXT, creato TIMESTAMP DEFAULT NOW());""")
+        # Colonne aggiunte dopo la prima stesura. Stavano dentro _salva_seduta,
+        # quindi partivano cinque ALTER TABLE a ogni salvataggio: DDL sul
+        # percorso caldo. Qui girano una volta sola, protette dal flag.
+        for _col, _tipo in (("procedure_studio", "TEXT"), ("procedure_casa", "TEXT"),
+                            ("materiale_casa", "TEXT"), ("data_consegna", "DATE"),
+                            ("data_riconsegna", "DATE")):
+            cur.execute(f"ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS {_col} {_tipo};")
         conn.commit()
         _TERAPIA_TABELLE_PRONTE = True
     except Exception:
@@ -643,11 +650,6 @@ def _salva_seduta(conn, paz_id, terapia, data_s, numero, prof, ob, att, risp,
     import json as _json
     try:
         cur = conn.cursor()
-        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS procedure_studio TEXT;")
-        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS procedure_casa TEXT;")
-        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS materiale_casa TEXT;")
-        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS data_consegna DATE;")
-        cur.execute("ALTER TABLE terapia_sedute ADD COLUMN IF NOT EXISTS data_riconsegna DATE;")
         cur.execute("""INSERT INTO terapia_sedute(paziente_id, terapia, data_seduta,
             numero, professionista, obiettivo, attivita, risposta,
             costo, sconto, incassato, metodo, note, procedure_studio, procedure_casa,
@@ -683,7 +685,8 @@ def _elenco_sedute(conn, paz_id, terapia):
         cur = conn.cursor()
         cur.execute("""SELECT id, data_seduta, numero, professionista, obiettivo,
             attivita, risposta, costo, sconto, incassato, metodo, note,
-            procedure_studio, procedure_casa
+            procedure_studio, procedure_casa,
+            materiale_casa, data_consegna, data_riconsegna
             FROM terapia_sedute WHERE paziente_id=%s AND terapia=%s
             ORDER BY data_seduta DESC, numero DESC""", (paz_id, terapia))
         righe = cur.fetchall()
@@ -697,7 +700,7 @@ def _elenco_sedute(conn, paz_id, terapia):
         st.caption("Nessuna seduta registrata per questo percorso.")
         return
     for (rid, ds, num, prof, ob, att, risp, costo, sconto, inc, met, note,
-         p_studio, p_casa) in righe:
+         p_studio, p_casa, mat_casa, d_cons, d_ricons) in righe:
         import json as _json
         try:
             l_studio = _json.loads(p_studio) if p_studio else []
