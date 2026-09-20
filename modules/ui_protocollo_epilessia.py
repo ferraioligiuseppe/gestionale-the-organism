@@ -369,6 +369,129 @@ def _pdf_calendario_crisi(nome_paziente, righe, anno, mese, professionista="") -
     return buf.getvalue()
 
 
+
+# ── Diario delle crisi: modulo cartaceo per la famiglia ──────────────
+# Non una schermata da compilare in studio, ma un foglio da stampare e
+# lasciare a casa: le crisi vanno annotate nel momento in cui accadono,
+# non ricostruite a memoria al controllo successivo.
+
+_DIARIO_CRISI_HTML = """<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">
+<title>Diario delle crisi epilettiche</title>
+<style>
+  @page {{ size: A4; margin: 14mm 12mm; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; font-family: Georgia, 'Times New Roman', serif; color:#1c2a24;
+         font-size:10pt; }}
+  .barra {{ display:flex; justify-content:space-between; align-items:center;
+            padding:8px 0 12px; font-family:Arial,sans-serif; font-size:9pt;
+            color:#555; border-bottom:1px solid #ddd; margin-bottom:10px; }}
+  .barra button {{ background:#14502F; color:#fff; border:0; border-radius:4px;
+                   padding:7px 16px; font-size:9pt; cursor:pointer; }}
+  .pagina {{ page-break-after: always; }}
+  .pagina:last-child {{ page-break-after: auto; }}
+  .testata {{ display:flex; justify-content:space-between; align-items:flex-start;
+              border-bottom:1.5px solid #14502F; padding-bottom:4px; margin-bottom:8px; }}
+  .testata .m {{ font-family:Arial,sans-serif; font-size:8.5pt; color:#14502F;
+                 font-weight:bold; letter-spacing:.03em; }}
+  .testata .s {{ font-family:Arial,sans-serif; font-size:7pt; color:#6B7C74;
+                 text-align:right; line-height:1.4; }}
+  h1 {{ font-size:15pt; color:#14502F; margin:6px 0 1px; }}
+  .sub {{ font-family:Arial,sans-serif; font-size:8.5pt; color:#5b6b63;
+          margin-bottom:8px; }}
+  .anag {{ display:flex; gap:10px; margin:8px 0 10px; }}
+  .anag div {{ flex:1; border-bottom:1px solid #999; padding-bottom:2px; }}
+  .anag .et {{ font-family:Arial,sans-serif; font-size:7.5pt; color:#6B7C74;
+               display:block; }}
+  .anag .vl {{ font-size:10pt; min-height:14px; display:block; }}
+  .istr {{ background:#F4F8F6; border:1px solid #d8e5de; border-radius:3px;
+           padding:7px 10px; font-size:8.5pt; line-height:1.5; margin-bottom:6px; }}
+  .urg {{ background:#FBEFEA; border:1px solid #e3b7a8; border-radius:3px;
+          padding:7px 10px; font-size:8.5pt; line-height:1.5; margin-bottom:9px;
+          color:#7a2a1e; }}
+  table {{ width:100%; border-collapse:collapse; }}
+  th {{ background:#14502F; color:#fff; font-family:Arial,sans-serif; font-size:8pt;
+        padding:4px 6px; text-align:left; font-weight:bold; }}
+  th .h {{ display:block; font-weight:normal; font-size:7pt; opacity:.85; }}
+  td {{ border:1px solid #c9d6cf; height:{ALTEZZA}mm; vertical-align:top; padding:2px; }}
+  .np {{ font-family:Arial,sans-serif; font-size:7pt; color:#6B7C74;
+         text-align:right; margin-top:4px; }}
+  @media print {{ .barra {{ display:none; }} }}
+</style></head><body>
+
+<div class="barra">
+  <span>Diario delle crisi — {NOME} · {RIGHE} righe su {PAGINE} pagine</span>
+  <button onclick="window.print()">Stampa / Salva come PDF</button>
+</div>
+
+{PAGINE_HTML}
+
+</body></html>"""
+
+_TESTATA = """  <div class="testata">
+    <div class="m">Metodo Psico-Neuro-Evolutivo<br><span style="font-weight:normal">pnev.it</span></div>
+    <div class="s">Via De Rosa 46, Pagani (SA) · Piano di Sorrento (NA)<br>
+      WhatsApp 391 3598767 · apstheorganism@gmail.com · theorganism.it</div>
+  </div>"""
+
+_INTESTAZIONE_TABELLA = """    <tr>
+      <th style="width:16%">Data<span class="h">gg/mm/aaaa</span></th>
+      <th style="width:14%">Ora d'inizio<span class="h">hh:mm</span></th>
+      <th style="width:14%">Durata<span class="h">min / sec</span></th>
+      <th>Note<span class="h">com'è stata la crisi, cosa c'era prima (sonno, febbre,
+        stress, dose saltata), come si è ripreso, chi ha assistito</span></th>
+    </tr>"""
+
+
+def _html_diario_crisi(nome="", data_nascita="", periodo="", pagine=3,
+                       righe_prima=7, righe_dopo=11):
+    """Modulo di automonitoraggio da stampare."""
+    blocchi = []
+    for p in range(1, pagine + 1):
+        prima = (p == 1)
+        n_righe = righe_prima if prima else righe_dopo
+        corpo = "".join(
+            "<tr><td></td><td></td><td></td><td></td></tr>" for _ in range(n_righe))
+        testa = f"""
+  <h1>Diario delle crisi epilettiche{'' if prima else ' — segue'}</h1>"""
+        if prima:
+            testa += """
+  <p class="sub">Modulo di automonitoraggio da compilare a casa e portare al controllo ·
+     Dott. Giuseppe Ferraioli — Psicologo, Neuropsicologo</p>
+  <div class="anag">
+    <div><span class="et">Nome e cognome</span><span class="vl">{NOME}</span></div>
+    <div><span class="et">Data di nascita</span><span class="vl">{DN}</span></div>
+    <div><span class="et">Periodo dal / al</span><span class="vl">{PER}</span></div>
+  </div>
+  <div class="istr">
+    Compila <b>subito dopo ogni crisi</b>. La durata è il tempo dall'inizio alla fine dei
+    sintomi, non il recupero: se puoi usa il cronometro del telefono, altrimenti scrivi una
+    stima. Registra anche gli episodi brevissimi o dubbi — servono. Se qualcuno ha assistito,
+    annota cosa ha visto: spesso è l'informazione più utile.
+  </div>
+  <div class="urg">
+    <b>Chiama il 112</b> se la crisi supera i 5 minuti, si ripete senza ripresa di coscienza,
+    compaiono difficoltà respiratorie, avviene in acqua, c'è un trauma, oppure è la prima crisi.
+  </div>""".replace("{NOME}", nome or "").replace("{DN}", data_nascita or "") \
+             .replace("{PER}", periodo or "")
+
+        blocchi.append(f"""<div class="pagina">
+{_TESTATA}{testa}
+  <table>
+{_INTESTAZIONE_TABELLA}
+    {corpo}
+  </table>
+  <div class="np">pag. {p} di {pagine}</div>
+</div>""")
+
+    totale = righe_prima + righe_dopo * (pagine - 1)
+    return (_DIARIO_CRISI_HTML
+            .replace("{ALTEZZA}", "16")
+            .replace("{NOME}", nome or "—")
+            .replace("{RIGHE}", str(totale))
+            .replace("{PAGINE}", str(pagine))
+            .replace("{PAGINE_HTML}", "\n".join(blocchi)))
+
+
 def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
     st.header("⚡ Protocollo Epilessia")
     st.caption("Raccolta anamnestica e clinica per paziente con crisi epilettiche/sospetta epilessia.")
@@ -491,6 +614,37 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
     if st.button("💾 Salva protocollo epilessia", type="primary", key="pe_salva"):
         if _salva(conn, paz_id, esaminatore, dati):
             st.success("Protocollo salvato.")
+
+    st.markdown("---")
+    st.markdown("#### 🖨️ Diario delle crisi da dare alla famiglia")
+    st.caption("Un foglio da stampare e tenere a casa: le crisi si annotano quando "
+               "accadono, non si ricostruiscono a memoria al controllo dopo.")
+
+    _nome_p = ""
+    if isinstance(paziente, dict):
+        _nome_p = f"{paziente.get('cognome','')} {paziente.get('nome','')}".strip()
+    _dn_p = paziente.get("data_nascita") if isinstance(paziente, dict) else None
+    _dn_txt = _dn_p.strftime("%d/%m/%Y") if hasattr(_dn_p, "strftime") else str(_dn_p or "")
+
+    dc1, dc2, dc3 = st.columns(3)
+    _nome_d = dc1.text_input("Nome sul modulo", value=_nome_p, key="pe_dc_nome")
+    _dn_d = dc2.text_input("Data di nascita", value=_dn_txt, key="pe_dc_dn")
+    _per_d = dc3.text_input("Periodo dal / al", key="pe_dc_periodo",
+                             placeholder="es. 01/10 — 31/12")
+    _pag = st.slider("Pagine (circa 7 crisi la prima, 11 le successive)",
+                      1, 6, 3, key="pe_dc_pagine")
+
+    if st.button("🖨️ Genera il diario", key="pe_dc_gen"):
+        _h = _html_diario_crisi(_nome_d, _dn_d, _per_d, pagine=_pag)
+        st.session_state["pe_dc_html"] = _h
+
+    if st.session_state.get("pe_dc_html"):
+        st.components.v1.html(st.session_state["pe_dc_html"], height=900, scrolling=True)
+        st.download_button(
+            "⬇️ Scarica (poi Stampa dal browser per il PDF)",
+            data=st.session_state["pe_dc_html"].encode("utf-8"),
+            file_name=f"diario_crisi_{(_nome_d or 'paziente').replace(' ','_')}.html",
+            mime="text/html", key="pe_dc_dl")
 
     st.markdown("---")
     st.markdown("#### Storico")
