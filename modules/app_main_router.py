@@ -950,7 +950,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except ImportError as e:
             st.error(f"Modulo non disponibile: {e}")
         return True
-    if sotto == "👁️ Oculistica":
+    if sotto == "👁️ Visita oculistica / optometrica":
         try:
             from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
             pid = header_paziente_attivo(conn)
@@ -1859,7 +1859,9 @@ def dispatch_main_section(*, sezione: str,
         "🧪 Caso Demo":                  (AREA_REPORT_AI,   "🧪 Caso demo"),
         "🏥 Il mio studio":              (AREA_STUDIO,      "🏥 Il mio studio"),
         "⚙️ Platform Admin":             (AREA_STUDIO,      "⚙️ Platform Admin"),
-        "👁️ Oculistica":                  (AREA_OCULISTICA,  "👁️ Oculistica"),
+        "👁️ Visita oculistica / optometrica": (AREA_OCULISTICA, "👁️ Visita oculistica / optometrica"),
+        # vecchia etichetta: i link salvati prima del cambio nome continuano a funzionare
+        "👁️ Oculistica": (AREA_OCULISTICA, "👁️ Visita oculistica / optometrica"),
         "👁️ Lenti a contatto":           (AREA_QUESTIONARI, "👁️ Lenti a contatto"),
         "📸 Photoref AI":                (AREA_QUESTIONARI, "📸 Photoref AI"),
     }
