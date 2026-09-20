@@ -1006,7 +1006,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🎧 Audiometria tonale calibrata":
         from .ui_audiometria import render_audiometria
         render_audiometria(conn, paz_id); return True
-    if sotto == "🎧 Libreria calibrazioni cuffie":
+    if sotto == "🌐 Curve cuffie condivise (pnev.it)":
         from .calibrazioni_condivise import render_calibrazioni_condivise
         render_calibrazioni_condivise(conn); return True
 

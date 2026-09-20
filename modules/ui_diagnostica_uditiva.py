@@ -603,8 +603,9 @@ def _retspl(tipo, freq):
 
 
 def _ui_calibrazione(conn):
-    st.subheader("Calibrazione cuffie")
-    st.caption("Misura l'uscita reale delle cuffie con un fonometro e salva l'offset globale")
+    st.subheader("Calibrazione cuffie — audiometria in studio")
+    st.caption("È la calibrazione che il test tonale usa davvero: misura l'uscita reale "
+               "delle cuffie col fonometro, frequenza per frequenza, e resta salvata.")
     ss = st.session_state
     import streamlit.components.v1 as _sc
 

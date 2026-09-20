@@ -105,7 +105,11 @@ PNEV_RAMI = {
         "📊 Audiometria funzionale",
         "🎧 Bilancio uditivo",
         "🎧 Audiometria tonale calibrata",
-        "🎧 Libreria calibrazioni cuffie",
+        # NON è la calibrazione dello studio (quella sta in Diagnostica
+        # uditiva completa → Calibrazione, ed è l'unica che il test tonale
+        # legge). Questa è la raccolta di curve inviate dallo strumento
+        # pubblico su pnev.it, utile come riferimento per modello.
+        "🌐 Curve cuffie condivise (pnev.it)",
     ],
     "📚 Apprendimenti": [
         "📚 Strumenti open",
