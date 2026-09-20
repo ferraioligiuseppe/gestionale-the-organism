@@ -144,12 +144,6 @@ def _salva_bilancio(conn, paz_id: int, data: dict, operatore: str = ""):
 
 
 def ui_bilancio_uditivo():
-    try:
-        from modules.ui_calibrazione_cuffie import ui_calibrazione_cuffie, ui_fonometro_wizard
-        _has_calib = True
-    except Exception:
-        _has_calib = False
-
     st.header("Bilancio Uditivo")
     st.caption("Lateralita uditiva su 16 frequenze (fino a 18 kHz) · Elasticita timpano "
                "— Metodo Tomatis/Hiperion")
@@ -199,15 +193,16 @@ def ui_bilancio_uditivo():
         _ui_storico(conn, cur, paz_id)
 
     st.divider()
-    with st.expander("🔧 Calibrazione cuffie con fonometro", expanded=False):
-        if _has_calib:
-            tab_fon, tab_classic = st.tabs(["Fonometro wizard", "Wizard classico + profili"])
-            with tab_fon:
-                ui_fonometro_wizard()
-            with tab_classic:
-                ui_calibrazione_cuffie(conn)
-        else:
-            st.info("Modulo calibrazione non disponibile.")
+    # La calibrazione stava anche qui, con un wizard che chiedeva dB(A):
+    # ponderazione che falsa i gravi di circa 16 dB. Averne due, e nessuna
+    # indicazione su quale fosse quella buona, era il vero problema. Ora la
+    # calibrazione e' una sola e vive accanto al test tonale che la usa.
+    st.caption(
+        "🔧 **Calibrazione cuffie:** si fa da «🔉 Diagnostica uditiva completa» → "
+        "scheda **Calibrazione cuffie**. E' l'unica calibrazione che il test "
+        "tonale legge: misura in dB SPL con ponderazione C o Z e converte in "
+        "dB HL con la tabella RETSPL del trasduttore in uso."
+    )
 
 
 def _ui_storico(conn, cur, paz_id):
