@@ -64,8 +64,12 @@ def _get_conn():
         if root not in sys.path: sys.path.insert(0, root)
         from modules.app_core import get_connection; return get_connection()
     except Exception: pass
-    import sqlite3
-    conn = sqlite3.connect("organism.db"); conn.row_factory = sqlite3.Row; return conn
+    # Nessun ripiego su SQLite. Un database locale su Streamlit Cloud
+    # sparisce a ogni riavvio: salvarci dentro un esame senza dirlo e'
+    # peggio di un errore visibile.
+    raise RuntimeError(
+        "Connessione al database non disponibile: "
+        "modules.app_core.get_connection() non risponde.")
 
 def _init_db(conn):
     raw = getattr(conn, "_conn", conn)
