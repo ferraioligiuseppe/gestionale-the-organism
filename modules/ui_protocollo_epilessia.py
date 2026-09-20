@@ -680,17 +680,15 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
     st.caption(f"Codice stampato su ogni pagina: **{_codice}** — se il foglio torna "
                "senza nome, sai comunque di chi è.")
 
-    if st.button("🖨️ Genera il diario", key="pe_dc_gen"):
-        _h = _html_diario_crisi(_nome_d, _dn_d, _per_d, pagine=_pag, codice=_codice)
-        st.session_state["pe_dc_html"] = _h
-
-    if st.session_state.get("pe_dc_html"):
-        st.components.v1.html(st.session_state["pe_dc_html"], height=900, scrolling=True)
-        st.download_button(
-            "⬇️ Scarica (poi Stampa dal browser per il PDF)",
-            data=st.session_state["pe_dc_html"].encode("utf-8"),
-            file_name=f"diario_crisi_{(_nome_d or 'paziente').replace(' ','_')}.html",
-            mime="text/html", key="pe_dc_dl")
+    _pdf_fam = _pdf_diario_famiglia(
+        _nome_d, _dn_d, _per_d, _codice,
+        st.session_state.get("utente_nome") or "Dott. Giuseppe Ferraioli — Psicologo, Neuropsicologo",
+        pagine=_pag)
+    st.download_button(
+        "🖨️ Scarica il diario in PDF (da dare alla famiglia)",
+        data=_pdf_fam,
+        file_name=f"diario_crisi_{(_nome_d or 'paziente').replace(' ', '_')}.pdf",
+        mime="application/pdf", key="pe_dc_pdf", type="primary")
 
     st.markdown("---")
     st.markdown("#### Storico")
@@ -727,3 +725,128 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
         st.code(st.session_state["pe_link_generato"])
     elif st.session_state.get("pe_link_errore"):
         st.error(f"Errore generazione link: {st.session_state['pe_link_errore']}")
+
+
+def _pdf_diario_famiglia(nome_paziente, data_nascita="", periodo="", codice="",
+                          professionista="", pagine=3) -> bytes:
+    """Diario delle crisi da dare alla famiglia — PDF pronto da stampare.
+
+    Tabella Data / Ora d'inizio / Durata / Note su più pagine, con le
+    istruzioni e i criteri d'urgenza sulla prima: chi compila a casa non
+    ha altro riferimento davanti.
+    """
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    W, H = A4
+    VERDE = colors.HexColor("#14502F")
+    GRIGIO = colors.HexColor("#6B7C74")
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+
+    for p in range(1, pagine + 1):
+        prima = (p == 1)
+        try:
+            draw_intestazione(c, professionista, "Diario delle crisi — pnev.it")
+            y = H - 5.0 * cm
+        except Exception:
+            c.setFont("Helvetica-Bold", 9); c.setFillColor(VERDE)
+            c.drawString(2 * cm, H - 1.6 * cm, "Metodo Psico-Neuro-Evolutivo · pnev.it")
+            c.setFont("Helvetica", 6.5); c.setFillColor(GRIGIO)
+            c.drawString(2 * cm, H - 2.0 * cm,
+                         "Via De Rosa 46, Pagani (SA) · Piano di Sorrento (NA) · "
+                         "WhatsApp 391 3598767 · apstheorganism@gmail.com")
+            y = H - 3.0 * cm
+
+        c.setFont("Helvetica-Bold", 15); c.setFillColor(VERDE)
+        c.drawString(2 * cm, y, "Diario delle crisi epilettiche"
+                                + ("" if prima else " — segue"))
+        y -= 0.55 * cm
+
+        if prima:
+            c.setFont("Helvetica", 8); c.setFillColor(GRIGIO)
+            c.drawString(2 * cm, y, "Modulo di automonitoraggio da compilare a casa e "
+                                    "portare al controllo · " + (professionista or ""))
+            y -= 0.85 * cm
+
+            # Anagrafica su righe da compilare
+            c.setFillColor(colors.black)
+            campi = [("Nome e cognome", nome_paziente, 7.0),
+                     ("Data di nascita", data_nascita, 4.2),
+                     ("Periodo dal / al", periodo, 4.2),
+                     ("Codice", codice, 2.2)]
+            x = 2 * cm
+            for etichetta, valore, larg in campi:
+                c.setFont("Helvetica", 6.5); c.setFillColor(GRIGIO)
+                c.drawString(x, y + 0.32 * cm, etichetta)
+                c.setFont("Helvetica", 9.5); c.setFillColor(colors.black)
+                c.drawString(x, y, valore or "")
+                c.setStrokeColor(colors.HexColor("#999999")); c.setLineWidth(0.5)
+                c.line(x, y - 0.12 * cm, x + larg * cm - 0.3 * cm, y - 0.12 * cm)
+                x += larg * cm
+            y -= 0.95 * cm
+
+            # Istruzioni
+            c.setFillColor(colors.HexColor("#F4F8F6"))
+            c.rect(2 * cm, y - 1.5 * cm, W - 4 * cm, 1.5 * cm, fill=1, stroke=0)
+            c.setFont("Helvetica", 7.6); c.setFillColor(colors.HexColor("#2c3e37"))
+            righe_istr = [
+                "Compila subito dopo ogni crisi. La durata è il tempo dall'inizio alla fine dei sintomi, non il recupero:",
+                "se puoi usa il cronometro del telefono, altrimenti scrivi una stima. Registra anche gli episodi brevissimi",
+                "o dubbi — servono. Se qualcuno ha assistito, annota cosa ha visto: spesso è l'informazione più utile.",
+            ]
+            yy = y - 0.42 * cm
+            for r in righe_istr:
+                c.drawString(2.25 * cm, yy, r); yy -= 0.36 * cm
+            y -= 1.75 * cm
+
+            # Urgenza
+            c.setFillColor(colors.HexColor("#FBEFEA"))
+            c.rect(2 * cm, y - 0.95 * cm, W - 4 * cm, 0.95 * cm, fill=1, stroke=0)
+            c.setFont("Helvetica-Bold", 7.6); c.setFillColor(colors.HexColor("#7a2a1e"))
+            c.drawString(2.25 * cm, y - 0.4 * cm, "Chiama il 112")
+            c.setFont("Helvetica", 7.6)
+            c.drawString(3.5 * cm, y - 0.4 * cm,
+                         "se la crisi supera i 5 minuti, si ripete senza ripresa di coscienza, "
+                         "compaiono difficoltà")
+            c.drawString(2.25 * cm, y - 0.75 * cm,
+                         "respiratorie, avviene in acqua, c'è un trauma, oppure è la prima crisi.")
+            y -= 1.25 * cm
+        else:
+            c.setFont("Helvetica", 8); c.setFillColor(GRIGIO)
+            c.drawString(2 * cm, y, f"{nome_paziente or ''} · codice {codice or '—'}")
+            y -= 0.7 * cm
+
+        # Intestazione tabella
+        col_x = [2 * cm, 5.0 * cm, 7.6 * cm, 10.2 * cm]
+        col_w = [3.0 * cm, 2.6 * cm, 2.6 * cm, W - 2 * cm - 10.2 * cm]
+        titoli = [("Data", "gg/mm/aaaa"), ("Ora d'inizio", "hh:mm"),
+                  ("Durata", "min / sec"),
+                  ("Note", "com'è stata, cosa c'era prima (sonno, febbre, stress, dose saltata), come si è ripreso")]
+        c.setFillColor(VERDE)
+        c.rect(2 * cm, y - 0.85 * cm, W - 4 * cm, 0.85 * cm, fill=1, stroke=0)
+        for (x0, w0, (t, h)) in zip(col_x, col_w, titoli):
+            c.setFont("Helvetica-Bold", 7.8); c.setFillColor(colors.white)
+            c.drawString(x0 + 0.15 * cm, y - 0.32 * cm, t)
+            c.setFont("Helvetica", 6.3); c.setFillColor(colors.HexColor("#cfe0d6"))
+            c.drawString(x0 + 0.15 * cm, y - 0.68 * cm, h[:78])
+        y -= 0.85 * cm
+
+        # Righe vuote alte abbastanza per scriverci
+        altezza = 1.55 * cm
+        c.setStrokeColor(colors.HexColor("#c9d6cf")); c.setLineWidth(0.6)
+        while y - altezza > 1.8 * cm:
+            c.rect(2 * cm, y - altezza, W - 4 * cm, altezza, fill=0, stroke=1)
+            for x0 in col_x[1:]:
+                c.line(x0, y - altezza, x0, y)
+            y -= altezza
+
+        c.setFont("Helvetica", 7); c.setFillColor(GRIGIO)
+        c.drawRightString(W - 2 * cm, 1.3 * cm, f"pag. {p} di {pagine}")
+        c.showPage()
+
+    c.save()
+    return buf.getvalue()
