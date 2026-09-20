@@ -443,8 +443,13 @@ _INTESTAZIONE_TABELLA = """    <tr>
 
 
 def _html_diario_crisi(nome="", data_nascita="", periodo="", pagine=3,
-                       righe_prima=7, righe_dopo=11):
-    """Modulo di automonitoraggio da stampare."""
+                       righe_prima=7, righe_dopo=11, codice=""):
+    """Modulo di automonitoraggio da stampare.
+
+    Il codice paziente è stampato su ogni pagina: un diario che torna
+    senza nome — capita, la famiglia fotocopia o riusa il foglio — resta
+    comunque attribuibile.
+    """
     blocchi = []
     for p in range(1, pagine + 1):
         prima = (p == 1)
@@ -453,6 +458,9 @@ def _html_diario_crisi(nome="", data_nascita="", periodo="", pagine=3,
             "<tr><td></td><td></td><td></td><td></td></tr>" for _ in range(n_righe))
         testa = f"""
   <h1>Diario delle crisi epilettiche{'' if prima else ' — segue'}</h1>"""
+        if not prima:
+            testa += f"""
+  <p class="sub">{nome or ''} · codice {codice}</p>"""
         if prima:
             testa += """
   <p class="sub">Modulo di automonitoraggio da compilare a casa e portare al controllo ·
@@ -461,6 +469,9 @@ def _html_diario_crisi(nome="", data_nascita="", periodo="", pagine=3,
     <div><span class="et">Nome e cognome</span><span class="vl">{NOME}</span></div>
     <div><span class="et">Data di nascita</span><span class="vl">{DN}</span></div>
     <div><span class="et">Periodo dal / al</span><span class="vl">{PER}</span></div>
+    <div style="flex:0 0 90px;text-align:right;border:0">
+      <span class="et">Codice</span>
+      <span class="vl" style="font-family:monospace;font-weight:bold">{COD}</span></div>
   </div>
   <div class="istr">
     Compila <b>subito dopo ogni crisi</b>. La durata è il tempo dall'inizio alla fine dei
@@ -472,7 +483,7 @@ def _html_diario_crisi(nome="", data_nascita="", periodo="", pagine=3,
     <b>Chiama il 112</b> se la crisi supera i 5 minuti, si ripete senza ripresa di coscienza,
     compaiono difficoltà respiratorie, avviene in acqua, c'è un trauma, oppure è la prima crisi.
   </div>""".replace("{NOME}", nome or "").replace("{DN}", data_nascita or "") \
-             .replace("{PER}", periodo or "")
+             .replace("{PER}", periodo or "").replace("{COD}", codice or "—")
 
         blocchi.append(f"""<div class="pagina">
 {_TESTATA}{testa}
@@ -634,8 +645,15 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
     _pag = st.slider("Pagine (circa 7 crisi la prima, 11 le successive)",
                       1, 6, 3, key="pe_dc_pagine")
 
+    # Codice stabile e leggibile: iniziali + id paziente. Serve perché un
+    # diario che torna in studio senza nome resti comunque attribuibile.
+    _iniz = "".join(p[0] for p in (_nome_d or "XX").split()[:2]).upper() or "XX"
+    _codice = f"{_iniz}-{paz_id}"
+    st.caption(f"Codice stampato su ogni pagina: **{_codice}** — se il foglio torna "
+               "senza nome, sai comunque di chi è.")
+
     if st.button("🖨️ Genera il diario", key="pe_dc_gen"):
-        _h = _html_diario_crisi(_nome_d, _dn_d, _per_d, pagine=_pag)
+        _h = _html_diario_crisi(_nome_d, _dn_d, _per_d, pagine=_pag, codice=_codice)
         st.session_state["pe_dc_html"] = _h
 
     if st.session_state.get("pe_dc_html"):
