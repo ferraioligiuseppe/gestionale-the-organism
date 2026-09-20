@@ -4,19 +4,24 @@
 ║  APP MENU — Struttura razionalizzata PNEV (v8, Valutazione/Terapia   ║
 ║  separate) ║
 ║                                                                      ║
-║  🧠 Valutazione PNEV: Riflessi primitivi · Visiva · Uditiva ·        ║
-║     Apprendimenti · Test psicologici · PNEV Games (solo assessment)  ║
-║  🧘 Terapia: Terapia riflessi primitivi · Terapia visiva ·           ║
-║     Terapia uditiva · Terapia psicologica/psicoterapia ·             ║
-║     Miofunzionale · Metodo Castagnini                                ║
-║  Le altre aree (Oculistica, Ortottica, Logopedia/TNPEE, Osteopatia,  ║
-║  Fisioterapia, Test live, Relazioni, Academy, Studio) restano a      ║
-║  parte, come prima.                                                  ║
+║  PULIZIA v9 — tre principi:                                          ║
 ║                                                                      ║
-║  Le voci "🚧 …(in arrivo)" sono placeholder: compaiono nel menu ma    ║
-║  mostrano solo un avviso "in costruzione" — non esiste ancora un     ║
-║  modulo dietro (vedi PLACEHOLDER_VOCI, gestito in                    ║
-║  app_main_router._dispatch_sotto).                                   ║
+║  1. Ogni voce vive in UN posto solo. "Percorsi terapeutici" era      ║
+║     ripetuto 6 volte (uno per disciplina) e apriva sempre la stessa  ║
+║     schermata: la disciplina si sceglie DENTRO il modulo, non dal    ║
+║     menu. Stesso criterio per Programma PNEV, Animazioni riflessi,   ║
+║     Apprendimento PNEV, Lettura avanzata.                            ║
+║                                                                      ║
+║  2. Niente voci vuote. I "🚧 …(in arrivo)" non compaiono più nel      ║
+║     menu: una voce che non fa nulla insegna a diffidare del menu.    ║
+║     PLACEHOLDER_VOCI resta solo come rete di sicurezza del router,   ║
+║     per vecchi link salvati.                                         ║
+║                                                                      ║
+║  3. Nessuna colonna oltre ~10 voci. Pazienti (21 voci) è ora         ║
+║     raggruppata in 5 rami per momento di lavoro.                     ║
+║                                                                      ║
+║  Per riattivare un'area sospesa (Ortottica, Fisioterapia): rimetti   ║
+║  la sua costante in AREE_ORDINE e le voci in SOTTOSEZIONI.           ║
 ║                                                                      ║
 ║  NOTA: il routing (app_main_router._dispatch_sotto) aggancia ogni    ║
 ║  voce SOLO al suo nome, non all'area/ramo. Quindi qui si possono     ║
@@ -64,12 +69,10 @@ AREE_ORDINE = [
     AREA_PNEV,
     AREA_TERAPIA_PNEV,
     AREA_OCULISTICA,
-    AREA_ORTOTTICA,
     AREA_TNPEE,
     AREA_PECS,
     AREA_OSTEOPATIA,
     AREA_SCREENING,
-    AREA_FISIOTERAPIA,
     AREA_TEST_LIVE,
     AREA_TERAPIA,
     AREA_ACADEMY,
@@ -110,7 +113,6 @@ PNEV_RAMI = {
     "🔬 Test psicologici": [
         "🧠 NPS — Neuropsicologica",
         "🌐 WHODAS 2.0",
-        "🚧 Psicologia (in arrivo)",
     ],
     "🎮 PNEV Games": [
         "🎮 Esercizi Wordwall",
@@ -119,35 +121,46 @@ PNEV_RAMI = {
     ],
 }
 
-# ── Rami dell'area Terapia (trattamento — parallela alla Valutazione) ──
-TERAPIA_RAMI = {
-    "🧬 Terapia riflessi primitivi": [
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
-        "🚧 Vojta (in arrivo)",
+# ── Area Terapia — elenco piatto ──────────────────────────────────────
+# Prima era divisa in 6 rami per disciplina, ma "🧘 Percorsi terapeutici"
+# compariva in tutti e sei aprendo sempre lo stesso identico modulo: la
+# disciplina non è una sezione del menu, è un filtro DENTRO il modulo
+# (il selettore "Percorso terapeutico" in cima a Percorsi terapeutici).
+# Sei etichette per una schermata sola facevano solo rumore.
+TERAPIA_RAMI = {}
+
+# ── Rami dell'area Pazienti ───────────────────────────────────────────
+# Erano 21 voci in un'unica colonna: troppe per sceglierne una a colpo
+# d'occhio. Raggruppate per momento di lavoro, non per funzione.
+PAZIENTI_RAMI = {
+    "🏠 Panoramica": [
+        "🏠 Dashboard",
+        "👤 Anagrafica pazienti",
+        "🧩 Quadro storico",
     ],
-    "👁️ Terapia visiva": [
-        "🎯 Piano Vision Therapy",
-        "🧘 Percorsi terapeutici",
-        "🧩 Programma PNEV",
+    "📁 Scheda clinica": [
+        "📎 Documenti clinici",
+        "🗓️ Diario clinico",
+        "📝 Diagnosi assistita",
+        "📅 Sedute / Terapie",
+        "📈 Esiti / Follow-up",
+        "🔒 Privacy & Consensi",
     ],
-    "🎧 Terapia uditiva": [
-        "🎧 MAPS",
-        "🗂 Programmi MAPS",
-        "🧭 Percorsi MAPS",
-        "🎧 MAPS-CLEAR pubblico",
-        "🎧 MAPS-CLEAR in studio",
-        "🔤 MAPS-Read",
-        "🧘 Percorsi terapeutici",
+    "💡 Strumenti": [
+        "💡 Assistente PNEV",
+        "📄 Modulistica / Schede da stampare",
+        "🎟️ Coupon OF / SDS",
     ],
-    "🧠 Terapia psicologica / psicoterapia": [
-        "🧘 Percorsi terapeutici",
+    "🌐 Dal sito pnev.it": [
+        "📨 Contatti dal sito",
+        "📋 Questionari dal sito",
+        "🎧 Aderenza ascolti MAPS",
+        "📝 Consensi ascolti MAPS",
+        "🔗 Sincronizza pnev.it",
+        "🚀 Trasferisci a pnev.it",
     ],
-    "💆 Miofunzionale": [
-        "🧘 Percorsi terapeutici",
-    ],
-    "🧩 Metodo Castagnini": [
-        "🧘 Percorsi terapeutici",
+    "📥 Dati": [
+        "📥 Import pazienti",
     ],
 }
 
@@ -155,8 +168,8 @@ TERAPIA_RAMI = {
 # dizionario invece di agganciarsi a una sola area — così si possono avere
 # più aree con rami senza toccare app_main_router.py.
 RAMI_PER_AREA = {
+    AREA_PAZIENTI: PAZIENTI_RAMI,
     AREA_PNEV: PNEV_RAMI,
-    AREA_TERAPIA_PNEV: TERAPIA_RAMI,
 }
 
 # Etichette delle voci "in arrivo" — vedi PLACEHOLDER_VOCI in
@@ -179,27 +192,16 @@ SOTTOSEZIONI = {
     AREA_AGENDA: [
         "📅 Agenda appuntamenti",
     ],
-    AREA_PAZIENTI: [
-        "🏠 Dashboard",
-        "👤 Anagrafica pazienti",
-        "📎 Documenti clinici",
-        "🗓️ Diario clinico",
-        "🧩 Quadro storico",
-        "💡 Assistente PNEV",
-        "📈 Esiti / Follow-up",
-        "🧪 Apprendimento PNEV",
-        "📝 Diagnosi assistita",
-        "📄 Modulistica / Schede da stampare",
-        "🎟️ Coupon OF / SDS",
-        "📨 Contatti dal sito",
-        "🎧 Aderenza ascolti MAPS",
-        "📝 Consensi ascolti MAPS",
-        "📋 Questionari dal sito",
-        "📅 Sedute / Terapie",
-        "🔒 Privacy & Consensi",
-        "📥 Import pazienti",
-        "🔗 Sincronizza pnev.it",
-        "🚀 Trasferisci a pnev.it",
+    AREA_TERAPIA_PNEV: [
+        "🧘 Percorsi terapeutici",
+        "🧩 Programma PNEV",
+        "🎯 Piano Vision Therapy",
+        "🎧 MAPS",
+        "🗂 Programmi MAPS",
+        "🧭 Percorsi MAPS",
+        "🎧 MAPS-CLEAR in studio",
+        "🎧 MAPS-CLEAR pubblico",
+        "🔤 MAPS-Read",
     ],
     AREA_INVII: [
         "📋 Questionari remoti",
@@ -209,9 +211,6 @@ SOTTOSEZIONI = {
     AREA_OCULISTICA: [
         "👁️ Oculistica",
         "👁️ Contattologia",
-    ],
-    AREA_ORTOTTICA: [
-        "🚧 Ortottica (in arrivo)",
     ],
     AREA_OSTEOPATIA: [
         "🦴 Osteopatia",
@@ -231,17 +230,10 @@ SOTTOSEZIONI = {
     ],
     AREA_ACADEMY: [
         "📅 Eventi e iscrizioni",
-        "🎬 Animazioni dei riflessi",
-        "🚧 Contenuti formativi PNEV Academy (in arrivo)",
     ],
-    AREA_FISIOTERAPIA: [
-        "🚧 Fisioterapia (in arrivo)",
-    ],
-    AREA_NPS_PSI: [],
     AREA_TEST_LIVE: [
         "🖥️ Somministrazione test",
         "📸 Photoref AI",
-        "📖 Lettura avanzata",
     ],
     AREA_TERAPIA: [
         "📝 Relazione clinica",
