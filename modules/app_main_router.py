@@ -1662,12 +1662,21 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
         area = AREE_ORDINE[0]
     st.session_state["nav_area"] = area
 
+    # Età del paziente attivo: il menu mostra solo gli strumenti che hanno
+    # senso per lui (vedi modules/filtro_eta.py). Senza paziente, tutto.
+    try:
+        from .filtro_eta import eta_paziente_attivo, filtra_per_eta
+        _eta_paz = eta_paziente_attivo()
+    except Exception:
+        _eta_paz = None
+        filtra_per_eta = lambda voci, eta: voci
+
     def _filtra(voci_lista):
-        if is_admin:
-            return voci_lista
-        return [v for v in voci_lista
-                if "Admin" not in v and "Utenti" not in v
-                and "Debug" not in v and "demo" not in v.lower()]
+        if not is_admin:
+            voci_lista = [v for v in voci_lista
+                          if "Admin" not in v and "Utenti" not in v
+                          and "Debug" not in v and "demo" not in v.lower()]
+        return filtra_per_eta(voci_lista, _eta_paz)
 
     for _a in AREE_ORDINE:
         _aperta = (_a == area)
@@ -1737,6 +1746,13 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
                         st.rerun()
             sotto = _cur
         st.sidebar.markdown("---")
+
+    # Quante voci il filtro sta nascondendo, e come rivederle tutte.
+    try:
+        from .filtro_eta import interruttore_laterale
+        interruttore_laterale(_eta_paz)
+    except Exception:
+        pass
 
     return area, sotto
 
