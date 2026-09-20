@@ -79,10 +79,12 @@ def _get_conn():
         return get_connection()
     except Exception:
         pass
-    import sqlite3
-    conn = sqlite3.connect("organism.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+    # Nessun ripiego su SQLite. Un database locale su Streamlit Cloud
+    # sparisce a ogni riavvio: salvarci dentro un esame senza dirlo e'
+    # peggio di un errore visibile.
+    raise RuntimeError(
+        "Connessione al database non disponibile: "
+        "modules.app_core.get_connection() non risponde.")
 
 
 def _row_get(row, key, default=None):
