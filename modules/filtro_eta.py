@@ -31,7 +31,6 @@ REGOLE_ETA: dict[str, tuple[int | None, int | None]] = {
     # Apprendimenti: richiedono che il bambino sia scolarizzato
     "📚 DSA — Apprendimento":           (6, None),
     "📖 Lettura avanzata":              (6, None),
-    "🧪 Apprendimento PNEV":            (5, None),
     "🔢 DEM interattivo":               (6, None),   # va letto a voce alta
 
     # Questionari tarati su adulti
