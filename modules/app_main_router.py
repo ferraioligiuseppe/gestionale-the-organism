@@ -1767,6 +1767,14 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     except Exception:
         pass
 
+    # Metronomo, cronometro, schermo paziente: strumenti che servono mentre
+    # si lavora su altro, quindi in fondo al menu e non come voce a sé.
+    try:
+        from .strumenti_rapidi import cintura_strumenti
+        cintura_strumenti()
+    except Exception:
+        pass
+
     return area, sotto
 
 
