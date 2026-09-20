@@ -1226,7 +1226,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📚 Strumenti open":
             from .ui_apprendimenti_open import render_apprendimenti_open
             render_apprendimenti_open(conn, paz_id); return
-    if sotto == "📚 DSA — Apprendimento":
+        if sotto == "📚 DSA — Apprendimento":
             try:
                 from .ui_dsa import render_dsa
                 render_dsa(conn, paz_id)
