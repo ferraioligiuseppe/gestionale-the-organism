@@ -1746,6 +1746,19 @@ def dispatch_smart_section(*, area: str, sotto: str,
                             is_admin: bool) -> None:
     """Entry point chiamato da app_core.py."""
     conn = get_connection()
+
+    # Blocco note del diario nella barra laterale: disponibile in ogni
+    # schermata, così durante la visita si annota senza uscire dal modulo
+    # in cui si sta lavorando. Non deve mai bloccare la pagina.
+    try:
+        from .paziente_attivo import paziente_attivo_id, paziente_attivo_record
+        _paz = paziente_attivo_id()
+        _rec = paziente_attivo_record() if _paz else None
+        from .diario_note_rapide import blocco_note_laterale
+        blocco_note_laterale(conn, _paz, _rec, schermata=sotto or area)
+    except Exception:
+        pass
+
     _render_area(area, sotto, conn, is_admin)
 
 
