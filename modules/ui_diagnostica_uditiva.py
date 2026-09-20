@@ -1669,19 +1669,43 @@ def _ui_johansen(conn, paz_id, operatore):
     st.subheader("Test dicotico di Johansen")
     st.caption("20 coppie sillabe OD/OS simultanee · 5 compiti · Tracce MP3 stereo")
 
-    # Tracce audio
-    st.markdown("**Riproduci le tracce in ordine:**")
-    for info in JOHANSEN_TRACCE:
-        n = info["n"]
-        data, mime = _load_johansen_track(n)
-        c1,c2 = st.columns([3,2])
-        c1.markdown(f"**Traccia {n}** — {info['desc']} ({info['dur']})")
-        with c2:
-            if data: c2.audio(data, format=mime)
-            else: c2.caption("File non trovato")
+    # ── Navigazione per traccia ─────────────────────────────────────
+    # Sei lettori impilati costringevano a scorrere per trovare quello in
+    # uso. Qui si sceglie la traccia e parte solo quella. In più ogni
+    # traccia corrisponde a una colonna di risposte (la 4 al Comp.3, la 5
+    # al Comp.4, la 6 al Comp.5): selezionandola, la griglia si restringe
+    # alla colonna che stai davvero compilando.
+    _COLONNA_DI_TRACCIA = {4: "c3", 5: "c4", 6: "c5"}
+
+    _n_sel = st.radio(
+        "Traccia", [t["n"] for t in JOHANSEN_TRACCE],
+        format_func=lambda n: f"{n} · {JOHANSEN_TRACCE[n-1]['desc']}",
+        horizontal=True, key="joh_traccia_sel", label_visibility="collapsed")
+
+    _t = JOHANSEN_TRACCE[_n_sel - 1]
+    _dati, _mime = _load_johansen_track(_n_sel)
+    tc1, tc2 = st.columns([2, 3])
+    tc1.caption(f"**{_t['desc']}** · durata {_t['dur']}")
+    with tc2:
+        if _dati:
+            st.audio(_dati, format=_mime)
+        else:
+            st.caption("⚠️ File non trovato in assets/johansen/")
 
     st.divider()
-    st.markdown("**Registra le risposte** — Comp.3=DX · Comp.4=SX · Comp.5=Entrambi")
+
+    _col_attiva = _COLONNA_DI_TRACCIA.get(_n_sel)
+    if _col_attiva:
+        _tutte = st.checkbox("Mostra tutte e tre le colonne", value=False,
+                              key="joh_tutte_col")
+        if _tutte:
+            _col_attiva = None
+
+    if _col_attiva:
+        st.markdown(f"**Risposte — Comp.{_col_attiva[-1]}** "
+                    f"({'DX' if _col_attiva=='c3' else 'SX' if _col_attiva=='c4' else 'Entrambi'})")
+    else:
+        st.markdown("**Registra le risposte** — Comp.3=DX · Comp.4=SX · Comp.5=Entrambi")
 
     if "joh_risp_v3" not in st.session_state:
         st.session_state.joh_risp_v3 = {}
@@ -1702,40 +1726,49 @@ def _ui_johansen(conn, paz_id, operatore):
     st.caption("**D** = ha risposto la parola di destra · **S** = quella di sinistra · "
                "**E** = entrambe. Muoviti con Tab: la pagina non si ricarica a ogni scelta.")
 
+    _colonne = [_col_attiva] if _col_attiva else ["c3", "c4", "c5"]
+
     _righe = []
     for i, coppia in enumerate(JOHANSEN_COPPIE):
         r = st.session_state.joh_risp_v3.get(i, {})
-        _righe.append({
-            "#": i + 1,
-            "Destra": coppia["od"],
-            "Sinistra": coppia["os"],
-            "Comp.3": _SIGLE.get(r.get("c3", ""), ""),
-            "Comp.4": _SIGLE.get(r.get("c4", ""), ""),
-            "Comp.5": _SIGLE.get(r.get("c5", ""), ""),
-        })
+        _riga = {"#": i + 1, "Destra": coppia["od"], "Sinistra": coppia["os"]}
+        for _c in _colonne:
+            _riga["Comp." + _c[-1]] = _SIGLE.get(r.get(_c, ""), "")
+        _righe.append(_riga)
+
+    _cfg = {
+        "#": st.column_config.NumberColumn(width="small", disabled=True),
+        "Destra": st.column_config.TextColumn(width="small", disabled=True),
+        "Sinistra": st.column_config.TextColumn(width="small", disabled=True),
+    }
+    for _c in _colonne:
+        _cfg["Comp." + _c[-1]] = st.column_config.SelectboxColumn(
+            options=_OPZ, width="small")
 
     _ed = st.data_editor(
         pd.DataFrame(_righe),
-        key="joh_griglia_v3", hide_index=True, use_container_width=True,
+        key=f"joh_griglia_v3_{'-'.join(_colonne)}",
+        hide_index=True, use_container_width=True,
         height=min(620, 36 * len(JOHANSEN_COPPIE) + 44),
-        column_config={
-            "#": st.column_config.NumberColumn(width="small", disabled=True),
-            "Destra": st.column_config.TextColumn(width="small", disabled=True),
-            "Sinistra": st.column_config.TextColumn(width="small", disabled=True),
-            "Comp.3": st.column_config.SelectboxColumn(options=_OPZ, width="small"),
-            "Comp.4": st.column_config.SelectboxColumn(options=_OPZ, width="small"),
-            "Comp.5": st.column_config.SelectboxColumn(options=_OPZ, width="small"),
-        },
+        column_config=_cfg,
     )
 
     for _, _r in _ed.iterrows():
         i = int(_r["#"]) - 1
-        for _c in ("c3", "c4", "c5"):
+        for _c in _colonne:
             _v = _ESTESE.get(str(_r["Comp." + _c[-1]] or "").strip().upper(), "")
             if _v:
                 st.session_state.joh_risp_v3.setdefault(i, {})[_c] = _v
             elif i in st.session_state.joh_risp_v3:
                 st.session_state.joh_risp_v3[i].pop(_c, None)
+
+    # Avanzamento: quante risposte mancano, colonna per colonna
+    _fatte = {c: sum(1 for r in st.session_state.joh_risp_v3.values() if r.get(c))
+              for c in ("c3", "c4", "c5")}
+    _tot = len(JOHANSEN_COPPIE)
+    st.caption(" · ".join(
+        f"{'✅' if _fatte[c] == _tot else '○'} Comp.{c[-1]}: {_fatte[c]}/{_tot}"
+        for c in ("c3", "c4", "c5")))
 
     # Punteggi
     jod, jos = 0, 0
