@@ -198,6 +198,10 @@ SOTTOSEZIONI = {
         "📅 Agenda appuntamenti",
     ],
     AREA_TERAPIA_PNEV: [
+        # Il piano sta in cima perche' e' il punto da cui si guarda il
+        # paziente: obiettivi, settimana corrente e aderenza di TUTTI i
+        # percorsi insieme. Le voci sotto restano quelle di prima.
+        "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
         "🎯 Piano Vision Therapy",
