@@ -55,20 +55,18 @@ SEED_POTENTIAL = [
 
 
 def _get_conn():
-    try:
-        import sys, os
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if root not in sys.path:
-            sys.path.insert(0, root)
-        from app_patched import get_connection
-        return get_connection()
-    except Exception:
-        pass
-    import sqlite3
-    c = sqlite3.connect("organism.db")
-    c.row_factory = sqlite3.Row
-    return c
+    """Connessione di ripiego — non deve MAI inventarsi un database.
 
+    Prima questa funzione, se non trovava la connessione, apriva in
+    silenzio un SQLite locale ("organism.db"): un database vuoto, diverso
+    dal Postgres dello studio, che su Streamlit Cloud sparisce a ogni
+    riavvio. Un salvataggio finito lì non dava errore e non tornava più.
+    Meglio fermarsi e dirlo.
+    """
+    raise RuntimeError(
+        "Connessione al database non disponibile: questa schermata va "
+        "aperta dal menu del gestionale, che le passa la connessione."
+    )
 
 def _is_postgres(conn):
     t = type(conn).__name__
