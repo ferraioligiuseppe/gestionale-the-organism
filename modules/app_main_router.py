@@ -578,7 +578,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
-    if sotto == "🧪 Apprendimento PNEV":
+    if sotto == "🧭 Bussola degli esiti":
         try:
             from .apprendimento import render_apprendimento
             render_apprendimento(conn, paz_id)
