@@ -10,7 +10,9 @@ _CANDIDATI = [
     os.path.join(os.path.dirname(__file__), "..", "static", "pnev_metronomo", "index.html"),
 ]
 # Copia pubblica su pnev.it (per pazienti e lavoro a casa)
-URL_PUBBLICO = "https://www.pnev.it/wp-content/uploads/pnev-metronomo/index.html"
+# La cartella su pnev.it usa il trattino BASSO (pnev_metronomo): con il
+# trattino normale il link dava 404.
+URL_PUBBLICO = "https://www.pnev.it/wp-content/uploads/pnev_metronomo/index.html"
 
 
 def _carica_html() -> str:
