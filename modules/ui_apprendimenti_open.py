@@ -473,8 +473,9 @@ def render_apprendimenti_open(conn=None, paz_id=None, paziente=None) -> None:
         st.info("Connessione non disponibile.")
         return
 
-    t_cat, t_mat, t_somm, t_stor = st.tabs(
-        ["📋 Catalogo", "📂 Materiali", "✏️ Somministra e registra", "📈 Storico paziente"])
+    t_cat, t_mat, t_somm, t_stor, t_rel = st.tabs(
+        ["📋 Catalogo", "📂 Materiali", "✏️ Somministra e registra",
+         "📈 Storico paziente", "📄 Relazione"])
 
     # ── Catalogo ─────────────────────────────────────────────────────
     with t_cat:
@@ -611,3 +612,132 @@ def render_apprendimenti_open(conn=None, paz_id=None, paziente=None) -> None:
                                          use_container_width=True)
                         if r.get("osservazioni"):
                             st.caption(r["osservazioni"])
+
+    # ── Relazione ────────────────────────────────────────────────────
+    with t_rel:
+        if not paz_id:
+            st.info("Seleziona un paziente qui sopra.")
+        else:
+            st.caption("Legge tutte le prove registrate per questo paziente e ne scrive "
+                       "una lettura d'insieme, con la carta intestata dello studio.")
+            st.warning(
+                "**Cosa può essere questa relazione.** Un profilo di screening: dove il "
+                "bambino è fragile, dove regge, come si è mosso nel tempo, e quali "
+                "approfondimenti valutare. **Non è una certificazione DSA** e non va "
+                "presentata come tale — manca il livello cognitivo, che è criterio "
+                "diagnostico e non esiste in versione libera con norme italiane. "
+                "Il testo lo dice da sé, così non ci sono equivoci con la famiglia "
+                "o con la scuola.")
+
+            prove = _storico(conn, paz_id)
+            if not prove:
+                st.info("Nessuna prova registrata: la relazione si costruisce su quelle.")
+            else:
+                st.caption(f"{len(prove)} prove registrate · "
+                           f"dalla più recente ({prove[0]['data_prova']}) "
+                           f"alla più vecchia ({prove[-1]['data_prova']})")
+
+                _dom = st.text_area(
+                    "Domanda che ha portato alla valutazione",
+                    key="ao_rel_domanda", height=68,
+                    placeholder="Es. la maestra segnala lettura lenta e fatica a copiare "
+                                "dalla lavagna; i genitori riferiscono rifiuto dei compiti.")
+                _oss = st.text_area("Osservazioni cliniche da includere",
+                                     key="ao_rel_oss", height=68,
+                                     placeholder="Collaborazione, affaticabilità, strategie, "
+                                                 "differenze fra prove…")
+
+                if st.button("✍️ Scrivi la relazione", type="primary", key="ao_rel_gen"):
+                    _righe_dati = []
+                    for p in prove:
+                        _pt = p.get("punteggi") or {}
+                        if isinstance(_pt, str):
+                            try: _pt = json.loads(_pt)
+                            except Exception: _pt = {}
+                        _righe_dati.append(
+                            f"- {p['data_prova']} · {p['strumento']}: "
+                            + ", ".join(f"{k} = {v}" for k, v in _pt.items())
+                            + (f" · note: {p['osservazioni']}" if p.get("osservazioni") else ""))
+
+                    _nome = ""
+                    if isinstance(paziente, dict):
+                        _nome = f"{paziente.get('cognome','')} {paziente.get('nome','')}".strip()
+                    _nome = _nome or f"paziente #{paz_id}"
+
+                    _testo = None
+                    try:
+                        from .ai_estrazione import genera_testo, ai_disponibile
+                        if ai_disponibile():
+                            _prompt = (
+                                f"Scrivi la lettura d'insieme di uno screening degli apprendimenti "
+                                f"su {_nome}.\n\n"
+                                f"MOTIVO DELLA VALUTAZIONE: {_dom or 'non specificato'}\n\n"
+                                f"PROVE SOMMINISTRATE (dalla più recente):\n"
+                                + "\n".join(_righe_dati) + "\n\n"
+                                f"OSSERVAZIONI DELL'OPERATORE: {_oss or '—'}\n\n"
+                                "Struttura il testo così: (1) perché è stato fatto lo screening; "
+                                "(2) che cosa è stato somministrato; (3) i risultati area per area, "
+                                "spiegando cosa significano in termini concreti — non elencando numeri; "
+                                "(4) se ci sono più somministrazioni della stessa prova, come si è "
+                                "mosso nel tempo, che è il dato più informativo; (5) conclusioni e "
+                                "passi successivi.\n\n"
+                                "VINCOLI NON NEGOZIABILI:\n"
+                                "- Sono strumenti ad accesso libero: valgono come screening e "
+                                "monitoraggio, NON come certificazione DSA. Dillo esplicitamente "
+                                "nelle conclusioni, spiegando che manca la valutazione del livello "
+                                "cognitivo, criterio diagnostico per cui servono strumenti "
+                                "commerciali (WISC-V o equivalenti).\n"
+                                "- Non usare mai le parole «diagnosi di dislessia/disortografia/"
+                                "discalculia»: scrivi «profilo compatibile con», «indicatori di "
+                                "rischio per», «merita approfondimento».\n"
+                                "- Il Numeracy Screener ha norme canadesi: se compare, precisa che "
+                                "il confronto è orientativo.\n"
+                                "- Italiano piano, per genitori e insegnanti. Mai allarmistico, mai "
+                                "rassicurante a vuoto. Massimo 600 parole."
+                            )
+                            _sistema = (
+                                "Sei un assistente clinico dello Studio The Organism. Scrivi "
+                                "relazioni di screening oneste sui propri limiti: dici cosa i dati "
+                                "mostrano e cosa non possono mostrare, senza mai far passare uno "
+                                "screening per una diagnosi.")
+                            with st.spinner("Scrivo la relazione…"):
+                                _b = genera_testo(_prompt, _sistema)
+                            if not _b.startswith("⚠️"):
+                                _testo = _b
+                    except Exception:
+                        pass
+
+                    if _testo is None:
+                        st.info("AI non disponibile: preparo una relazione essenziale "
+                                "coi dati raccolti, da completare a mano.")
+                        _testo = ("PROVE SOMMINISTRATE\n\n" + "\n".join(_righe_dati)
+                                  + ("\n\nMOTIVO: " + _dom if _dom else "")
+                                  + ("\n\nOSSERVAZIONI: " + _oss if _oss else "")
+                                  + "\n\nCONCLUSIONI\n[da completare]\n\n"
+                                  "Gli strumenti impiegati sono ad accesso libero: il presente "
+                                  "profilo ha valore di screening e di monitoraggio, non di "
+                                  "certificazione diagnostica. Per un inquadramento diagnostico "
+                                  "è necessaria la valutazione del livello cognitivo con "
+                                  "strumenti standardizzati.")
+
+                    try:
+                        from .intestazione_relazioni import incornicia
+                        _dn = paziente.get("data_nascita") if isinstance(paziente, dict) else None
+                        _testo = incornicia(
+                            _testo, "Screening degli apprendimenti",
+                            nome_paziente=_nome,
+                            data_nascita=(_dn.strftime("%d/%m/%Y")
+                                          if hasattr(_dn, "strftime") else str(_dn or "")))
+                    except Exception:
+                        pass
+
+                    st.session_state["ao_rel_testo"] = _testo
+
+                if st.session_state.get("ao_rel_testo"):
+                    _finale = st.text_area("Relazione (correggila prima di consegnarla)",
+                                            value=st.session_state["ao_rel_testo"],
+                                            height=460, key="ao_rel_out")
+                    st.download_button(
+                        "⬇️ Scarica in formato testo", data=_finale.encode("utf-8"),
+                        file_name=f"screening_apprendimenti_{paz_id}.txt",
+                        mime="text/plain", key="ao_rel_dl")
