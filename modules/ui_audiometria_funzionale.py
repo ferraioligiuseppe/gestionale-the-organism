@@ -19,6 +19,7 @@ Curva Tomatis standard (dB HL target per frequenza):
 """
 
 import json
+import os
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -231,33 +232,52 @@ def _mostra_eq_summary(data):
 def _ui_test_dicotico(conn, cur, paz_id):
     st.subheader("Test dicotico di Johansen")
     st.caption(
-        "Carica le 6 tracce MP3 stereo (una per compito). "
-        "Le tracce presentano sillabe diverse OD/OS simultaneamente. "
-        "Registra le risposte del paziente per ogni coppia."
+        "Le tracce presentano sillabe diverse su orecchio destro e sinistro "
+        "simultaneamente. Riproduci una traccia per volta e registra le risposte."
     )
 
-    st.info(
-        "Carica le tracce MP3 del test Johansen (le 6 tracce stereo della sequenza). "
-        "Ogni traccia corrisponde a un compito specifico."
-    )
+    # Le tracce vivono nel repo (audio_johansen/): prima andavano ricaricate a
+    # mano a ogni sessione, il che significa cercare i file mentre il paziente
+    # aspetta, e rischiare di somministrare una traccia sbagliata.
+    _CARTELLA_AUDIO = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "audio_johansen")
 
-    # Upload tracce
-    with st.expander("Carica tracce MP3", expanded=True):
-        uploaded = {}
-        for info in JOHANSEN_INFO:
-            n = info["traccia"]
-            f = st.file_uploader(
-                f"Traccia {n} — {info['desc']} ({info['durata']})",
-                type=["mp3","wav"], key=f"joh_track_{n}"
-            )
-            if f: uploaded[n] = f
+    def _percorso_traccia(n):
+        for nome in (f"traccia_{n:02d}.mp3", f"traccia_{n}.mp3"):
+            p = os.path.join(_CARTELLA_AUDIO, nome)
+            if os.path.exists(p):
+                return p
+        return None
 
-    if uploaded:
-        st.markdown("**Riproduci le tracce in ordine:**")
-        for n, f in sorted(uploaded.items()):
-            info = JOHANSEN_INFO[n-1]
-            st.markdown(f"**Traccia {n} — {info['desc']}**")
-            st.audio(f.getvalue(), format="audio/mp3")
+    _presenti = {info["traccia"]: _percorso_traccia(info["traccia"])
+                 for info in JOHANSEN_INFO}
+    _mancanti = [n for n, p in _presenti.items() if not p]
+
+    st.markdown("**Tracce del test**")
+    _scelta = st.radio(
+        "Traccia", [info["traccia"] for info in JOHANSEN_INFO],
+        format_func=lambda n: f"{n} · {JOHANSEN_INFO[n-1]['desc']}",
+        key="joh_traccia_scelta", horizontal=True, label_visibility="collapsed")
+
+    _info_sel = JOHANSEN_INFO[_scelta - 1]
+    st.caption(f"Traccia {_scelta} — {_info_sel['desc']} · durata {_info_sel['durata']}")
+    _p = _presenti.get(_scelta)
+    if _p:
+        with open(_p, "rb") as _fh:
+            st.audio(_fh.read(), format="audio/mp3")
+    else:
+        st.warning(f"Traccia {_scelta} non trovata in audio_johansen/.")
+
+    if _mancanti:
+        with st.expander(f"⚠️ {len(_mancanti)} tracce mancanti — caricale a mano"):
+            st.caption("Le tracce dovrebbero stare in audio_johansen/ come "
+                       "traccia_01.mp3 … traccia_06.mp3. Qui puoi caricarle "
+                       "solo per questa sessione.")
+            for n in _mancanti:
+                f = st.file_uploader(f"Traccia {n} — {JOHANSEN_INFO[n-1]['desc']}",
+                                      type=["mp3", "wav"], key=f"joh_track_{n}")
+                if f:
+                    st.audio(f.getvalue(), format="audio/mp3")
 
     # Tabella risposte
     st.markdown("---")
@@ -278,8 +298,6 @@ def _ui_test_dicotico(conn, cur, paz_id):
     #
     # Etichette di una lettera: D destra, S sinistra, E entrambi. Si scelgono
     # a colpo d'occhio e si scrivono da tastiera.
-    import pandas as pd
-
     _SIGLE = {"": "", "OD": "D", "OS": "S", "Entrambi": "E"}
     _ESTESE = {"": "", "D": "OD", "S": "OS", "E": "Entrambi"}
     _OPZIONI = ["", "D", "S", "E"]
