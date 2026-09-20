@@ -14,22 +14,43 @@ schermo o sul secondo monitor e resta lì, mentre nel gestionale compili.
 """
 from __future__ import annotations
 
+import base64
+
 import streamlit as st
 import streamlit.components.v1 as components
 
-METRONOMO_URL = "https://www.pnev.it/wp-content/uploads/pnev-metronomo/index.html"
+import os
+
+# Il metronomo vive nel repo: la copia su pnev.it non è pubblicata (404),
+# quindi si legge il file locale e lo si scrive dentro la finestra.
+_METRONOMO_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "static", "pnev_metronomo", "index.html")
+
+
+def _html_metronomo() -> str:
+    try:
+        with open(_METRONOMO_FILE, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
 
 
 def _apri_finestra(nome_finestra: str, html: str = "", url: str = "",
                    larghezza: int = 460, altezza: int = 680) -> None:
-    """Apre (o riporta in primo piano) una finestra separata."""
+    """Apre (o riporta in primo piano) una finestra separata.
+
+    L'HTML viene passato come data-URL in base64 invece che con
+    document.write: il metronomo contiene JavaScript con template
+    literal, e qualunque `${...}` dentro una stringa JS verrebbe
+    interpretato e romperebbe la pagina. Il base64 non ha questo problema.
+    """
     if url:
         sorgente = f"w = window.open({url!r}, {nome_finestra!r}, opts);"
     else:
-        safe = html.replace("\\", "\\\\").replace("`", "\\`").replace("</", "<\\/")
-        sorgente = (f"w = window.open('', {nome_finestra!r}, opts);"
-                    f" if (w) {{ w.document.open(); w.document.write(`{safe}`);"
-                    f" w.document.close(); }}")
+        b64 = base64.b64encode(html.encode("utf-8")).decode()
+        sorgente = (f"w = window.open('data:text/html;base64,{b64}', "
+                    f"{nome_finestra!r}, opts);")
     components.html(f"""<script>
       var opts = 'width={larghezza},height={altezza},menubar=no,toolbar=no,location=no';
       var w;
@@ -122,8 +143,12 @@ def cintura_strumenti() -> None:
                    "lavori qui dentro.")
 
         if st.button("🥁 Metronomo", key="cintura_metro", use_container_width=True):
-            _apri_finestra("pnev_metronomo", url=METRONOMO_URL,
-                           larghezza=520, altezza=760)
+            _h = _html_metronomo()
+            if _h:
+                _apri_finestra("pnev_metronomo", html=_h, larghezza=520, altezza=780)
+            else:
+                st.error("Metronomo non trovato: serve "
+                         "static/pnev_metronomo/index.html nel repo.")
 
         if st.button("⏱️ Cronometro", key="cintura_crono", use_container_width=True):
             _apri_finestra("pnev_cronometro", html=_CRONOMETRO,
