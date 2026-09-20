@@ -1757,7 +1757,13 @@ def dispatch_smart_section(*, area: str, sotto: str,
         from .diario_note_rapide import blocco_note_laterale
         blocco_note_laterale(conn, _paz, _rec, schermata=sotto or area)
     except Exception:
-        pass
+        # Se il blocco note fallisce NON deve lasciare la transazione
+        # abortita: il modulo che viene dopo troverebbe la connessione
+        # inutilizzabile ("current transaction is aborted").
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
     _render_area(area, sotto, conn, is_admin)
 

@@ -89,6 +89,10 @@ def blocco_note_laterale(conn, paz_id=None, paziente=None, schermata: str = "") 
                 crea_schema(conn)
                 st.session_state["_diario_schema_ok"] = True
             except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 st.caption(f"Errore schema diario: {e}")
                 return
 
@@ -133,6 +137,10 @@ def blocco_note_laterale(conn, paz_id=None, paziente=None, schermata: str = "") 
                             pass
                     st.success("Salvato.")
                 except Exception as e:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                     st.error(f"Errore: {e}")
 
         # Le ultime voci servono a non ripetersi e a riprendere il filo di
@@ -140,6 +148,10 @@ def blocco_note_laterale(conn, paz_id=None, paziente=None, schermata: str = "") 
         try:
             voci = lista_voci(conn, studio_id, paz_id, limite=3) or []
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             voci = []
         if voci:
             st.caption("**Ultime voci**")
