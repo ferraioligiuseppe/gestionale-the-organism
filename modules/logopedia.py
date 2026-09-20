@@ -268,6 +268,18 @@ def render_logopedia(conn=None, paz_id=None, paziente=None):
             lg["errori_tipici"] = st.text_area(
                 "Errori tipici (sostituzioni, omissioni, distorsioni)",
                 value=g("lg", "errori_tipici"), key="logo_lg_err")
+
+            with st.expander("🔤 Bilancio fonetico — fono per fono"):
+                st.caption("Repertorio completo dei fonemi dell'italiano, per "
+                           "categoria articolatoria: per ognuno le parole-stimolo "
+                           "da far dire e l'esito.")
+                try:
+                    from .bilancio_fonetico import render_bilancio_fonetico
+                    lg["bilancio_fonetico"] = render_bilancio_fonetico(
+                        f"logo_{paz_id}", g("lg", "bilancio_fonetico") or {})
+                except Exception as e:
+                    st.caption(f"Bilancio fonetico non disponibile: {e}")
+
             dati["lg"] = lg
 
         # 3c — Fluenza / Balbuzie
