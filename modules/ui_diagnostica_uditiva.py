@@ -22,6 +22,7 @@ import streamlit as st
 from datetime import date, datetime
 
 import numpy as np
+import pandas as pd
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Costanti
@@ -623,26 +624,177 @@ def _ui_calibrazione(conn):
     off_os = round(sum(os_) / len(os_)) if os_ else 0
 
     st.divider()
-    cc1, cc2, cc3 = st.columns(3)
+    _studio_id = ss.get("studio_id", 1)
+
+    # ── Cuffie già calibrate ─────────────────────────────────────────
+    _profili = _elenco_profili_cuffie(conn, _studio_id)
+    if _profili:
+        st.markdown("**Cuffie calibrate**")
+        _nomi = [p["nome"] for p in _profili]
+        _attivo = ss.get("cal_profilo_globale", {}).get("nome")
+        pc1, pc2, pc3 = st.columns([3, 1, 1])
+        with pc1:
+            _sel = st.selectbox(
+                "Cuffia in uso", _nomi,
+                index=_nomi.index(_attivo) if _attivo in _nomi else 0,
+                key="cal_profilo_sel", label_visibility="collapsed")
+        _p = next(p for p in _profili if p["nome"] == _sel)
+        with pc2:
+            if st.button("Usa questa", key="cal_usa", use_container_width=True,
+                         type="primary" if _sel != _attivo else "secondary"):
+                ss["cal_profilo_globale"] = {
+                    "nome": _p["nome"], "brand": _p.get("marca", ""),
+                    "model": _p.get("modello", ""),
+                    "offset_od": int(_p.get("offset_od") or 0),
+                    "offset_os": int(_p.get("offset_os") or 0),
+                    "misure": _p.get("misure") or {},
+                }
+                st.rerun()
+        with pc3:
+            if st.button("Elimina", key="cal_del", use_container_width=True):
+                _elimina_profilo_cuffie(conn, _studio_id, _sel)
+                if _attivo == _sel:
+                    ss.pop("cal_profilo_globale", None)
+                st.rerun()
+        st.caption(f"«{_p['nome']}» — {_p.get('marca','')} {_p.get('modello','')} · "
+                   f"OD {int(_p.get('offset_od') or 0):+d} dB · "
+                   f"OS {int(_p.get('offset_os') or 0):+d} dB")
+        st.divider()
+
+    # ── Salva la calibrazione appena misurata ────────────────────────
+    st.markdown("**Salva questa calibrazione**")
     prev = ss.get("cal_profilo_globale", {})
+    cc1, cc2, cc3 = st.columns(3)
     brand = cc1.text_input("Marca cuffie", prev.get("brand", ""), key="cal_brand")
     model = cc2.text_input("Modello", prev.get("model", ""), key="cal_model")
     cc3.metric("Offset OD / OS", f"{off_od:+d} / {off_os:+d} dB")
 
-    if st.button("💾 Salva profilo globale", type="primary", key="cal_save"):
-        ss["cal_profilo_globale"] = {
-            "brand": brand, "model": model,
-            "offset_od": off_od, "offset_os": off_os,
-            "misure": dict(ss["cal_misure"]),
-        }
-        st.success(f"Profilo salvato: {brand} {model} — OD {off_od:+d} dB · OS {off_os:+d} dB. "
-                   "Verrà applicato automaticamente nel Test Tonale.")
+    _nome_sugg = (f"{brand} {model}".strip() or "Cuffia senza nome")
+    cn1, cn2 = st.columns([3, 1])
+    with cn1:
+        nome_prof = st.text_input(
+            "Nome con cui ritrovarla", _nome_sugg, key="cal_nome_prof",
+            help="Se in studio hai più cuffie, dai a ognuna un nome riconoscibile "
+                 "(es. «Sennheiser studio 1», «Cuffia bambini»).")
+    with cn2:
+        st.write("")
+        st.write("")
+        _salva = st.button("💾 Salva", type="primary", key="cal_save",
+                           use_container_width=True)
+
+    if _salva:
+        if not nome_prof.strip():
+            st.warning("Dai un nome alla cuffia prima di salvare.")
+        elif _salva_profilo_cuffie(conn, _studio_id, nome_prof.strip(), brand,
+                                    model, off_od, off_os, dict(ss["cal_misure"])):
+            ss["cal_profilo_globale"] = {
+                "nome": nome_prof.strip(), "brand": brand, "model": model,
+                "offset_od": off_od, "offset_os": off_os,
+                "misure": dict(ss["cal_misure"]),
+            }
+            st.success(f"«{nome_prof.strip()}» salvata — OD {off_od:+d} dB · OS {off_os:+d} dB. "
+                       "Resta nel database: non va rifatta a ogni sessione.")
+            st.rerun()
 
     profilo = ss.get("cal_profilo_globale")
     if profilo:
         st.info(
-            f"Profilo attivo: **{profilo.get('brand','')} {profilo.get('model','')}** — "
-            f"Offset OD: {profilo.get('offset_od',0):+d} dB · OS: {profilo.get('offset_os',0):+d} dB")
+            f"Attiva nel Test tonale: **{profilo.get('nome') or profilo.get('brand','')}** — "
+            f"OD {profilo.get('offset_od',0):+d} dB · OS {profilo.get('offset_os',0):+d} dB")
+
+
+# ── Profili di calibrazione cuffie, salvati sul database ─────────────
+# Prima il profilo viveva solo in st.session_state: bastava un riavvio
+# dell'app o una sessione scaduta e la calibrazione spariva, costringendo
+# a rifarla da capo. Ora sta in tabella, e se ne possono tenere diversi —
+# uno per ogni cuffia usata in studio — scegliendo di volta in volta
+# quale è attivo.
+
+def _assicura_tabella_cuffie(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS calibrazioni_cuffie_studio (
+                id          BIGSERIAL PRIMARY KEY,
+                studio_id   BIGINT NOT NULL DEFAULT 1,
+                nome        TEXT NOT NULL,
+                marca       TEXT,
+                modello     TEXT,
+                offset_od   INT NOT NULL DEFAULT 0,
+                offset_os   INT NOT NULL DEFAULT 0,
+                misure      JSONB,
+                creato_il   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (studio_id, nome)
+            );
+        """)
+        conn.commit()
+        return True
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return False
+
+
+def _salva_profilo_cuffie(conn, studio_id, nome, marca, modello, off_od, off_os, misure):
+    if not _assicura_tabella_cuffie(conn):
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO calibrazioni_cuffie_studio
+                (studio_id, nome, marca, modello, offset_od, offset_os, misure)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (studio_id, nome) DO UPDATE SET
+                marca = EXCLUDED.marca, modello = EXCLUDED.modello,
+                offset_od = EXCLUDED.offset_od, offset_os = EXCLUDED.offset_os,
+                misure = EXCLUDED.misure, creato_il = now();
+        """, (studio_id, nome, marca, modello, int(off_od), int(off_os),
+              json.dumps(misure or {})))
+        conn.commit()
+        return True
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        st.error(f"Errore salvataggio profilo: {e}")
+        return False
+
+
+def _elenco_profili_cuffie(conn, studio_id):
+    if not _assicura_tabella_cuffie(conn):
+        return []
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT nome, marca, modello, offset_od, offset_os, misure
+              FROM calibrazioni_cuffie_studio
+             WHERE studio_id = %s ORDER BY nome;
+        """, (studio_id,))
+        righe = cur.fetchall() or []
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return []
+    fuori = []
+    for r in righe:
+        if hasattr(r, "get"):
+            fuori.append(dict(r))
+        else:
+            fuori.append({"nome": r[0], "marca": r[1], "modello": r[2],
+                          "offset_od": r[3], "offset_os": r[4], "misure": r[5]})
+    return fuori
+
+
+def _elimina_profilo_cuffie(conn, studio_id, nome):
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM calibrazioni_cuffie_studio "
+                    "WHERE studio_id = %s AND nome = %s;", (studio_id, nome))
+        conn.commit()
+        return True
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -744,12 +896,44 @@ def _carica_ultimo_audiogramma(conn, paz_id):
 FREQ_ORDER_AUTO = [1000, 2000, 4000, 8000, 500, 250, 125, 750, 1500, 3000, 6000]
 
 
+# ── Parametri del metodo ascendente (Tomatis) ────────────────────────
+# Si parte sotto la soglia attesa e si sale: la soglia è il primo livello
+# udito. Ripetendo la prova e prendendo il valore PIÙ ALTO si ottiene il
+# livello a cui il suono è percepito con chiarezza in tutte le
+# presentazioni — che è ciò che serve per calcolare il delta EQ, non il
+# minimo appena rilevabile.
+_TT_PARTENZA   = 0    # dB HL di partenza di ogni prova ascendente
+_TT_PASSO      = 5    # incremento dopo ogni "non sentito"
+_TT_RIPARTENZA = 15   # di quanto si scende per ricominciare la prova
+_TT_PROVE      = 2    # prove ascendenti per frequenza
+_TT_MIN        = -20
+_TT_MAX        = 120
+
+
 def _ui_test_tonale(conn, paz_id, operatore):
     st.subheader("Test tonale audiometrico")
     st.caption("Via aerea (AC) e ossea (BC) · WebAudio istantaneo · Metodo Hipérion · Curva Tomatis")
 
     import streamlit.components.v1 as _sc
     ss = st.session_state
+
+    # ── Cuffia calibrata: si riprende dal database all'apertura ─────────────
+    # Se non lo facessimo, dopo ogni riavvio dell'app il test partirebbe
+    # senza offset e le soglie sarebbero falsate senza che nulla lo segnali.
+    if "cal_profilo_globale" not in ss:
+        _prof = _elenco_profili_cuffie(conn, ss.get("studio_id", 1))
+        if len(_prof) == 1:
+            _p = _prof[0]
+            ss["cal_profilo_globale"] = {
+                "nome": _p["nome"], "brand": _p.get("marca", ""),
+                "model": _p.get("modello", ""),
+                "offset_od": int(_p.get("offset_od") or 0),
+                "offset_os": int(_p.get("offset_os") or 0),
+                "misure": _p.get("misure") or {},
+            }
+        elif len(_prof) > 1:
+            st.warning("Più cuffie calibrate e nessuna attiva: scegline una in "
+                       "**Calibrazione cuffie**, altrimenti il test gira senza offset.")
 
     # ── Ricarica automatica dell'ultimo audiogramma di QUESTO paziente ───────
     # (evita che le soglie di un paziente restino a video passando a un altro,
@@ -796,20 +980,30 @@ def _ui_test_tonale(conn, paz_id, operatore):
     dur = float(dur_str)
 
     if modalita.startswith("🤖"):
-        st.markdown("##### Ricerca automatica della soglia (metodo Hughson–Westlake)")
-        st.caption("Il sistema propone un livello, tu rispondi «🔊 Ho sentito» / «🔇 Non ho sentito»: "
-                   "scende di 10 dB dopo ogni «sentito», sale di 5 dB dopo ogni «non sentito». "
-                   "Dopo 2 inversioni concordanti la soglia è proposta in automatico — "
-                   "resta comunque visibile e modificabile col mouse prima di validarla.")
+        st.markdown("##### Ricerca automatica della soglia — metodo ascendente (Tomatis)")
+        st.caption("Si parte da un livello inudibile e si sale di 5 dB per volta finché il paziente "
+                   "sente: quella è la soglia ascendente. La prova si ripete due volte partendo più "
+                   "in basso. **Si adotta il valore più alto fra le prove**, non il minimo udibile: "
+                   "è la convenzione Tomatis, dove conta il livello a cui il suono è percepito con "
+                   "chiarezza, non quello appena rilevabile. La soglia proposta resta modificabile "
+                   "prima di confermarla.")
         auto_key = f"tt_auto_{ear_code}_{via_code}"
         if auto_key not in ss or ss[auto_key].get("freq_seq_i") is None:
-            ss[auto_key] = {"freq_seq_i": 0, "level": 40, "phase": "down", "reversals": [], "found": None}
+            ss[auto_key] = {"freq_seq_i": 0, "level": _TT_PARTENZA,
+                            "prove": [], "found": None}
         auto = ss[auto_key]
         fi = FREQS_TON.index(FREQ_ORDER_AUTO[auto["freq_seq_i"] % len(FREQ_ORDER_AUTO)])
         cur_f = FREQS_TON[fi]
         st.progress((auto["freq_seq_i"] % len(FREQ_ORDER_AUTO)) / len(FREQ_ORDER_AUTO),
                     text=f"Frequenza {auto['freq_seq_i'] % len(FREQ_ORDER_AUTO) + 1} di {len(FREQ_ORDER_AUTO)}")
         db_init = int(auto["level"])
+        _n_prova = len(auto.get("prove", [])) + 1
+        if auto.get("prove"):
+            st.caption(f"Prova {_n_prova} di {_TT_PROVE} · già rilevate: "
+                       + ", ".join(f"{v} dB" for v in auto["prove"]))
+        else:
+            st.caption(f"Prova {_n_prova} di {_TT_PROVE} · si sale di "
+                       f"{_TT_PASSO} dB finché il paziente sente")
     else:
         cur_f = st.selectbox("Frequenza", FREQS_TON,
                              format_func=lambda f: str(f) if f < 1000 else f"{f//1000}k Hz",
@@ -838,8 +1032,13 @@ def _ui_test_tonale(conn, paz_id, operatore):
                .replace("__DBINIT__", str(db_init)))
     _sc.html(console, height=340)
 
+    _prof_att = ss.get("cal_profilo_globale") or {}
     if cal_offset:
-        st.caption(f"Offset calibrazione cuffie applicato: {cal_offset:+d} dB")
+        st.caption(f"🎧 {_prof_att.get('nome') or _prof_att.get('brand') or 'Cuffia calibrata'} — "
+                   f"offset {cal_offset:+d} dB applicato su {ear_code}")
+    elif not _prof_att:
+        st.caption("⚠️ Nessuna cuffia calibrata: i valori sono relativi all'uscita del "
+                   "dispositivo, non a dB HL reali. Calibra in «Calibrazione cuffie».")
 
     key_s = f"tt_soglie_{ear_code}_{via_code}_v3"
     if key_s not in ss:
@@ -854,32 +1053,73 @@ def _ui_test_tonale(conn, paz_id, operatore):
         with bc3:
             salta = st.button("⏭️ Salta frequenza", use_container_width=True, key="tt_auto_skip")
 
-        if sentito or non_sentito:
-            prev_phase = auto["phase"]
-            if sentito:
-                auto["phase"] = "down"
-                auto["level"] = max(-20, auto["level"] - 10)
-            else:
-                auto["phase"] = "up"
-                auto["level"] = min(90, auto["level"] + 5)
-            if prev_phase != auto["phase"] and prev_phase in ("up", "down"):
-                auto["reversals"].append(auto["level"])
-            if len(auto["reversals"]) >= 2 and sentito:
-                soglia_auto = round(sum(auto["reversals"][-2:]) / 2 / 5) * 5
-                ss[key_s][fi] = int(soglia_auto)
-                st.success(f"Soglia proposta: {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} "
-                           f"= {int(soglia_auto)} dB HL (modificabile qui sotto prima di confermare)")
-                auto["freq_seq_i"] += 1
-                auto["level"] = 40
-                auto["phase"] = "down"
-                auto["reversals"] = []
+        if non_sentito:
+            # Non sentito: si sale. È l'unico movimento del metodo ascendente.
+            auto["level"] = min(_TT_MAX, auto["level"] + _TT_PASSO)
             st.rerun()
+
+        if sentito:
+            # Sentito: questa prova ascendente è conclusa, il livello attuale
+            # è la sua soglia. Si riparte più in basso per una nuova prova.
+            auto["prove"].append(int(auto["level"]))
+
+            if len(auto["prove"]) >= _TT_PROVE:
+                # Convenzione Tomatis: fra le prove si prende la PIÙ ALTA,
+                # cioè il livello a cui il suono è percepito con chiarezza in
+                # tutte le presentazioni — non il minimo appena rilevabile,
+                # che sovrastima l'udito utile ai fini dell'equalizzazione.
+                soglia_auto = max(auto["prove"])
+                ss[key_s][fi] = int(soglia_auto)
+                _dettaglio = " / ".join(f"{v} dB" for v in auto["prove"])
+                st.success(
+                    f"Soglia proposta: {FLABELS_TON[fi]} Hz {ear_code} {via_code.upper()} "
+                    f"= {int(soglia_auto)} dB HL — prove: {_dettaglio}, adottata la più alta "
+                    "(modificabile qui sotto prima di confermare)")
+                auto["freq_seq_i"] += 1
+                auto["level"] = _TT_PARTENZA
+                auto["prove"] = []
+            else:
+                # Nuova prova ascendente: si riparte sotto la soglia trovata.
+                auto["level"] = max(_TT_MIN, int(auto["level"]) - _TT_RIPARTENZA)
+            st.rerun()
+
         if salta:
             auto["freq_seq_i"] += 1
-            auto["level"] = 40
-            auto["phase"] = "down"
-            auto["reversals"] = []
+            auto["level"] = _TT_PARTENZA
+            auto["prove"] = []
             st.rerun()
+
+    # ── Inserimento rapido di tutte le frequenze (solo in manuale) ──────────
+    # Una frequenza per volta vuol dire undici conferme e undici ricariche
+    # per orecchio: qui la griglia le prende tutte insieme, con una sola
+    # ricarica alla fine.
+    if not modalita.startswith("🤖"):
+        with st.expander("⌨️ Inserimento rapido — tutte le frequenze insieme", expanded=False):
+            st.caption(f"{ear_code} · via {via_code.upper()} — lascia vuoto ciò che non hai misurato. "
+                       "Muoviti con Tab.")
+            _riga = {FLABELS_TON[i]: ss[key_s].get(i) for i in range(len(FREQS_TON))}
+            _out = st.data_editor(
+                pd.DataFrame([_riga]),
+                key=f"tt_griglia_{ear_code}_{via_code}",
+                hide_index=True, use_container_width=True,
+                column_config={
+                    lbl: st.column_config.NumberColumn(
+                        lbl, min_value=-20, max_value=120, step=5, format="%d")
+                    for lbl in FLABELS_TON
+                },
+            )
+            if st.button("✓ Registra tutte", key=f"tt_griglia_ok_{ear_code}_{via_code}",
+                         type="primary"):
+                _n = 0
+                for i, lbl in enumerate(FLABELS_TON):
+                    _v = _out.iloc[0][lbl]
+                    if pd.isna(_v):
+                        ss[key_s].pop(i, None)
+                    else:
+                        ss[key_s][i] = int(_v)
+                        _n += 1
+                st.success(f"{_n} soglie registrate su {ear_code} {via_code.upper()}.")
+                st.rerun()
 
     # ── Registrazione / conferma soglia (sempre visibile e modificabile) ─────
     valore_proposto = ss[key_s].get(fi, db_init)
