@@ -39,6 +39,7 @@ STRUMENTI = {
     "🔤 Prerequisiti (ultimo anno infanzia · 1ª primaria)": [
         {
             "nome": "RAN — Denominazione rapida automatizzata",
+            "bibliografia": "Denckla M.B., Rudel R.G. (1976). Rapid automatized naming (R.A.N.): dyslexia differentiated from other learning disabilities. *Neuropsychologia*, 14(4), 471-479. · Materiali e tarature: Laboratorio DeCoNe, Dipartimento di Psicologia dello Sviluppo, Università di Padova.",
             "fonte": "DeCoNe, Università di Padova",
             "eta": "5-7 anni", "durata": "5 min",
             "norme": "Taratura italiana DeCoNe",
@@ -55,6 +56,7 @@ STRUMENTI = {
         },
         {
             "nome": "RAN e Ricerca visiva — versione Santa Lucia",
+            "bibliografia": "Fondazione Santa Lucia IRCCS, Laboratorio di Dislessia (2016). *RAN e Ricerca visiva: manuale e norme*. Roma.",
             "fonte": "Fondazione Santa Lucia, Lab. Dislessia",
             "eta": "6-11 anni", "durata": "8 min",
             "norme": "Norme italiane 2016",
@@ -72,6 +74,7 @@ STRUMENTI = {
     "📖 Lettura (primaria)": [
         {
             "nome": "Batteria DeCoNe — Lettura",
+            "bibliografia": "Batteria DeCoNe per la lettura — manuale del somministratore e tarature. Laboratorio DeCoNe, Università di Padova.",
             "fonte": "DeCoNe, Università di Padova",
             "eta": "1ª-5ª primaria", "durata": "15 min",
             "norme": "Tarature per classe scolastica",
@@ -87,6 +90,7 @@ STRUMENTI = {
         },
         {
             "nome": "Lettura di parole e non parole — Santa Lucia",
+            "bibliografia": "Fondazione Santa Lucia IRCCS, Laboratorio di Dislessia. *Lettura di parole e non parole: manuale, test e foglio di notazione*. Roma.",
             "fonte": "Fondazione Santa Lucia",
             "eta": "6-13 anni", "durata": "10 min",
             "norme": "Norme italiane",
@@ -101,6 +105,7 @@ STRUMENTI = {
         },
         {
             "nome": "PLS — Prova di Lettura Sublessicale",
+            "bibliografia": "Calgaro A., Toffalini E., Cornoldi C. (2018). La Prova di Lettura Sublessicale (PLS) per la prima primaria. *Dislessia*, AIRIPA.",
             "fonte": "Calgaro, Toffalini, Cornoldi (2018) · AIRIPA",
             "eta": "1ª primaria", "durata": "5 min",
             "norme": "Tarature nell'articolo di riferimento",
@@ -116,6 +121,7 @@ STRUMENTI = {
     "✍️ Scrittura e ortografia": [
         {
             "nome": "Batteria COST",
+            "bibliografia": "Batteria COST — prove di lettura e scrittura con tarature. Progetto COST.",
             "fonte": "Progetto COST",
             "eta": "primaria e secondaria I grado", "durata": "20 min",
             "norme": "Tarature incluse nel materiale",
@@ -132,6 +138,7 @@ STRUMENTI = {
     "🔢 Calcolo": [
         {
             "nome": "Numeracy Screener",
+            "bibliografia": "Nosworthy N., Bugden S., Archibald L., Evans B., Ansari D. (2013). A two-minute paper-and-pencil test of symbolic and nonsymbolic numerical magnitude processing explains variability in primary school children's arithmetic competence. *PLoS ONE*, 8(7), e67918. ⚠️ Dati normativi canadesi.",
             "fonte": "Numerical Cognition Lab, Western University",
             "eta": "5-9 anni", "durata": "2 min",
             "norme": "⚠️ Dati canadesi (658 bambini, Ontario) — riferimento orientativo, "
@@ -146,6 +153,7 @@ STRUMENTI = {
         },
         {
             "nome": "Intervention Central — generatori di prove",
+            "bibliografia": "Wright J. *Intervention Central* — Curriculum-Based Measurement generators. interventioncentral.org. Misure a criterio, senza norme.",
             "fonte": "interventioncentral.org",
             "eta": "tutte", "durata": "variabile",
             "norme": "Nessuna — misura a criterio",
@@ -160,6 +168,7 @@ STRUMENTI = {
     "🗣️ Linguaggio": [
         {
             "nome": "MAIN — abilità narrative",
+            "bibliografia": "Gagarina N., Klop D., Kunnari S., Tantele K., Välimaa T., Bohnacker U., Walters J. *Multilingual Assessment Instrument for Narratives (MAIN)*. ZAS Papers in Linguistics, Leibniz-ZAS Berlino. Versione italiana 2020 revised.",
             "fonte": "Leibniz-ZAS · versione italiana 2020",
             "eta": "3-10 anni", "durata": "15 min",
             "norme": "Riferimenti di ricerca europei",
@@ -174,6 +183,7 @@ STRUMENTI = {
         },
         {
             "nome": "Fluenze verbali (fonemica e semantica)",
+            "bibliografia": "Novelli G. et al. (1986). Tre test clinici di ricerca e produzione lessicale: taratura su soggetti normali. *Archivio di Psicologia, Neurologia e Psichiatria*, 47(4), 477-506. · Carlesimo G.A. et al. (1996). The Mental Deterioration Battery: normative data. *European Neurology*, 36(6), 378-384.",
             "fonte": "Novelli et al. 1986 · Carlesimo et al. 1996",
             "eta": "adulti", "durata": "3 min",
             "norme": "Norme italiane per età e scolarità",
@@ -190,6 +200,7 @@ STRUMENTI = {
     "🎯 Attenzione e comportamento": [
         {
             "nome": "COM-R — questionario insegnanti",
+            "bibliografia": "Scala COM-R per insegnanti, con percentili. AIRIPA — Associazione Italiana per la Ricerca e l'Intervento nella Psicopatologia dell'Apprendimento.",
             "fonte": "AIRIPA",
             "eta": "primaria e secondaria", "durata": "10 min",
             "norme": "Percentili inclusi",
@@ -203,6 +214,7 @@ STRUMENTI = {
         },
         {
             "nome": "ASRS-5 — adulti (OMS)",
+            "bibliografia": "Kessler R.C. et al. (2005). The World Health Organization Adult ADHD Self-Report Scale (ASRS): a short screening scale for use in the general population. *Psychological Medicine*, 35(2), 245-256. Versione italiana ASRS-5.",
             "fonte": "Organizzazione Mondiale della Sanità",
             "eta": "adulti", "durata": "5 min",
             "norme": "Cut-off validato",
@@ -216,6 +228,7 @@ STRUMENTI = {
         },
         {
             "nome": "Batteria DeCoNe — Attenzione",
+            "bibliografia": "Batteria DeCoNe per l'attenzione — manuale del somministratore e tarature. Laboratorio DeCoNe, Università di Padova.",
             "fonte": "DeCoNe, Università di Padova",
             "eta": "primaria", "durata": "15 min",
             "norme": "Tarature per classe",
@@ -230,6 +243,7 @@ STRUMENTI = {
     "🧩 Complementari": [
         {
             "nome": "QAD — Questionario Adattamento Dislessia",
+            "bibliografia": "Viola. *QAD — Questionario di Adattamento alla Dislessia*. AIRIPA.",
             "fonte": "AIRIPA",
             "eta": "primaria e secondaria", "durata": "10 min",
             "norme": "Riferimenti AIRIPA",
@@ -242,6 +256,7 @@ STRUMENTI = {
         },
         {
             "nome": "Span associativo / memoria fonologica",
+            "bibliografia": "Antonello. *Span associativo e memoria fonologica (MLFA)*. AIRIPA.",
             "fonte": "AIRIPA",
             "eta": "primaria", "durata": "8 min",
             "norme": "Riferimenti AIRIPA",
@@ -454,6 +469,34 @@ def _storico(conn, paz_id, strumento=None):
             fuori.append({"data_prova": r[0], "strumento": r[1],
                           "punteggi": r[2], "osservazioni": r[3]})
     return fuori
+
+
+def _bibliografia(strumenti_usati) -> str:
+    """Riferimenti dei soli strumenti somministrati.
+
+    Una bibliografia generica non serve a nessuno: qui compaiono le fonti
+    delle prove che quel paziente ha effettivamente svolto, così chi legge
+    la relazione può risalire a norme e materiali.
+    """
+    voci = []
+    for elenco in STRUMENTI.values():
+        for s in elenco:
+            if s["nome"] in strumenti_usati and s.get("bibliografia"):
+                voci.append((s["nome"], s["bibliografia"]))
+    if not voci:
+        return ""
+    righe = ["", "─" * 64, "", "RIFERIMENTI BIBLIOGRAFICI E FONTI DEGLI STRUMENTI", ""]
+    for nome, bib in sorted(voci):
+        righe.append(f"· {nome}")
+        righe.append(f"  {bib}")
+        righe.append("")
+    righe.append("Criteri di riferimento per la valutazione della lettura:")
+    righe.append("Cornoldi C., Perini N., Tressoldi P.E. Criteri per la diagnosi e la "
+                 "valutazione dei disturbi di lettura. AIRIPA.")
+    righe.append("")
+    righe.append("Tutti gli strumenti impiegati sono ad accesso libero e resi disponibili "
+                 "dagli enti indicati per uso clinico e di ricerca.")
+    return "\n".join(righe)
 
 
 def render_apprendimenti_open(conn=None, paz_id=None, paziente=None) -> None:
@@ -720,6 +763,9 @@ def render_apprendimenti_open(conn=None, paz_id=None, paziente=None) -> None:
                                   "è necessaria la valutazione del livello cognitivo con "
                                   "strumenti standardizzati.")
 
+                    _usati = {p["strumento"] for p in prove}
+                    _testo = _testo.rstrip() + "\n" + _bibliografia(_usati)
+
                     try:
                         from .intestazione_relazioni import incornicia
                         _dn = paziente.get("data_nascita") if isinstance(paziente, dict) else None
@@ -727,7 +773,8 @@ def render_apprendimenti_open(conn=None, paz_id=None, paziente=None) -> None:
                             _testo, "Screening degli apprendimenti",
                             nome_paziente=_nome,
                             data_nascita=(_dn.strftime("%d/%m/%Y")
-                                          if hasattr(_dn, "strftime") else str(_dn or "")))
+                                          if hasattr(_dn, "strftime") else str(_dn or "")),
+                            metodo_in_apertura=True)
                     except Exception:
                         pass
 
