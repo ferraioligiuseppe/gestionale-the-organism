@@ -468,6 +468,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
+        "🔉 Diagnostica uditiva completa",
         "🎧 Stimolazione uditiva", "🎧 MAPS", "🗂 Programmi MAPS", "🎧 MAPS-CLEAR in studio",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
         "🎧 MAPS-CLEAR in studio",
@@ -974,6 +975,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
 
     # ── AUDIO (MAPS & diagnostica uditiva) ────────────────────────────
     _audio_map = {
+        # Etichetta corretta: il modulo fa diagnostica, non stimolazione.
+        # La vecchia resta mappata per non rompere link già salvati.
+        "🔉 Diagnostica uditiva completa": ("ui_diagnostica_uditiva", "ui_diagnostica_uditiva"),
         "🎧 Stimolazione uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
         "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
         "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
@@ -1462,7 +1466,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         from .paziente_attivo import header_paziente_attivo
         # L'header serve solo per i moduli che richiedono un paziente
         _audio_map = {
-            "🎧 Stimolazione uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
+            # Etichetta corretta: il modulo fa diagnostica, non stimolazione.
+        # La vecchia resta mappata per non rompere link già salvati.
+        "🔉 Diagnostica uditiva completa": ("ui_diagnostica_uditiva", "ui_diagnostica_uditiva"),
+        "🎧 Stimolazione uditiva":    ("ui_diagnostica_uditiva",   "ui_diagnostica_uditiva"),
             "🎧 MAPS":                   ("ui_maps",                  "ui_maps"),
             "🗂 Programmi MAPS":         ("ui_programmi",             "ui_programmi"),
             "🧭 Percorsi MAPS":          ("ui_percorsi",              "ui_percorsi"),
