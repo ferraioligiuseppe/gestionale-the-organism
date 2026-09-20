@@ -454,7 +454,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "🔬 PNEV", "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
-        "🧠 NPS — Neuropsicologica", "🌐 WHODAS 2.0", "🖼️ PECS — CAA", "📚 DSA — Apprendimento",
+        "🧠 NPS — Neuropsicologica", "🌐 WHODAS 2.0", "🖼️ PECS — CAA", "📚 DSA — Apprendimento", "📚 Strumenti open",
         "🔬 Test psicologici", "⚡ Funzioni esecutive",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
@@ -758,6 +758,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except ImportError as e:
             st.error(f"Modulo PECS non disponibile: {e}")
         return True
+    if sotto == "📚 Strumenti open":
+        from .ui_apprendimenti_open import render_apprendimenti_open
+        render_apprendimenti_open(conn, paz_id); return True
     if sotto == "📚 DSA — Apprendimento":
         try:
             from .ui_dsa import render_dsa
@@ -1220,7 +1223,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             except ImportError as e:
                 st.error(f"Modulo PECS non disponibile: {e}")
             return
-        if sotto == "📚 DSA — Apprendimento":
+        if sotto == "📚 Strumenti open":
+        from .ui_apprendimenti_open import render_apprendimenti_open
+        render_apprendimenti_open(conn, paz_id); return True
+    if sotto == "📚 DSA — Apprendimento":
             try:
                 from .ui_dsa import render_dsa
                 render_dsa(conn, paz_id)

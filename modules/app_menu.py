@@ -108,6 +108,7 @@ PNEV_RAMI = {
         "🎧 Libreria calibrazioni cuffie",
     ],
     "📚 Apprendimenti": [
+        "📚 Strumenti open",
         "📚 DSA — Apprendimento",
         "📖 Lettura avanzata",
     ],
