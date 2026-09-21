@@ -479,10 +479,18 @@ def azione_iscrizione_evento(conn):
                     cur_an = conn.cursor()
                     cog_b = (cognome_b if evento_minori else cognome_g).strip().upper()
                     nom_b = (nome_b if evento_minori else nome_g).strip().upper()
+                    # Match sul NOME della persona iscritta, non sull'email.
+                    # Con l'email nella condizione OR, un genitore che iscrive
+                    # il secondo figlio con lo stesso indirizzo agganciava la
+                    # nuova iscrizione all'anagrafica del PRIMO figlio: due
+                    # bambini diversi sullo stesso fascicolo. La pagina avvisa
+                    # gia' che l'iscrizione di un fratello e' legittima, ma poi
+                    # i dati finivano nel posto sbagliato. Nella scheda manuale
+                    # del gestionale il match e' sempre stato su cognome+nome:
+                    # ora le due strade si comportano allo stesso modo.
                     cur_an.execute(
-                        "SELECT id FROM pazienti WHERE (email IS NOT NULL AND LOWER(email)=%s) "
-                        "OR (UPPER(cognome)=%s AND UPPER(nome)=%s) LIMIT 1",
-                        (email.strip().lower(), cog_b, nom_b))
+                        "SELECT id FROM pazienti WHERE UPPER(cognome)=%s AND UPPER(nome)=%s LIMIT 1",
+                        (cog_b, nom_b))
                     esistente = cur_an.fetchone()
                     if esistente:
                         paz_auto_id = int(esistente["id"] if isinstance(esistente, dict) else esistente[0])
@@ -498,9 +506,9 @@ def azione_iscrizione_evento(conn):
                                 INSERT INTO consensi_privacy
                                 (paziente_id, tipo, consenso_trattamento, consenso_comunicazioni,
                                  canale_email, canale_whatsapp, data_ora, note)
-                                VALUES (%s,'minore',1,1,1,1,NOW(),
+                                VALUES (%s,%s,1,1,1,1,NOW(),
                                         'Consenso firmato in fase di iscrizione evento')
-                            """, (paz_auto_id,))
+                            """, (paz_auto_id, "minore" if evento_minori else "adulto"))
                         except Exception:
                             pass
                     conn.commit()
@@ -546,7 +554,16 @@ def azione_iscrizione_evento(conn):
                     )
                     ok_m, dett_m = invia_email(email.strip(), oggetto_genitore, corpo_email,
                                                dettaglio=True)
-                    if not ok_m:
+                    if ok_m:
+                        # Senza questo la colonna "Email conferma" nel gestionale
+                        # resta "—" anche quando la mail e' partita davvero: veniva
+                        # marcata solo dall'invio manuale dal pannello admin.
+                        try:
+                            from modules.eventi.db_eventi import mark_email_conferma_inviata
+                            mark_email_conferma_inviata(conn, iscr["id"])
+                        except Exception:
+                            pass
+                    else:
                         st.warning(f"Iscrizione salvata, ma l'email di conferma non è partita: {dett_m}")
                 except Exception as _e_mail:
                     st.warning(f"Iscrizione salvata, ma l'email di conferma non è partita: {_e_mail}")
