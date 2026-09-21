@@ -342,16 +342,37 @@ def _render_tab_iscritti(conn, ev: dict):
             (st.success if esito else st.error)("Inviata." if esito else "Invio fallito.")
 
     if st.toggle("➕ Aggiungi iscrizione manualmente", key=f"tg_man_{ev['id']}"):
+        # Il modulo chiedeva sempre "Nome genitore" e i dati del bambino, anche
+        # per Costellazioni, webinar e workshop, che sono eventi per adulti:
+        # l'operatore si trovava a scrivere il nome di un adulto in un campo
+        # che diceva "genitore" e due campi bambino da lasciare vuoti.
+        # Lo screening e' l'unico tipo in cui un genitore accompagna un
+        # bambino; per gli altri si presume l'iscritto adulto, ma la
+        # presunzione si puo' sempre ribaltare con la spunta qui sotto —
+        # esistono workshop per famiglie.
+        _tipo_ev = (ev.get("tipo") or "").strip().lower()
+        _default_con_bambino = _tipo_ev == "screening"
+        con_bambino = st.checkbox(
+            "L'iscritto accompagna un bambino/a",
+            value=_default_con_bambino,
+            key=f"man_conbimbo_{ev['id']}",
+            help="Attivo di default per lo screening. Per costellazioni, webinar e "
+                 "workshop l'iscritto è la persona adulta che partecipa.")
+        _et_nome = "Nome genitore" if con_bambino else "Nome"
+        _et_cognome = "Cognome genitore" if con_bambino else "Cognome"
+
         with st.form(f"form_manuale_{ev['id']}"):
             c1, c2 = st.columns(2)
-            m_nome = c1.text_input("Nome genitore", key=f"man_nome_{ev['id']}")
-            m_cognome = c2.text_input("Cognome genitore", key=f"man_cognome_{ev['id']}")
+            m_nome = c1.text_input(_et_nome, key=f"man_nome_{ev['id']}")
+            m_cognome = c2.text_input(_et_cognome, key=f"man_cognome_{ev['id']}")
             c3, c4 = st.columns(2)
             m_email = c3.text_input("Email", key=f"man_email_{ev['id']}")
             m_telefono = c4.text_input("Telefono", key=f"man_tel_{ev['id']}")
-            c5, c6 = st.columns(2)
-            m_nome_b = c5.text_input("Nome bambino/a", key=f"man_nomeb_{ev['id']}")
-            m_cognome_b = c6.text_input("Cognome bambino/a", key=f"man_cognomeb_{ev['id']}")
+            m_nome_b = m_cognome_b = ""
+            if con_bambino:
+                c5, c6 = st.columns(2)
+                m_nome_b = c5.text_input("Nome bambino/a", key=f"man_nomeb_{ev['id']}")
+                m_cognome_b = c6.text_input("Cognome bambino/a", key=f"man_cognomeb_{ev['id']}")
             m_slot = None
             if ev.get("slot_abilitati"):
                 from .slots import slot_con_disponibilita
