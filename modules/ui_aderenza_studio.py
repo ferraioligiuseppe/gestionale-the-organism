@@ -344,7 +344,7 @@ def _blocco_promemoria(conn, soglia, finestra, giorni_silenzio, is_admin):
 
 def _esegui_promemoria(conn, soglia, finestra, giorni_silenzio, dry_run):
     try:
-        from .promemoria_aderenza import processa_promemoria_aderenza
+        from .aderenza_promemoria import processa_promemoria_aderenza
     except Exception as e:
         st.error(f"Modulo promemoria non disponibile: {e}")
         return
