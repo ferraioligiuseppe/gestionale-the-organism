@@ -97,16 +97,46 @@ _SCHEMA = (
 )
 
 
+def documenti_del_paziente(conn, paz_id):
+    """Elenco documenti SENZA il contenuto del file.
+
+    La tabella documenti_clinici tiene il PDF o la foto dentro la colonna
+    `dati` (BYTEA). Qui si leggeva con SELECT *, quindi ogni apertura della
+    Diagnosi assistita — e ogni clic dentro la pagina, perche' Streamlit
+    rilancia tutto da capo — scaricava dal database l'intero archivio del
+    paziente: con cinque referti da 3 MB sono quindici megabyte per clic,
+    solo per arrivare a leggere il campo `estratto`. Era la causa
+    dell'attesa. L'elenco documenti del suo modulo lo sapeva gia' e usa
+    octet_length(); questa funzione no.
+    """
+    return _query(conn,
+                  "SELECT id, tipo, nome_file, note, estratto, data "
+                  "FROM documenti_clinici WHERE paziente_id=%s "
+                  "ORDER BY data DESC", (paz_id,)) or []
+
+
 def _riassunto_storico(conn, paz_id) -> str:
     parti = []
 
-    docs = _query(conn, "SELECT * FROM documenti_clinici WHERE paziente_id=%s", (paz_id,))
+    docs = documenti_del_paziente(conn, paz_id)
     if docs:
         parti.append("DOCUMENTI CLINICI:")
-        for d in sorted(docs, key=lambda x: str(_data_di(x)), reverse=True):
+        for d in docs:
+            nome_f = (d.get("nome_file") or "").strip()
             riga = f"- {d.get('tipo','Documento')} ({_fmt(_data_di(d))})"
+            if nome_f:
+                riga += f" — file: {nome_f}"
+            if d.get("note"):
+                riga += f" — nota: {d['note']}"
             if d.get("estratto"):
                 riga += "\n  Dati estratti: " + " ".join(str(d["estratto"]).split())
+            else:
+                # Detto esplicitamente, altrimenti l'AI vede un titolo senza
+                # contenuto e scrive "da approfondire" su un referto che in
+                # archivio c'e' eccome: da fuori sembra che non trovi i
+                # documenti, mentre non ne ha mai letto il contenuto.
+                riga += "\n  (documento presente in archivio ma non ancora letto: "
+                riga += "contenuto non disponibile all'analisi)"
             parti.append(riga)
 
     g = _query(conn, "SELECT * FROM getman_risultati WHERE paziente_id=%s", (paz_id,))
@@ -232,7 +262,16 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
     if isinstance(paziente, dict):
         nome = f"{paziente.get('Cognome','')} {paziente.get('Nome','')}".strip()
 
-    storico = _riassunto_storico(conn, paz_id)
+    # Lo storico sono dodici interrogazioni al database. Venivano rifatte
+    # tutte a ogni clic della pagina, anche solo scrivendo nel riquadro del
+    # testo. Ora si calcola una volta per paziente e si rifa' su richiesta.
+    key_storico = f"diag_storico_{paz_id}"
+    if key_storico not in st.session_state:
+        with st.spinner("Raccolgo lo storico del paziente…"):
+            st.session_state[key_storico] = _riassunto_storico(conn, paz_id)
+    storico = st.session_state[key_storico]
+
+    _blocco_documenti_non_letti(conn, paz_id, key_storico)
 
     with st.expander("📚 Storico raccolto (quello che legge l'AI)",
                      expanded=not bool(storico)):
@@ -241,6 +280,9 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
         else:
             st.info("Nessuno storico ancora presente. Puoi comunque scrivere la "
                     "diagnosi a mano qui sotto.")
+        if st.button("🔄 Rileggi lo storico", key=f"diag_refresh_{paz_id}"):
+            st.session_state.pop(key_storico, None)
+            st.rerun()
 
     st.markdown("---")
 
@@ -285,6 +327,7 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
         if st.button("💾 Salva in cartella", key=f"diag_save_{paz_id}"):
             if testo.strip() and _salva(conn, paz_id, testo):
                 st.success("Diagnosi salvata in cartella.")
+                st.session_state.pop(f"diag_storico_{paz_id}", None)
             else:
                 st.warning("Scrivi prima qualcosa (o salvataggio non riuscito).")
     with cc2:
@@ -295,6 +338,82 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
     st.markdown("---")
     st.markdown("#### Diagnosi precedenti")
     _elenco_precedenti(conn, paz_id)
+
+
+def _blocco_documenti_non_letti(conn, paz_id, key_storico):
+    """I documenti in archivio non entrano nella relazione finche' qualcuno
+    non preme «Estrai dati con AI» su ciascuno, nel modulo Documenti. Qui
+    quel passaggio era invisibile: la relazione usciva piena di «da
+    approfondire» e sembrava che i documenti non venissero trovati."""
+    docs = documenti_del_paziente(conn, paz_id)
+    if not docs:
+        return
+    da_leggere = [d for d in docs if not (d.get("estratto") or "").strip()]
+    letti = len(docs) - len(da_leggere)
+
+    if not da_leggere:
+        parola = "documento" if letti == 1 else "documenti"
+        st.success(f"📎 {letti} {parola} in archivio, contenuto disponibile all'AI.")
+        return
+
+    st.warning(
+        f"📎 Questo paziente ha **{len(docs)} documenti** in archivio, ma "
+        f"**{len(da_leggere)} non sono ancora stati letti dall'AI**: nella "
+        "relazione compaiono solo come titolo, e le sezioni che dipendono da "
+        "loro escono con «da approfondire».")
+    for d in da_leggere:
+        st.caption(f"· {d.get('tipo','Documento')} — {d.get('nome_file') or 's.n.'} "
+                   f"({_fmt(_data_di(d))})")
+
+    try:
+        from .ai_estrazione import estrai_da_documento, ai_disponibile
+    except Exception:
+        st.caption("Modulo di lettura AI non disponibile.")
+        return
+    if not ai_disponibile():
+        st.caption("Per leggerli serve la chiave AI nei Secrets.")
+        return
+
+    if st.button(f"🤖 Leggi ora i {len(da_leggere)} documenti mancanti",
+                 key=f"diag_estrai_{paz_id}", type="primary"):
+        barra = st.progress(0.0)
+        fatti, falliti = 0, []
+        for n, doc in enumerate(da_leggere, start=1):
+            barra.progress(n / len(da_leggere),
+                           text=f"{doc.get('nome_file') or 'documento'} ({n}/{len(da_leggere)})")
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT dati, mime, nome_file FROM documenti_clinici WHERE id=%s",
+                            (doc["id"],))
+                riga = cur.fetchone()
+                if not riga:
+                    falliti.append(doc.get("nome_file") or str(doc["id"]))
+                    continue
+                dati, mime, nomef = riga[0], riga[1], riga[2]
+                esito = estrai_da_documento(bytes(dati), mime or "", nomef or "")
+                if esito.startswith("⚠️"):
+                    falliti.append(f"{nomef}: {esito[:80]}")
+                    continue
+                cur.execute("UPDATE documenti_clinici SET estratto=%s WHERE id=%s",
+                            (esito, doc["id"]))
+                conn.commit()
+                fatti += 1
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                falliti.append(f"{doc.get('nome_file') or doc['id']}: {e}")
+        barra.empty()
+        if fatti:
+            st.success(f"{fatti} document{'o letto' if fatti == 1 else 'i letti'}. "
+                       "Ora entrano nella relazione.")
+        if falliti:
+            st.error("Non letti:")
+            for f in falliti:
+                st.caption(f"· {f}")
+        st.session_state.pop(key_storico, None)
+        st.rerun()
 
 
 def _identificativi(paziente) -> str:
