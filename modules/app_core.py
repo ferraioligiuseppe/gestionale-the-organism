@@ -2303,20 +2303,51 @@ class _PgCursor:
         except Exception:
             pass
 
+    def _lancia(self, sql2, params):
+        if params is None:
+            return self._cur.execute(sql2)
+        return self._cur.execute(sql2, params)
+
     def execute(self, sql, params=None):
         sql2 = self._adapt_sql(str(sql))
         self._clear_if_aborted()
         try:
-            if params is None:
-                return self._cur.execute(sql2)
-            return self._cur.execute(sql2, params)
-        except Exception:
-            # If a statement fails, PostgreSQL marks the transaction as aborted.
-            # Roll back so subsequent statements don't hit InFailedSqlTransaction.
+            return self._lancia(sql2, params)
+        except Exception as e:
+            # La transazione e' andata in errore: senza rollback ogni
+            # statement successivo viene rifiutato.
             try:
                 self._cur.connection.rollback()
             except Exception:
                 pass
+
+            # ── RIPROVA UNA VOLTA SOLA, e solo su "transaction is aborted".
+            # _clear_if_aborted() sopra controlla get_transaction_status(),
+            # ma quel controllo non basta: la connessione e' condivisa e
+            # tenuta in cache fra un rerun e l'altro, quindi un altro cursore
+            # puo' romperla fra il controllo e l'esecuzione, e il rollback
+            # difensivo puo' a sua volta fallire in silenzio. Il risultato
+            # e' la pagina che si apre con "current transaction is aborted"
+            # e resta rotta finche' l'app non riparte.
+            #
+            # Riprovare qui e' sicuro perche' questo errore significa che lo
+            # statement NON e' stato eseguito: Postgres lo ha rifiutato prima
+            # di guardarlo. Non c'e' rischio di scrivere due volte.
+            testo = str(e).lower()
+            abortita = ("current transaction is aborted" in testo
+                        or type(e).__name__ == "InFailedSqlTransaction")
+            if abortita and not getattr(self, "_riprovo", False):
+                self._riprovo = True
+                try:
+                    return self._lancia(sql2, params)
+                except Exception:
+                    try:
+                        self._cur.connection.rollback()
+                    except Exception:
+                        pass
+                    raise
+                finally:
+                    self._riprovo = False
             raise
 
     def executemany(self, sql, seq_of_params):
