@@ -32,15 +32,54 @@ def _pnev_logo_path():
         return p
     return None
 
+def _intestazione_studio():
+    """Dati di intestazione dello studio attivo.
+
+    Prima la sessione; se non c'e', si rileggono dal database. Prima si
+    guardava SOLO st.session_state["intestazione_studio"], che viene
+    riempito al login: se la sessione era ripartita, se l'app si era
+    ricaricata o se il login era passato per una strada diversa, quella
+    chiave era vuota e i PDF uscivano con l'intestazione di ripiego senza
+    che nulla lo segnalasse."""
+    try:
+        import streamlit as st
+    except Exception:
+        return {}
+    d = st.session_state.get("intestazione_studio")
+    if isinstance(d, dict) and d:
+        return d
+    try:
+        from modules.app_core import get_connection
+        from modules.ui_intestazione_studio import get_intestazione_studio
+        sid = int(st.session_state.get("studio_id") or 1)
+        d = get_intestazione_studio(get_connection(), sid) or {}
+        if d:
+            st.session_state["intestazione_studio"] = d
+        return d
+    except Exception:
+        return {}
+
+
 def _carta_intestata_bytes():
     """Bytes dell'immagine carta intestata dello studio attivo (o None)."""
     try:
         import base64
-        import streamlit as st
-        intest = st.session_state.get("intestazione_studio") or {}
-        b64 = intest.get("carta_intestata_base64")
+        b64 = (_intestazione_studio() or {}).get("carta_intestata_base64")
         if b64:
             return base64.b64decode(b64)
+    except Exception:
+        pass
+    return None
+
+
+def _logo_studio_reader():
+    """Logo caricato dallo studio (base64 nel database), se presente."""
+    try:
+        import base64
+        from reportlab.lib.utils import ImageReader
+        b64 = (_intestazione_studio() or {}).get("logo_base64")
+        if b64:
+            return ImageReader(io.BytesIO(base64.b64decode(b64)))
     except Exception:
         pass
     return None
@@ -64,7 +103,19 @@ def draw_intestazione(c, professionista="", titolo=""):
     # l'intestazione "costruita" (logo+righe), perché la grafica la contiene già.
     if _draw_bg_carta(c):
         return
-    logo = _logo_path()
+    # Senza immagine si costruisce l'intestazione. I dati sono quelli salvati
+    # in «Intestazione dello studio»: indirizzo, contatti, titolo e logo.
+    # Prima venivano ignorati e si stampavano sempre le costanti qui sotto,
+    # quindi compilare quella schermata non cambiava nulla nei PDF.
+    _d = _intestazione_studio() or {}
+    _indirizzo = " · ".join(
+        r.strip() for r in str(_d.get("indirizzo") or "").splitlines() if r.strip()
+    ) or INDIRIZZO
+    _contatti = (str(_d.get("contatti") or "").strip()
+                 or str(_d.get("telefono") or "").strip()
+                 or CONTATTI)
+    titolo = titolo or _d.get("titolo_default") or ""
+    logo = _logo_studio_reader() or _logo_path()
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(colors.black)
     c.drawString(1.8*cm, H - 1.3*cm, professionista)
@@ -81,19 +132,26 @@ def draw_intestazione(c, professionista="", titolo=""):
     c.setLineWidth(0.8)
     c.line(1.8*cm, H-3.4*cm, W-1.8*cm, H-3.4*cm)
     c.setFont("Helvetica", 7); c.setFillColor(GRIGIO)
-    c.drawCentredString(W/2, H-3.9*cm, INDIRIZZO)
-    c.drawCentredString(W/2, H-4.25*cm, CONTATTI)
+    c.drawCentredString(W/2, H-3.9*cm, _indirizzo)
+    c.drawCentredString(W/2, H-4.25*cm, _contatti)
 
 def draw_footer(c):
     # Con carta intestata il piè di pagina è già nella grafica: non disegnare nulla.
     if _carta_intestata_bytes():
         return
+    _d = _intestazione_studio() or {}
+    _indirizzo = " · ".join(
+        r.strip() for r in str(_d.get("indirizzo") or "").splitlines() if r.strip()
+    ) or INDIRIZZO
+    _contatti = (str(_d.get("contatti") or "").strip()
+                 or str(_d.get("telefono") or "").strip()
+                 or CONTATTI)
     c.setStrokeColor(VERDE); c.setLineWidth(0.8)
     c.line(1.8*cm, 2.2*cm, W-1.8*cm, 2.2*cm)
     c.setFont("Helvetica-Bold", 8); c.setFillColor(colors.black)
-    c.drawCentredString(W/2, 1.7*cm, INDIRIZZO)
+    c.drawCentredString(W/2, 1.7*cm, _indirizzo)
     c.setFont("Helvetica", 8)
-    c.drawCentredString(W/2, 1.2*cm, CONTATTI)
+    c.drawCentredString(W/2, 1.2*cm, _contatti)
 
 def genera_ricetta(professionista, titolo, rx) -> bytes:
     buf = io.BytesIO()
