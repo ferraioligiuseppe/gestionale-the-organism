@@ -578,6 +578,16 @@ def render_oculistica(conn, paz_id: int, paziente: dict = None) -> None:
 
     eta = _eta_paziente(paziente)
 
+    # La visita salva tutti i campi con un solo UPDATE: due postazioni sulla
+    # stessa visita significano che l'ultimo a salvare riscrive anche quello
+    # che ha compilato l'altro.
+    try:
+        from .presenza_schede import avvisa_se_aperta_altrove
+        avvisa_se_aperta_altrove(conn, paz_id, "oculistica",
+                                 "la visita oculistica / optometrica")
+    except Exception:
+        pass
+
     _blocco_storico(conn, paz_id)
     _blocco_stampa(conn, paziente, eta)
 
@@ -970,6 +980,11 @@ def _form_visita(conn, paz_id, dv, edit_id, tipo_visita, on, eta):
         else:
             _salva(conn, paz_id, v)
             st.success("Visita salvata.")
+        try:
+            from .presenza_schede import rilascia
+            rilascia(conn, paz_id, "oculistica")
+        except Exception:
+            pass
         st.rerun()
     except Exception as e:
         st.error(f"Errore salvataggio: {e}")
