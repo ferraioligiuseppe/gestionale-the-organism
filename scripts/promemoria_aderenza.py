@@ -6,6 +6,10 @@ Cron giornaliero: contatta le famiglie il cui lavoro a casa e' sotto
 soglia o ferma da giorni, e manda un riepilogo allo studio. Stesso
 meccanismo di scripts/promemoria_ascolti_maps.py.
 
+La logica sta in modules/aderenza_promemoria.py — nome diverso da questo
+file di proposito: due file omonimi in cartelle diverse si scambiano di
+posto al primo caricamento distratto.
+
 Secret necessario: STREAMLIT_SECRETS (lo stesso gia' usato dall'app) —
 contiene DB e SMTP in formato TOML. Viene scritto in
 .streamlit/secrets.toml prima di importare l'app, cosi' get_connection()
@@ -28,7 +32,7 @@ if _secrets_toml:
         f.write(_secrets_toml)
 
 from modules.app_core import get_connection
-from modules.promemoria_aderenza import processa_promemoria_aderenza
+from modules.aderenza_promemoria import processa_promemoria_aderenza
 
 if __name__ == "__main__":
     conn = get_connection()
