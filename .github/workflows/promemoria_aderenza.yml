@@ -1,0 +1,27 @@
+name: Promemoria aderenza lavoro a casa
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"   # lunedì alle 07:00 UTC (09:00 in Italia)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Prova senza inviare (1 = sì)"
+        required: false
+        default: "0"
+
+jobs:
+  promemoria:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Invia promemoria aderenza
+        env:
+          STREAMLIT_SECRETS: ${{ secrets.STREAMLIT_SECRETS }}
+          EMAIL_STUDIO: info@pnev.it
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: python scripts/promemoria_aderenza.py
