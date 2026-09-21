@@ -324,7 +324,25 @@ def _draw_corpo_ricetta(c, rx):
             return str(int(round(float(v))))
         except: return str(v).lstrip("+")
 
-    def tabo(cx, cy, r=2.3*cm, label=""):
+    def tabo(cx, cy, r=2.3*cm, label="", asse=None, cilindro=None):
+        """Schema TABO con l'asse del cilindro effettivamente disegnato.
+
+        Due correzioni rispetto a prima.
+
+        1. L'asse non veniva disegnato. La riga verticale che si vedeva e'
+           la tacca fissa dei 90 gradi, parte della griglia: quando l'asse
+           era 90 sembrava indicato, per pura coincidenza, e con qualunque
+           altro valore lo schema restava vuoto. Ora la linea dell'asse si
+           disegna davvero, in verde e con il valore in gradi accanto.
+
+        2. Le tacche erano specchiate. Il codice calcolava la posizione con
+           (180 - gradi), quindi scriveva «30» dove sta il meridiano a 150 e
+           viceversa, pur avendo 0 a destra e 180 a sinistra. Finche' non
+           c'era una linea da leggerci contro non si notava; adesso si',
+           quindi vanno rimesse al loro posto. La convenzione corretta e'
+           quella TABO: 0 a destra, si sale in senso antiorario, 90 in alto,
+           180 a sinistra.
+        """
         c.setStrokeColor(GRIGIO_L); c.setLineWidth(0.5)
         c.arc(cx-r, cy-r, cx+r, cy+r, startAng=0, extent=180)
         c.line(cx-r-0.3*cm, cy, cx+r+0.3*cm, cy)
@@ -332,16 +350,40 @@ def _draw_corpo_ricetta(c, rx):
         c.setFont("Helvetica",6); c.setFillColor(GRIGIO)
         for deg in [30,60,90,120,150]:
             rad = math.radians(deg)
-            xp = cx+r*math.cos(math.pi-rad); yp = cy+r*math.sin(math.pi-rad)
-            c.line(xp,yp,cx+(r+0.12*cm)*math.cos(math.pi-rad),
-                         cy+(r+0.12*cm)*math.sin(math.pi-rad))
-            c.drawCentredString(cx+(r+0.4*cm)*math.cos(math.pi-rad),
-                                cy+(r+0.4*cm)*math.sin(math.pi-rad), str(deg))
+            xp = cx+r*math.cos(rad); yp = cy+r*math.sin(rad)
+            c.line(xp, yp, cx+(r+0.12*cm)*math.cos(rad),
+                           cy+(r+0.12*cm)*math.sin(rad))
+            c.drawCentredString(cx+(r+0.4*cm)*math.cos(rad),
+                                cy+(r+0.4*cm)*math.sin(rad), str(deg))
         c.drawString(cx-r-0.65*cm, cy-0.1*cm, "180")
         c.drawString(cx+r+0.1*cm,  cy-0.1*cm, "0")
         c.setFont("Helvetica",7); c.drawCentredString(cx, cy+0.5*cm, "TABO")
+
+        # ── L'asse misurato ───────────────────────────────────────────
+        # Si disegna solo se c'e' un cilindro: un asse senza cilindro non
+        # significa niente, e stamparlo sarebbe un dato inventato.
+        _a = None
+        try:
+            if cilindro not in (None, "", 0) and float(cilindro) != 0.0:
+                _a = float(asse) % 180
+        except Exception:
+            _a = None
+        if _a is not None:
+            _rad = math.radians(_a)
+            _xe = cx + r*math.cos(_rad); _ye = cy + r*math.sin(_rad)
+            c.setStrokeColor(VERDE); c.setLineWidth(1.6)
+            c.line(cx, cy, _xe, _ye)
+            c.setFillColor(VERDE); c.circle(_xe, _ye, 2.0, fill=1)
+            # Il numero appena fuori dalla circonferenza, sulla direzione
+            # dell'asse: si legge senza doverlo cercare fra le tacche.
+            _lx = cx + (r+0.78*cm)*math.cos(_rad)
+            _ly = cy + (r+0.78*cm)*math.sin(_rad)
+            c.setFont("Helvetica-Bold", 8)
+            c.drawCentredString(_lx, _ly-0.08*cm, f"{int(round(_a))}°")
+
         c.setFillColor(colors.black); c.circle(cx, cy, 1.5, fill=1)
-        c.setFont("Helvetica",9); c.drawCentredString(cx, cy-0.65*cm, label)
+        c.setFont("Helvetica",9); c.setFillColor(colors.black)
+        c.drawCentredString(cx, cy-0.65*cm, label)
 
     y_sig = H - 5.0*cm
     c.setFont("Helvetica",10); c.setFillColor(colors.black)
@@ -363,8 +405,15 @@ def _draw_corpo_ricetta(c, rx):
         c.drawString(W-5.9*cm, y_sig+0.58*cm, _dat)
 
     y_tabo = H - 9.2*cm
-    tabo(W/2-5.5*cm, y_tabo, label="Occhio Destro")
-    tabo(W/2+5.5*cm, y_tabo, label="Occhio Sinistro")
+    # L'asse mostrato e' quello della correzione per lontano, che e' la
+    # riga di riferimento della ricetta.
+    _lon = rx.get("lontano", {}) or {}
+    _od_l = _lon.get("od", {}) or {}
+    _os_l = _lon.get("os", {}) or {}
+    tabo(W/2-5.5*cm, y_tabo, label="Occhio Destro",
+         asse=_od_l.get("ax"), cilindro=_od_l.get("cil"))
+    tabo(W/2+5.5*cm, y_tabo, label="Occhio Sinistro",
+         asse=_os_l.get("ax"), cilindro=_os_l.get("cil"))
 
     y_tab = y_tabo - 1.9*cm
     cw = 1.45*cm; gap = 0.08*cm
