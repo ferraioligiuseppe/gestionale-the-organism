@@ -54,12 +54,16 @@ if not st.session_state.portale_paziente_id and st.session_state.portale_step ==
         pid = db.login(conn, email, password)
         if pid:
             codice = db.genera_otp(conn, email)
-            inviata = email_otp.invia_codice(email.strip(), codice)
+            inviata, motivo = email_otp.invia_codice(email.strip(), codice, dettaglio=True)
             st.session_state.portale_email_pendente = email.strip()
             st.session_state.portale_pid_pendente = pid
             st.session_state.portale_step = "otp"
-            if not inviata:
-                st.session_state.portale_otp_fallback = codice  # invio non riuscito: mostra comunque per non bloccare lo studio
+            # Il codice NON si mostra a schermo quando l'invio fallisce.
+            # Prima si faceva "per non bloccare", ma stampare il secondo
+            # fattore accanto al primo lo annulla: chi ha la password
+            # vedeva anche il codice. Meglio una porta chiusa che una
+            # porta che sembra chiusa.
+            st.session_state.portale_otp_errore = "" if inviata else motivo
             st.rerun()
         else:
             st.error("Email o password non corretti.")
@@ -68,20 +72,37 @@ if not st.session_state.portale_paziente_id and st.session_state.portale_step ==
 
 if not st.session_state.portale_paziente_id and st.session_state.portale_step == "otp":
     st.caption(f"Abbiamo inviato un codice a **{st.session_state.portale_email_pendente}**. Inseriscilo qui sotto (valido 10 minuti).")
-    if st.session_state.get("portale_otp_fallback"):
-        st.warning(f"Invio email non riuscito — codice di emergenza: {st.session_state.portale_otp_fallback}")
+    if st.session_state.get("portale_otp_errore"):
+        st.error("Non siamo riusciti a inviare il codice. Chiama lo studio allo "
+                 "0815152334 e ti facciamo entrare noi.")
+        with st.expander("Dettaglio tecnico (per lo studio)"):
+            st.caption(st.session_state["portale_otp_errore"])
     with st.form("otp_form"):
         codice_inserito = st.text_input("Codice ricevuto via email", max_chars=6)
         ok2 = st.form_submit_button("Verifica", type="primary", use_container_width=True)
     if ok2:
-        if db.verifica_otp(conn, st.session_state.portale_email_pendente, codice_inserito):
+        valido, motivo = db.verifica_otp(conn, st.session_state.portale_email_pendente,
+                                         codice_inserito)
+        if valido:
             st.session_state.portale_paziente_id = st.session_state.portale_pid_pendente
             st.session_state.portale_step = "password"
+            st.session_state.pop("portale_otp_errore", None)
             st.rerun()
         else:
-            st.error("Codice non valido o scaduto.")
-    if st.button("↩ Torna indietro"):
+            st.error(motivo)
+
+    c1, c2 = st.columns(2)
+    if c1.button("✉️ Invia un nuovo codice", use_container_width=True):
+        nuovo = db.genera_otp(conn, st.session_state.portale_email_pendente)
+        inviata, motivo = email_otp.invia_codice(
+            st.session_state.portale_email_pendente, nuovo, dettaglio=True)
+        st.session_state.portale_otp_errore = "" if inviata else motivo
+        st.rerun()
+    if c2.button("↩ Torna indietro", use_container_width=True):
         st.session_state.portale_step = "password"
+        st.session_state.portale_email_pendente = None
+        st.session_state.portale_pid_pendente = None
+        st.session_state.pop("portale_otp_errore", None)
         st.rerun()
     st.stop()
 
@@ -90,7 +111,14 @@ paziente_id = st.session_state.portale_paziente_id
 c1, c2 = st.columns([4, 1])
 c1.success("Accesso effettuato ✅")
 if c2.button("Esci"):
-    st.session_state.portale_paziente_id = None
+    # Ripulire tutto, non solo l'id: restavano in sessione l'email e il
+    # paziente in attesa del codice, e il "torna indietro" della
+    # schermata OTP riportava dentro l'accesso precedente.
+    for _k in ("portale_paziente_id", "portale_email_pendente",
+               "portale_pid_pendente", "portale_otp_errore",
+               "portale_otp_fallback"):
+        st.session_state.pop(_k, None)
+    st.session_state.portale_step = "password"
     st.rerun()
 
 programma = db.get_programma_corrente(conn, paziente_id)
