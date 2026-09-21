@@ -43,6 +43,43 @@ def _rgb(hexstr):
     return RGBColor.from_string(hexstr)
 
 
+# Quanta parte dell'immagine A4 e' intestazione e quanta pie' di pagina.
+# Servono perche' Word non sa usare un'immagine a pagina intera come sfondo
+# ripetuto: la carta intestata va spezzata e messa nell'intestazione e nel
+# piede di sezione, che Word ripete da solo su ogni pagina.
+FASCIA_ALTA = 0.18     # 18% dall'alto: loghi, nome, titolo
+FASCIA_BASSA = 0.14    # 14% dal basso: filetto, indirizzo, contatti, siti
+
+
+def _bande_carta_intestata():
+    """Ritaglia la carta intestata dello studio in (alto, basso).
+
+    Ritorna due BytesIO PNG, o (None, None) se non c'e' l'immagine o se
+    Pillow non e' disponibile."""
+    try:
+        from modules.pdf_templates import _carta_intestata_bytes
+        dati = _carta_intestata_bytes()
+    except Exception:
+        dati = None
+    if not dati:
+        return None, None
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(dati)).convert("RGB")
+        larg, alt = img.size
+        alto = img.crop((0, 0, larg, int(alt * FASCIA_ALTA)))
+        basso = img.crop((0, int(alt * (1 - FASCIA_BASSA)), larg, alt))
+        out = []
+        for pezzo in (alto, basso):
+            buf = io.BytesIO()
+            pezzo.save(buf, format="PNG")
+            buf.seek(0)
+            out.append(buf)
+        return out[0], out[1]
+    except Exception:
+        return None, None
+
+
 def _dati_studio():
     """Indirizzo e contatti salvati in «Intestazione dello studio», così il
     Word riporta la stessa intestazione del PDF invece delle costanti."""
@@ -67,26 +104,49 @@ def genera_docx_carta_intestata(professionista: str, titolo: str,
 
     doc = Document()
 
+    banda_alta, banda_bassa = _bande_carta_intestata()
+    ha_carta = banda_alta is not None
+
     for sez in doc.sections:
-        sez.top_margin = Cm(2.0)
-        sez.bottom_margin = Cm(2.0)
-        sez.left_margin = Cm(2.2)
-        sez.right_margin = Cm(2.2)
+        sez.left_margin = Cm(1.8)
+        sez.right_margin = Cm(1.8)
+        if ha_carta:
+            # Margini larghi in alto e in basso: le fasce della carta
+            # intestata stanno li' e il testo non ci deve finire sopra.
+            sez.top_margin = Cm(5.6)
+            sez.bottom_margin = Cm(4.4)
+            sez.header_distance = Cm(0.4)
+            sez.footer_distance = Cm(0.4)
+        else:
+            sez.top_margin = Cm(2.0)
+            sez.bottom_margin = Cm(2.0)
+
+    if ha_carta:
+        larghezza = Cm(17.4)   # 21 cm meno i due margini
+        p_h = doc.sections[0].header.paragraphs[0]
+        p_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_h.add_run().add_picture(banda_alta, width=larghezza)
+        p_f = doc.sections[0].footer.paragraphs[0]
+        p_f.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_f.add_run().add_picture(banda_bassa, width=larghezza)
 
     normale = doc.styles["Normal"]
     normale.font.name = "Calibri"
     normale.font.size = Pt(11)
 
-    # ── Intestazione ──────────────────────────────────────────────────
-    p = doc.add_paragraph()
-    r = p.add_run(professionista or "")
-    r.bold = True
-    r.font.size = Pt(12)
-    if titolo:
-        p2 = doc.add_paragraph()
-        r2 = p2.add_run(titolo)
-        r2.font.size = Pt(9)
-        r2.font.color.rgb = _rgb(GRIGIO)
+    # ── Intestazione scritta ──────────────────────────────────────────
+    # Solo quando NON c'e' la carta intestata: altrimenti nome, titolo e
+    # contatti sarebbero stampati due volte, una nell'immagine e una sotto.
+    if not ha_carta:
+        p = doc.add_paragraph()
+        r = p.add_run(professionista or "")
+        r.bold = True
+        r.font.size = Pt(12)
+        if titolo:
+            p2 = doc.add_paragraph()
+            r2 = p2.add_run(titolo)
+            r2.font.size = Pt(9)
+            r2.font.color.rgb = _rgb(GRIGIO)
 
     _d = _dati_studio()
     _indirizzo = " · ".join(
@@ -95,11 +155,12 @@ def genera_docx_carta_intestata(professionista: str, titolo: str,
     _contatti = (str(_d.get("contatti") or "").strip()
                  or str(_d.get("telefono") or "").strip()
                  or CONTATTI)
-    p3 = doc.add_paragraph()
-    p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r3 = p3.add_run(_indirizzo + "\n" + _contatti)
-    r3.font.size = Pt(7.5)
-    r3.font.color.rgb = _rgb(GRIGIO)
+    if not ha_carta:
+        p3 = doc.add_paragraph()
+        p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r3 = p3.add_run(_indirizzo + "\n" + _contatti)
+        r3.font.size = Pt(7.5)
+        r3.font.color.rgb = _rgb(GRIGIO)
 
     # ── Titolo del documento ──────────────────────────────────────────
     pt = doc.add_paragraph()
