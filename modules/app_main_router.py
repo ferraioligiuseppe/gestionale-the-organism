@@ -871,9 +871,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🩶 Postura (Wii Balance Board)":
         from .ui_postura_wiifit import render_postura_wiifit
         render_postura_wiifit(conn, paz_id); return True
-    if sotto == "📋 Protocollo di valutazione":
-        from .ui_protocollo_pdf_app import render_protocollo_pdf_app
-        render_protocollo_pdf_app(conn, paz_id); return True
+    if sotto in ("📋 Protocollo di valutazione (scheda)", "📋 Protocollo di valutazione"):
+        # La seconda etichetta e' quella storica: il dispatch esisteva ma non
+        # era in nessun menu, e puntava all'app HTML gia' raggiungibile da
+        # "Screening completo". Ora apre la scheda Python, che salva nel
+        # fascicolo; i link vecchi continuano a funzionare.
+        from .ui_protocollo_valutazione import render_protocollo_valutazione
+        render_protocollo_valutazione(conn, paz_id); return True
     if sotto == "⚡ Protocollo Epilessia":
         from .ui_protocollo_epilessia import render_protocollo_epilessia
         render_protocollo_epilessia(conn, paz_id); return True
@@ -1336,9 +1340,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 sottotitolo="Versione rapida a impaginazione A4, con calcolatori e stampa diretta.",
                 kp="sb")
             return
-        if sotto == "📋 Protocollo di valutazione":
-            from .ui_protocollo_pdf_app import render_protocollo_pdf_app
-            render_protocollo_pdf_app(conn, paz_id); return
+        if sotto in ("📋 Protocollo di valutazione (scheda)", "📋 Protocollo di valutazione"):
+            from .ui_protocollo_valutazione import render_protocollo_valutazione
+            render_protocollo_valutazione(conn, paz_id); return
         if sotto == "⚡ Protocollo Epilessia":
             from .ui_protocollo_epilessia import render_protocollo_epilessia
             render_protocollo_epilessia(conn, paz_id); return

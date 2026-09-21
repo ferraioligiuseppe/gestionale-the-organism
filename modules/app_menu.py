@@ -236,7 +236,16 @@ SOTTOSEZIONI = {
         "🩺 Screening rapido",
         "🩺 Screening breve (15 min)",
         "🧸 Screening 0-4 anni",
+        # Due strumenti per lo stesso protocollo, con punti di forza opposti:
+        #  · "Screening completo" apre l'app HTML — impaginazione A4 fedele,
+        #    calcolatori automatici, stampa diretta, secondo monitor. Ma per
+        #    conservare i dati bisogna esportarli a mano.
+        #  · "Protocollo di valutazione (scheda)" e' la replica in Python —
+        #    stessi stimoli e stesso ordine, salva nel fascicolo del paziente
+        #    (tabella protocollo_valutazione) e genera la relazione.
+        # Il secondo esisteva gia' completo ma non era in nessun menu.
         "🩺 Screening completo",
+        "📋 Protocollo di valutazione (scheda)",
     ],
     AREA_TNPEE: [
         "🗣️ Logopedia / SMOF",
