@@ -52,19 +52,26 @@ FASCIA_BASSA = 0.14    # 14% dal basso: filetto, indirizzo, contatti, siti
 
 
 def _bande_carta_intestata():
-    """Ritaglia la carta intestata dello studio in (alto, basso).
+    """Ritaglia la carta intestata dello studio in (alto, basso, motivo).
 
-    Ritorna due BytesIO PNG, o (None, None) se non c'e' l'immagine o se
-    Pillow non e' disponibile."""
+    Il terzo valore dice PERCHE' non e' stato possibile: prima questa
+    funzione inghiottiva ogni errore e restituiva due None, quindi il Word
+    usciva con l'intestazione scritta e non c'era modo di sapere se
+    mancasse l'immagine, la libreria o altro."""
     try:
         from modules.pdf_templates import _carta_intestata_bytes
         dati = _carta_intestata_bytes()
-    except Exception:
-        dati = None
+    except Exception as e:
+        return None, None, f"lettura configurazione non riuscita: {e}"
     if not dati:
-        return None, None
+        return None, None, (
+            "nessuna carta intestata salvata per questo studio. "
+            "Si carica da «Intestazione dello studio» → «Carta intestata».")
     try:
         from PIL import Image
+    except Exception as e:
+        return None, None, f"manca la libreria Pillow per ritagliare l'immagine: {e}"
+    try:
         img = Image.open(io.BytesIO(dati)).convert("RGB")
         larg, alt = img.size
         alto = img.crop((0, 0, larg, int(alt * FASCIA_ALTA)))
@@ -75,9 +82,9 @@ def _bande_carta_intestata():
             pezzo.save(buf, format="PNG")
             buf.seek(0)
             out.append(buf)
-        return out[0], out[1]
-    except Exception:
-        return None, None
+        return out[0], out[1], ""
+    except Exception as e:
+        return None, None, f"immagine non leggibile ({len(dati)} byte): {e}"
 
 
 def _dati_studio():
@@ -104,8 +111,10 @@ def genera_docx_carta_intestata(professionista: str, titolo: str,
 
     doc = Document()
 
-    banda_alta, banda_bassa = _bande_carta_intestata()
+    banda_alta, banda_bassa, _motivo_carta = _bande_carta_intestata()
     ha_carta = banda_alta is not None
+    # Il motivo viene letto dal bottone per dirlo all'utente.
+    genera_docx_carta_intestata.ultimo_motivo = _motivo_carta
 
     for sez in doc.sections:
         sez.left_margin = Cm(1.8)
@@ -123,12 +132,22 @@ def genera_docx_carta_intestata(professionista: str, titolo: str,
 
     if ha_carta:
         larghezza = Cm(17.4)   # 21 cm meno i due margini
-        p_h = doc.sections[0].header.paragraphs[0]
-        p_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_h.add_run().add_picture(banda_alta, width=larghezza)
-        p_f = doc.sections[0].footer.paragraphs[0]
-        p_f.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_f.add_run().add_picture(banda_bassa, width=larghezza)
+        try:
+            p_h = doc.sections[0].header.paragraphs[0]
+            p_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_h.add_run().add_picture(banda_alta, width=larghezza)
+            p_f = doc.sections[0].footer.paragraphs[0]
+            p_f.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_f.add_run().add_picture(banda_bassa, width=larghezza)
+        except Exception as e:
+            # Se l'inserimento fallisce si torna all'intestazione scritta,
+            # ma lo si dice invece di produrre un Word muto.
+            ha_carta = False
+            genera_docx_carta_intestata.ultimo_motivo = (
+                f"immagine non inseribile nell'intestazione di Word: {e}")
+            for sez in doc.sections:
+                sez.top_margin = Cm(2.0)
+                sez.bottom_margin = Cm(2.0)
 
     normale = doc.styles["Normal"]
     normale.font.name = "Calibri"
@@ -243,3 +262,6 @@ def bottone_word(st, etichetta: str, nome_file: str, key: str, **kwargs) -> None
         return
     st.download_button(etichetta, data=dati, file_name=nome_file,
                        mime=MIME_DOCX, key=key)
+    motivo = getattr(genera_docx_carta_intestata, "ultimo_motivo", "")
+    if motivo:
+        st.caption(f"⚠️ Word senza carta intestata — {motivo}")
