@@ -305,9 +305,36 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
 
 def _render_tab_iscritti(conn, ev: dict):
     with st.popover("✉️ Test notifiche email"):
+        # Le email degli eventi viaggiano su DUE strade diverse: le notifiche
+        # scritte a mano dal gestionale passano da email_otp, le conferme
+        # della pagina pubblica di iscrizione passano da email_eventi.
+        # Finche' qui si provava solo la prima, il test diceva OK mentre le
+        # conferme non partivano: erano proprio le due strade a non avere la
+        # stessa configurazione. Ora si controllano entrambe.
         from modules.email_otp import diagnostica_email, invia_email as _ie
-        ok, msg = diagnostica_email()
-        (st.success if ok else st.error)(msg)
+
+        st.markdown("**1 · Notifiche interne** (avvisi allo studio, iscrizioni manuali)")
+        ok1, msg1 = diagnostica_email()
+        (st.success if ok1 else st.error)(msg1)
+
+        st.markdown("**2 · Conferme agli iscritti** (pagina pubblica di iscrizione)")
+        try:
+            from .email_eventi import diagnostica_invio
+            ok2, msg2 = diagnostica_invio()
+        except Exception as _e:
+            ok2, msg2 = False, f"Diagnostica non disponibile: {_e}"
+        (st.success if ok2 else st.error)(msg2)
+
+        if ok1 and ok2:
+            st.caption("Entrambe le strade funzionano: le conferme partono per "
+                       "tutti gli eventi, comunque sia stata fatta l'iscrizione.")
+        elif ok1 and not ok2:
+            st.warning("Le notifiche interne partono, le conferme agli iscritti no. "
+                       "È il caso in cui le email sembrano arrivare «per certi "
+                       "eventi sì e per altri no»: dipende da come è stata fatta "
+                       "l'iscrizione, non dall'evento.")
+
+        st.divider()
         dest_test = st.text_input("Invia una mail di prova a", key=f"test_mail_{ev['id']}")
         if st.button("Invia prova", key=f"btn_test_mail_{ev['id']}") and dest_test.strip():
             esito = _ie(dest_test.strip(), "[Test] Notifiche gestionale",
