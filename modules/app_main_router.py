@@ -895,6 +895,17 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Modulo Lettura non disponibile: {e}")
         return True
 
+    if sotto == "📊 Aderenza dello studio":
+        try:
+            from .ui_aderenza_studio import render_aderenza_studio
+            render_aderenza_studio(conn, is_admin)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore aderenza dello studio: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+
     # ── TERAPIA & RELAZIONE ───────────────────────────────────────────
     if sotto == "🎯 Piano di trattamento":
         try:
