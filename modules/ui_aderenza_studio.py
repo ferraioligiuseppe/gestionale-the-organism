@@ -301,7 +301,89 @@ def render_aderenza_studio(conn=None, is_admin: bool = False) -> None:
                 st.caption(f"{d['nome']} — {d['pct']}% ({d['fatti']}/{d['totali']})")
 
     st.divider()
-    st.caption("Promemoria automatici: Streamlit non esegue nulla se nessuno apre "
-               "l'app, quindi le mail non possono partire da qui. Servono o un "
-               "controllo al primo accesso della giornata, o un cron esterno "
-               "(GitHub Actions / cron-job.org). Da decidere.")
+    _blocco_promemoria(conn, int(soglia), int(finestra), int(giorni_silenzio), is_admin)
+
+
+def _blocco_promemoria(conn, soglia, finestra, giorni_silenzio, is_admin):
+    """Prova e invio manuale. L'invio vero e proprio lo fa il cron del
+    lunedi' mattina: qui si guarda cosa partirebbe, e volendo si anticipa."""
+    with st.expander("✉️ Promemoria automatici alle famiglie"):
+        st.caption(
+            "Ogni lunedì mattina parte un messaggio alle famiglie sotto soglia o "
+            "in silenzio, più un riepilogo allo studio. Chi è già stato contattato "
+            "negli ultimi 7 giorni viene saltato: un promemoria che arriva ogni "
+            "mattina si smette di leggere. Il messaggio nomina la procedura che "
+            "salta, quando ce n'è una che spicca, e chiede se è quella a non "
+            "funzionare invece di sollecitare e basta.")
+        st.caption("Chi non ha credenziali del portale non riceve nulla: "
+                   "l'indirizzo arriva da lì.")
+
+        c1, c2 = st.columns(2)
+        if c1.button("👁️ Vedi cosa partirebbe", use_container_width=True,
+                     key="ad_prom_dry"):
+            _esegui_promemoria(conn, soglia, finestra, giorni_silenzio, dry_run=True)
+
+        if is_admin:
+            if c2.button("📤 Invia adesso", use_container_width=True,
+                         key="ad_prom_send"):
+                st.session_state["ad_prom_conferma"] = True
+        else:
+            c2.caption("L'invio manuale è riservato all'amministratore.")
+
+        if st.session_state.get("ad_prom_conferma"):
+            st.warning("Le email partono davvero. Il cron del lunedì lo fa da solo: "
+                       "usa questo solo se vuoi anticipare.")
+            d1, d2 = st.columns(2)
+            if d1.button("Confermo, invia", type="primary", key="ad_prom_ok"):
+                st.session_state.pop("ad_prom_conferma", None)
+                _esegui_promemoria(conn, soglia, finestra, giorni_silenzio, dry_run=False)
+            if d2.button("Annulla", key="ad_prom_no"):
+                st.session_state.pop("ad_prom_conferma", None)
+                st.rerun()
+
+
+def _esegui_promemoria(conn, soglia, finestra, giorni_silenzio, dry_run):
+    try:
+        from .promemoria_aderenza import processa_promemoria_aderenza
+    except Exception as e:
+        st.error(f"Modulo promemoria non disponibile: {e}")
+        return
+    try:
+        report = processa_promemoria_aderenza(
+            conn, dry_run=dry_run, email_studio=None,
+            soglia=soglia, finestra=finestra, silenzio=giorni_silenzio)
+    except Exception as e:
+        st.error(f"Errore durante l'esecuzione: {e}")
+        return
+
+    if not report["dettaglio"]:
+        if report["saltati_cooldown"]:
+            st.info(f"Nessun messaggio da mandare: {report['saltati_cooldown']} "
+                    "famiglie sono già state contattate negli ultimi giorni.")
+        else:
+            st.success("Nessuna famiglia da contattare.")
+        return
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Da contattare", report["candidati"])
+    m2.metric("Inviate" if not dry_run else "Partirebbero",
+              report["email_inviate"] if not dry_run else len(report["dettaglio"]))
+    m3.metric("Saltate", report["saltati_cooldown"], "già avvisate", delta_color="off")
+
+    try:
+        import pandas as pd
+        st.dataframe(pd.DataFrame([{
+            "Paziente": v["paziente"],
+            "Motivo": "in silenzio" if v["tipo"] == "silenzio" else "sotto soglia",
+            "Aderenza": f"{v['aderenza']}%" if v["aderenza"] is not None else "—",
+            "Email": v["email"],
+            "Esito": v["esito"],
+        } for v in report["dettaglio"]]), hide_index=True, use_container_width=True)
+    except Exception:
+        for v in report["dettaglio"]:
+            st.caption(f"{v['paziente']} — {v['tipo']} — {v['esito']}")
+
+    if report["errori"]:
+        st.error("Errori:")
+        for e in report["errori"]:
+            st.code(e)
