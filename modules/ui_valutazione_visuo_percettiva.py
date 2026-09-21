@@ -1356,16 +1356,49 @@ def _sez_g(conn, pid, d, paziente):
                     fv=float(v or 0); return f"+{fv:.2f}" if fv>=0 else f"{fv:.2f}"
                 except: return str(v or "nd")
             paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}"
-            corpo = "\n".join(_corpo_relazione(rs_od2, rs_os2, bino, acc))
-            try:
-                from modules.ui_anamnesi_visiva import sintesi_anamnesi
-                _anam = sintesi_anamnesi(conn, pid)
-                if _anam:
-                    corpo = _anam + "\n\n" + corpo
-            except Exception:
-                pass
-            if diagnosi: corpo += f"\n\n### Diagnosi\n{diagnosi}"
-            if piano:    corpo += f"\n\n### Piano terapeutico\n{piano}"
+
+            # Due modi di scrivere la stessa visita.
+            #  · Discorsiva: per ogni area cosa fa quella funzione, com'e'
+            #    risultata e quali sintomi produce; poi conclusioni e
+            #    indicazioni. E' l'impianto del report optometrico classico,
+            #    leggibile da una famiglia e dalla scuola.
+            #  · Sintetica: l'elenco delle misure, per un collega che deve
+            #    solo vedere i numeri.
+            _stile = st.radio(
+                "Come scrivere la relazione",
+                ["Discorsiva (spiegata, per famiglia e scuola)",
+                 "Sintetica (solo misure, per i colleghi)"],
+                key=s("stile_rel"), horizontal=True)
+            _discorsiva = _stile.startswith("Discorsiva")
+
+            if _discorsiva:
+                from modules.relazione_narrativa import componi_relazione
+                _motivo = ""
+                try:
+                    from modules.ui_anamnesi_visiva import sintesi_anamnesi
+                    _motivo = sintesi_anamnesi(conn, pid) or ""
+                except Exception:
+                    pass
+                corpo = componi_relazione(
+                    d, nome_paziente=f"{nom} {cog}".strip(),
+                    eta=_eta(dn), diagnosi=diagnosi, piano=piano,
+                    motivo=_motivo)
+            else:
+                corpo = "\n".join(_corpo_relazione(rs_od2, rs_os2, bino, acc))
+                try:
+                    from modules.ui_anamnesi_visiva import sintesi_anamnesi
+                    _anam = sintesi_anamnesi(conn, pid)
+                    if _anam:
+                        corpo = _anam + "\n\n" + corpo
+                except Exception:
+                    pass
+                if diagnosi: corpo += f"\n\n### Diagnosi\n{diagnosi}"
+                if piano:    corpo += f"\n\n### Piano terapeutico\n{piano}"
+
+            with st.expander("👁 Anteprima del testo (modificabile prima di scaricare)"):
+                corpo = st.text_area("Testo della relazione", value=corpo,
+                                     height=380, key=s("corpo_rel"),
+                                     label_visibility="collapsed")
             titolo_prof2 = (d.get("intestazione",{}).get("titolo_prof","") or
                          st.session_state.get(f"titolo_pdf_{pid}","") or
                          _titolo_prof())
