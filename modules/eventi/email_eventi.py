@@ -31,30 +31,66 @@ ROME_TZ = ZoneInfo("Europe/Rome")
 # CONFIG
 # =============================================================================
 
+def _config_email() -> dict:
+    """Configurazione di invio, accettando ENTRAMBE le sezioni di secrets.
+
+    Il gestionale ne ha due, nate in momenti diversi: [gmail] EMAIL +
+    APP_PASSWORD (usata da email_otp, dai questionari e dai lead del sito)
+    e [smtp] HOST/PORT/USERNAME/PASSWORD (usata qui e in app_core).
+
+    Finche' qui si leggeva solo [smtp], chi aveva configurato solo [gmail]
+    vedeva partire le conferme scritte a mano dal gestionale — che passano
+    da email_otp — e non quelle della pagina pubblica di iscrizione, che
+    passano di qui. Da fuori sembrava che le email arrivassero "per certi
+    eventi si' e per altri no": in realta' dipendeva da quale strada era
+    stata usata per iscrivere.
+
+    Ritorna: host, port, ssl_diretto, mittente, username, password.
+    """
+    smtp = st.secrets.get("smtp", {})
+    if smtp.get("HOST") and smtp.get("USERNAME") and smtp.get("PASSWORD"):
+        porta = int(smtp.get("PORT") or 587)
+        usa_tls = str(smtp.get("USE_TLS", "true")).lower() in ("1", "true", "yes", "y")
+        return {"host": smtp["HOST"], "port": porta, "ssl_diretto": not usa_tls,
+                "from": smtp.get("FROM") or smtp["USERNAME"],
+                "username": smtp["USERNAME"], "password": smtp["PASSWORD"]}
+
+    gmail = st.secrets.get("gmail", {})
+    if gmail.get("EMAIL") and gmail.get("APP_PASSWORD"):
+        return {"host": "smtp.gmail.com", "port": 465, "ssl_diretto": True,
+                "from": gmail["EMAIL"], "username": gmail["EMAIL"],
+                "password": gmail["APP_PASSWORD"]}
+
+    raise RuntimeError(
+        "Nessuna configurazione email nei Secrets: serve [smtp] HOST + PORT + "
+        "USERNAME + PASSWORD oppure [gmail] EMAIL + APP_PASSWORD."
+    )
+
+
 def _smtp_cfg() -> dict:
-    cfg = st.secrets.get("smtp", {})
-    missing = [k for k in ("HOST", "PORT", "USERNAME", "PASSWORD") if not cfg.get(k)]
-    if missing:
-        raise RuntimeError(
-            f"Configurazione SMTP incompleta. Mancano: {missing}. "
-            f"Configurare [smtp] in secrets.toml"
-        )
-    return cfg
+    """Compatibilita' con i chiamanti storici che si aspettano il dict [smtp]."""
+    c = _config_email()
+    return {"HOST": c["host"], "PORT": c["port"], "USERNAME": c["username"],
+            "PASSWORD": c["password"], "FROM": c["from"],
+            "USE_TLS": "false" if c["ssl_diretto"] else "true"}
 
 
 def _clinic_email() -> str:
     """Email dello studio per le notifiche."""
-    return (
-        st.secrets.get("privacy", {}).get("CLINIC_EMAIL")
-        or st.secrets.get("smtp", {}).get("FROM")
-        or st.secrets.get("smtp", {}).get("USERNAME")
-        or ""
-    )
+    diretta = st.secrets.get("privacy", {}).get("CLINIC_EMAIL")
+    if diretta:
+        return diretta
+    # Ripiego sul mittente configurato, quale che sia la sezione usata:
+    # prima si guardava solo [smtp] e con la sola [gmail] la notifica
+    # allo studio veniva saltata in silenzio.
+    try:
+        return _config_email()["from"]
+    except Exception:
+        return ""
 
 
 def _from_address() -> str:
-    cfg = _smtp_cfg()
-    return cfg.get("FROM") or cfg.get("USERNAME")
+    return _config_email()["from"]
 
 
 # =============================================================================
@@ -62,21 +98,46 @@ def _from_address() -> str:
 # =============================================================================
 
 def _send(msg: EmailMessage) -> None:
-    """Spedisce il messaggio usando SMTP con TLS (compat con resto del gestionale)."""
-    cfg = _smtp_cfg()
-    host = cfg["HOST"]
-    port = int(cfg["PORT"])
-    use_tls = str(cfg.get("USE_TLS", "true")).lower() in ("1", "true", "yes", "y")
+    """Spedisce il messaggio con la configurazione disponibile.
 
-    if use_tls:
-        with smtplib.SMTP(host, port) as s:
-            s.starttls()
-            s.login(cfg["USERNAME"], cfg["PASSWORD"])
+    ssl_diretto = porta 465 (Gmail), altrimenti STARTTLS sulla 587."""
+    c = _config_email()
+    if c["ssl_diretto"]:
+        with smtplib.SMTP_SSL(c["host"], c["port"]) as s:
+            s.login(c["username"], c["password"])
             s.send_message(msg)
     else:
-        with smtplib.SMTP_SSL(host, port) as s:
-            s.login(cfg["USERNAME"], cfg["PASSWORD"])
+        with smtplib.SMTP(c["host"], c["port"]) as s:
+            s.ehlo()
+            s.starttls()
+            s.login(c["username"], c["password"])
             s.send_message(msg)
+
+
+def diagnostica_invio() -> tuple[bool, str]:
+    """Verifica che una configurazione esista e che il server accetti il
+    login. Serve a distinguere «configurazione assente» da «password
+    scaduta» senza dover fare una iscrizione di prova."""
+    try:
+        c = _config_email()
+    except Exception as exc:
+        return False, str(exc)
+    try:
+        if c["ssl_diretto"]:
+            with smtplib.SMTP_SSL(c["host"], c["port"]) as s:
+                s.login(c["username"], c["password"])
+        else:
+            with smtplib.SMTP(c["host"], c["port"]) as s:
+                s.ehlo()
+                s.starttls()
+                s.login(c["username"], c["password"])
+        sezione = "[smtp]" if c["host"] != "smtp.gmail.com" else "[gmail]"
+        return True, (f"Invio eventi OK — mittente {c['from']} "
+                      f"via {c['host']}:{c['port']} (sezione {sezione})")
+    except smtplib.SMTPAuthenticationError as exc:
+        return False, f"Login rifiutato da {c['host']} (password per le app da rigenerare?): {exc}"
+    except Exception as exc:
+        return False, f"Errore su {c['host']}:{c['port']} — {exc}"
 
 
 # =============================================================================
