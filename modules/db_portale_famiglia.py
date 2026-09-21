@@ -68,6 +68,9 @@ def init_db(conn):
                 creato_il       TIMESTAMPTZ NOT NULL DEFAULT now()
             );
         """)
+        # Senza un limite ai tentativi, sei cifre si indovinano a forza
+        # bruta in pochi minuti: il secondo fattore non protegge niente.
+        cur.execute("ALTER TABLE portale_otp ADD COLUMN IF NOT EXISTS tentativi INT DEFAULT 0;")
         conn.commit()
     finally:
         try: cur.close()
@@ -249,14 +252,28 @@ def get_aderenza_riepilogo(conn, paziente_id, giorni=30):
 
 
 # ── Codice via email (OTP), richiesto ad ogni login ──────────────────
+MAX_TENTATIVI_OTP = 5
+
+
 def genera_otp(conn, email):
+    """Genera un codice e annulla i precedenti dello stesso indirizzo.
+
+    Prima restavano validi tutti insieme: chiedendo cinque codici se ne
+    ottenevano cinque funzionanti, e la finestra di dieci minuti si
+    allungava a piacere."""
     import random
     cur = conn.cursor()
     try:
+        email = email.strip().lower()
+        cur.execute("UPDATE portale_otp SET usato=TRUE WHERE email=%s AND usato=FALSE",
+                     (email,))
+        # I codici scaduti non servono a nessuno e la tabella cresce a ogni
+        # accesso: si buttano qui, senza bisogno di un cron dedicato.
+        cur.execute("DELETE FROM portale_otp WHERE scade_il < now() - interval '1 day'")
         codice = f"{random.randint(0, 999999):06d}"
         scade = datetime.datetime.now() + datetime.timedelta(minutes=10)
         cur.execute("INSERT INTO portale_otp (email, codice, scade_il) VALUES (%s, %s, %s)",
-                     (email.strip().lower(), codice, scade))
+                     (email, codice, scade))
         conn.commit()
         return codice
     finally:
@@ -265,19 +282,43 @@ def genera_otp(conn, email):
 
 
 def verifica_otp(conn, email, codice):
+    """Ritorna (ok, motivo). Il motivo distingue il codice sbagliato dal
+    codice scaduto e dai tentativi esauriti: senza, chi sbaglia non sa
+    se deve riprovare o richiedere il codice."""
     cur = conn.cursor()
     try:
+        email = email.strip().lower()
         cur.execute("""
-            SELECT id FROM portale_otp
-            WHERE email=%s AND codice=%s AND usato=FALSE AND scade_il > now()
+            SELECT id, codice, tentativi, scade_il > now() AS valido
+            FROM portale_otp
+            WHERE email=%s AND usato=FALSE
             ORDER BY id DESC LIMIT 1
-        """, (email.strip().lower(), codice.strip()))
+        """, (email,))
         row = cur.fetchone()
         if not row:
-            return False
-        cur.execute("UPDATE portale_otp SET usato=TRUE WHERE id=%s", (row[0],))
+            return False, "Nessun codice attivo: richiedine uno nuovo."
+        rid, atteso, tentativi, valido = row
+        if not valido:
+            return False, "Codice scaduto: richiedine uno nuovo."
+        if (tentativi or 0) >= MAX_TENTATIVI_OTP:
+            cur.execute("UPDATE portale_otp SET usato=TRUE WHERE id=%s", (rid,))
+            conn.commit()
+            return False, "Troppi tentativi. Richiedi un codice nuovo."
+        if (codice or "").strip() != atteso:
+            cur.execute("UPDATE portale_otp SET tentativi=COALESCE(tentativi,0)+1 WHERE id=%s",
+                         (rid,))
+            conn.commit()
+            rimasti = MAX_TENTATIVI_OTP - (tentativi or 0) - 1
+            if rimasti <= 0:
+                return False, "Troppi tentativi. Richiedi un codice nuovo."
+            return False, f"Codice non corretto. Tentativi rimasti: {rimasti}."
+        cur.execute("UPDATE portale_otp SET usato=TRUE WHERE id=%s", (rid,))
         conn.commit()
-        return True
+        return True, ""
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        return False, f"Verifica non riuscita: {e}"
     finally:
         try: cur.close()
         except Exception: pass
