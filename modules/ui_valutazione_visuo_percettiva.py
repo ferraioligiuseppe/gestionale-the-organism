@@ -55,6 +55,146 @@ def _fmt_data_it(iso_str):
     except Exception:
         return str(iso_str)[:10]
 
+# ══════════════════════════════════════════════════════════════════════
+#  Composizione della relazione: stampa solo cio' che e' stato compilato
+#
+#  Il testo era un modello fisso: ogni riga usciva comunque, e i campi mai
+#  toccati comparivano come «Visus», «stereopsi:», «MEM OD: 0.0 D». In una
+#  relazione clinica un valore a zero non si legge come «non misurato», si
+#  legge come una misura: e zero diottrie di lag accomodativo o zero
+#  centimetri di punto prossimo sono referti diversi da una casella vuota.
+#
+#  Regola: una riga si stampa se almeno uno dei suoi valori e' stato
+#  compilato. Uno zero accanto a un valore vero resta (sfero 0.00 con
+#  cilindro -1.00 e' una refrazione reale); una riga tutta a zero sparisce.
+#  Un titolo di sezione compare solo se sotto ha qualcosa.
+# ══════════════════════════════════════════════════════════════════════
+
+def _vuoto(x) -> bool:
+    if x is None:
+        return True
+    return str(x).strip().lower() in ("", "nd", "n.d.", "none", "-", "—", "/")
+
+
+def _zero(x) -> bool:
+    if _vuoto(x):
+        return True
+    try:
+        return float(x) == 0.0
+    except Exception:
+        return False
+
+
+def _fmt_diottrie(x) -> str:
+    try:
+        f = float(x or 0)
+        return f"+{f:.2f}" if f >= 0 else f"{f:.2f}"
+    except Exception:
+        return str(x or "")
+
+
+def _campo(etichetta, valore, suffisso=""):
+    """Ritorna «etichetta: valore», o None se il campo e' vuoto."""
+    if _vuoto(valore):
+        return None
+    return f"{etichetta}: {valore}{suffisso}"
+
+
+def _unisci(*pezzi):
+    """Mette sulla stessa riga solo i pezzi presenti."""
+    vivi = [p for p in pezzi if p]
+    return "  |  ".join(vivi) if vivi else None
+
+
+def _coppia(etichetta, od, os_, suffisso=""):
+    """Riga OD/OS: sparisce se entrambi gli occhi sono a zero o vuoti."""
+    if _zero(od) and _zero(os_):
+        return None
+    v_od = "—" if _vuoto(od) else f"{od}{suffisso}"
+    v_os = "—" if _vuoto(os_) else f"{os_}{suffisso}"
+    return f"{etichetta} OD: {v_od}  |  OS: {v_os}"
+
+
+def _riga_occhio(occhio, r):
+    """Refrazione di un occhio: niente riga se non e' stato inserito nulla."""
+    r = r or {}
+    if (all(_zero(r.get(k)) for k in ("sf", "cil", "ax"))
+            and _vuoto(r.get("acuita"))):
+        return None
+    riga = (f"{occhio}: {_fmt_diottrie(r.get('sf'))} / "
+            f"{_fmt_diottrie(r.get('cil'))} x {r.get('ax', 0)} gradi")
+    if not _vuoto(r.get("acuita")):
+        riga += f"  -  Visus {r.get('acuita')}"
+    return riga
+
+
+def _sezione(titolo, righe):
+    """Blocco di relazione: lista vuota se non c'e' niente da dire."""
+    vive = [r for r in righe if r]
+    if not vive:
+        return []
+    return [f"### {titolo}"] + vive + [""]
+
+
+def _corpo_relazione(rs_od, rs_os, bino, acc, ob=None):
+    """Righe della relazione, saltando tutto cio' che non e' stato compilato.
+
+    Un solo costruttore per i due punti da cui si genera la relazione:
+    prima erano due modelli quasi identici ma non uguali, e correggerne
+    uno lasciava l'altro indietro."""
+    bino = bino or {}
+    acc = acc or {}
+    righe = []
+
+    righe += _sezione("Refrazione soggettiva", [
+        _riga_occhio("OD", rs_od),
+        _riga_occhio("OS", rs_os),
+    ])
+
+    # La soppressione si stampa solo se rilevata: una casella non spuntata
+    # non e' un «no» clinico, e' un esame che non risulta eseguito.
+    sopp = None
+    if bino.get("tb_sopp_od") or bino.get("tb_sopp_os"):
+        sopp = _unisci(
+            "Telebinocular — soppressione OD: " + ("sì" if bino.get("tb_sopp_od") else "no"),
+            "soppressione OS: " + ("sì" if bino.get("tb_sopp_os") else "no"))
+
+    ppc = None
+    if not (_zero(bino.get("ppc_acc_rot")) and _zero(bino.get("ppc_acc_rec"))):
+        rot = "—" if _vuoto(bino.get("ppc_acc_rot")) else bino.get("ppc_acc_rot")
+        rec = "—" if _vuoto(bino.get("ppc_acc_rec")) else bino.get("ppc_acc_rec")
+        ppc = f"PPC accomodativo: {rot} / {rec} cm"
+
+    righe += _sezione("Equilibrio binoculare", [
+        _unisci(_campo("Cover test lontano", bino.get("ct_l")),
+                _campo("Cover test vicino", bino.get("ct_v"))),
+        _unisci(_campo("Telebinocular — fusione periferica", bino.get("tb_fus_per")),
+                _campo("fusione centrale", bino.get("tb_fus_cen"))),
+        sopp,
+        _campo("Stereopsi (Telebinocular)", bino.get("tb_stereo")),
+        ppc,
+        _unisci(_campo("AC/A", bino.get("aca")) if not _zero(bino.get("aca")) else None,
+                _campo("Worth lontano", bino.get("worth_l"))),
+        _campo("Randot", bino.get("randot"), " sec d'arco") if not _zero(bino.get("randot")) else None,
+    ])
+
+    righe += _sezione("Accomodazione", [
+        _coppia("Push-Up", acc.get("pu_od"), acc.get("pu_os"), " D"),
+        _coppia("MEM", acc.get("mem_od"), acc.get("mem_os"), " D"),
+        _coppia("Facilità accomodativa", acc.get("fl_od"), acc.get("fl_os"), " c/30sec"),
+    ])
+
+    if ob:
+        righe += _sezione("Esame obiettivo", [
+            _coppia("IOP", ob.get("iop_od"), ob.get("iop_os"), " mmHg"),
+            _coppia("Pachimetria", ob.get("pach_od"), ob.get("pach_os"), " µm"),
+        ])
+
+    while righe and not righe[-1]:
+        righe.pop()
+    return righe
+
+
 def _sk(sez, campo, pid):
     return f"vvp_{pid}_{sez}_{campo}"
 
@@ -1065,23 +1205,25 @@ def _testo_solo_optometrico(d: dict) -> str:
             return str(v or "nd")
     rs_od = a.get("rs_od", {}); rs_os = a.get("rs_os", {})
     ar_od = a.get("ar_od", {}); ar_os = a.get("ar_os", {})
-    righe = ["### A — Stato refrattivo",
-             f"Autorefrattometro OD: {_f(ar_od.get('sf'))} / {_f(ar_od.get('cil'))} x {ar_od.get('ax',0)}",
-             f"Autorefrattometro OS: {_f(ar_os.get('sf'))} / {_f(ar_os.get('cil'))} x {ar_os.get('ax',0)}",
-             f"Refrazione soggettiva OD: {_f(rs_od.get('sf'))} / {_f(rs_od.get('cil'))} x {rs_od.get('ax',0)} — Visus {rs_od.get('acuita','nd')}",
-             f"Refrazione soggettiva OS: {_f(rs_os.get('sf'))} / {_f(rs_os.get('cil'))} x {rs_os.get('ax',0)} — Visus {rs_os.get('acuita','nd')}",
-             "", "### B — Equilibrio binoculare"]
-    for k, v in b.items():
-        if v not in (None, "", {}):
-            righe.append(f"{k}: {v}")
-    righe += ["", "### C — Accomodazione"]
-    for k, v in c.items():
-        if v not in (None, "", {}):
-            righe.append(f"{k}: {v}")
-    righe += ["", "### D — Oculomotricità"]
-    for k, v in dd.items():
-        if v not in (None, "", {}):
-            righe.append(f"{k}: {v}")
+    righe = _sezione("A — Stato refrattivo", [
+        _riga_occhio("Autorefrattometro OD", ar_od),
+        _riga_occhio("Autorefrattometro OS", ar_os),
+        _riga_occhio("Refrazione soggettiva OD", rs_od),
+        _riga_occhio("Refrazione soggettiva OS", rs_os),
+    ])
+    # Le sezioni B/C/D si stampavano con la chiave grezza del campo e
+    # tenevano dentro anche gli zeri: ora passano dallo stesso filtro.
+    for titolo, blocco in (("B — Equilibrio binoculare", b),
+                           ("C — Accomodazione", c),
+                           ("D — Oculomotricità", dd)):
+        voci = []
+        for k, val in (blocco or {}).items():
+            if _vuoto(val) or _zero(val) or isinstance(val, dict):
+                continue
+            voci.append(f"{str(k).replace('_', ' ')}: {val}")
+        righe += _sezione(titolo, voci)
+    while righe and not righe[-1]:
+        righe.pop()
     return "\n".join(righe)
 
 
@@ -1171,6 +1313,19 @@ def _sez_g(conn, pid, d, paziente):
                     "Scarica Valutazione Optometrica PDF", data=pdf_optom,
                     file_name=f"optometria_{cog}_{nom}_{datetime.date.today()}.pdf",
                     mime="application/pdf", key=s("dl_optom"), type="primary")
+                # Stesso contenuto in Word: il PDF si consegna, il Word si
+                # corregge. Senza, per cambiare una frase bisogna tornare nel
+                # modulo e rigenerare tutto.
+                from modules.relazione_docx import bottone_word
+                bottone_word(
+                    st, "⬇️ Scarica in Word (modificabile)",
+                    f"optometria_{cog}_{nom}_{datetime.date.today()}.docx",
+                    s("dlw_optom"),
+                    professionista=prof, titolo=titolo_pdf,
+                    paziente=f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}",
+                    data=datetime.date.today().strftime("%d/%m/%Y"),
+                    titolo_doc="Valutazione Optometrica",
+                    corpo_testo=corpo_optom)
             except Exception as e:
                 st.error(f"Errore stampa optometrica: {e}")
 
@@ -1201,20 +1356,7 @@ def _sez_g(conn, pid, d, paziente):
                     fv=float(v or 0); return f"+{fv:.2f}" if fv>=0 else f"{fv:.2f}"
                 except: return str(v or "nd")
             paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}"
-            corpo = f"""### Refrazione soggettiva
-OD: {_f(rs_od2.get("sf"))} / {_f(rs_od2.get("cil"))} x {rs_od2.get("ax",0)} gradi  -  Visus {rs_od2.get("acuita","nd")}
-OS: {_f(rs_os2.get("sf"))} / {_f(rs_os2.get("cil"))} x {rs_os2.get("ax",0)} gradi  -  Visus {rs_os2.get("acuita","nd")}
-
-### Equilibrio binoculare
-Cover test lontano: {bino.get("ct_l","nd")}  |  Cover test vicino: {bino.get("ct_v","nd")}
-Telebinocular — fusione periferica: {bino.get("tb_fus_per","nd")}  |  fusione centrale: {bino.get("tb_fus_cen","nd")}
-Telebinocular — soppressione OD: {"sì" if bino.get("tb_sopp_od") else "no"}  |  soppressione OS: {"sì" if bino.get("tb_sopp_os") else "no"}  |  stereopsi: {bino.get("tb_stereo","nd")}
-PPC: {bino.get("ppc_acc_rot","nd")} / {bino.get("ppc_acc_rec","nd")} cm  |  AC/A: {bino.get("aca","nd")}
-Randot: {bino.get("randot","nd")} sec d arco
-
-### Accomodazione
-Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
-MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
+            corpo = "\n".join(_corpo_relazione(rs_od2, rs_os2, bino, acc))
             try:
                 from modules.ui_anamnesi_visiva import sintesi_anamnesi
                 _anam = sintesi_anamnesi(conn, pid)
@@ -1241,6 +1383,15 @@ MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D"""
                 mime="application/pdf",
                 key=s("dl_rel")
             )
+            from modules.relazione_docx import bottone_word
+            bottone_word(
+                st, "⬇️ Scarica in Word (modificabile)",
+                f"relazione_{cog}_{nom}_{datetime.date.today()}.docx",
+                s("dlw_rel"),
+                professionista=prof, titolo=titolo_prof2,
+                paziente=paz_str, data=data_vis_fmt,
+                titolo_doc="RELAZIONE CLINICA VISUO-PERCETTIVA",
+                corpo_testo=corpo)
         except Exception as e:
             st.error(f"Errore relazione: {e}")
 
@@ -1331,26 +1482,7 @@ def _pdf_relazione(pid, cog, nom, dn, d, prof, diagnosi, piano):
         sod = rx.get("rs_od",{}); sos = rx.get("rs_os",{})
         paz_str = f"{cog} {nom}  |  Nato/a: {_fmt_data_it(dn)}"
 
-        corpo = f"""### Refrazione soggettiva
-OD: {_f(sod.get("sf"))} / {_f(sod.get("cil"))} x {sod.get("ax",0)} gradi  -  Visus {sod.get("acuita","nd")}
-OS: {_f(sos.get("sf"))} / {_f(sos.get("cil"))} x {sos.get("ax",0)} gradi  -  Visus {sos.get("acuita","nd")}
-
-### Equilibrio binoculare
-Cover test lontano: {bino.get("ct_l","nd")}  |  Cover test vicino: {bino.get("ct_v","nd")}
-Telebinocular — fusione periferica: {bino.get("tb_fus_per","nd")}  |  fusione centrale: {bino.get("tb_fus_cen","nd")}
-Telebinocular — soppressione OD: {"sì" if bino.get("tb_sopp_od") else "no"}  |  soppressione OS: {"sì" if bino.get("tb_sopp_os") else "no"}  |  stereopsi: {bino.get("tb_stereo","nd")}
-PPC accomodativo: {bino.get("ppc_acc_rot","nd")} / {bino.get("ppc_acc_rec","nd")} cm
-AC/A: {bino.get("aca","nd")}  |  Worth lontano: {bino.get("worth_l","nd")}
-Randot: {bino.get("randot","nd")} sec d arco
-
-### Accomodazione
-Push-Up OD: {acc.get("pu_od","nd")} D  |  OS: {acc.get("pu_os","nd")} D
-MEM OD: {acc.get("mem_od","nd")} D  |  OS: {acc.get("mem_os","nd")} D
-Facilita accomodativa OD: {acc.get("fl_od","nd")} c/30sec  |  OS: {acc.get("fl_os","nd")} c/30sec
-
-### Esame obiettivo
-IOP OD: {ob.get("iop_od","nd")}  /  OS: {ob.get("iop_os","nd")} mmHg
-Pachimetria OD: {ob.get("pach_od","nd")}  /  OS: {ob.get("pach_os","nd")} um"""
+        corpo = "\n".join(_corpo_relazione(sod, sos, bino, acc, ob))
 
         if diagnosi:
             corpo += f"\n\n### Diagnosi\n{diagnosi}"
@@ -1371,6 +1503,15 @@ Pachimetria OD: {ob.get("pach_od","nd")}  /  OS: {ob.get("pach_os","nd")} um"""
         st.download_button("Scarica Relazione PDF", data=pdf_bytes,
             file_name=f"relazione_{cog}_{nom}_{datetime.date.today()}.pdf",
             mime="application/pdf", key=f"dl_rel_{pid}")
+        from modules.relazione_docx import bottone_word
+        bottone_word(
+            st, "⬇️ Scarica in Word (modificabile)",
+            f"relazione_{cog}_{nom}_{datetime.date.today()}.docx",
+            f"dlw_rel_{pid}",
+            professionista=prof, titolo=titolo_prof,
+            paziente=paz_str, data=data_vis_fmt,
+            titolo_doc="RELAZIONE CLINICA VISUO-PERCETTIVA",
+            corpo_testo=corpo)
     except Exception as e:
         st.error(f"Errore relazione: {e}")
 
