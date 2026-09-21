@@ -191,6 +191,16 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
 
     _assicura_tabella(conn)
 
+    # Questa scheda salva tutte le otto parti insieme: se due postazioni la
+    # compilano sullo stesso paziente, l'ultimo salvataggio cancella il
+    # lavoro dell'altro senza dirlo a nessuno.
+    try:
+        from .presenza_schede import avvisa_se_aperta_altrove
+        avvisa_se_aperta_altrove(conn, paz_id, "protocollo",
+                                 "il protocollo di valutazione")
+    except Exception:
+        pass
+
     st.markdown("### Dati generali")
     c1, c2 = st.columns(2)
     esaminatore = c1.text_input("Esaminatore", key="pv_esaminatore")
@@ -1223,6 +1233,11 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     if st.button("💾 Salva protocollo completo (PARTE 1-8)", type="primary", key="pv_salva"):
         if _salva(conn, paz_id, esaminatore, dati):
             st.success("Salvato. Protocollo completo — PARTE 1-8 (PARTE 9 gestita dal modulo Consenso privacy).")
+            try:
+                from .presenza_schede import rilascia
+                rilascia(conn, paz_id, "protocollo")
+            except Exception:
+                pass
 
     st.markdown("---")
     st.markdown("#### 📄 Relazione — generazione e invio")
