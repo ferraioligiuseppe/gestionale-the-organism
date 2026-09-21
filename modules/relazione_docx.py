@@ -43,6 +43,16 @@ def _rgb(hexstr):
     return RGBColor.from_string(hexstr)
 
 
+def _dati_studio():
+    """Indirizzo e contatti salvati in «Intestazione dello studio», così il
+    Word riporta la stessa intestazione del PDF invece delle costanti."""
+    try:
+        from modules.pdf_templates import _intestazione_studio
+        return _intestazione_studio() or {}
+    except Exception:
+        return {}
+
+
 def genera_docx_carta_intestata(professionista: str, titolo: str,
                                 paziente: str, data: str, titolo_doc: str,
                                 corpo_testo: str = "",
@@ -78,9 +88,16 @@ def genera_docx_carta_intestata(professionista: str, titolo: str,
         r2.font.size = Pt(9)
         r2.font.color.rgb = _rgb(GRIGIO)
 
+    _d = _dati_studio()
+    _indirizzo = " · ".join(
+        r.strip() for r in str(_d.get("indirizzo") or "").splitlines() if r.strip()
+    ) or INDIRIZZO
+    _contatti = (str(_d.get("contatti") or "").strip()
+                 or str(_d.get("telefono") or "").strip()
+                 or CONTATTI)
     p3 = doc.add_paragraph()
     p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r3 = p3.add_run(INDIRIZZO + "\n" + CONTATTI)
+    r3 = p3.add_run(_indirizzo + "\n" + _contatti)
     r3.font.size = Pt(7.5)
     r3.font.color.rgb = _rgb(GRIGIO)
 
