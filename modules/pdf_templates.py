@@ -46,7 +46,12 @@ def _intestazione_studio():
     except Exception:
         return {}
     d = st.session_state.get("intestazione_studio")
-    if isinstance(d, dict) and d:
+    # Il dizionario in sessione viene riempito al login. Se l'utente ha
+    # caricato la carta intestata DOPO, quel dizionario esiste ma non la
+    # contiene: fidarsene qui significava non rileggere mai il database e
+    # continuare a stampare l'intestazione di ripiego. Si accetta la copia
+    # in sessione solo se la carta c'e' davvero.
+    if isinstance(d, dict) and d.get("carta_intestata_base64"):
         return d
     try:
         from modules.app_core import get_connection
