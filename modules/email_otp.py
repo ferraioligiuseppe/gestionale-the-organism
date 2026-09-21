@@ -113,12 +113,24 @@ def invia_email(to_email: str, oggetto: str, corpo: str, dettaglio: bool = False
         return _esito(False, f"{type(e).__name__}: {e}")
 
 
-def invia_codice(to_email: str, codice: str) -> bool:
+def invia_codice(to_email: str, codice: str, dettaglio: bool = False):
+    """Manda il codice di accesso al portale.
+
+    dettaglio=True ritorna (ok, motivo). Prima l'esito era un solo
+    True/False: quando il codice non arrivava non c'era modo di sapere
+    se fosse la password per le app scaduta, l'indirizzo sbagliato o il
+    server irraggiungibile, e la schermata di login non poteva dire
+    niente di utile a chi stava aspettando."""
+    def _esito(ok, motivo=""):
+        return (ok, motivo) if dettaglio else ok
+
     try:
-        conf, _motivo = _config_invio()
+        conf, motivo = _config_invio()
         if not conf:
-            return False
+            return _esito(False, motivo)
         host, porta, ssl_diretto, mittente, password = conf
+        if not to_email or "@" not in to_email:
+            return _esito(False, f"Indirizzo non valido: {to_email!r}")
         msg = MIMEText(
             f"Il tuo codice di accesso al Portale famiglia — Studio The Organism è:\n\n"
             f"{codice}\n\nValido per 10 minuti. Se non hai richiesto l'accesso, ignora questa email."
@@ -127,6 +139,10 @@ def invia_codice(to_email: str, codice: str) -> bool:
         msg["From"] = mittente
         msg["To"] = to_email
         _spedisci(mittente, password, host, porta, ssl_diretto, to_email, msg)
-        return True
-    except Exception:
-        return False
+        return _esito(True, f"Inviata a {to_email}")
+    except smtplib.SMTPAuthenticationError as exc:
+        return _esito(False, f"Login rifiutato (password per le app da rigenerare?): {exc}")
+    except smtplib.SMTPRecipientsRefused as exc:
+        return _esito(False, f"Destinatario rifiutato dal server: {exc}")
+    except Exception as exc:
+        return _esito(False, f"{type(exc).__name__}: {exc}")
