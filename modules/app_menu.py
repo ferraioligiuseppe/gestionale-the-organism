@@ -142,6 +142,10 @@ PAZIENTI_RAMI = {
         # sotto "Apprendimenti", dove "apprendimento" indica quello del
         # bambino — due significati opposti sotto la stessa parola.
         "🧭 Bussola degli esiti",
+        # Vista d'insieme, non per paziente: sta qui e NON in
+        # VOCI_CON_PAZIENTE, altrimenti chiederebbe di scegliere un
+        # paziente per mostrarti la lista di tutti.
+        "📊 Aderenza dello studio",
     ],
     "📁 Scheda clinica": [
         "📎 Documenti clinici",
