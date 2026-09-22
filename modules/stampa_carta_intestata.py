@@ -269,6 +269,16 @@ _MODELLO = r"""
                            corpo.appendChild(ul); host = ul; }
         else host = corpo;
         host.appendChild(wrap);
+
+        /* Un blocco piu' alto di una pagina intera non entra da nessuna
+           parte: con overflow:hidden verrebbe tagliato in silenzio, ed e'
+           esattamente il modo in cui si stampa una relazione incompleta
+           senza accorgersene. Si lascia sbordare, visibile, e si dice che
+           va spezzato a mano. */
+        if (deborda()){
+          corpo.style.overflow = 'visible';
+          corpo.dataset.sbordo = '1';
+        }
       }
     }
 
@@ -278,6 +288,8 @@ _MODELLO = r"""
       np.textContent = (n+1) + ' / ' + fogli.length;
       el.appendChild(np);
     });
+
+    var sbordi = ovl.querySelectorAll('.pnev_ci_corpo[data-sbordo]').length;
 
     bar.innerHTML = '';
     var bStampa = document.createElement('button');
@@ -295,6 +307,14 @@ _MODELLO = r"""
     info.textContent = fogli.length + (fogli.length===1 ? ' pagina' : ' pagine')
                      + ' \u00B7 A4' + (URI ? ' \u00B7 carta intestata dello studio' : '');
     bar.appendChild(bStampa); bar.appendChild(bChiudi); bar.appendChild(info);
+
+    if (sbordi){
+      var av2 = document.createElement('span');
+      av2.style.cssText = 'color:#FFD9D4;font-weight:600';
+      av2.textContent = '\u26A0 Un paragrafo \u00E8 pi\u00F9 lungo di una pagina '
+                      + 'e sborda: spezzalo in due nel riquadro del testo.';
+      bar.appendChild(av2);
+    }
   }
 
   function apri(){
