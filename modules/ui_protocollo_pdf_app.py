@@ -323,7 +323,23 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
 })();
 </script>
 """
-    _script_completo = _second_monitor_js + (_precompila_js or "") + _salva_db_js
+    # Anteprima e stampa della relazione su carta intestata.
+    # La app stampava con window.print(), cioe' TUTTA la scheda di lavoro —
+    # ogni prova, ogni tabella — anche quando all'operatore serviva solo la
+    # relazione per la famiglia; e la relazione vive in un <textarea>, di cui
+    # i browser stampano solo la parte visibile, tagliando il resto. La carta
+    # intestata poi non c'era affatto: la app sta in un iframe e non vede il
+    # database. Il modulo qui sotto aggiunge un foglio A4 a schermo, con la
+    # carta intestata dello studio, il testo impaginato misurandolo, e una
+    # stampa che riproduce quel foglio e nient'altro.
+    _carta_js = ""
+    try:
+        from .stampa_carta_intestata import script_stampa_carta
+        _carta_js = script_stampa_carta()
+    except Exception as e:
+        st.caption(f"Anteprima su carta intestata non disponibile: {e}")
+
+    _script_completo = _second_monitor_js + (_precompila_js or "") + _salva_db_js + _carta_js
     if "</body>" in html:
         html = html.replace("</body>", _script_completo + "</body>", 1)
     else:
