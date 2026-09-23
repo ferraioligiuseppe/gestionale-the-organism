@@ -232,6 +232,14 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     valutazione_visiva_pregressa = st.text_input("Valutazione visiva/optometrica pregressa", key="pv_visiva_preg")
     hobby = st.text_input("Hobby, sport, attività extrascolastiche", key="pv_hobby")
 
+    st.markdown("### Sviluppo dopo il primo anno, scuola, salute, abitudini")
+    sviluppo = {}
+    try:
+        from .anamnesi_sviluppo import render_anamnesi_sviluppo
+        sviluppo = render_anamnesi_sviluppo(conn, paz_id, "pv_sv")
+    except Exception as e:
+        st.caption(f"Anamnesi dello sviluppo non disponibile: {e}")
+
     st.markdown("---")
     st.markdown("## PARTE 1 — BILANCIO FONETICO")
 
@@ -1120,6 +1128,7 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
             "bilinguismo": bilinguismo, "patologie_note": patologie_note,
             "trattamenti_pregressi": trattamenti_pregressi,
             "valutazione_visiva_pregressa": valutazione_visiva_pregressa, "hobby": hobby,
+            "sviluppo": sviluppo,
         },
         "parte1_bilancio_fonetico": {
             "per_fono": bilancio_fonetico, "gruppi_consonantici": gruppi.to_dict("records"),
