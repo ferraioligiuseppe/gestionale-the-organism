@@ -49,6 +49,10 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
     # semplicemente non c'era e nessuno sapeva perche'. Ora lo si dice.
     _col_pdf, _col_man = st.columns(2)
     _pdf_path = os.path.join(_STATIC_DIR, pdf_file)
+    # Salvando in PDF il browser a volte aggiunge un secondo ".pdf" al nome:
+    # si accetta anche quello, invece di far sparire il bottone.
+    if not os.path.exists(_pdf_path) and os.path.exists(_pdf_path + ".pdf"):
+        _pdf_path = _pdf_path + ".pdf"
     with _col_pdf:
         if os.path.exists(_pdf_path):
             with open(_pdf_path, "rb") as f:
@@ -61,6 +65,8 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
                        f"`static_protocollo/{pdf_file}`.")
     _man_file = "Manuale_Screening_TheOrganism.pdf"
     _man_path = os.path.join(_STATIC_DIR, _man_file)
+    if not os.path.exists(_man_path) and os.path.exists(_man_path + ".pdf"):
+        _man_path = _man_path + ".pdf"
     with _col_man:
         if os.path.exists(_man_path):
             with open(_man_path, "rb") as f:
