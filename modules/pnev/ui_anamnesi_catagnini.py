@@ -628,6 +628,19 @@ def _build_summary(data: dict) -> str:
 
 # ── entry point principale ────────────────────────────────────────────────────
 
+def _sintesi_sviluppo() -> str:
+    try:
+        from modules.anamnesi_sviluppo import carica_anamnesi_sviluppo, sintesi_anamnesi_sviluppo
+        from modules.app_core import get_connection
+        from modules.paziente_attivo import paziente_attivo_id
+        righe = sintesi_anamnesi_sviluppo(
+            carica_anamnesi_sviluppo(get_connection(), paziente_attivo_id()))
+        righe = [r[2:] if r.startswith("- ") else r for r in righe]
+        return ("\n" + "\n".join(righe)) if righe else ""
+    except Exception:
+        return ""
+
+
 def render_anamnesi_castagnini(
     pnev_json: Dict[str, Any],
     prefix: str,
@@ -664,7 +677,7 @@ def render_anamnesi_castagnini(
             cat[k] = v
 
     if readonly:
-        summary = _build_summary(cat)
+        summary = (_build_summary(cat) + _sintesi_sviluppo()).strip()
         if summary:
             st.markdown("**Sintesi anamnesi Castagnini:**")
             for line in summary.split("\n"):
@@ -702,13 +715,24 @@ def render_anamnesi_castagnini(
     with st.expander("8️⃣ Motivo dell'invio / domanda clinica", expanded=False):
         cat["motivo_invio"] = _sezione_motivo_invio(cat.get("motivo_invio", {}), px)
 
+    # Dopo i 24 mesi questa anamnesi si fermava. Il seguito e' un blocco
+    # condiviso con il Protocollo di valutazione: stessi dati, una sola copia.
+    st.markdown("#### 9️⃣ Dopo i 2 anni — sviluppo, scuola, salute, abitudini")
+    try:
+        from modules.anamnesi_sviluppo import render_anamnesi_sviluppo
+        from modules.app_core import get_connection
+        from modules.paziente_attivo import paziente_attivo_id
+        render_anamnesi_sviluppo(get_connection(), paziente_attivo_id(), f"{px}_sv")
+    except Exception as e:
+        st.caption(f"Anamnesi dello sviluppo non disponibile: {e}")
+
     # Aggiorna timestamp
     cat["_meta"] = {"versione": "1.0", "data": date.today().isoformat()}
 
     # Scrivi nel pnev_json principale
     pnev_json["anamnesi_castagnini"] = cat
 
-    summary = _build_summary(cat)
+    summary = (_build_summary(cat) + _sintesi_sviluppo()).strip()
 
     # Anteprima summary collassata
     with st.expander("📄 Anteprima sintesi anamnesi", expanded=False):
