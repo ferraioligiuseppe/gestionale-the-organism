@@ -44,14 +44,33 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
                "riaprirli — così restano legati al paziente indipendentemente dal browser usato. "
                "\"Salva\"/\"Riapri\" nella barra della app usano solo la memoria di questo browser.")
 
+    # Scheda bianca e manuale d'uso, se presenti in static_protocollo/.
+    # Prima un PDF mancante veniva ignorato in silenzio: il bottone
+    # semplicemente non c'era e nessuno sapeva perche'. Ora lo si dice.
+    _col_pdf, _col_man = st.columns(2)
     _pdf_path = os.path.join(_STATIC_DIR, pdf_file)
-    try:
-        with open(_pdf_path, "rb") as f:
-            st.download_button("📄 Scarica il PDF (bianco, da compilare a mano)",
-                                data=f.read(), file_name=pdf_file,
-                                mime="application/pdf", key=f"{kp}_dl_pdf")
-    except Exception:
-        pass
+    with _col_pdf:
+        if os.path.exists(_pdf_path):
+            with open(_pdf_path, "rb") as f:
+                st.download_button("📄 Scheda in PDF (bianca, da compilare a mano)",
+                                    data=f.read(), file_name=pdf_file,
+                                    mime="application/pdf", key=f"{kp}_dl_pdf",
+                                    use_container_width=True)
+        else:
+            st.caption(f"📄 Scheda in PDF non ancora caricata: manca "
+                       f"`static_protocollo/{pdf_file}`.")
+    _man_file = "Manuale_Screening_TheOrganism.pdf"
+    _man_path = os.path.join(_STATIC_DIR, _man_file)
+    with _col_man:
+        if os.path.exists(_man_path):
+            with open(_man_path, "rb") as f:
+                st.download_button("📘 Manuale d'uso (breve e completo)",
+                                    data=f.read(), file_name=_man_file,
+                                    mime="application/pdf", key=f"{kp}_dl_manuale",
+                                    use_container_width=True)
+        else:
+            st.caption(f"📘 Manuale non ancora caricato: manca "
+                       f"`static_protocollo/{_man_file}`.")
 
     try:
         with open(os.path.join(_STATIC_DIR, html_file), "r", encoding="utf-8") as f:
