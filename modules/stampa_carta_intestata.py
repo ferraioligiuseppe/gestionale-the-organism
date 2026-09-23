@@ -57,8 +57,7 @@ def _carta_data_uri() -> tuple[str, str]:
     except Exception as e:
         return "", f"lettura della configurazione non riuscita: {e}"
     if not dati:
-        return "", ("nessuna carta intestata salvata per questo studio — "
-                    "si carica da «Intestazione dello studio» → «Carta intestata»")
+        return "", _perche_manca()
     testa = dati[:12]
     if testa.startswith(b"\x89PNG"):
         mime = "image/png"
@@ -72,6 +71,34 @@ def _carta_data_uri() -> tuple[str, str]:
         return "", (f"formato dell'immagine non riconosciuto ({len(dati)} byte): "
                     "servono PNG, JPEG, GIF o WebP")
     return f"data:{mime};base64,{base64.b64encode(dati).decode()}", ""
+
+
+def _perche_manca() -> str:
+    """Dice esattamente cosa c'e' nel database, invece di un generico
+    «non salvata»: studio cercato, se la riga esiste, se la colonna e' vuota,
+    e quali altri studi hanno una carta. Senza questo non si distingue un
+    caricamento mai avvenuto da una carta salvata sullo studio sbagliato."""
+    try:
+        import streamlit as st
+        from .app_core import get_connection
+        sid = int(st.session_state.get("studio_id") or 1)
+        cur = get_connection().cursor()
+        cur.execute("SELECT id, nome, COALESCE(length(carta_intestata_base64),0) FROM studi ORDER BY id")
+        righe = cur.fetchall() or []
+        def _v(r, i, k):
+            return r.get(k) if isinstance(r, dict) else r[i]
+        studi = [(int(_v(r, 0, "id")), _v(r, 1, "nome") or "", int(_v(r, 2, "coalesce") or 0)) for r in righe]
+        mio = [x for x in studi if x[0] == sid]
+        con_carta = [f"{x[0]} ({x[1]})" for x in studi if x[2] > 0]
+        if not mio:
+            base = f"lo studio attivo (id {sid}) non esiste nella tabella studi"
+        else:
+            base = f"lo studio attivo è id {sid} «{mio[0][1]}», e la sua carta intestata è vuota"
+        if con_carta:
+            return base + ". La carta risulta salvata invece su: " + ", ".join(con_carta)
+        return base + ". Nessuno studio ha una carta salvata: il caricamento non è andato a buon fine"
+    except Exception as e:
+        return f"nessuna carta intestata trovata, e il controllo sul database non è riuscito ({e})"
 
 
 def script_stampa_carta() -> str:
