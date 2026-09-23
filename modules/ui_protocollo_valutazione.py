@@ -210,7 +210,7 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
                        key="pv_fascia", horizontal=True)
 
     st.markdown("### Anamnesi gravidica, parto e neonatale")
-    gravidanza = st.text_area("Gravidanza (decorso, terapie, eventi)", key="pv_gravidanza", height=60)
+    gravidanza = st.text_area("Gravidanza (decorso, terapie, eventi)", key="pv_gravidanza", height=68)
     c3, c4 = st.columns(2)
     parto_tipo = c3.selectbox("Parto", ["", "Eutocico", "Distocico", "Cesareo programmato", "Cesareo d'urgenza"],
                                key="pv_parto_tipo")
@@ -220,15 +220,15 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     apgar = c6.text_input("Apgar (___/___)", key="pv_apgar")
     tin_ittero = c7.multiselect("Segnalazioni", ["TIN", "Ittero", "Altro"], key="pv_tin")
     periodo_neonatale = st.text_area("Periodo neonatale (allattamento, suzione, coliche, sonno, pianto)",
-                                      key="pv_neonatale", height=60)
+                                      key="pv_neonatale", height=68)
     c8, c9 = st.columns(2)
     tappe_motorie = c8.text_input("Tappe motorie (controllo capo, seduta, gattonamento, cammino)", key="pv_tappe")
     prime_parole = c9.text_input("Prime parole — prime frasi", key="pv_prime_parole")
     otiti = st.text_input("Otiti, tubi timpanici, screening uditivo", key="pv_otiti")
     familiarita = st.text_input("Familiarità per DSA, disturbi di linguaggio, balbuzie", key="pv_familiarita")
     bilinguismo = st.text_input("Bilinguismo / lingua prevalente in casa", key="pv_bilinguismo")
-    patologie_note = st.text_area("Patologie note, interventi, terapie in corso", key="pv_patologie", height=60)
-    trattamenti_pregressi = st.text_area("Trattamenti pregressi ed esiti", key="pv_trattamenti", height=60)
+    patologie_note = st.text_area("Patologie note, interventi, terapie in corso", key="pv_patologie", height=68)
+    trattamenti_pregressi = st.text_area("Trattamenti pregressi ed esiti", key="pv_trattamenti", height=68)
     valutazione_visiva_pregressa = st.text_input("Valutazione visiva/optometrica pregressa", key="pv_visiva_preg")
     hobby = st.text_input("Hobby, sport, attività extrascolastiche", key="pv_hobby")
 
@@ -292,7 +292,7 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     st.caption("strafulgo · pesciantro · gnaviglio · trasbricchi · sclorendo · zampigliastro · ricchiaffronto")
     st.caption("Somministrare 2 volte: velocità libera, poi «il più veloce possibile». Annotare se l'accuratezza "
                "crolla sotto carico di velocità (da incrociare con Parte 3 — cluttering).")
-    logatomi_note = st.text_area("Osservazioni logatomi", key="pv_logatomi", height=60)
+    logatomi_note = st.text_area("Osservazioni logatomi", key="pv_logatomi", height=68)
 
     st.markdown("**1.4 Inventario fonetico — griglia di sintesi**")
     st.caption("P presente e stabile · I instabile · A assente. Compilare le tre colonne di contesto.")
@@ -483,7 +483,7 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     tempo_esordio = c19.text_input("Tempo trascorso dall'esordio", key="pv_tempo_esordio")
     consapevolezza = c20.text_input("Consapevolezza e vissuto riferito", key="pv_consapevolezza")
     reazione_ambiente = st.text_input("Reazione dell'ambiente (famiglia, scuola, pari)", key="pv_reazione_amb")
-    trattamenti_fluenza = st.text_area("Trattamenti pregressi ed esiti", key="pv_trattamenti_fluenza", height=60)
+    trattamenti_fluenza = st.text_area("Trattamenti pregressi ed esiti", key="pv_trattamenti_fluenza", height=68)
 
     st.markdown("**3.2 Campionamento dell'eloquio**")
     st.caption("Registrare audio-video. Tre campioni di almeno 300 sillabe ciascuno. "
@@ -553,8 +553,8 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
         "Migliora se gli si chiede di rallentare/parlare con cura"], key="pv_indic_cluttering")
 
     st.markdown("**3.7 Sintomatologia extra-verbale e profilo PNEV**")
-    vissuto_emotivo = st.text_area("Vissuto emotivo (ansia anticipatoria, vergogna, frustrazione)", key="pv_vissuto", height=60)
-    evitamento = st.text_area("Evitamento di parole/situazioni/interlocutori; strategie di sostituzione", key="pv_evitamento", height=60)
+    vissuto_emotivo = st.text_area("Vissuto emotivo (ansia anticipatoria, vergogna, frustrazione)", key="pv_vissuto", height=68)
+    evitamento = st.text_area("Evitamento di parole/situazioni/interlocutori; strategie di sostituzione", key="pv_evitamento", height=68)
     impatto_funzionale = st.text_input("Impatto funzionale (scuola, amicizie, telefono, lettura ad alta voce)", key="pv_impatto")
     postura_tono = st.text_input("Postura e tono (asse, cingolo scapolare, appoggio, tenuta del capo)", key="pv_postura_tono")
     pattern_respiratorio = st.text_input("Pattern respiratorio a riposo e in fonazione", key="pv_pattern_resp")
@@ -1097,7 +1097,7 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     sistema_prevalente = st.selectbox("Sistema prevalente nel controllo posturale",
         ["", "Visivo", "Podalico", "Oro-mandibolare", "Cervicale/vestibolare", "Equilibrato"], key="pv_sistema_prevalente")
     entrata_efficace = st.text_input("Entrata più efficace nel ridurre l'oscillazione", key="pv_entrata_efficace")
-    coerenza_optometrica = st.text_area("Coerenza con i rilievi optometrici e miofunzionali", key="pv_coerenza_optom", height=60)
+    coerenza_optometrica = st.text_area("Coerenza con i rilievi optometrici e miofunzionali", key="pv_coerenza_optom", height=68)
 
     st.markdown("**8.10 Sintesi optometrica, posturale e indicazioni**")
     sintesi_optometrica = st.radio("Indicazione", [
