@@ -236,6 +236,15 @@ def _riassunto_storico(conn, paz_id) -> str:
                 step = f"{r.get('step')} " if r.get("step") and r["step"] != "—" else ""
                 parti.append(f"   · {step}{r.get('nome','')} — {r.get('stato','')}")
 
+    try:
+        from .anamnesi_sviluppo import carica_anamnesi_sviluppo, sintesi_anamnesi_sviluppo
+        sv = sintesi_anamnesi_sviluppo(carica_anamnesi_sviluppo(conn, paz_id))
+        if sv:
+            parti.append("\nANAMNESI DELLO SVILUPPO (dopo il primo anno):")
+            parti.extend(sv)
+    except Exception:
+        pass
+
     return "\n".join(parti).strip()
 
 
