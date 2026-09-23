@@ -477,6 +477,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
         "🩺 Screening rapido", "🩺 Screening breve (15 min)",
         "🧸 Screening 0-4 anni",
+        # La scheda chiede «Seleziona un paziente qui sopra», ma senza questa
+        # riga il selettore non veniva disegnato: pagina ferma sull'avviso.
+        "📋 Protocollo di valutazione (scheda)", "📋 Protocollo di valutazione",
     }
 
     paz_id = None
