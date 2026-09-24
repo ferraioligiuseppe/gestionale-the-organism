@@ -245,6 +245,15 @@ def _riassunto_storico(conn, paz_id) -> str:
     except Exception:
         pass
 
+    try:
+        from .rilievi_pnev import sintesi_rilievi
+        ril = sintesi_rilievi(conn, paz_id)
+        if ril:
+            parti.append("\nRILIEVI PNEV CONFERMATI (per livello):")
+            parti.extend(ril)
+    except Exception:
+        pass
+
     return "\n".join(parti).strip()
 
 

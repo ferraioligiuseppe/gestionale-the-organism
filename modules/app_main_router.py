@@ -452,6 +452,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
         "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
+        "🧩 Rilievi PNEV",
         "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
@@ -538,6 +539,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore quadro storico: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "🧩 Rilievi PNEV":
+        try:
+            from .rilievi_pnev import render_rilievi
+            render_rilievi(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore rilievi PNEV: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True

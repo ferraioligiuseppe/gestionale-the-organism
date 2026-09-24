@@ -149,6 +149,9 @@ PAZIENTI_RAMI = {
     ],
     "📁 Scheda clinica": [
         "📎 Documenti clinici",
+        # Il profilo della persona sui sette livelli del modello PNEV:
+        # rilievi da anamnesi, referti esterni, colloqui e test.
+        "🧩 Rilievi PNEV",
         "🗓️ Diario clinico",
         "📝 Diagnosi assistita",
         "📅 Sedute / Terapie",

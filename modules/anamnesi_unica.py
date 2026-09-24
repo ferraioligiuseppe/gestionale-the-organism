@@ -74,9 +74,13 @@ GRUPPI = [
          [_NO, "Spontaneo", "Indotto", "Distocico", "Cesareo programmato", "Cesareo d'urgenza"]),
         ("parto_presentazione", "Presentazione", "sel", [_NO, "Cefalica", "Podalica", "Trasversa", "Altro"]),
         ("parto_travaglio", "Travaglio", "sel", [_NO, "Rapido", "Normale", "Prolungato"]),
+        ("parto_travaglio_ore", "Durata del travaglio (ore)", "num", 72),
+        ("parto_cordone", "Cordone ombelicale", "sel",
+         [_NO, "Nessun problema", "Giro di cordone", "Più giri di cordone", "Nodo vero",
+          "Cordone corto", "Prolasso"]),
         ("parto_strumenti", "Strumenti", "multi", ["Forcipe", "Ventosa"]),
         ("parto_complicanze", "Complicanze", "multi",
-         ["Distress fetale", "Giro di cordone", "Prolasso del cordone", "Emorragia materna",
+         ["Distress fetale", "Emorragia materna",
           "Anestesia generale", "Rottura prematura delle membrane", "Distocia di spalla", "Altro"]),
         ("parto_peso", "Peso alla nascita (g)", "txt", None),
         ("parto_apgar1", "APGAR a 1'", "num", 10),
@@ -378,8 +382,10 @@ def _da_castagnini(d: dict, c: dict):
     _aggiungi_lista(d, "parto_strumenti", [x for x, k in (("Forcipe", "forcipe"), ("Ventosa", "ventosa")) if s.get(k)])
     pc = p.get("complicanze") or {}
     _aggiungi_lista(d, "parto_complicanze",
-                    [x for x, k in (("Distress fetale", "distress_fetale"), ("Giro di cordone", "cordone"),
+                    [x for x, k in (("Distress fetale", "distress_fetale"),
                                     ("Emorragia materna", "emorragia"), ("Altro", "altro")) if pc.get(k)])
+    if pc.get("cordone"):
+        _metti(d, "parto_cordone", "Giro di cordone")
     _unisci_note(d, "parto_note", pc.get("altro_desc"), "Altre complicanze")
     _metti(d, "parto_apgar1", p.get("apgar_1"))
     _metti(d, "parto_apgar5", p.get("apgar_5"))
@@ -489,9 +495,14 @@ def _da_teitelbaum(d: dict, t: dict):
     else:
         _metti(d, "parto_tipo", {"Naturale": "Spontaneo", "Cesareo emergenza": "Cesareo d'urgenza"}.get(tipo, tipo))
     _metti(d, "parto_presentazione", p.get("pres"))
+    comp_t = p.get("complicanze") or []
+    if "Cordone al collo" in comp_t:
+        _metti(d, "parto_cordone", "Giro di cordone")
+    elif "Prolasso del cordone" in comp_t:
+        _metti(d, "parto_cordone", "Prolasso")
     _aggiungi_lista(d, "parto_complicanze",
-                    [{"Cordone al collo": "Giro di cordone", "Rottura prematura membrane":
-                      "Rottura prematura delle membrane"}.get(x, x) for x in (p.get("complicanze") or [])])
+                    [{"Rottura prematura membrane": "Rottura prematura delle membrane"}.get(x, x)
+                     for x in comp_t if x not in ("Cordone al collo", "Prolasso del cordone")])
     for k, src in (("parto_apgar1", "apgar1"), ("parto_apgar5", "apgar5")):
         try:
             _metti(d, k, int(p.get(src) or 0))
@@ -612,7 +623,7 @@ def _da_protocollo(d: dict, sv: dict, a: dict):
     _unisci_note(d, "grav_note", a.get("gravidanza"))
     _metti(d, "parto_tipo", {"Eutocico": "Spontaneo"}.get(a.get("parto_tipo"), a.get("parto_tipo")))
     if a.get("giro_cordone"):
-        _aggiungi_lista(d, "parto_complicanze", ["Giro di cordone"])
+        _metti(d, "parto_cordone", "Giro di cordone")
     _metti(d, "parto_peso", a.get("peso_nascita"))
     ap = str(a.get("apgar") or "").replace(" ", "")
     if "/" in ap:
@@ -784,6 +795,13 @@ def render_anamnesi_unica(conn, paz_id, px: str = "an") -> tuple[dict, dict]:
 
     _profilo_rischio(nuovo_pi, nuovo_sv)
 
+    # Documenti pregressi: stessa funzione della pagina Rilievi PNEV.
+    try:
+        from .rilievi_pnev import render_documenti_pregressi
+        render_documenti_pregressi(conn, paz_id, f"{px}_doc")
+    except Exception as e:
+        st.caption(f"Documenti pregressi non disponibili: {e}")
+
     if st.button("💾 Salva anamnesi", key=f"{px}_salva", type="primary"):
         ok1, e1 = _salva(conn, paz_id, nuovo_pi, "confermata")
         ok2, e2 = _salva_sviluppo(conn, paz_id, nuovo_sv)
@@ -825,7 +843,13 @@ def calcola_rischio(pi: dict, sv: dict | None = None) -> tuple[int, list[str]]:
         score += 2; flags.append(f"APGAR basso a 1' ({a1})")
     if pi.get("parto_pianto") in ("Tardivo", "Assente"):
         score += 1; flags.append("Pianto non immediato")
-    if len(pi.get("parto_complicanze") or []) >= 2 or pi.get("parto_strumenti"):
+    n_comp = len(pi.get("parto_complicanze") or [])
+    if pi.get("parto_cordone") not in (None, "", "Nessun problema"):
+        n_comp += 1
+    ore = _int(pi.get("parto_travaglio_ore"))
+    if pi.get("parto_travaglio") == "Prolungato" or (ore and ore > 12):
+        n_comp += 1
+    if n_comp >= 2 or pi.get("parto_strumenti"):
         score += 1; flags.append("Parto complicato o strumentale")
     if pi.get("mot_gatt") == "No (saltato)":
         score += 2; flags.append("Gattonamento saltato")
@@ -927,7 +951,8 @@ def valori_protocollo(pi: dict, sv: dict) -> dict:
     return {
         "gravidanza": unisci("🤰 Gravidanza", pi, tutte),
         "parto_tipo": pi.get("parto_tipo") or "",
-        "giro_cordone": any("cordone" in x.lower() for x in comp),
+        "giro_cordone": (pi.get("parto_cordone") not in (None, "", "Nessun problema"))
+                        or any("cordone" in x.lower() for x in comp),
         "peso_nascita": pi.get("parto_peso") or "",
         "apgar": f"{a1 or '_'}/{a5 or '_'}" if (a1 or a5) else "",
         "tin_ittero": pi.get("parto_segnalazioni") or [],
