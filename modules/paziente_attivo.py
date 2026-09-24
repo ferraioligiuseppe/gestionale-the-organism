@@ -524,10 +524,11 @@ def header_paziente_attivo(conn) -> int | None:
     # chiave dei suoi widget sempre unica per evitare "duplicate element key".
     st.session_state["_hpa_render_n"] = st.session_state.get("_hpa_render_n", 0) + 1
     _hpa_n = st.session_state["_hpa_render_n"]
-    if not pid:
-        ripristina_ultimo_paziente(conn)
-        pid = paziente_attivo_id()
-        rec = paziente_attivo_record()
+    # Niente ripristino automatico dell'ultimo paziente: a ogni nuovo accesso
+    # si parte senza paziente attivo e lo si sceglie dalla lista. Aprire per
+    # errore la scheda del paziente di ieri era un rischio di confusione.
+    # Dentro la stessa sessione il paziente scelto resta attivo come prima.
+    # (ripristina_ultimo_paziente resta nel file, non piu' chiamata.)
 
     # Se ho l'id ma non il record (cache pulita o sessione nuova) → ricarico
     if pid and not rec:
