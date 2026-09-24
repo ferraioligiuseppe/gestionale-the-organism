@@ -541,7 +541,7 @@ def _sezione_motivo_invio(mi: dict, px: str) -> dict:
 
 # ── summary ───────────────────────────────────────────────────────────────────
 
-def _build_summary(data: dict) -> str:
+def _build_summary_castagnini(data: dict) -> str:
     """Genera un testo riassuntivo compatto dei punti salienti."""
     lines = []
 
@@ -676,72 +676,50 @@ def render_anamnesi_castagnini(
         if k not in cat:
             cat[k] = v
 
-    if readonly:
-        summary = (_build_summary(cat) + _sintesi_sviluppo()).strip()
-        if summary:
-            st.markdown("**Sintesi anamnesi Castagnini:**")
-            for line in summary.split("\n"):
-                st.markdown(f"- {line}")
-        else:
-            st.caption("Anamnesi Castagnini non compilata.")
-        return pnev_json, summary
-
-    st.markdown("## 📋 Anamnesi PNEV — Castagnini (0–2 anni)")
-    st.caption("Tutti i campi sono facoltativi. I dati vengono salvati in pnev_json senza migrazioni DB.")
-
-    px = f"cat_{prefix}"
-
-    with st.expander("1️⃣ Gravidanza", expanded=True):
-        cat["gravidanza"] = _sezione_gravidanza(cat.get("gravidanza", {}), px)
-
-    with st.expander("2️⃣ Parto", expanded=False):
-        cat["parto"] = _sezione_parto(cat.get("parto", {}), px)
-
-    with st.expander("3️⃣ Periodo neonatale (0–3 mesi)", expanded=False):
-        cat["neonatale"] = _sezione_neonatale(cat.get("neonatale", {}), px)
-
-    with st.expander("4️⃣ Sviluppo motorio (0–24 mesi)", expanded=False):
-        cat["sviluppo_motorio"] = _sezione_sviluppo_motorio(cat.get("sviluppo_motorio", {}), px)
-
-    with st.expander("5️⃣ Sviluppo sensoriale e comunicativo", expanded=False):
-        cat["sviluppo_sensoriale"] = _sezione_sviluppo_sensoriale(cat.get("sviluppo_sensoriale", {}), px)
-
-    with st.expander("6️⃣ Alimentazione e sonno", expanded=False):
-        cat["alimentazione_sonno"] = _sezione_alimentazione_sonno(cat.get("alimentazione_sonno", {}), px)
-
-    with st.expander("7️⃣ Storia familiare e contesto", expanded=False):
-        cat["storia_familiare"] = _sezione_storia_familiare(cat.get("storia_familiare", {}), px)
-
-    with st.expander("8️⃣ Motivo dell'invio / domanda clinica", expanded=False):
-        cat["motivo_invio"] = _sezione_motivo_invio(cat.get("motivo_invio", {}), px)
-
-    # Dopo i 24 mesi questa anamnesi si fermava. Il seguito e' un blocco
-    # condiviso con il Protocollo di valutazione: stessi dati, una sola copia.
-    st.markdown("#### 9️⃣ Dopo i 2 anni — sviluppo, scuola, salute, abitudini")
+    # Questa anamnesi e' ora l'anamnesi unica del paziente (modules/anamnesi_unica.py):
+    # stessi dati in Anamnesi PNEV, Protocollo di valutazione e Diagnosi assistita.
+    # Le funzioni _sezione_* sopra restano solo come riferimento storico.
     try:
-        from modules.anamnesi_sviluppo import render_anamnesi_sviluppo
+        from modules.anamnesi_unica import render_anamnesi_unica, sintesi_testo
         from modules.app_core import get_connection
         from modules.paziente_attivo import paziente_attivo_id
-        render_anamnesi_sviluppo(get_connection(), paziente_attivo_id(), f"{px}_sv")
+        conn, paz_id = get_connection(), paziente_attivo_id()
     except Exception as e:
-        st.caption(f"Anamnesi dello sviluppo non disponibile: {e}")
+        st.error(f"Anamnesi non disponibile: {e}")
+        return pnev_json, ""
 
-    # Aggiorna timestamp
-    cat["_meta"] = {"versione": "1.0", "data": date.today().isoformat()}
-
-    # Scrivi nel pnev_json principale
-    pnev_json["anamnesi_castagnini"] = cat
-
-    summary = (_build_summary(cat) + _sintesi_sviluppo()).strip()
-
-    # Anteprima summary collassata
-    with st.expander("📄 Anteprima sintesi anamnesi", expanded=False):
+    if readonly:
+        summary = sintesi_testo(conn, paz_id)
         if summary:
+            st.markdown("**Sintesi anamnesi:**")
             for line in summary.split("\n"):
                 st.markdown(f"- {line}")
         else:
-            st.caption("Nessun elemento saliente da evidenziare (tutti i valori sono nella norma attesa).")
+            st.caption("Anamnesi non compilata.")
+        return pnev_json, summary
 
+    st.markdown("## 📋 Anamnesi — dalla gravidanza a oggi")
+    render_anamnesi_unica(conn, paz_id, f"cat_{prefix}")
+    summary = sintesi_testo(conn, paz_id)
     return pnev_json, summary
 # Alias per compatibilità con app_core.py (typo storico)
 render_anamnesi_catagnini = render_anamnesi_castagnini
+
+
+def _build_summary(cat) -> str:
+    """app_core.py chiama questa funzione passando pnev_json["anamnesi_catagnini"]
+    (con la «s» mancante): riceveva sempre un dizionario vuoto e la sintesi
+    usciva vuota. Ora risponde con l'anamnesi unica del paziente attivo."""
+    try:
+        from modules.anamnesi_unica import sintesi_testo
+        from modules.app_core import get_connection
+        from modules.paziente_attivo import paziente_attivo_id
+        t = sintesi_testo(get_connection(), paziente_attivo_id())
+        if t:
+            return t
+    except Exception:
+        pass
+    try:
+        return _build_summary_castagnini(cat) if cat else ""
+    except Exception:
+        return ""
