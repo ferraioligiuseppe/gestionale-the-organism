@@ -650,76 +650,15 @@ def _profilo_rischio(dati: dict) -> None:
 
 
 def render_anamnesi_the_organism(conn, paz_id: int) -> None:
-    """Scheda anamnesi completa The Organism — 9 sezioni."""
+    """Ora e' l'anamnesi unica del paziente (modules/anamnesi_unica.py).
 
-    st.subheader("Scheda Anamnesi Neuropsicologica — The Organism")
-    st.caption(
-        "Piramide degli apprendimenti | Modello Teitelbaum | "
-        "Scale visive + Checklist"
-    )
-
-    stored_full = _carica(conn, paz_id)
-    stored = stored_full.get("anamnesi_the_organism", {})
-
-    tabs = st.tabs([
-        "1. Gravidanza", "2. Parto", "3. Neonatale",
-        "4. Alimentazione", "5. Motorio (Teitelbaum)",
-        "6. Sensoriale", "7. Segnali allerta",
-        "8. Famiglia", "9. Invio", "Profilo rischio",
-    ])
-
-    dati_correnti = {}
-
-    with tabs[0]:
-        dati_correnti.update(_s1_gravidanza(paz_id, stored))
-        if st.button("Salva gravidanza", key=f"save_s1_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[1]:
-        dati_correnti.update(_s2_parto(paz_id, stored))
-        if st.button("Salva parto", key=f"save_s2_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[2]:
-        dati_correnti.update(_s3_neonatale(paz_id, stored))
-        if st.button("Salva neonatale", key=f"save_s3_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[3]:
-        dati_correnti.update(_s4_alimentazione(paz_id, stored))
-        if st.button("Salva alimentazione", key=f"save_s4_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[4]:
-        dati_correnti.update(_s5_motorio(paz_id, stored))
-        if st.button("Salva motorio", key=f"save_s5_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[5]:
-        dati_correnti.update(_s6_sensoriale(paz_id, stored))
-        if st.button("Salva sensoriale", key=f"save_s6_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[6]:
-        dati_correnti.update(_s7_allerta(paz_id, stored))
-        if st.button("Salva segnali allerta", key=f"save_s7_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[7]:
-        dati_correnti.update(_s8_famiglia(paz_id, stored))
-        if st.button("Salva famiglia", key=f"save_s8_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[8]:
-        dati_correnti.update(_s9_invio(paz_id, stored))
-        if st.button("Salva motivo invio", key=f"save_s9_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-
-    with tabs[9]:
-        _profilo_rischio(stored)
-        if st.button("Ricalcola profilo", key=f"risc_{paz_id}"):
-            st.rerun()
-        if st.button("Salva tutto e aggiorna profilo",
-                     type="primary", key=f"save_all_{paz_id}"):
-            _salva(conn, paz_id, {"anamnesi_the_organism": dati_correnti})
-            st.rerun()
+    La versione precedente aveva un difetto che perdeva dati: ogni scheda
+    aveva il suo bottone «Salva», e ognuno salvava solo le sezioni disegnate
+    fino a quel punto sovrascrivendo l'intera chiave. Salvare la gravidanza
+    cancellava tutte le altre sezioni. Le funzioni _s1.._s9 restano solo
+    come riferimento: i loro dati vengono recuperati alla prima apertura."""
+    st.subheader("Anamnesi — dalla gravidanza a oggi")
+    st.caption("Modello Castagnini per tappe e dati oggettivi, modello Teitelbaum per "
+               "qualità del movimento e profilo di rischio.")
+    from .anamnesi_unica import render_anamnesi_unica
+    render_anamnesi_unica(conn, paz_id, "org")

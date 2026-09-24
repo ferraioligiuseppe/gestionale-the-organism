@@ -237,10 +237,10 @@ def _riassunto_storico(conn, paz_id) -> str:
                 parti.append(f"   · {step}{r.get('nome','')} — {r.get('stato','')}")
 
     try:
-        from .anamnesi_sviluppo import carica_anamnesi_sviluppo, sintesi_anamnesi_sviluppo
-        sv = sintesi_anamnesi_sviluppo(carica_anamnesi_sviluppo(conn, paz_id))
+        from .anamnesi_unica import sintesi_anamnesi_unica
+        sv = sintesi_anamnesi_unica(conn, paz_id)
         if sv:
-            parti.append("\nANAMNESI DELLO SVILUPPO (dopo il primo anno):")
+            parti.append("\nANAMNESI (dalla gravidanza a oggi):")
             parti.extend(sv)
     except Exception:
         pass

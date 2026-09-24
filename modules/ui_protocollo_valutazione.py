@@ -209,36 +209,35 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     fascia = st.radio("Fascia applicata", ["A 3;0–5;11 prescolare", "B 6;0–10;11 primaria", "C 11 anni e oltre"],
                        key="pv_fascia", horizontal=True)
 
-    st.markdown("### Anamnesi gravidica, parto e neonatale")
-    gravidanza = st.text_area("Gravidanza (decorso, terapie, eventi)", key="pv_gravidanza", height=68)
-    c3, c4 = st.columns(2)
-    parto_tipo = c3.selectbox("Parto", ["", "Eutocico", "Distocico", "Cesareo programmato", "Cesareo d'urgenza"],
-                               key="pv_parto_tipo")
-    giro_cordone = c4.checkbox("Giro di cordone", key="pv_giro_cordone")
-    c5, c6, c7 = st.columns(3)
-    peso_nascita = c5.text_input("Peso alla nascita (g)", key="pv_peso")
-    apgar = c6.text_input("Apgar (___/___)", key="pv_apgar")
-    tin_ittero = c7.multiselect("Segnalazioni", ["TIN", "Ittero", "Altro"], key="pv_tin")
-    periodo_neonatale = st.text_area("Periodo neonatale (allattamento, suzione, coliche, sonno, pianto)",
-                                      key="pv_neonatale", height=68)
-    c8, c9 = st.columns(2)
-    tappe_motorie = c8.text_input("Tappe motorie (controllo capo, seduta, gattonamento, cammino)", key="pv_tappe")
-    prime_parole = c9.text_input("Prime parole — prime frasi", key="pv_prime_parole")
-    otiti = st.text_input("Otiti, tubi timpanici, screening uditivo", key="pv_otiti")
-    familiarita = st.text_input("Familiarità per DSA, disturbi di linguaggio, balbuzie", key="pv_familiarita")
-    bilinguismo = st.text_input("Bilinguismo / lingua prevalente in casa", key="pv_bilinguismo")
-    patologie_note = st.text_area("Patologie note, interventi, terapie in corso", key="pv_patologie", height=68)
-    trattamenti_pregressi = st.text_area("Trattamenti pregressi ed esiti", key="pv_trattamenti", height=68)
-    valutazione_visiva_pregressa = st.text_input("Valutazione visiva/optometrica pregressa", key="pv_visiva_preg")
-    hobby = st.text_input("Hobby, sport, attività extrascolastiche", key="pv_hobby")
-
-    st.markdown("### Sviluppo dopo il primo anno, scuola, salute, abitudini")
-    sviluppo = {}
+    # Un tempo qui c'erano sedici campi a testo libero, una terza copia di
+    # gravidanza, parto e tappe. Ora e' l'anamnesi unica del paziente: la
+    # stessa dell'Anamnesi PNEV e del Castagnini. Le variabili sotto hanno i
+    # nomi di prima, cosi' salvataggio e relazione del protocollo non cambiano.
+    st.markdown("### Anamnesi")
     try:
-        from .anamnesi_sviluppo import render_anamnesi_sviluppo
-        sviluppo = render_anamnesi_sviluppo(conn, paz_id, "pv_sv")
+        from .anamnesi_unica import render_anamnesi_unica, valori_protocollo
+        _pi, _sv = render_anamnesi_unica(conn, paz_id, "pv_an")
+        _va = valori_protocollo(_pi, _sv)
     except Exception as e:
-        st.caption(f"Anamnesi dello sviluppo non disponibile: {e}")
+        st.error(f"Anamnesi non disponibile: {e}")
+        _va = {}
+    gravidanza = _va.get("gravidanza", "")
+    parto_tipo = _va.get("parto_tipo", "")
+    giro_cordone = _va.get("giro_cordone", False)
+    peso_nascita = _va.get("peso_nascita", "")
+    apgar = _va.get("apgar", "")
+    tin_ittero = _va.get("tin_ittero", [])
+    periodo_neonatale = _va.get("periodo_neonatale", "")
+    tappe_motorie = _va.get("tappe_motorie", "")
+    prime_parole = _va.get("prime_parole", "")
+    otiti = _va.get("otiti", "")
+    familiarita = _va.get("familiarita", "")
+    bilinguismo = _va.get("bilinguismo", "")
+    patologie_note = _va.get("patologie_note", "")
+    trattamenti_pregressi = _va.get("trattamenti_pregressi", "")
+    valutazione_visiva_pregressa = _va.get("valutazione_visiva_pregressa", "")
+    hobby = _va.get("hobby", "")
+    sviluppo = _va.get("sviluppo", {})
 
     st.markdown("---")
     st.markdown("## PARTE 1 — BILANCIO FONETICO")
