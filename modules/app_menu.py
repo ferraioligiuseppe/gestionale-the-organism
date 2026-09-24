@@ -152,6 +152,7 @@ PAZIENTI_RAMI = {
         # Il profilo della persona sui sette livelli del modello PNEV:
         # rilievi da anamnesi, referti esterni, colloqui e test.
         "🧩 Rilievi PNEV",
+        "🎙️ Colloqui clinici",
         "🗓️ Diario clinico",
         "📝 Diagnosi assistita",
         "📅 Sedute / Terapie",

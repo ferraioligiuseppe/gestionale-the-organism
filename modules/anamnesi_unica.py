@@ -802,6 +802,13 @@ def render_anamnesi_unica(conn, paz_id, px: str = "an") -> tuple[dict, dict]:
     except Exception as e:
         st.caption(f"Documenti pregressi non disponibili: {e}")
 
+    # Il colloquio anamnestico: stessa funzione della pagina Colloqui clinici.
+    try:
+        from .colloqui_clinici import render_colloqui
+        render_colloqui(conn, paz_id, f"{px}_coll", tipo_default="Primo colloquio (anamnestico)")
+    except Exception as e:
+        st.caption(f"Colloqui clinici non disponibili: {e}")
+
     if st.button("💾 Salva anamnesi", key=f"{px}_salva", type="primary"):
         ok1, e1 = _salva(conn, paz_id, nuovo_pi, "confermata")
         ok2, e2 = _salva_sviluppo(conn, paz_id, nuovo_sv)

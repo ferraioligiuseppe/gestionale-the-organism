@@ -254,6 +254,15 @@ def _riassunto_storico(conn, paz_id) -> str:
     except Exception:
         pass
 
+    try:
+        from .colloqui_clinici import sintesi_colloqui
+        col = sintesi_colloqui(conn, paz_id)
+        if col:
+            parti.append("\nCOLLOQUI CLINICI (tutti i professionisti):")
+            parti.extend(col)
+    except Exception:
+        pass
+
     return "\n".join(parti).strip()
 
 
