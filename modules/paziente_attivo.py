@@ -345,13 +345,14 @@ def _corpo_seleziona(conn, ns="default"):
         if ordina_recenti:
             pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
 
-    # Nuovo paziente al volo — SEMPRE APERTO e in evidenza, così le
-    # collaboratrici vedono subito come creare un'anagrafica senza uscire.
-    with st.expander("➕ Crea NUOVA anagrafica (senza uscire da qui)",
-                     expanded=True):
-        st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
-                   "il paziente viene creato e selezionato subito.")
-        _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
+    def _nuovo_in_fondo():
+        # Prima l'elenco, poi la creazione: chiusa, si apre da sola solo se
+        # la ricerca non trova nessuno (il caso in cui serve davvero).
+        with st.expander("➕ Crea NUOVA anagrafica (senza uscire da qui)",
+                         expanded=bool(cerca.strip()) and not pazienti):
+            st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
+                       "il paziente viene creato e selezionato subito.")
+            _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
 
     # Tabella ag-grid
     try:
@@ -375,6 +376,7 @@ def _corpo_seleziona(conn, ns="default"):
                 st.rerun()
             except Exception:
                 st.error("Selezione non valida.")
+        _nuovo_in_fondo()
         return
 
     rows_df = []
@@ -425,6 +427,7 @@ def _corpo_seleziona(conn, ns="default"):
         fit_columns_on_grid_load=False,
         key=f"aggrid_paz_attivo_{ns}_{cerca}",
     )
+    _nuovo_in_fondo()
 
     selected = grid_response.get("selected_rows", [])
     if hasattr(selected, "to_dict"):
