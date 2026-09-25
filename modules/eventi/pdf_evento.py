@@ -151,7 +151,9 @@ def genera_pdf_conferma(evento: dict, iscrizione: dict) -> bytes:
     story.append(Spacer(1, 10 * mm))
 
     # === BOX EVENTO ===
-    data_str, ora_str = _format_data_ora(evento["data_ora"])
+    # Negli eventi a turni vale l'orario dell'iscritto, non l'inizio dell'evento.
+    _slot = iscrizione.get("slot_orario")
+    data_str, ora_str = _format_data_ora(_slot if isinstance(_slot, datetime) else evento["data_ora"])
     rows = [
         [Paragraph("<b>Evento</b>", style_label), Paragraph(evento.get("titolo", ""), style_body)],
         [Paragraph("<b>Data</b>", style_label), Paragraph(data_str, style_body)],
@@ -245,8 +247,8 @@ def genera_pdf_conferma(evento: dict, iscrizione: dict) -> bytes:
     # === FOOTER ===
     story.append(Spacer(1, 15 * mm))
     story.append(Paragraph(
-        "Studio The Organism — Via De Rosa 46, 84016 Pagani (SA)<br/>"
-        "www.theorganism.com",
+        "Associazione The Organism<br/>"
+        "www.pnev.it · apstheorganism@gmail.com",
         style_caption,
     ))
 
