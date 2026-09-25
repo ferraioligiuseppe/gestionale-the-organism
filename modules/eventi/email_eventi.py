@@ -156,11 +156,34 @@ def _format_data_evento(dt: datetime) -> str:
     return f"{g} {dt.day} {MESI[dt.month - 1]} {dt.year} alle ore {dt.strftime('%H:%M')}"
 
 
+FIRMA = (
+    "A presto,\n"
+    "Associazione The Organism\n"
+    "www.pnev.it · apstheorganism@gmail.com\n"
+)
+
+
+def _data_iscritto(evento: dict, iscrizione: dict) -> str:
+    """Data e ora dell'appuntamento DI QUESTO iscritto.
+
+    Negli eventi a turni (screening) ognuno ha il suo orario in slot_orario;
+    l'email usava sempre l'ora di inizio dell'evento, quindi a tutti arrivava
+    lo stesso orario. Se lo slot c'e', vale lo slot."""
+    slot = iscrizione.get("slot_orario")
+    if isinstance(slot, datetime):
+        return _format_data_evento(slot)
+    return _format_data_evento(evento["data_ora"])
+
+
+def _sede(evento: dict) -> str:
+    return evento.get("sede") or ""
+
+
 def _testo_conferma_iscritto(evento: dict, iscrizione: dict) -> str:
     """Testo plain-text dell'email di conferma all'iscritto."""
     stato = iscrizione.get("stato", "confermata")
     nome = iscrizione.get("nome", "").strip()
-    data_str = _format_data_evento(evento["data_ora"])
+    data_str = _data_iscritto(evento, iscrizione)
 
     if stato == "confermata":
         intro = (
@@ -197,10 +220,7 @@ def _testo_conferma_iscritto(evento: dict, iscrizione: dict) -> str:
         "Conservalo come ricevuta.\n\n"
         "Se non puoi più partecipare, ti chiediamo cortesemente di avvisarci rispondendo "
         "a questa email, così possiamo liberare il posto a chi è in lista d'attesa.\n\n"
-        "A presto,\n"
-        "Studio The Organism\n"
-        "Via De Rosa 46, Pagani (SA)\n"
-        "www.theorganism.com\n"
+        + FIRMA
     )
     return intro + note
 
@@ -232,7 +252,7 @@ def _testo_promemoria_iscritto(evento: dict, iscrizione: dict, tipo: str = "24h"
     tipo: '48h' (mancano 2 giorni) o '24h' (manca 1 giorno / domani)
     """
     nome = iscrizione.get("nome", "").strip()
-    data_str = _format_data_evento(evento["data_ora"])
+    data_str = _data_iscritto(evento, iscrizione)
 
     if tipo == "48h":
         apertura = (
@@ -261,10 +281,7 @@ def _testo_promemoria_iscritto(evento: dict, iscrizione: dict, tipo: str = "24h"
         "Ti aspettiamo. Se per qualsiasi motivo non potrai più esserci, "
         "ti chiediamo gentilmente di avvisarci rispondendo a questa email, "
         "così possiamo liberare il posto per chi è in lista d'attesa.\n\n"
-        "A presto,\n"
-        "Studio The Organism\n"
-        "Via De Rosa 46, Pagani (SA)\n"
-        "www.theorganism.com\n"
+        + FIRMA
     )
     return apertura + corpo + chiusura
 
