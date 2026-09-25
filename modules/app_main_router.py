@@ -452,7 +452,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
         "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
-        "🧩 Rilievi PNEV", "🎙️ Colloqui clinici",
         "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
@@ -539,26 +538,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore quadro storico: {e}")
-            with st.expander("Dettagli tecnici"):
-                st.code(traceback.format_exc())
-        return True
-    if sotto == "🎙️ Colloqui clinici":
-        try:
-            from .colloqui_clinici import render_pagina_colloqui
-            render_pagina_colloqui(conn, paz_id)
-        except Exception as e:
-            import traceback
-            st.error(f"Errore colloqui clinici: {e}")
-            with st.expander("Dettagli tecnici"):
-                st.code(traceback.format_exc())
-        return True
-    if sotto == "🧩 Rilievi PNEV":
-        try:
-            from .rilievi_pnev import render_rilievi
-            render_rilievi(conn, paz_id)
-        except Exception as e:
-            import traceback
-            st.error(f"Errore rilievi PNEV: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
@@ -1833,6 +1812,19 @@ def dispatch_smart_section(*, area: str, sotto: str,
                             is_admin: bool) -> None:
     """Entry point chiamato da app_core.py."""
     conn = get_connection()
+
+    # Cambiando area del menu (es. da Pazienti a Screening) il paziente
+    # attivo si azzera e va riscelto dall'elenco: evita di continuare a
+    # lavorare sulla scheda del paziente precedente senza accorgersene.
+    # Dentro la stessa area (Anamnesi → Visiva) resta quello scelto.
+    try:
+        _prec = st.session_state.get("_area_paziente_attivo")
+        if _prec is not None and _prec != area:
+            from .paziente_attivo import reset_paziente_attivo
+            reset_paziente_attivo()
+        st.session_state["_area_paziente_attivo"] = area
+    except Exception:
+        pass
 
     # Blocco note del diario nella barra laterale: disponibile in ogni
     # schermata, così durante la visita si annota senza uscire dal modulo
