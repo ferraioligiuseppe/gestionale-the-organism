@@ -389,3 +389,28 @@ def invia_promemoria_iscritto(
         f"Promemoria {tipo} inviato a {to_email} per evento "
         f"{evento.get('id')} (iscrizione {iscrizione.get('id')})"
     )
+
+
+def invia_riepilogo_promemoria(evento: dict, tipo: str, inviati: list, errori: list) -> None:
+    """Una sola email allo studio dopo l'invio dei promemoria: a chi e' partito,
+    a chi no e perche', e il testo esatto ricevuto dagli iscritti."""
+    to_email = _clinic_email()
+    if not to_email:
+        raise RuntimeError("Email dello studio non configurata")
+    righe = [f"Promemoria {tipo} — {evento.get('titolo', '')}",
+             f"{_format_data_evento(evento['data_ora'])}", "",
+             f"Inviati: {len(inviati)}"]
+    for i in inviati:
+        orario = i["slot_orario"].astimezone(ROME_TZ).strftime("%H:%M") if isinstance(i.get("slot_orario"), datetime) and i["slot_orario"].tzinfo else (i["slot_orario"].strftime("%H:%M") if isinstance(i.get("slot_orario"), datetime) else "—")
+        righe.append(f"  ✓ {orario}  {i.get('cognome', '')} {i.get('nome', '')} <{i.get('email', '')}>")
+    if errori:
+        righe += ["", f"NON inviati: {len(errori)}"] + [f"  ✗ {e}" for e in errori]
+    if inviati:
+        righe += ["", "─" * 50, "Testo ricevuto (esempio, dal primo iscritto):", "",
+                  _testo_promemoria_iscritto(evento, inviati[0], tipo)]
+    msg = EmailMessage()
+    msg["Subject"] = f"Riepilogo promemoria {tipo}: {len(inviati)} inviati" + (f", {len(errori)} errori" if errori else "") + f" — {evento.get('titolo', '')}"
+    msg["From"] = _from_address()
+    msg["To"] = to_email
+    msg.set_content("\n".join(righe))
+    _send(msg)

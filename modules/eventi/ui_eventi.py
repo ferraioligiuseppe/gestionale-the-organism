@@ -872,9 +872,17 @@ def _render_tab_azioni(conn, ev: dict):
                     copia = dict(prova_iscr)
                     copia["email"] = email_prova.strip()
                     invia_conferma_iscritto(ev, copia, pdf_bytes=genera_pdf_conferma(ev, prova_iscr))
-                    st.success(f"Prova inviata a {email_prova.strip()}. All'iscritto non è partito niente.")
+                    st.session_state[f"prova_esito_{ev['id']}"] = (
+                        True, f"Prova inviata a {email_prova.strip()}. All'iscritto non è partito niente.")
                 except Exception as e:
-                    st.error(f"Invio di prova non riuscito: {e}")
+                    st.session_state[f"prova_esito_{ev['id']}"] = (False, f"Invio di prova non riuscito: {e}")
+            # Il click ricarica la pagina e le schede tornano su «Info»: un
+            # messaggio scritto qui non si vedrebbe. Il toast compare sempre,
+            # e l'esito resta scritto anche dentro la scheda.
+            _esito = st.session_state.get(f"prova_esito_{ev['id']}")
+            if _esito:
+                st.toast(("✅ " if _esito[0] else "❌ ") + _esito[1])
+                (st.success if _esito[0] else st.error)(_esito[1])
 
         # Doppia conferma
         col_btn1, col_btn2 = st.columns([2, 1])
@@ -975,26 +983,62 @@ def _render_tab_azioni(conn, ev: dict):
                     st.error(f"Errore import: {e}")
                     st.stop()
 
-                successi, errori = 0, []
+                inviati, errori = [], []
                 progress = st.progress(0, text="Invio...")
                 for i, iscr in enumerate(non_inviati):
                     try:
                         invia_promemoria_iscritto(ev, iscr, tipo_prom)
                         marca_promemoria_inviato(conn, iscr["id"], tipo_prom)
-                        successi += 1
+                        inviati.append(iscr)
                     except Exception as e:
-                        errori.append(f"{iscr.get('email','?')}: {e}")
+                        errori.append(f"{iscr.get('cognome','')} {iscr.get('nome','')} <{iscr.get('email','?')}>: {e}")
                     progress.progress((i + 1) / len(non_inviati),
                                       text=f"Inviata {i+1}/{len(non_inviati)}")
                 progress.empty()
-                if successi:
-                    st.success(f"✅ {successi} promemoria {tipo_prom} inviati")
-                if errori:
-                    st.error(f"❌ {len(errori)} errori:")
-                    for err in errori:
-                        st.code(err)
+                # Copia per lo studio: un'unica email di riepilogo
+                copia = ""
+                try:
+                    from .email_eventi import invia_riepilogo_promemoria
+                    invia_riepilogo_promemoria(ev, tipo_prom, inviati, errori)
+                    copia = " Riepilogo inviato anche allo studio."
+                except Exception as e:
+                    copia = f" Riepilogo allo studio non inviato: {e}"
+                # Il click ricarica la pagina e le schede tornano su «Info»:
+                # l'esito va conservato, altrimenti non lo si vede.
+                st.session_state[f"prom_esito_{ev['id']}"] = (tipo_prom, len(inviati), errori, copia)
+                st.rerun()
         else:
             st.info(f"Tutti gli iscritti confermati hanno già ricevuto il promemoria {tipo_prom}.")
+
+        _pe = st.session_state.get(f"prom_esito_{ev['id']}")
+        if _pe:
+            _t, _n, _err, _copia = _pe
+            st.toast(f"{'✅' if not _err else '⚠️'} Promemoria {_t}: {_n} inviati" + (f", {len(_err)} errori" if _err else ""))
+            (st.success if not _err else st.warning)(
+                f"Ultimo invio promemoria {_t}: **{_n} inviati**" + (f", **{len(_err)} non inviati**" if _err else "") + "." + _copia)
+            for err in _err:
+                st.code(err)
+
+        # Stato per ogni iscritto, letto dal database: e' la prova di cosa e' partito
+        if tutti_confermati:
+            def _q(i, t):
+                if not i.get(f"promemoria_{t}_inviato"):
+                    return "—"
+                ts = i.get(f"promemoria_{t}_ts")
+                try:
+                    if getattr(ts, "tzinfo", None):
+                        from zoneinfo import ZoneInfo
+                        ts = ts.astimezone(ZoneInfo("Europe/Rome"))
+                    return "✅ " + ts.strftime("%d/%m %H:%M")
+                except Exception:
+                    return "✅"
+            with st.expander(f"📋 Stato promemoria per iscritto ({len(tutti_confermati)})"):
+                st.dataframe(
+                    [{"Iscritto": f"{i.get('cognome','')} {i.get('nome','')}",
+                      "Orario": i["slot_orario"].strftime("%H:%M") if i.get("slot_orario") else "",
+                      "Email": i.get("email", ""),
+                      "48h": _q(i, "48h"), "24h": _q(i, "24h")} for i in tutti_confermati],
+                    hide_index=True, use_container_width=True)
 
     with tab_wa:
         tipo_wa = st.radio(
