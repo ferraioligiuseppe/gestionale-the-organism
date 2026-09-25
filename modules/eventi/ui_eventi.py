@@ -940,6 +940,37 @@ def _render_tab_azioni(conn, ev: dict):
             f"{', ...' if len(iscritti_confermati) > 3 else ''})"
         )
 
+        # ── Prova prima di mandare a tutti ─────────────────────────────
+        # Si sceglie un iscritto e si vede, a schermo, esattamente l'email
+        # che riceverebbe; poi la si puo' mandare a un indirizzo di prova
+        # (il proprio) invece che all'iscritto. Niente parte agli iscritti.
+        with st.container(border=True):
+            st.markdown("**🧪 Prova prima: guarda e manda a te la conferma di un iscritto**")
+            def _etich(i):
+                orario = i["slot_orario"].strftime("%H:%M") if i.get("slot_orario") else "senza turno"
+                return f"{i.get('cognome','')} {i.get('nome','')} · {orario} · {i.get('email','')}"
+            prova_iscr = st.selectbox("Iscritto", iscritti_confermati, format_func=_etich,
+                                      key=f"prova_iscr_{ev['id']}")
+            try:
+                from .email_eventi import _testo_conferma_iscritto
+                st.text_area("Testo che riceverà", _testo_conferma_iscritto(ev, prova_iscr),
+                             height=300, disabled=True, key=f"prova_txt_{ev['id']}_{prova_iscr.get('id')}")
+            except Exception as e:
+                st.error(f"Anteprima non riuscita: {e}")
+            c_p1, c_p2 = st.columns([3, 1])
+            email_prova = c_p1.text_input("Manda la prova a", value="dr.ferraioligiuseppe@gmail.com",
+                                          key=f"prova_mail_{ev['id']}")
+            if c_p2.button("📨 Manda prova", key=f"prova_btn_{ev['id']}", use_container_width=True):
+                try:
+                    from .email_eventi import invia_conferma_iscritto
+                    from .pdf_evento import genera_pdf_conferma
+                    copia = dict(prova_iscr)
+                    copia["email"] = email_prova.strip()
+                    invia_conferma_iscritto(ev, copia, pdf_bytes=genera_pdf_conferma(ev, prova_iscr))
+                    st.success(f"Prova inviata a {email_prova.strip()}. All'iscritto non è partito niente.")
+                except Exception as e:
+                    st.error(f"Invio di prova non riuscito: {e}")
+
         # Doppia conferma
         col_btn1, col_btn2 = st.columns([2, 1])
         with col_btn1:
