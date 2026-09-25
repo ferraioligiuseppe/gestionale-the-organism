@@ -302,6 +302,13 @@ def _form_nuovo_paziente(conn, key_suffix=None):
 
 @st.dialog("👤 Seleziona paziente", width="large")
 def _dialog_seleziona(conn):
+    # La finestra "large" di Streamlit e' larga circa 750 px: troppo poco
+    # per la tabella. La si porta quasi a tutto schermo.
+    st.markdown(
+        "<style>div[data-testid='stDialog'] div[role='dialog']"
+        "{width:min(1200px,94vw)!important;max-width:94vw!important}</style>",
+        unsafe_allow_html=True,
+    )
     _corpo_seleziona(conn)
 
 
@@ -345,14 +352,6 @@ def _corpo_seleziona(conn, ns="default"):
         if ordina_recenti:
             pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
 
-    # Nuovo paziente al volo — SEMPRE APERTO e in evidenza, così le
-    # collaboratrici vedono subito come creare un'anagrafica senza uscire.
-    with st.expander("➕ Crea NUOVA anagrafica (senza uscire da qui)",
-                     expanded=True):
-        st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
-                   "il paziente viene creato e selezionato subito.")
-        _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
-
     # Tabella ag-grid
     try:
         from st_aggrid import (
@@ -381,10 +380,9 @@ def _corpo_seleziona(conn, ns="default"):
     for p in pazienti:
         rows_df.append({
             "_id": p.get("id"),
-            "Stato": _badge_stato(p.get("stato_paziente")),
-            "Cognome": p.get("cognome", "") or "",
-            "Nome": p.get("nome", "") or "",
-            "Data nasc.": _fmt_dn(p.get("data_nascita")),
+            "": _badge_stato(p.get("stato_paziente")),
+            "Paziente": f"{(p.get('cognome') or '').strip()} {(p.get('nome') or '').strip()}".strip(),
+            "Nato il": _fmt_dn(p.get("data_nascita")),
             "Età": _eta_anni(p.get("data_nascita")) or "",
             "Telefono": p.get("telefono", "") or "",
             "Registrato il": _fmt_dn(p.get("creato_il")) if p.get("creato_il") else "",
@@ -402,15 +400,16 @@ def _corpo_seleziona(conn, ns="default"):
     gob = GridOptionsBuilder.from_dataframe(df)
     gob.configure_default_column(filter=True, sortable=True, resizable=True)
     gob.configure_column("_id", hide=True)
-    gob.configure_column("Stato", width=70, pinned="left")
-    gob.configure_column("Cognome", width=170, pinned="left", sort="asc")
-    gob.configure_column("Nome", width=140)
-    gob.configure_column("Data nasc.", width=110)
-    gob.configure_column("Età", width=70, type=["numericColumn"])
-    gob.configure_column("Telefono", width=130)
+    gob.configure_column("", width=44, minWidth=44, maxWidth=44, filter=False, sortable=False)
+    gob.configure_column("Paziente", flex=3, minWidth=240,
+                         sort=None if ordina_recenti else "asc")
+    gob.configure_column("Nato il", flex=1, minWidth=105)
+    gob.configure_column("Età", flex=0, width=70, type=["numericColumn"])
+    gob.configure_column("Telefono", flex=1, minWidth=120)
+    gob.configure_column("Registrato il", flex=1, minWidth=110)
     gob.configure_selection(selection_mode="single", use_checkbox=False)
     gob.configure_grid_options(
-        rowHeight=32, headerHeight=34,
+        rowHeight=36, headerHeight=36,
         suppressCellFocus=True, domLayout="normal",
     )
 
@@ -422,7 +421,7 @@ def _corpo_seleziona(conn, ns="default"):
         data_return_mode=DataReturnMode.AS_INPUT,
         allow_unsafe_jscode=False,
         theme="balham",
-        fit_columns_on_grid_load=False,
+        fit_columns_on_grid_load=True,
         key=f"aggrid_paz_attivo_{ns}_{cerca}",
     )
 
@@ -440,6 +439,15 @@ def _corpo_seleziona(conn, ns="default"):
             st.rerun()
         except Exception:
             st.error("Selezione non valida.")
+
+    # Nuovo paziente: sotto l'elenco e chiuso. Si apre solo se serve; dopo
+    # «Crea e seleziona» il paziente diventa attivo e la finestra si chiude.
+    st.markdown("")
+    if st.toggle("➕ Il paziente non è in elenco: crea una nuova anagrafica",
+                 key=f"paz_attivo_nuovo_tgl_{ns}"):
+        st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi): "
+                   "il paziente viene creato e selezionato subito.")
+        _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
 
 
 # ════════════════════════════════════════════════════════════════════
