@@ -345,14 +345,13 @@ def _corpo_seleziona(conn, ns="default"):
         if ordina_recenti:
             pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
 
-    def _nuovo_in_fondo():
-        # Prima l'elenco, poi la creazione: chiusa, si apre da sola solo se
-        # la ricerca non trova nessuno (il caso in cui serve davvero).
-        with st.expander("➕ Crea NUOVA anagrafica (senza uscire da qui)",
-                         expanded=bool(cerca.strip()) and not pazienti):
-            st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
-                       "il paziente viene creato e selezionato subito.")
-            _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
+    # Nuovo paziente al volo — SEMPRE APERTO e in evidenza, così le
+    # collaboratrici vedono subito come creare un'anagrafica senza uscire.
+    with st.expander("➕ Crea NUOVA anagrafica (senza uscire da qui)",
+                     expanded=True):
+        st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi) → "
+                   "il paziente viene creato e selezionato subito.")
+        _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
 
     # Tabella ag-grid
     try:
@@ -376,7 +375,6 @@ def _corpo_seleziona(conn, ns="default"):
                 st.rerun()
             except Exception:
                 st.error("Selezione non valida.")
-        _nuovo_in_fondo()
         return
 
     rows_df = []
@@ -419,7 +417,7 @@ def _corpo_seleziona(conn, ns="default"):
     grid_response = AgGrid(
         df,
         gridOptions=gob.build(),
-        height=400,
+        height=480,
         update_mode=GridUpdateMode.SELECTION_CHANGED,
         data_return_mode=DataReturnMode.AS_INPUT,
         allow_unsafe_jscode=False,
@@ -427,7 +425,6 @@ def _corpo_seleziona(conn, ns="default"):
         fit_columns_on_grid_load=False,
         key=f"aggrid_paz_attivo_{ns}_{cerca}",
     )
-    _nuovo_in_fondo()
 
     selected = grid_response.get("selected_rows", [])
     if hasattr(selected, "to_dict"):
@@ -474,12 +471,11 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
                 "Selezionane uno per continuare."
             )
         with c2:
-            with st.popover("👤 Seleziona paziente"):
-                # Chiave fissa: qui non esiste il contatore _hpa_n, che e'
-                # locale a header_paziente_attivo. Riferirlo sollevava un
-                # NameError ogni volta che un modulo chiamava questa
-                # funzione senza paziente selezionato.
-                _corpo_seleziona(conn, ns="gpa")
+            # Finestra grande invece del popover: il popover stava in una
+            # colonna stretta e la tabella dei pazienti era illeggibile.
+            if st.button("👤 Seleziona paziente", key="gpa_apri_sel",
+                         type="primary", use_container_width=True):
+                _dialog_seleziona(conn)
     return pid
 
 
@@ -527,11 +523,10 @@ def header_paziente_attivo(conn) -> int | None:
     # chiave dei suoi widget sempre unica per evitare "duplicate element key".
     st.session_state["_hpa_render_n"] = st.session_state.get("_hpa_render_n", 0) + 1
     _hpa_n = st.session_state["_hpa_render_n"]
-    # Niente ripristino automatico dell'ultimo paziente: a ogni nuovo accesso
-    # si parte senza paziente attivo e lo si sceglie dalla lista. Aprire per
-    # errore la scheda del paziente di ieri era un rischio di confusione.
-    # Dentro la stessa sessione il paziente scelto resta attivo come prima.
-    # (ripristina_ultimo_paziente resta nel file, non piu' chiamata.)
+    if not pid:
+        ripristina_ultimo_paziente(conn)
+        pid = paziente_attivo_id()
+        rec = paziente_attivo_record()
 
     # Se ho l'id ma non il record (cache pulita o sessione nuova) → ricarico
     if pid and not rec:
@@ -549,8 +544,9 @@ def header_paziente_attivo(conn) -> int | None:
         with c1:
             st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
         with c2:
-            with st.popover("👤 Seleziona paziente"):
-                _corpo_seleziona(conn, ns=f"nopid_{_hpa_n}")
+            if st.button("👤 Seleziona paziente", key=f"nopid_apri_sel_{_hpa_n}",
+                         type="primary", use_container_width=True):
+                _dialog_seleziona(conn)
         return None
 
     # Banner paziente attivo
@@ -595,12 +591,9 @@ def header_paziente_attivo(conn) -> int | None:
         )
     with c2:
         st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
-        with st.popover("🔄 Cambia paziente", use_container_width=True):
-            st.markdown(
-                "<style>div[data-testid='stPopoverBody']{max-width:560px}</style>",
-                unsafe_allow_html=True,
-            )
-            _corpo_seleziona(conn, ns=f"hdr_{_hpa_n}")
+        if st.button("🔄 Cambia paziente", key=f"hdr_apri_sel_{_hpa_n}",
+                     use_container_width=True):
+            _dialog_seleziona(conn)
 
     _mostra_moduli_pnev_attivi(conn, pid)
 
