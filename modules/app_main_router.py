@@ -475,7 +475,10 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🎧 Audiometria tonale calibrata",
         "📝 Relazione clinica",
         "🎯 Piano Vision Therapy", "📄 Report PDF con grafici",
-        "🩺 Screening rapido", "🩺 Screening breve (15 min)",
+        # Screening breve escluso: il bambino si sceglie dentro la scheda,
+        # da «Precompila da anagrafica». Il banner del paziente sopra era un
+        # doppione, e spesso mostrava un paziente diverso da quello in scheda.
+        "🩺 Screening rapido",
         "🧸 Screening 0-4 anni",
         # La scheda chiede «Seleziona un paziente qui sopra», ma senza questa
         # riga il selettore non veniva disegnato: pagina ferma sull'avviso.

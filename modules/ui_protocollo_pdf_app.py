@@ -127,6 +127,9 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
             if scelta != opzioni[0]:
                 idx_sel = opzioni.index(scelta) - 1
                 r = righe[idx_sel]
+                # Il paziente scelto qui e' quello a cui si aggancia il
+                # salvataggio e la relazione.
+                paz_id = _g(r, 0, "id")
                 cognome_sel = _g(r, 1, "cognome") or ""
                 nome_sel = _g(r, 2, "nome") or ""
                 dn_sel = _g(r, 3, "data_nascita")
