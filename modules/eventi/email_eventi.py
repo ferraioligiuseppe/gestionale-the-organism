@@ -164,19 +164,12 @@ FIRMA = (
 
 
 def _data_iscritto(evento: dict, iscrizione: dict) -> str:
-    """Data e ora dell'appuntamento DI QUESTO iscritto.
-
-    Negli eventi a turni (screening) ognuno ha il suo orario in slot_orario;
-    l'email usava sempre l'ora di inizio dell'evento, quindi a tutti arrivava
-    lo stesso orario. Se lo slot c'e', vale lo slot."""
+    """Data e ora dell'appuntamento DI QUESTO iscritto: negli eventi a turni
+    vale slot_orario. Prima l'email usava sempre l'inizio dell'evento."""
     slot = iscrizione.get("slot_orario")
     if isinstance(slot, datetime):
         return _format_data_evento(slot)
     return _format_data_evento(evento["data_ora"])
-
-
-def _sede(evento: dict) -> str:
-    return evento.get("sede") or ""
 
 
 def _testo_conferma_iscritto(evento: dict, iscrizione: dict) -> str:
@@ -231,7 +224,7 @@ def _testo_notifica_studio(evento: dict, iscrizione: dict) -> str:
     return (
         f"Nuova iscrizione all'evento:\n\n"
         f"  Evento: {evento.get('titolo', '')}\n"
-        f"  Data:   {_format_data_evento(evento['data_ora'])}\n"
+        f"  Data:   {_data_iscritto(evento, iscrizione)}\n"
         f"  Slug:   {evento.get('slug', '')}\n\n"
         f"Iscritto:\n"
         f"  Nome:     {iscrizione.get('cognome', '')} {iscrizione.get('nome', '')}\n"
@@ -396,3 +389,28 @@ def invia_promemoria_iscritto(
         f"Promemoria {tipo} inviato a {to_email} per evento "
         f"{evento.get('id')} (iscrizione {iscrizione.get('id')})"
     )
+
+
+def invia_riepilogo_promemoria(evento: dict, tipo: str, inviati: list, errori: list) -> None:
+    """Una sola email allo studio dopo l'invio dei promemoria: a chi e' partito,
+    a chi no e perche', e il testo esatto ricevuto dagli iscritti."""
+    to_email = _clinic_email()
+    if not to_email:
+        raise RuntimeError("Email dello studio non configurata")
+    righe = [f"Promemoria {tipo} — {evento.get('titolo', '')}",
+             f"{_format_data_evento(evento['data_ora'])}", "",
+             f"Inviati: {len(inviati)}"]
+    for i in inviati:
+        orario = i["slot_orario"].astimezone(ROME_TZ).strftime("%H:%M") if isinstance(i.get("slot_orario"), datetime) and i["slot_orario"].tzinfo else (i["slot_orario"].strftime("%H:%M") if isinstance(i.get("slot_orario"), datetime) else "—")
+        righe.append(f"  ✓ {orario}  {i.get('cognome', '')} {i.get('nome', '')} <{i.get('email', '')}>")
+    if errori:
+        righe += ["", f"NON inviati: {len(errori)}"] + [f"  ✗ {e}" for e in errori]
+    if inviati:
+        righe += ["", "─" * 50, "Testo ricevuto (esempio, dal primo iscritto):", "",
+                  _testo_promemoria_iscritto(evento, inviati[0], tipo)]
+    msg = EmailMessage()
+    msg["Subject"] = f"Riepilogo promemoria {tipo}: {len(inviati)} inviati" + (f", {len(errori)} errori" if errori else "") + f" — {evento.get('titolo', '')}"
+    msg["From"] = _from_address()
+    msg["To"] = to_email
+    msg.set_content("\n".join(righe))
+    _send(msg)

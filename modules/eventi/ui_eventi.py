@@ -57,90 +57,6 @@ APP_URL_PUBBLICO_DEFAULT = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck
 # ENTRY POINT
 # =============================================================================
 
-_STATO_LEGGIBILE = {"confermata": "confermato", "lista_attesa": "in attesa", "annullata": "annullato"}
-
-
-def _pdf_iscritti(ev, iscrizioni, filtro: str) -> bytes:
-    """Elenco iscritti su carta intestata, da stampare e usare il giorno
-    dell'evento: una riga per iscritto, con le colonne «Presente» e «Firma»
-    lasciate vuote da compilare a penna."""
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-    from xml.sax.saxutils import escape
-    from modules.pdf_templates import draw_intestazione, draw_footer
-
-    verde = colors.HexColor("#1D6B44")
-    st_tit = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=13, leading=16, spaceAfter=3)
-    st_sub = ParagraphStyle("s", fontName="Helvetica", fontSize=9, leading=12, textColor=colors.HexColor("#4E5A53"))
-    st_cel = ParagraphStyle("c", fontName="Helvetica", fontSize=8.3, leading=10)
-    st_int = ParagraphStyle("h", fontName="Helvetica-Bold", fontSize=8, leading=10, textColor=colors.white)
-
-    # timestamp e non il datetime: gli orari possono avere il fuso, datetime.max no
-    righe_ord = sorted(iscrizioni, key=lambda i: ((0, i["slot_orario"].timestamp()) if i.get("slot_orario") else (1, 0),
-                                                  (i.get("cognome") or "").lower(),
-                                                  (i.get("nome") or "").lower()))
-    intest = ["N°", "Nominativo", "Telefono", "Orario", "Stato", "Note", "Presente", "Firma"]
-    dati = [[Paragraph(x, st_int) for x in intest]]
-    for n, i in enumerate(righe_ord, start=1):
-        note = " ".join(str(i.get("note") or "").split())
-        if len(note) > 90:
-            note = note[:88] + "…"
-        dati.append([
-            str(n),
-            Paragraph(escape(f"{i.get('cognome') or ''} {i.get('nome') or ''}".strip()), st_cel),
-            Paragraph(escape(i.get("telefono") or ""), st_cel),
-            i["slot_orario"].strftime("%H:%M") if i.get("slot_orario") else "",
-            _STATO_LEGGIBILE.get(i.get("stato"), i.get("stato") or ""),
-            Paragraph(escape(note), st_cel),
-            "",
-            "",
-        ])
-
-    tab = Table(dati, colWidths=[0.8*cm, 4.0*cm, 2.6*cm, 1.4*cm, 1.8*cm, 3.6*cm, 1.3*cm, 1.9*cm],
-                repeatRows=1)
-    tab.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), verde),
-        ("FONT", (0, 1), (-1, -1), "Helvetica", 8.3),
-        ("ALIGN", (0, 1), (0, -1), "RIGHT"),
-        # Presente e Firma: caselle vuote da compilare a penna
-        ("INNERGRID", (6, 1), (7, -1), 0.5, colors.HexColor("#9AA59F")),
-        ("BOX", (6, 1), (7, -1), 0.5, colors.HexColor("#9AA59F")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F3F6F4")]),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.HexColor("#C9D1CC")),
-        ("TOPPADDING", (0, 1), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
-    ]))
-
-    quando = ev["data_ora"].strftime("%d/%m/%Y, ore %H:%M") if ev.get("data_ora") else ""
-    dettagli = " · ".join(x for x in (quando, ev.get("sede") or "", ev.get("conduttore") or "") if x)
-    conta = f"{len(righe_ord)} iscritt{'o' if len(righe_ord) == 1 else 'i'}"
-    if filtro and filtro != "Tutti":
-        conta += f" · solo: {filtro.lower()}"
-    conta += f" · elenco stampato il {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-
-    def _pagina(c, doc):
-        draw_intestazione(c)
-        draw_footer(c)
-        c.setFont("Helvetica", 7.5)
-        c.setFillColor(colors.HexColor("#6E7A73"))
-        c.drawRightString(A4[0] - 1.8*cm, 4.55*cm, f"pag. {doc.page}")
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.8*cm, rightMargin=1.8*cm,
-                            topMargin=5.7*cm, bottomMargin=4.9*cm,
-                            title=f"Elenco iscritti — {ev.get('titolo') or ''}")
-    doc.build([Paragraph(escape(ev.get("titolo") or "Evento"), st_tit),
-               Paragraph(escape(dettagli), st_sub),
-               Paragraph(escape(conta), st_sub),
-               Spacer(1, 0.4*cm), tab],
-              onFirstPage=_pagina, onLaterPages=_pagina)
-    return buf.getvalue()
-
-
 def render_eventi_section():
     """Entry point UI eventi — chiamata dal router app_main."""
     st.title("📣 Marketing — Eventi e iscrizioni")
@@ -578,24 +494,13 @@ def _render_tab_iscritti(conn, ev: dict):
     writer = csv.DictWriter(csv_buf, fieldnames=list(table_data[0].keys()))
     writer.writeheader()
     writer.writerows(table_data)
-    c_csv, c_pdf = st.columns(2)
-    c_csv.download_button(
+    st.download_button(
         "📥 Esporta CSV",
         data=csv_buf.getvalue().encode("utf-8"),
         file_name=f"iscritti_{ev['slug']}.csv",
         mime="text/csv",
         key=f"dl_csv_{ev['id']}",
     )
-    try:
-        c_pdf.download_button(
-            "🖨️ Elenco in PDF da stampare",
-            data=_pdf_iscritti(ev, iscrizioni, filtro_stato),
-            file_name=f"elenco_{ev['slug']}.pdf",
-            mime="application/pdf",
-            key=f"dl_pdf_{ev['id']}",
-        )
-    except Exception as e:
-        c_pdf.caption(f"PDF non disponibile: {e}")
 
     st.divider()
 
@@ -967,9 +872,17 @@ def _render_tab_azioni(conn, ev: dict):
                     copia = dict(prova_iscr)
                     copia["email"] = email_prova.strip()
                     invia_conferma_iscritto(ev, copia, pdf_bytes=genera_pdf_conferma(ev, prova_iscr))
-                    st.success(f"Prova inviata a {email_prova.strip()}. All'iscritto non è partito niente.")
+                    st.session_state[f"prova_esito_{ev['id']}"] = (
+                        True, f"Prova inviata a {email_prova.strip()}. All'iscritto non è partito niente.")
                 except Exception as e:
-                    st.error(f"Invio di prova non riuscito: {e}")
+                    st.session_state[f"prova_esito_{ev['id']}"] = (False, f"Invio di prova non riuscito: {e}")
+            # Il click ricarica la pagina e le schede tornano su «Info»: un
+            # messaggio scritto qui non si vedrebbe. Il toast compare sempre,
+            # e l'esito resta scritto anche dentro la scheda.
+            _esito = st.session_state.get(f"prova_esito_{ev['id']}")
+            if _esito:
+                st.toast(("✅ " if _esito[0] else "❌ ") + _esito[1])
+                (st.success if _esito[0] else st.error)(_esito[1])
 
         # Doppia conferma
         col_btn1, col_btn2 = st.columns([2, 1])
@@ -1070,26 +983,62 @@ def _render_tab_azioni(conn, ev: dict):
                     st.error(f"Errore import: {e}")
                     st.stop()
 
-                successi, errori = 0, []
+                inviati, errori = [], []
                 progress = st.progress(0, text="Invio...")
                 for i, iscr in enumerate(non_inviati):
                     try:
                         invia_promemoria_iscritto(ev, iscr, tipo_prom)
                         marca_promemoria_inviato(conn, iscr["id"], tipo_prom)
-                        successi += 1
+                        inviati.append(iscr)
                     except Exception as e:
-                        errori.append(f"{iscr.get('email','?')}: {e}")
+                        errori.append(f"{iscr.get('cognome','')} {iscr.get('nome','')} <{iscr.get('email','?')}>: {e}")
                     progress.progress((i + 1) / len(non_inviati),
                                       text=f"Inviata {i+1}/{len(non_inviati)}")
                 progress.empty()
-                if successi:
-                    st.success(f"✅ {successi} promemoria {tipo_prom} inviati")
-                if errori:
-                    st.error(f"❌ {len(errori)} errori:")
-                    for err in errori:
-                        st.code(err)
+                # Copia per lo studio: un'unica email di riepilogo
+                copia = ""
+                try:
+                    from .email_eventi import invia_riepilogo_promemoria
+                    invia_riepilogo_promemoria(ev, tipo_prom, inviati, errori)
+                    copia = " Riepilogo inviato anche allo studio."
+                except Exception as e:
+                    copia = f" Riepilogo allo studio non inviato: {e}"
+                # Il click ricarica la pagina e le schede tornano su «Info»:
+                # l'esito va conservato, altrimenti non lo si vede.
+                st.session_state[f"prom_esito_{ev['id']}"] = (tipo_prom, len(inviati), errori, copia)
+                st.rerun()
         else:
             st.info(f"Tutti gli iscritti confermati hanno già ricevuto il promemoria {tipo_prom}.")
+
+        _pe = st.session_state.get(f"prom_esito_{ev['id']}")
+        if _pe:
+            _t, _n, _err, _copia = _pe
+            st.toast(f"{'✅' if not _err else '⚠️'} Promemoria {_t}: {_n} inviati" + (f", {len(_err)} errori" if _err else ""))
+            (st.success if not _err else st.warning)(
+                f"Ultimo invio promemoria {_t}: **{_n} inviati**" + (f", **{len(_err)} non inviati**" if _err else "") + "." + _copia)
+            for err in _err:
+                st.code(err)
+
+        # Stato per ogni iscritto, letto dal database: e' la prova di cosa e' partito
+        if tutti_confermati:
+            def _q(i, t):
+                if not i.get(f"promemoria_{t}_inviato"):
+                    return "—"
+                ts = i.get(f"promemoria_{t}_ts")
+                try:
+                    if getattr(ts, "tzinfo", None):
+                        from zoneinfo import ZoneInfo
+                        ts = ts.astimezone(ZoneInfo("Europe/Rome"))
+                    return "✅ " + ts.strftime("%d/%m %H:%M")
+                except Exception:
+                    return "✅"
+            with st.expander(f"📋 Stato promemoria per iscritto ({len(tutti_confermati)})"):
+                st.dataframe(
+                    [{"Iscritto": f"{i.get('cognome','')} {i.get('nome','')}",
+                      "Orario": i["slot_orario"].strftime("%H:%M") if i.get("slot_orario") else "",
+                      "Email": i.get("email", ""),
+                      "48h": _q(i, "48h"), "24h": _q(i, "24h")} for i in tutti_confermati],
+                    hide_index=True, use_container_width=True)
 
     with tab_wa:
         tipo_wa = st.radio(
