@@ -417,7 +417,7 @@ def _corpo_seleziona(conn, ns="default"):
     grid_response = AgGrid(
         df,
         gridOptions=gob.build(),
-        height=400,
+        height=480,
         update_mode=GridUpdateMode.SELECTION_CHANGED,
         data_return_mode=DataReturnMode.AS_INPUT,
         allow_unsafe_jscode=False,
@@ -471,12 +471,11 @@ def get_paziente_attivo(conn, show_warning: bool = True) -> int | None:
                 "Selezionane uno per continuare."
             )
         with c2:
-            with st.popover("👤 Seleziona paziente"):
-                # Chiave fissa: qui non esiste il contatore _hpa_n, che e'
-                # locale a header_paziente_attivo. Riferirlo sollevava un
-                # NameError ogni volta che un modulo chiamava questa
-                # funzione senza paziente selezionato.
-                _corpo_seleziona(conn, ns="gpa")
+            # Finestra grande invece del popover: il popover stava in una
+            # colonna stretta e la tabella dei pazienti era illeggibile.
+            if st.button("👤 Seleziona paziente", key="gpa_apri_sel",
+                         type="primary", use_container_width=True):
+                _dialog_seleziona(conn)
     return pid
 
 
@@ -545,8 +544,9 @@ def header_paziente_attivo(conn) -> int | None:
         with c1:
             st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
         with c2:
-            with st.popover("👤 Seleziona paziente"):
-                _corpo_seleziona(conn, ns=f"nopid_{_hpa_n}")
+            if st.button("👤 Seleziona paziente", key=f"nopid_apri_sel_{_hpa_n}",
+                         type="primary", use_container_width=True):
+                _dialog_seleziona(conn)
         return None
 
     # Banner paziente attivo
@@ -591,12 +591,9 @@ def header_paziente_attivo(conn) -> int | None:
         )
     with c2:
         st.markdown("<div style='height: 8px'></div>", unsafe_allow_html=True)
-        with st.popover("🔄 Cambia paziente", use_container_width=True):
-            st.markdown(
-                "<style>div[data-testid='stPopoverBody']{max-width:560px}</style>",
-                unsafe_allow_html=True,
-            )
-            _corpo_seleziona(conn, ns=f"hdr_{_hpa_n}")
+        if st.button("🔄 Cambia paziente", key=f"hdr_apri_sel_{_hpa_n}",
+                     use_container_width=True):
+            _dialog_seleziona(conn)
 
     _mostra_moduli_pnev_attivi(conn, pid)
 
