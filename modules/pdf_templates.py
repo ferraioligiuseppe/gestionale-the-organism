@@ -65,13 +65,29 @@ def _intestazione_studio():
         return {}
 
 
+_CARTA_FILE = os.path.join(os.path.dirname(__file__), "..", "static_protocollo",
+                           "carta_intestata_the_organism.png")
+
+
 def _carta_intestata_bytes():
-    """Bytes dell'immagine carta intestata dello studio attivo (o None)."""
+    """Bytes dell'immagine carta intestata dello studio attivo (o None).
+
+    Prima quella caricata in «Il mio studio → Intestazione»; se nel database
+    non c'e', il file static_protocollo/carta_intestata_the_organism.png del
+    repository. Cosi' PDF, Word e anteprime hanno sempre la carta intestata,
+    anche se il salvataggio nello studio non e' andato a buon fine."""
     try:
         import base64
         b64 = (_intestazione_studio() or {}).get("carta_intestata_base64")
         if b64:
             return base64.b64decode(b64)
+    except Exception:
+        pass
+    try:
+        with open(_CARTA_FILE, "rb") as f:
+            dati = f.read()
+        if dati:
+            return dati
     except Exception:
         pass
     return None
