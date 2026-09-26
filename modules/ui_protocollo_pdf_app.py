@@ -84,13 +84,18 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
     nome_precompilato = data_nascita_precompilata = eta_precompilata = ""
     if conn is not None:
         with st.expander("➕ Nuovo paziente (non ancora in anagrafica)"):
-            cn1, cn2 = st.columns(2)
-            nuovo_cognome = cn1.text_input("Cognome", key=f"{kp}_html_nuovo_cognome")
-            nuovo_nome = cn2.text_input("Nome", key=f"{kp}_html_nuovo_nome")
-            nuova_dn = st.date_input("Data di nascita", key=f"{kp}_html_nuova_dn",
-                                      value=None, min_value=datetime.date(1930, 1, 1))
-            if st.button("Crea e usa questo paziente", key=f"{kp}_html_crea_paziente"):
-                if not nuovo_cognome or not nuovo_nome:
+            # Dentro un form: il pulsante invia i campi cosi' come sono a schermo.
+            # Senza, i campi riempiti dal completamento automatico del browser
+            # non arrivavano a Streamlit e «Crea» li trovava vuoti.
+            with st.form(f"{kp}_html_form_nuovo", clear_on_submit=False, border=False):
+                cn1, cn2 = st.columns(2)
+                nuovo_cognome = cn1.text_input("Cognome", key=f"{kp}_html_nuovo_cognome")
+                nuovo_nome = cn2.text_input("Nome", key=f"{kp}_html_nuovo_nome")
+                nuova_dn = st.date_input("Data di nascita", key=f"{kp}_html_nuova_dn",
+                                          value=None, min_value=datetime.date(1930, 1, 1))
+                crea = st.form_submit_button("Crea e usa questo paziente", type="primary")
+            if crea:
+                if not (nuovo_cognome or "").strip() or not (nuovo_nome or "").strip():
                     st.warning("Cognome e nome sono obbligatori.")
                 else:
                     try:
@@ -104,6 +109,13 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
                         _r = cur.fetchone()
                         nuovo_id = int(_r["id"] if isinstance(_r, dict) else _r[0])
                         conn.commit()
+                        # L'elenco pazienti e' in cache: senza svuotarla il nuovo
+                        # paziente non comparirebbe nel selettore.
+                        try:
+                            from .paziente_attivo import _carica_lista_pazienti
+                            _carica_lista_pazienti.clear()
+                        except Exception:
+                            pass
                         st.session_state["_paziente_attivo_id"] = nuovo_id
                         paz_id = nuovo_id
                         st.success(f"Paziente creato (#{nuovo_id}) e impostato come attivo.")
