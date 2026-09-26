@@ -95,12 +95,17 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
                 else:
                     try:
                         cur = conn.cursor()
-                        cur.execute("INSERT INTO pazienti (cognome, nome, data_nascita) "
-                                    "VALUES (%s, %s, %s) RETURNING id",
-                                    (nuovo_cognome.strip(), nuovo_nome.strip(), nuova_dn))
-                        nuovo_id = cur.fetchone()[0]
+                        # stato_paziente e' obbligatorio nella tabella: senza,
+                        # la creazione falliva con «null value in column stato_paziente».
+                        # Maiuscolo come in anagrafica, cosi' la ricerca lo trova.
+                        cur.execute("INSERT INTO pazienti (cognome, nome, data_nascita, stato_paziente) "
+                                    "VALUES (%s, %s, %s, 'ATTIVO') RETURNING id",
+                                    (nuovo_cognome.strip().upper(), nuovo_nome.strip().upper(), nuova_dn))
+                        _r = cur.fetchone()
+                        nuovo_id = int(_r["id"] if isinstance(_r, dict) else _r[0])
                         conn.commit()
                         st.session_state["_paziente_attivo_id"] = nuovo_id
+                        paz_id = nuovo_id
                         st.success(f"Paziente creato (#{nuovo_id}) e impostato come attivo.")
                         st.rerun()
                     except Exception as e:

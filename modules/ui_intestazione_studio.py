@@ -115,16 +115,47 @@ def render_intestazione_studio(conn, studio_id: int) -> None:
                 new_carta = carta_b64
         # nome è NOT NULL: non lasciarlo vuoto
         nome_val = (nome or "").strip() or d.get("nome") or "Studio"
+        valori = (nome_val, indirizzo or None, piva or None, tel or None,
+                  contatti or None, titolo or None, new_logo, new_carta)
         try:
             cur = conn.cursor()
             cur.execute(
                 "UPDATE studi SET nome=%s, indirizzo=%s, partita_iva=%s, telefono=%s, "
                 "contatti=%s, titolo_default=%s, logo_base64=%s, carta_intestata_base64=%s WHERE id=%s",
-                (nome_val, indirizzo or None, piva or None, tel or None,
-                 contatti or None, titolo or None, new_logo, new_carta, int(studio_id)),
+                valori + (int(studio_id),),
             )
+            # Se lo studio non esiste ancora nella tabella, l'UPDATE non tocca
+            # nessuna riga e non da' errore: la pagina diceva «salvato» e non
+            # salvava niente. In quel caso si crea la riga.
+            if (cur.rowcount or 0) == 0:
+                # email_admin e db_url sono NOT NULL in una delle due versioni
+                # della tabella (saas_tenant.py): si passano vuoti.
+                cur.execute(
+                    "INSERT INTO studi (id, codice, email_admin, db_url, nome, indirizzo, "
+                    "partita_iva, telefono, contatti, titolo_default, logo_base64, "
+                    "carta_intestata_base64) "
+                    "VALUES (%s,%s,'','',%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (int(studio_id), f"studio_{int(studio_id)}") + valori,
+                )
+                # L'id e' stato scritto a mano: si riallinea il contatore, cosi'
+                # un futuro studio registrato non prova a riusare lo stesso id.
+                try:
+                    cur.execute("SELECT setval(pg_get_serial_sequence('studi','id'), "
+                                "(SELECT MAX(id) FROM studi))")
+                except Exception:
+                    pass
             conn.commit()
-            st.success("Intestazione salvata. Comparirà sui prossimi PDF.")
+            # Controllo sul database, non sulla fiducia: si rilegge quello che
+            # e' stato davvero scritto.
+            cur.execute("SELECT COALESCE(length(carta_intestata_base64),0), "
+                        "COALESCE(length(logo_base64),0) FROM studi WHERE id=%s", (int(studio_id),))
+            _r = cur.fetchone()
+            _lc = int((_r[0] if not isinstance(_r, dict) else list(_r.values())[0]) or 0) if _r else -1
+            if _r is None:
+                st.error("Salvataggio non riuscito: lo studio non risulta nel database.")
+                return
+            st.success("Intestazione salvata. Comparirà sui prossimi PDF."
+                       + (" Carta intestata presente." if _lc > 0 else " Nessuna carta intestata caricata."))
             st.session_state["intestazione_studio"] = {
                 "nome": nome_val, "indirizzo": indirizzo or "", "partita_iva": piva or "",
                 "telefono": tel or "", "contatti": (contatti or tel or ""),
