@@ -341,15 +341,18 @@ def _crea_paziente_da_iscrizione(conn, iscr) -> int | None:
     try:
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO pazienti (cognome, nome, data_nascita, email, telefono, codice_fiscale)
-            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+            INSERT INTO pazienti (cognome, nome, data_nascita, email, telefono, codice_fiscale, stato_paziente)
+            VALUES (%s, %s, %s, %s, %s, %s, 'ATTIVO') RETURNING id
         """, (
-            gid("cognome_bambino") or gid("cognome") or "",
-            gid("nome_bambino") or gid("nome") or "",
+            # stato_paziente e' NOT NULL: senza, l'inserimento veniva rifiutato.
+            # Maiuscolo come in anagrafica, cosi' la ricerca lo trova.
+            (gid("cognome_bambino") or gid("cognome") or "").strip().upper(),
+            (gid("nome_bambino") or gid("nome") or "").strip().upper(),
             gid("data_nascita_bambino") or gid("data_nascita"),
             gid("email"), gid("telefono"), cf,
         ))
-        new_id = cur.fetchone()[0]
+        _r = cur.fetchone()
+        new_id = int(_r["id"] if isinstance(_r, dict) else _r[0])
         conn.commit()
         return new_id
     except Exception as e:
