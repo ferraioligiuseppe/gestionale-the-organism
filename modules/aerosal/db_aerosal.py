@@ -200,6 +200,13 @@ CREATE INDEX IF NOT EXISTS ix_aer_prove_data ON aerosal_prove(studio_id, data_pr
 
 """
 
+# Pubblicazione delle offerte su www.pnev.it
+_SQL_SCHEMA += r"""
+ALTER TABLE aerosal_listino ADD COLUMN IF NOT EXISTS pubblica_sito BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE aerosal_listino ADD COLUMN IF NOT EXISTS titolo_sito TEXT;
+ALTER TABLE aerosal_listino ADD COLUMN IF NOT EXISTS testo_sito TEXT;
+"""
+
 _SQL_SEED = r"""
 -- =====================================================================
 -- Modulo AEROSAL — dati iniziali da chat "Aerosal Family" (lug–set 2026)
@@ -340,6 +347,51 @@ def salva_voce_listino(conn, studio_id: str, v: dict) -> int:
         new_id = cur.fetchone()[0]
     conn.commit()
     return new_id
+
+
+def imposta_pubblicazione(conn, studio_id: str, listino_id: int, pubblica: bool,
+                          titolo: str | None, testo: str | None) -> None:
+    with _cur(conn) as cur:
+        cur.execute("""UPDATE aerosal_listino SET pubblica_sito=%s, titolo_sito=%s, testo_sito=%s
+                       WHERE id=%s AND studio_id=%s""",
+                    (bool(pubblica), titolo or None, testo or None, listino_id, studio_id))
+    conn.commit()
+
+
+def voci_sito(conn, studio_id: str) -> list[dict]:
+    """Le promo con i campi di pubblicazione, per la scheda del gestionale."""
+    with _cur(conn) as cur:
+        cur.execute("""SELECT id, codice, descrizione, n_sedute, prezzo, prezzo_pieno_rif, promo_nome,
+                              limite_pacchetti, valido_dal, valido_al, attivo, note,
+                              pubblica_sito, titolo_sito, testo_sito
+                       FROM aerosal_listino WHERE studio_id=%s AND tipo='promo'
+                       ORDER BY valido_dal DESC NULLS LAST, n_sedute""", (studio_id,))
+        return _rows(cur)
+
+
+def offerte_pubbliche(conn, studio_id: str | None = None, oggi: date | None = None) -> list[dict]:
+    """Le offerte da mostrare su pnev.it OGGI: attive, spuntate per il sito,
+    dentro le date di validita' e non esaurite. Programmare un'offerta vuol
+    dire darle le date: compare e sparisce da sola."""
+    oggi = oggi or date.today()
+    sql = """SELECT l.id, l.codice, l.descrizione, l.n_sedute, l.prezzo, l.prezzo_pieno_rif,
+                    l.promo_nome, l.limite_pacchetti, l.valido_dal, l.valido_al, l.note,
+                    l.titolo_sito, l.testo_sito,
+                    (SELECT COUNT(*) FROM aerosal_pacchetti p
+                      WHERE p.listino_id=l.id AND p.stato <> 'annullato') AS vendute
+             FROM aerosal_listino l
+             WHERE l.tipo='promo' AND l.attivo AND l.pubblica_sito
+               AND (l.valido_dal IS NULL OR l.valido_dal <= %s)
+               AND (l.valido_al  IS NULL OR l.valido_al  >= %s)"""
+    par = [oggi, oggi]
+    if studio_id:
+        sql += " AND l.studio_id=%s"
+        par.append(studio_id)
+    sql += " ORDER BY l.promo_nome, l.n_sedute"
+    with _cur(conn) as cur:
+        cur.execute(sql, tuple(par))
+        righe = _rows(cur)
+    return [r for r in righe if not r.get("limite_pacchetti") or r["vendute"] < r["limite_pacchetti"]]
 
 
 def promo_vendute(conn, studio_id: str, listino_id: int) -> int:

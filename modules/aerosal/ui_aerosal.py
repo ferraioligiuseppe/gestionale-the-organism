@@ -43,7 +43,7 @@ def _tab_listino(conn, studio_id):
     mostra_tutto = st.toggle("Mostra anche le promo scadute", value=False)
     righe = db.listino(conn, studio_id, solo_attivi=not mostra_tutto)
     if not righe:
-        st.info("Listino vuoto: esegui `02_aerosal_seed.sql` oppure aggiungi una voce qui sotto.")
+        st.info("Listino vuoto: aggiungi una voce qui sotto.")
     else:
         df = pd.DataFrame(righe)
         df["€/seduta"] = df.apply(
@@ -83,6 +83,68 @@ def _tab_listino(conn, studio_id):
                     "limite_pacchetti": int(limite) or None, "attivo": attivo})
                 st.success(f"Voce {codice.upper()} salvata.")
                 st.rerun()
+
+
+# ------------------------------------------------------- Offerte sul sito
+URL_GESTIONALE = "https://gestionale-the-organism.streamlit.app"
+URL_PUBBLICA = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck7n.streamlit.app"
+
+
+def _stato_offerta(v, oggi):
+    if not v.get("attivo"):
+        return "⚫ disattivata"
+    if not v.get("pubblica_sito"):
+        return "⚪ non pubblicata"
+    if v.get("valido_al") and v["valido_al"] < oggi:
+        return "⚫ scaduta"
+    if v.get("valido_dal") and v["valido_dal"] > oggi:
+        return f"🟡 programmata dal {v['valido_dal']:%d/%m}"
+    return "🟢 online ora"
+
+
+def _tab_sito(conn, studio_id):
+    st.caption("Le promo spuntate qui compaiono su www.pnev.it nelle date di validità e "
+               "spariscono da sole alla scadenza o quando finiscono i pacchetti disponibili. "
+               "Per programmare un'offerta crea la voce nel Listino con le date, poi pubblicala qui.")
+    oggi = date.today()
+    voci = db.voci_sito(conn, studio_id)
+    if not voci:
+        st.info("Nessuna promo nel listino. Creala nella scheda Listino con tipo «promo».")
+    mostra_scadute = st.toggle("Mostra anche le promo scadute", value=False, key="sito_scadute")
+    for v in voci:
+        scaduta = bool(v.get("valido_al") and v["valido_al"] < oggi)
+        if scaduta and not mostra_scadute:
+            continue
+        periodo = " – ".join(f"{x:%d/%m/%Y}" for x in (v.get("valido_dal"), v.get("valido_al")) if x) or "senza date"
+        with st.expander(f"{_stato_offerta(v, oggi)} · {v.get('promo_nome') or v['codice']} · "
+                         f"{v['descrizione']} · {periodo}"):
+            with st.form(f"sito_{v['id']}"):
+                pub = st.toggle("Pubblica su www.pnev.it", value=bool(v.get("pubblica_sito")))
+                titolo = st.text_input("Titolo sul sito", v.get("titolo_sito") or v.get("promo_nome") or "",
+                                       placeholder="es. Ricomincia ora")
+                testo = st.text_area("Testo sul sito", v.get("testo_sito") or "", height=80,
+                                     placeholder="es. 20 sedute di haloterapia per tutta la famiglia, "
+                                                 "solo per i primi 5 pacchetti.")
+                if st.form_submit_button("💾 Salva", type="primary"):
+                    db.imposta_pubblicazione(conn, studio_id, v["id"], pub, titolo.strip(), testo.strip())
+                    st.rerun()
+            if v.get("limite_pacchetti"):
+                st.caption(f"Pacchetti venduti: {db.promo_vendute(conn, studio_id, v['id'])} "
+                           f"su {v['limite_pacchetti']}.")
+
+    st.markdown("---")
+    online = db.offerte_pubbliche(conn, studio_id)
+    st.markdown(f"**Oggi su www.pnev.it: {len(online)} offert{'a' if len(online) == 1 else 'e'}**")
+    # La pagina sta nell'app PUBBLICA (quella delle iscrizioni agli eventi):
+    # il gestionale chiede il login, quindi da pnev.it non si vedrebbe niente.
+    base = str(st.secrets.get("APP_PUBBLICA_URL", URL_PUBBLICA)).rstrip("/")
+    url = f"{base}/?azione=offerte_sale&embed=true"
+    st.markdown(f"[👁️ Apri l'anteprima della pagina]({url})")
+    with st.expander("🔗 Codice da incollare su www.pnev.it (una volta sola)"):
+        st.caption("Incollalo nella pagina della Stanza del Sale, in un blocco HTML. "
+                   "Da lì in poi le offerte si aggiornano da sole dal gestionale.")
+        st.code(f'<iframe src="{url}" style="width:100%;min-height:760px;border:0" '
+                f'title="Offerte Stanza del Sale" loading="lazy"></iframe>', language="html")
 
 
 # ------------------------------------------------------------- Prime prove
@@ -333,7 +395,8 @@ def render_aerosal(conn, studio_id: str, pazienti=None, paziente_id=None, operat
             st.error(f"Tabelle Aerosal non create: {err}")
             return
         st.session_state[chiave] = True
-    tabs = st.tabs(["Listino", "Prime prove", "Vendita pacchetto", "Sedute", "Rate", "Sale"])
+    tabs = st.tabs(["Listino", "🌐 Offerte sul sito", "Prime prove", "Vendita pacchetto",
+                    "Sedute", "Rate", "Sale"])
     with tabs[0]:
         _tab_listino(conn, studio_id)
     with tabs[1]:
