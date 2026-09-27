@@ -48,6 +48,7 @@ AREA_TEST_LIVE     = "🖥️ Test live"
 AREA_SCREENING     = "🩺 Screening"
 AREA_TERAPIA       = "📄 Relazioni & studio clinico"
 AREA_STUDIO        = "⚙️ Studio"
+AREA_AEROSAL       = "🌬️ Aerosal"
 
 # ── Alias legacy (mantengono validi gli import esistenti in
 #    app_main_router.py e app_main.py) — puntano all'area più coerente
@@ -78,6 +79,7 @@ AREE_ORDINE = [
     AREA_MATERIALI,
     AREA_TERAPIA,
     AREA_ACADEMY,
+    AREA_AEROSAL,
     AREA_STUDIO,
 ]
 
@@ -280,6 +282,9 @@ SOTTOSEZIONI = {
         "📄 Report PDF con grafici",
         "📊 Export statistici",
         "🧪 Caso demo",
+    ],
+    AREA_AEROSAL: [
+        "🌬️ Aerosal · Haloterapia",
     ],
     AREA_STUDIO: [
         "📊 Dashboard incassi",

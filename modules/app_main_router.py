@@ -1095,6 +1095,28 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Modulo Eventi non disponibile: {e}")
         return True
 
+    if sotto == "🌬️ Aerosal · Haloterapia":
+        try:
+            from .aerosal import render_aerosal
+            try:
+                _c = conn.cursor()
+                _c.execute("SELECT id, cognome, nome FROM pazienti ORDER BY cognome, nome")
+                _paz = [(int(x[0]), f"{x[1] or ''} {x[2] or ''}".strip()) for x in _c.fetchall()]
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                _paz = []
+            render_aerosal(conn, str(st.session_state.get("studio_id", 1)), pazienti=_paz,
+                           operatore=st.session_state.get("username") or st.session_state.get("user"))
+        except Exception as e:
+            import traceback
+            st.error(f"Errore Aerosal: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+
     # ── STUDIO ────────────────────────────────────────────────────────
     if sotto == "📊 Dashboard incassi":
         from .sections.ui_cliniche import render_dashboard_section
