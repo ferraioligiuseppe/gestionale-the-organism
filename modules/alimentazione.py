@@ -532,7 +532,7 @@ def _tab_piano(conn, paz_id, px):
                     for k, l in vv:
                         nuove[k] = st.checkbox(l, value=voci.get(k, True), key=f"{px}_{k}")
                     extra[n] = st.text_area("Altre indicazioni", (p.get("extra") or {}).get(n, ""),
-                                            height=60, key=f"{px}_ex_{n}")
+                                            height=68, key=f"{px}_ex_{n}")
         integr = st.text_area("Integrazione prescritta: prodotto, dose, durata", p.get("integrazione", ""),
                               height=80, key=f"{px}_int")
         st.markdown("**🥣 Crema Budwig**")
