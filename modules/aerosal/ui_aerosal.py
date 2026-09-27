@@ -400,12 +400,14 @@ def render_aerosal(conn, studio_id: str, pazienti=None, paziente_id=None, operat
     with tabs[0]:
         _tab_listino(conn, studio_id)
     with tabs[1]:
-        _tab_prove(conn, studio_id, pazienti)
+        _tab_sito(conn, studio_id)
     with tabs[2]:
-        _tab_vendita(conn, studio_id, pazienti, paziente_id)
+        _tab_prove(conn, studio_id, pazienti)
     with tabs[3]:
-        _tab_sedute(conn, studio_id, pazienti, paziente_id, operatore)
+        _tab_vendita(conn, studio_id, pazienti, paziente_id)
     with tabs[4]:
-        _tab_rate(conn, studio_id)
+        _tab_sedute(conn, studio_id, pazienti, paziente_id, operatore)
     with tabs[5]:
+        _tab_rate(conn, studio_id)
+    with tabs[6]:
         _tab_sale(conn, studio_id)
