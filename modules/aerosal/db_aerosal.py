@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import date, datetime
-from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
 
@@ -34,7 +33,216 @@ def _cur(conn):
             pass
 
 
-_SQL = Path(__file__).with_name("sql")
+# Gli SQL stanno qui dentro e non in file .sql separati: caricando su GitHub
+# la sottocartella sql/ veniva saltata e la pagina non partiva.
+_SQL_SCHEMA = r"""
+-- =====================================================================
+-- Modulo AEROSAL — schema PostgreSQL (Neon)
+-- Studio The Organism · gestionale-the-organism
+-- Convenzioni: BIGSERIAL, TEXT, TIMESTAMPTZ, placeholder %s lato Python
+-- Multi-tenant: colonna studio_id su tutte le tabelle operative.
+-- ⚠ Allineare la policy RLS (in fondo) al nome della variabile di sessione
+--   già usata dagli altri moduli.
+-- =====================================================================
+
+-- 1. LISTINO (prezzi base + promo storiche) ----------------------------
+CREATE TABLE IF NOT EXISTS aerosal_listino (
+    id               BIGSERIAL PRIMARY KEY,
+    studio_id        TEXT NOT NULL,
+    codice           TEXT NOT NULL,              -- es. PKG20, PKG20_PROMO_AGO26
+    descrizione      TEXT NOT NULL,
+    tipo             TEXT NOT NULL CHECK (tipo IN ('base','promo')),
+    n_sedute         INTEGER NOT NULL CHECK (n_sedute > 0),
+    prezzo           NUMERIC(10,2) NOT NULL,
+    prezzo_pieno_rif NUMERIC(10,2),              -- per le promo: prezzo di riferimento
+    promo_nome       TEXT,
+    limite_pacchetti INTEGER,                    -- es. 5 per centro
+    valido_dal       DATE,
+    valido_al        DATE,
+    attivo           BOOLEAN NOT NULL DEFAULT TRUE,
+    note             TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (studio_id, codice)
+);
+
+-- 2. CATEGORIE PRIMA SEDUTA PROVA (allineate a Carta Respiro, dal 18/9/26)
+CREATE TABLE IF NOT EXISTS aerosal_categorie_prova (
+    codice      TEXT PRIMARY KEY,
+    descrizione TEXT NOT NULL,
+    adulti      INTEGER NOT NULL DEFAULT 1,
+    bambini     INTEGER NOT NULL DEFAULT 0,
+    ordine      INTEGER NOT NULL DEFAULT 0
+);
+
+-- 3. PRIME SEDUTE DI PROVA / OPEN DAY ----------------------------------
+CREATE TABLE IF NOT EXISTS aerosal_prove (
+    id              BIGSERIAL PRIMARY KEY,
+    studio_id       TEXT NOT NULL,
+    paziente_id     BIGINT,                      -- NULL se non ancora in anagrafica
+    nominativo      TEXT NOT NULL,
+    telefono        TEXT,
+    categoria       TEXT NOT NULL REFERENCES aerosal_categorie_prova(codice),
+    origine         TEXT NOT NULL CHECK (origine IN ('open_day','prima_seduta')),
+    data_prova      DATE NOT NULL,
+    registrata_carta_respiro BOOLEAN NOT NULL DEFAULT FALSE,
+    convertita      BOOLEAN NOT NULL DEFAULT FALSE,
+    pacchetto_id    BIGINT,                      -- pacchetto acquistato dopo la prova
+    note            TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 4. PACCHETTI VENDUTI -------------------------------------------------
+CREATE TABLE IF NOT EXISTS aerosal_pacchetti (
+    id               BIGSERIAL PRIMARY KEY,
+    studio_id        TEXT NOT NULL,
+    paziente_id      BIGINT NOT NULL,
+    listino_id       BIGINT REFERENCES aerosal_listino(id),
+    descrizione      TEXT NOT NULL,              -- copia congelata dal listino
+    n_sedute         INTEGER NOT NULL CHECK (n_sedute > 0),
+    prezzo_totale    NUMERIC(10,2) NOT NULL,
+    data_acquisto    DATE NOT NULL,
+    modalita         TEXT NOT NULL CHECK (modalita IN ('unica','rateale')),
+    provider_rate    TEXT CHECK (provider_rate IN ('Klarna','PayPal','HeyLight','Interno')),
+    n_rate           INTEGER,
+    stato            TEXT NOT NULL DEFAULT 'attivo'
+                     CHECK (stato IN ('attivo','sospeso','completato','annullato')),
+    detraibile       BOOLEAN NOT NULL DEFAULT TRUE, -- dispositivo medico
+    note             TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 5. PAGAMENTI / RATE --------------------------------------------------
+CREATE TABLE IF NOT EXISTS aerosal_pagamenti (
+    id            BIGSERIAL PRIMARY KEY,
+    studio_id     TEXT NOT NULL,
+    pacchetto_id  BIGINT NOT NULL REFERENCES aerosal_pacchetti(id) ON DELETE CASCADE,
+    scadenza      DATE,
+    data_pagamento DATE,
+    importo       NUMERIC(10,2) NOT NULL,
+    metodo        TEXT CHECK (metodo IN ('contanti','POS','bonifico','link','Klarna','PayPal','HeyLight')),
+    riferimento   TEXT,
+    pagato        BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 6. SEDUTE EFFETTUATE (scalano dal pacchetto) -------------------------
+CREATE TABLE IF NOT EXISTS aerosal_sedute (
+    id            BIGSERIAL PRIMARY KEY,
+    studio_id     TEXT NOT NULL,
+    pacchetto_id  BIGINT NOT NULL REFERENCES aerosal_pacchetti(id) ON DELETE CASCADE,
+    paziente_id   BIGINT NOT NULL,
+    data_ora      TIMESTAMPTZ NOT NULL,
+    durata_min    INTEGER NOT NULL DEFAULT 30,
+    operatore     TEXT,
+    tollerata     BOOLEAN NOT NULL DEFAULT TRUE,
+    sintomi       TEXT,                          -- tosse, dispnea, altro
+    interrotta    BOOLEAN NOT NULL DEFAULT FALSE,
+    note          TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 7. ORDINI E RITIRO SALE ----------------------------------------------
+CREATE TABLE IF NOT EXISTS aerosal_date_ritiro (
+    data_ritiro DATE PRIMARY KEY,
+    fasce       TEXT NOT NULL DEFAULT '09:00-12:00 / 14:00-16:00',
+    note        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS aerosal_ordini_sale (
+    id               BIGSERIAL PRIMARY KEY,
+    studio_id        TEXT NOT NULL,
+    data_ordine      DATE NOT NULL,
+    quantita         TEXT,                       -- es. "10 kg" / n. confezioni
+    importo          NUMERIC(10,2),
+    data_pagamento   DATE,
+    email_inviata    BOOLEAN NOT NULL DEFAULT FALSE,   -- a ordini@aerosal.it con copia pagamento
+    data_ritiro      DATE REFERENCES aerosal_date_ritiro(data_ritiro),
+    fascia           TEXT CHECK (fascia IN ('09:00-12:00','14:00-16:00')),
+    stato            TEXT NOT NULL DEFAULT 'da_pagare'
+                     CHECK (stato IN ('da_pagare','pagato','appuntamento','ritirato')),
+    note             TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 8. VISTA: SEDUTE RESIDUE PER PACCHETTO -------------------------------
+CREATE OR REPLACE VIEW aerosal_v_residuo AS
+SELECT p.id AS pacchetto_id,
+       p.studio_id,
+       p.paziente_id,
+       p.descrizione,
+       p.n_sedute,
+       COUNT(s.id)                          AS sedute_fatte,
+       p.n_sedute - COUNT(s.id)             AS sedute_residue,
+       p.prezzo_totale,
+       COALESCE((SELECT SUM(g.importo) FROM aerosal_pagamenti g
+                 WHERE g.pacchetto_id = p.id AND g.pagato), 0) AS incassato,
+       p.stato,
+       p.data_acquisto
+FROM aerosal_pacchetti p
+LEFT JOIN aerosal_sedute s ON s.pacchetto_id = p.id
+GROUP BY p.id;
+
+CREATE INDEX IF NOT EXISTS ix_aer_pacc_paz   ON aerosal_pacchetti(studio_id, paziente_id);
+CREATE INDEX IF NOT EXISTS ix_aer_sed_pacc   ON aerosal_sedute(pacchetto_id);
+CREATE INDEX IF NOT EXISTS ix_aer_pag_pacc   ON aerosal_pagamenti(pacchetto_id);
+CREATE INDEX IF NOT EXISTS ix_aer_prove_data ON aerosal_prove(studio_id, data_prova);
+
+-- 9. RLS (modello — ADATTARE alla variabile di sessione già in uso) ----
+-- ALTER TABLE aerosal_listino     ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE aerosal_prove       ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE aerosal_pacchetti   ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE aerosal_pagamenti   ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE aerosal_sedute      ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE aerosal_ordini_sale ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY aer_tenant ON aerosal_pacchetti
+--     USING (studio_id = current_setting('app.studio_id', true));
+-- (ripetere per ogni tabella)
+
+"""
+
+_SQL_SEED = r"""
+-- =====================================================================
+-- Modulo AEROSAL — dati iniziali da chat "Aerosal Family" (lug–set 2026)
+-- Sostituire 'THE_ORGANISM' con lo studio_id reale.
+-- =====================================================================
+
+-- Categorie "Prima Seduta Prova" (Carta Respiro, dal 18/09/2026)
+INSERT INTO aerosal_categorie_prova (codice, descrizione, adulti, bambini, ordine) VALUES
+ ('ADULTO',        'Adulto singolo',        1, 0, 1),
+ ('ADULTO_1BIMBO', 'Adulto con bambino',    1, 1, 2),
+ ('ADULTO_2BIMBI', 'Adulto con 2 bambini',  1, 2, 3),
+ ('ADULTO_3BIMBI', 'Adulto con 3 bambini',  1, 3, 4)
+ON CONFLICT (codice) DO NOTHING;
+
+-- Listino BASE (prezzo pieno)
+INSERT INTO aerosal_listino (studio_id, codice, descrizione, tipo, n_sedute, prezzo, attivo, note) VALUES
+ ('THE_ORGANISM','PKG20','Pacchetto 20 sedute','base',20, 520.00, TRUE,'26,00 €/seduta'),
+ ('THE_ORGANISM','PKG40','Pacchetto 40 sedute','base',40, 930.00, TRUE,'23,25 €/seduta'),
+ ('THE_ORGANISM','PKG78','Pacchetto 78 sedute','base',78,1640.00, TRUE,'21,03 €/seduta')
+ON CONFLICT (studio_id, codice) DO NOTHING;
+
+-- Promo "Ricomincia ora" 24/08–05/09/2026 (storico, scaduta)
+INSERT INTO aerosal_listino (studio_id, codice, descrizione, tipo, n_sedute, prezzo, prezzo_pieno_rif,
+                             promo_nome, limite_pacchetti, valido_dal, valido_al, attivo) VALUES
+ ('THE_ORGANISM','PKG20_PROMO_AGO26','20 sedute — promo rientro','promo',20, 442.00, 520.00,'Ricomincia ora',5,'2026-08-24','2026-09-05',FALSE),
+ ('THE_ORGANISM','PKG40_PROMO_AGO26','40 sedute — promo rientro','promo',40, 790.00, 930.00,'Ricomincia ora',5,'2026-08-24','2026-09-05',FALSE),
+ ('THE_ORGANISM','PKG78_PROMO_AGO26','78 sedute — promo rientro','promo',78,1312.00,1640.00,'Ricomincia ora',5,'2026-08-24','2026-09-05',FALSE)
+ON CONFLICT (studio_id, codice) DO NOTHING;
+
+-- Promo "Settembre parte da oggi" 23/07–09/08/2026 (storico, scaduta; sconto % sul formato)
+INSERT INTO aerosal_listino (studio_id, codice, descrizione, tipo, n_sedute, prezzo, promo_nome,
+                             limite_pacchetti, valido_dal, valido_al, attivo, note) VALUES
+ ('THE_ORGANISM','TRIM_PROMO_LUG26','Trimestrale -20%','promo',1,0,'Settembre parte da oggi',5,'2026-07-23','2026-08-09',FALSE,'Sconto 20% — sedute e prezzo definiti dal centro'),
+ ('THE_ORGANISM','SEM_PROMO_LUG26', 'Semestrale -25%', 'promo',1,0,'Settembre parte da oggi',5,'2026-07-23','2026-08-09',FALSE,'Sconto 25% — sedute e prezzo definiti dal centro'),
+ ('THE_ORGANISM','ANN_PROMO_LUG26', 'Annuale -30%',    'promo',1,0,'Settembre parte da oggi',5,'2026-07-23','2026-08-09',FALSE,'Sconto 30% — sedute e prezzo definiti dal centro')
+ON CONFLICT (studio_id, codice) DO NOTHING;
+
+-- Date ritiro sale (prenotare via ordini@aerosal.it allegando il pagamento)
+INSERT INTO aerosal_date_ritiro (data_ritiro) VALUES
+ ('2026-09-21'),('2026-09-28'),('2026-10-05'),('2026-10-19'),('2026-10-26')
+ON CONFLICT (data_ritiro) DO NOTHING;
+
+"""
 
 
 def _statement(testo: str) -> list[str]:
@@ -47,9 +255,9 @@ def assicura_schema(conn, studio_id: str) -> str:
     volta. Si puo' rilanciare: tutto e' IF NOT EXISTS / ON CONFLICT."""
     try:
         with _cur(conn) as cur:
-            for s in _statement((_SQL / "01_aerosal_schema.sql").read_text(encoding="utf-8")):
+            for s in _statement(_SQL_SCHEMA):
                 cur.execute(s)
-            seed = (_SQL / "02_aerosal_seed.sql").read_text(encoding="utf-8")
+            seed = _SQL_SEED
             # Con i parametri psycopg2 legge ogni % come segnaposto: «Sconto 20%»
             # nelle note delle promo va raddoppiato prima.
             for s in _statement(seed.replace("%", "%%").replace("'THE_ORGANISM'", "%s")):
