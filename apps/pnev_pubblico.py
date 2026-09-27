@@ -609,6 +609,77 @@ def azione_iscrizione_evento(conn):
 
 
 # ═══════════════════════════════════════════════════════════════
+# OFFERTE STANZA DEL SALE (Aerosal) — pagina per www.pnev.it
+# ═══════════════════════════════════════════════════════════════
+
+def _euro(v):
+    try:
+        return f"€ {float(v):,.0f}".replace(",", ".")
+    except Exception:
+        return ""
+
+
+def azione_offerte_sale(conn):
+    """Le offerte programmate nel gestionale (Aerosal → Offerte sul sito).
+    Compaiono dal primo giorno di validita' e spariscono da sole alla
+    scadenza o quando i pacchetti disponibili sono finiti."""
+    from html import escape
+    from modules.aerosal import db_aerosal as dba
+    studio = st.secrets.get("STUDIO_ID_AEROSAL") or None
+    try:
+        offerte = dba.offerte_pubbliche(conn, studio)
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        offerte = []
+
+    st.markdown("## 🌬️ Stanza del Sale — le offerte in corso")
+    if not offerte:
+        st.info("In questo momento non ci sono offerte attive. Per informazioni sui pacchetti "
+                "di haloterapia chiamaci allo 081 5152334.")
+        st.stop()
+
+    gruppi = {}
+    for o in offerte:
+        gruppi.setdefault(o.get("titolo_sito") or o.get("promo_nome") or "Offerta", []).append(o)
+
+    for titolo, voci in gruppi.items():
+        testo = next((v.get("testo_sito") for v in voci if v.get("testo_sito")), "")
+        fine = max((v["valido_al"] for v in voci if v.get("valido_al")), default=None)
+        schede = ""
+        for v in voci:
+            pieno = v.get("prezzo_pieno_rif")
+            barrato = (f'<span style="text-decoration:line-through;opacity:.7;font-size:15px">'
+                       f'{_euro(pieno)}</span> ') if pieno and float(pieno) > float(v["prezzo"]) else ""
+            resto = ""
+            if v.get("limite_pacchetti"):
+                n = int(v["limite_pacchetti"]) - int(v.get("vendute") or 0)
+                resto = (f'<div style="font-size:13px;margin-top:6px;opacity:.9">'
+                         f'{"ultimo pacchetto" if n == 1 else f"ancora {n} pacchetti"} disponibili</div>')
+            schede += (
+                '<div style="flex:1 1 180px;background:rgba(255,255,255,.12);'
+                'border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:16px 18px">'
+                f'<div style="font-size:15px;font-weight:600">{int(v["n_sedute"])} sedute</div>'
+                f'<div style="margin-top:6px">{barrato}<span style="font-size:26px;font-weight:700">'
+                f'{_euro(v["prezzo"])}</span></div>{resto}</div>')
+        st.markdown(
+            f'<div style="margin:18px 0 26px">'
+            f'<h3 style="margin:0 0 6px">{escape(titolo)}</h3>'
+            + (f'<p style="margin:0 0 12px">{escape(testo)}</p>' if testo else "")
+            + f'<div style="display:flex;flex-wrap:wrap;gap:12px">{schede}</div>'
+            + (f'<div style="font-size:13px;margin-top:10px;opacity:.85">Offerta valida fino al '
+               f'{fine:%d/%m/%Y}</div>' if fine else "")
+            + '</div>', unsafe_allow_html=True)
+
+    st.link_button("📞 Chiama per prenotare · 081 5152334", "tel:+390815152334",
+                   type="primary", use_container_width=True)
+    st.caption("Studio The Organism · Via De Rosa 46, Pagani (SA) · www.pnev.it")
+    st.stop()
+
+
+# ═══════════════════════════════════════════════════════════════
 # DASHBOARD
 # ═══════════════════════════════════════════════════════════════
 
@@ -704,6 +775,10 @@ def main():
         # 0. Iscrizione pubblica a evento (non richiede token né login)
         if azione == "iscrizione_evento":
             azione_iscrizione_evento(conn)
+            return
+
+        if azione == "offerte_sale":
+            azione_offerte_sale(conn)
             return
 
         # 1. Registrazione (non richiede token)
