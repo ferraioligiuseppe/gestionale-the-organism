@@ -635,10 +635,22 @@ def azione_offerte_sale(conn):
             pass
         offerte = []
 
-    st.markdown("## 🌬️ Stanza del Sale — le offerte in corso")
+    # Dentro la pagina di pnev.it: sfondo bianco e schede come quelle del sito,
+    # non il verde delle altre pagine di questa app.
+    st.markdown("""<style>
+      .stApp{background:#fff!important}
+      .stApp, .stApp p, .stApp li, .stApp label, .stApp div{color:#1F2A24}
+      header, footer, [data-testid="stToolbar"]{display:none!important}
+      .block-container{padding:8px 12px 16px!important;max-width:900px}
+      a[data-testid="stBaseLinkButton-primary"]{background:#1D6B44!important;border:0!important;
+        border-radius:6px!important;color:#fff!important}
+      a[data-testid="stBaseLinkButton-primary"] *{color:#fff!important}
+    </style>""", unsafe_allow_html=True)
     if not offerte:
-        st.info("In questo momento non ci sono offerte attive. Per informazioni sui pacchetti "
-                "di haloterapia chiamaci allo 081 5152334.")
+        st.markdown('<div style="text-align:center;padding:18px;border:1px solid #D6E2DA;'
+                    'border-radius:8px;font-size:15px">In questo momento non ci sono offerte attive. '
+                    'Per informazioni sui pacchetti chiamaci allo 081 5152334.</div>',
+                    unsafe_allow_html=True)
         st.stop()
 
     gruppi = {}
@@ -651,31 +663,30 @@ def azione_offerte_sale(conn):
         schede = ""
         for v in voci:
             pieno = v.get("prezzo_pieno_rif")
-            barrato = (f'<span style="text-decoration:line-through;opacity:.7;font-size:15px">'
+            barrato = (f'<span style="text-decoration:line-through;color:#7A857E;font-size:15px">'
                        f'{_euro(pieno)}</span> ') if pieno and float(pieno) > float(v["prezzo"]) else ""
             resto = ""
             if v.get("limite_pacchetti"):
                 n = int(v["limite_pacchetti"]) - int(v.get("vendute") or 0)
-                resto = (f'<div style="font-size:13px;margin-top:6px;opacity:.9">'
+                resto = (f'<div style="font-size:13px;margin-top:6px;color:#1D6B44;font-weight:600">'
                          f'{"ultimo pacchetto" if n == 1 else f"ancora {n} pacchetti"} disponibili</div>')
             schede += (
-                '<div style="flex:1 1 180px;background:rgba(255,255,255,.12);'
-                'border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:16px 18px">'
-                f'<div style="font-size:15px;font-weight:600">{int(v["n_sedute"])} sedute</div>'
-                f'<div style="margin-top:6px">{barrato}<span style="font-size:26px;font-weight:700">'
+                '<div style="flex:1 1 180px;background:#fff;text-align:center;'
+                'border:1px solid #D6E2DA;border-radius:8px;padding:16px 18px">'
+                f'<div style="font-size:15px;font-weight:700;color:#155235">{int(v["n_sedute"])} sedute</div>'
+                f'<div style="margin-top:6px">{barrato}<span style="font-size:26px;font-weight:700;color:#1F2A24">'
                 f'{_euro(v["prezzo"])}</span></div>{resto}</div>')
         st.markdown(
             f'<div style="margin:18px 0 26px">'
-            f'<h3 style="margin:0 0 6px">{escape(titolo)}</h3>'
-            + (f'<p style="margin:0 0 12px">{escape(testo)}</p>' if testo else "")
+            f'<div style="text-align:center;font-size:18px;font-weight:700;color:#155235;margin:0 0 6px">{escape(titolo)}</div>'
+            + (f'<p style="text-align:center;margin:0 0 12px;color:#4E5A53">{escape(testo)}</p>' if testo else "")
             + f'<div style="display:flex;flex-wrap:wrap;gap:12px">{schede}</div>'
-            + (f'<div style="font-size:13px;margin-top:10px;opacity:.85">Offerta valida fino al '
+            + (f'<div style="text-align:center;font-size:13px;margin-top:10px;color:#4E5A53">Offerta valida fino al '
                f'{fine:%d/%m/%Y}</div>' if fine else "")
             + '</div>', unsafe_allow_html=True)
 
     st.link_button("📞 Chiama per prenotare · 081 5152334", "tel:+390815152334",
                    type="primary", use_container_width=True)
-    st.caption("Studio The Organism · Via De Rosa 46, Pagani (SA) · www.pnev.it")
     st.stop()
 
 
