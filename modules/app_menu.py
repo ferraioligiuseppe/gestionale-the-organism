@@ -153,6 +153,8 @@ PAZIENTI_RAMI = {
         # rilievi da anamnesi, referti esterni, colloqui e test.
         "🧩 Rilievi PNEV",
         "🎙️ Colloqui clinici",
+        # Metodo Kousmine: valutazione, esami, piano firmato, diario, esiti.
+        "🥗 Alimentazione",
         "🗓️ Diario clinico",
         "📝 Diagnosi assistita",
         "📅 Sedute / Terapie",

@@ -452,6 +452,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
         "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
+        "🧩 Rilievi PNEV", "🎙️ Colloqui clinici", "🥗 Alimentazione",
         "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
@@ -544,6 +545,20 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
+    # Rilievi e Colloqui erano nel menu ma non qui: aprivano una pagina vuota.
+    for _voce, _mod, _fn in (("🧩 Rilievi PNEV", "rilievi_pnev", "render_rilievi"),
+                             ("🎙️ Colloqui clinici", "colloqui_clinici", "render_pagina_colloqui"),
+                             ("🥗 Alimentazione", "alimentazione", "render_alimentazione")):
+        if sotto == _voce:
+            try:
+                import importlib
+                getattr(importlib.import_module(f".{_mod}", __package__), _fn)(conn, paz_id)
+            except Exception as e:
+                import traceback
+                st.error(f"Errore {_voce}: {e}")
+                with st.expander("Dettagli tecnici"):
+                    st.code(traceback.format_exc())
+            return True
     if sotto == "📝 Diagnosi assistita":
         try:
             from .diagnosi_assistita import render_diagnosi
