@@ -265,6 +265,7 @@ SOTTOSEZIONI = {
     AREA_MATERIALI: [
         "📐 PNEV-Chart (schede stampabili)",
         "🥁 PNEV Metronomo",
+        "🎯 Segui la pallina",
         "🎬 Animazioni dei riflessi",
         "🕹️ PNEV Game Center",
         "🎮 Esercizi Wordwall",
