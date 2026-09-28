@@ -4,7 +4,7 @@ modules/sportivi.py
 
 Integrazione di PNEV Sport Vision nel gestionale The Organism.
 
-PNEV Sport Vision e' un'app separata su pnev.it (12 moduli di allenamento
+PNEV Sport Vision e' un'app separata su pnev.it (19 moduli di allenamento
 visivo-sportivo). I dati restano nel browser del terapista e vengono
 esportati a fine giornata come archivio JSON. Questo modulo:
 
@@ -49,10 +49,21 @@ MODULI = {
     "segnali":       {"nome": "Segnali",                  "cat": "Metronomo / comandi sonori"},
     "tabelle":       {"nome": "Tabelle",                  "cat": "Hart Chart / saccadi / slap-tap"},
     "procedure":     {"nome": "Procedure",                "cat": "Registro del lavoro sul corpo"},
+    # Moduli aggiunti sul sito dopo la prima versione di questo file
+    # (cartella giochi/sport/ su pnev.it, settembre 2026).
+    "agilita":             {"nome": "Agilità",                  "cat": "Reazione e spostamento"},
+    "agilita-decisionale": {"nome": "Agilità decisionale",      "cat": "Scelta rapida in movimento"},
+    "doppio-compito":      {"nome": "Doppio compito",           "cat": "Attenzione divisa"},
+    "scelta-pressione":    {"nome": "Scelta sotto pressione",   "cat": "Decisione con limite di tempo"},
+    "sequenze-motorie":    {"nome": "Sequenze motorie",         "cat": "Memoria e programmazione del gesto"},
+    "blazepod-sport":      {"nome": "BlazePod Sport",           "cat": "Reazione con telecamera"},
+    "pursuit-periferia":   {"nome": "Inseguimento e periferia", "cat": "Inseguimento lento e campo utile"},
 }
 ORDINE = ["rotatore", "anaglifo", "facilita", "reazione", "periferica",
           "anticipazione", "memoria", "mano", "sequenza", "segnali",
-          "tabelle", "procedure"]
+          "tabelle", "procedure",
+          "agilita", "agilita-decisionale", "doppio-compito", "scelta-pressione",
+          "sequenze-motorie", "blazepod-sport", "pursuit-periferia"]
 
 
 # ---------------------------------------------------------------- DB
