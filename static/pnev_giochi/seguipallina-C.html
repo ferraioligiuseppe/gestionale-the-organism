@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>PNEV Sport Vision · Segui la pallina (C)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--green:#1D6B44; --green-soft:#E7F3EC; --red:#C8453A; --amber:#B6791F; --blue:#246B86; --violet:#6C4CA6; --ink:#1C2A24; --muted:#6B7C74; --line:#DCE5DF; --page:#F2F5F1; --card:#FFFFFF;}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0;}
+  body{font-family:'Nunito',system-ui,sans-serif; background:var(--page); color:var(--ink); overflow:hidden; -webkit-user-select:none; user-select:none;}
+  a{color:var(--green);} a:hover{color:#155235;}
+  .app{height:100dvh; display:flex; flex-direction:column;}
+  .screen{flex:1; display:none; flex-direction:column; padding:22px; min-height:0;}
+  .screen.active{display:flex;}
+  #screen-start{align-items:center; text-align:center; overflow-y:auto; position:relative; padding-top:64px;}
+  .backlink{position:absolute; top:14px; left:14px; z-index:5; font-family:'Fredoka',sans-serif; font-weight:600; font-size:15px; color:#fff; text-decoration:none; background:var(--green); border-radius:999px; padding:9px 18px;}
+  .backlink:hover{color:#fff;}
+  .brand{font-family:'Fredoka',sans-serif; font-weight:500; letter-spacing:.5px; color:var(--green); font-size:14px; text-transform:uppercase; margin-bottom:6px;}
+  h1{font-family:'Fredoka',sans-serif; font-weight:600; font-size:30px; margin:0 0 6px;}
+  .sub{color:var(--muted); font-size:15px; max-width:460px; margin:0 auto 14px; line-height:1.5; text-wrap:pretty;}
+  .opts{width:100%; max-width:460px; margin:0 auto; text-align:left;}
+  .opt-label{font-size:13px; color:var(--muted); font-weight:700; margin:13px 0 8px; text-transform:uppercase; letter-spacing:.4px;}
+  .seg{display:flex; gap:8px;}
+  .seg button{flex:1; padding:11px 6px; border-radius:12px; border:2px solid var(--line); background:var(--card); color:var(--ink); font-weight:700; font-size:14px; cursor:pointer; font-family:inherit;}
+  .seg button.on{border-color:var(--green); background:var(--green-soft); color:var(--green);}
+  .namefield{width:100%; margin-top:6px; padding:12px 14px; border-radius:12px; border:2px solid var(--line); font-family:'Nunito',sans-serif; font-size:16px; color:var(--ink); background:var(--card);}
+  .namefield:focus{outline:none; border-color:var(--green);}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; font-family:'Fredoka',sans-serif; font-weight:600; cursor:pointer; border:none; border-radius:999px; transition:transform .08s;}
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--green); color:#fff; font-size:20px; padding:15px 40px; margin-top:20px;}
+  .btn-ghost{background:transparent; color:var(--green); border:2px solid var(--green); font-size:16px; padding:12px 26px; text-decoration:none;}
+  .foot{margin-top:16px; font-size:12px; color:var(--muted); max-width:460px; line-height:1.5;}
+
+  #screen-game{padding:0; background:#0f1512;}
+  .hud{display:flex; align-items:center; gap:10px; padding:12px 14px;}
+  .banner{font-family:'Fredoka',sans-serif; font-weight:600; font-size:16px; color:#fff; background:#20302a; border-radius:999px; padding:5px 16px; white-space:nowrap;}
+  .banner.memo{background:var(--red);} .banner.go{background:var(--blue);} .banner.pick{background:var(--violet);}
+  .bar{flex:1; height:7px; background:#22302b; border-radius:999px; overflow:hidden;}
+  .bar > i{display:block; height:100%; width:0%; background:var(--amber); border-radius:999px;}
+  .counter{font-family:'Fredoka',sans-serif; font-weight:500; font-size:13px; color:#9fb3aa; text-align:right; white-space:nowrap;}
+  .arena{flex:1; display:flex; align-items:center; justify-content:center; padding:6px; min-height:0;}
+  canvas{width:min(96vw, calc(100dvh - 170px)); aspect-ratio:1; touch-action:none;}
+  .actionrow{display:flex; align-items:center; justify-content:center; gap:14px; min-height:74px; padding-bottom:12px;}
+  #btn-react{background:#2a3a33; color:#ffd24a; font-size:22px; padding:14px 34px; border:2px solid #ffd24a;}
+  #btn-react.hit{background:#ffd24a; color:#1c2a24;}
+
+  #screen-results{overflow-y:auto; position:relative;}
+  .res-head{text-align:center; margin:6px 0 16px;}
+  .res-head h2{font-family:'Fredoka',sans-serif; font-weight:600; font-size:26px; margin:0;}
+  .res-head .who{color:var(--muted); font-size:14px; margin-top:2px;}
+  .cards{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; max-width:480px; margin:0 auto; width:100%;}
+  .mc{background:var(--card); border:2px solid var(--line); border-radius:16px; padding:14px 16px;}
+  .mc .l{font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase;}
+  .mc .n{font-family:'Fredoka',sans-serif; font-weight:600; font-size:30px; margin-top:4px;}
+  .mc .s{font-size:12px; color:var(--muted); margin-top:2px;}
+  .mc.green .n{color:var(--green);} .mc.blue .n{color:var(--blue);} .mc.violet .n{color:var(--violet);} .mc.amber .n{color:var(--amber);}
+  .storico{max-width:480px; margin:16px auto 0; width:100%; background:var(--card); border:2px solid var(--line); border-radius:16px; padding:14px 16px;}
+  .storico .l{font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; margin-bottom:10px;}
+  .barre{display:flex; align-items:flex-end; gap:8px; height:110px;}
+  .barre .c{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:4px; height:100%;}
+  .barre .v{font:600 12px 'Fredoka',sans-serif; color:var(--ink);}
+  .barre .b{width:100%; border-radius:6px 6px 2px 2px; background:#B9D7C5;}
+  .barre .c.ora .b{background:var(--green);}
+  .barre .d{font-size:11px; color:var(--muted);}
+  .interp{max-width:480px; margin:16px auto 0; width:100%; background:var(--green-soft); border-radius:16px; padding:16px 18px; font-size:15px; line-height:1.55;}
+  .interp .dis{display:block; margin-top:8px; font-size:12px; color:var(--muted);}
+  .res-actions{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin:22px 0 8px;}
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#fff; padding:10px 18px; border-radius:999px; font-size:14px; opacity:0; transition:all .25s; pointer-events:none; z-index:99;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div class="app">
+  <section id="screen-start" class="screen active">
+    <a class="backlink" href="index.html">← Giochi</a>
+    <div class="brand">The Organism · PNEV Sport Vision</div>
+    <h1>Segui la pallina · Sport</h1>
+    <p class="sub">Memorizza le palline <b>rosse</b>, seguile mentre si mescolano, poi toccale. La velocità <b>si adatta</b>: sale se il round è perfetto, scende se sbagli. Il risultato è la velocità massima che riesci a tenere.</p>
+    <div class="opts">
+      <div class="opt-label">Atleta</div>
+      <input id="f-name" class="namefield" type="text" placeholder="Nome (serve per lo storico)" autocomplete="off">
+      <div class="opt-label">Da seguire</div>
+      <div class="seg" id="seg-targets"><button data-v="2">2</button><button data-v="3" class="on">3</button><button data-v="4">4</button></div>
+      <div class="opt-label">Palline in tutto</div>
+      <div class="seg" id="seg-tot"><button data-v="12">12</button><button data-v="16" class="on">16</button><button data-v="20">20</button></div>
+      <div class="opt-label">Velocità di partenza</div>
+      <div class="seg" id="seg-speed"><button data-v="1" class="on">Base</button><button data-v="1.7">Media</button><button data-v="2.4">Alta</button></div>
+      <div class="opt-label">Durata dell'inseguimento</div>
+      <div class="seg" id="seg-dur"><button data-v="6000">6 s</button><button data-v="8000" class="on">8 s</button><button data-v="10000">10 s</button></div>
+      <div class="opt-label">Round</div>
+      <div class="seg" id="seg-rounds"><button data-v="10">10</button><button data-v="15" class="on">15</button><button data-v="20">20</button></div>
+      <div class="opt-label">Doppio compito</div>
+      <div class="seg" id="seg-dual"><button data-v="0" class="on">No</button><button data-v="1">Sì · lampo sul bordo</button></div>
+    </div>
+    <button class="btn btn-primary" id="btn-start">▶ Inizia</button>
+    <p class="foot">Doppio compito: mentre segui le palline, quando il bordo diventa giallo premi ⚡ (o la barra spaziatrice) il più in fretta possibile. Meglio a tutto schermo, su tablet o TV.</p>
+  </section>
+
+  <section id="screen-game" class="screen">
+    <div class="hud"><div class="banner" id="banner">Memorizza!</div><div class="bar"><i id="bar-fill"></i></div><div class="counter" id="counter">1/15</div></div>
+    <div class="arena"><canvas id="cv" width="600" height="600"></canvas></div>
+    <div class="actionrow">
+      <button class="btn" id="btn-react" style="display:none">⚡</button>
+      <button class="btn btn-primary" id="btn-done" style="margin-top:0; font-size:17px; padding:12px 30px; display:none;">Fatto ✓</button>
+    </div>
+  </section>
+
+  <section id="screen-results" class="screen">
+    <div class="res-head"><h2>Risultati</h2><div class="who" id="res-who"></div></div>
+    <div class="cards" id="res-cards"></div>
+    <div class="storico" id="res-storico"></div>
+    <div class="interp" id="res-interp"></div>
+    <div class="res-actions">
+      <button class="btn btn-primary" id="btn-copy" style="margin-top:0; font-size:16px; padding:13px 28px;">Copia risultati</button>
+      <button class="btn btn-ghost" id="btn-again">Rigioca</button>
+      <button class="btn btn-ghost" id="btn-settings" style="border-color:var(--line); color:var(--muted);">Impostazioni</button>
+      <a class="btn btn-ghost" href="index.html" style="border-color:var(--line); color:var(--muted);">← Giochi</a>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast">Copiato ✓</div>
+<script>
+(function(){
+  "use strict";
+  const $=id=>document.getElementById(id);
+  const screens={start:$("screen-start"),game:$("screen-game"),results:$("screen-results")};
+  function show(n){ for(const k in screens) screens[k].classList.remove("active"); screens[n].classList.add("active"); }
+  /* Velocità: 1.00 = la «Lenta» dei giochi A e B (2 px per fotogramma a 60 Hz, arena di 600 px).
+     Qui il movimento è calcolato sul tempo reale: stessa velocità su schermi a 60 e a 120 Hz. */
+  const BASE=2.0, MEMO=1500, SU=1.12, GIU=0.90, MIN=0.5, MAX=6;
+  let cfg={targets:3,tot:16,start:1,dur:8000,rounds:15,dual:0,name:""};
+  let cv=$("cv"), ctx=cv.getContext("2d"), W=600, H=600, cx=300, cy=300, R=284;
+  let balls=[], sel=new Set(), state="idle", roundI=0, rafId=null, timer=null, tLast=0;
+  let idx=1, dir=0, inversioni=[], storia=[], foundTot=0, targetTot=0, perfect=0;
+  let flash=null, flashTimer=null, rts=[], mancati=0, falsi=0, lampi=0;
+
+  function bindSeg(id,key){ const s=$(id); s.addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; [...s.children].forEach(c=>c.classList.remove("on")); b.classList.add("on"); cfg[key]=+b.dataset.v; }); }
+  bindSeg("seg-targets","targets"); bindSeg("seg-tot","tot"); bindSeg("seg-speed","start"); bindSeg("seg-dur","dur"); bindSeg("seg-rounds","rounds"); bindSeg("seg-dual","dual");
+
+  function radiusFor(n){ return n<=12?21:n<=16?17:15; }
+  function startGame(){
+    cfg.name=($("f-name").value||"").trim(); roundI=0; foundTot=0; targetTot=0; perfect=0;
+    idx=cfg.start; dir=0; inversioni=[]; storia=[]; rts=[]; mancati=0; falsi=0; lampi=0;
+    $("btn-react").style.display=cfg.dual?"":"none";
+    show("game"); newRound();
+  }
+  function newRound(){
+    if(roundI>=cfg.rounds){ finish(); return; }
+    $("counter").textContent=(roundI+1)+"/"+cfg.rounds+" · vel. "+idx.toFixed(2);
+    var n=cfg.tot, r=radiusFor(n), sp=BASE*idx; sel.clear(); balls=[];
+    for(var i=0;i<n;i++){
+      var placed=false, x, y, tries=0;
+      while(!placed && tries<300){ tries++;
+        var ang=Math.random()*Math.PI*2, rad=Math.random()*(R-r-6);
+        x=cx+Math.cos(ang)*rad; y=cy+Math.sin(ang)*rad; placed=true;
+        for(var j=0;j<balls.length;j++){ var dx=x-balls[j].x, dy=y-balls[j].y; if(dx*dx+dy*dy<(2.1*r)*(2.1*r)){ placed=false; break; } }
+      }
+      var a=Math.random()*Math.PI*2;
+      balls.push({x:x,y:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:r,target:false});
+    }
+    var idxs=[...Array(n).keys()]; for(var k=idxs.length-1;k>0;k--){ var m=Math.floor(Math.random()*(k+1)); var t=idxs[k]; idxs[k]=idxs[m]; idxs[m]=t; }
+    targetTot+=cfg.targets;
+    for(var t2=0;t2<cfg.targets;t2++) balls[idxs[t2]].target=true;
+    state="memo"; setBanner("memo","Memorizza le rosse!"); $("btn-done").style.display="none";
+    draw(); animBar(MEMO);
+    timer=setTimeout(startShuffle, MEMO);
+  }
+  function startShuffle(){
+    state="go"; setBanner("go","Seguile!"); animBar(cfg.dur);
+    tLast=performance.now(); rafId=requestAnimationFrame(step);
+    if(cfg.dual) programmaLampo();
+    timer=setTimeout(stopShuffle, cfg.dur);
+  }
+  function programmaLampo(){
+    clearTimeout(flashTimer);
+    flashTimer=setTimeout(function(){
+      if(state!=="go") return;
+      flash={t:performance.now(), preso:false}; lampi++;
+      setTimeout(function(){ if(flash && !flash.preso) mancati++; flash=null; if(state==="go") programmaLampo(); }, 900);
+    }, 1100+Math.random()*1700);
+  }
+  function reagisci(){
+    if(state!=="go" || !cfg.dual) return;
+    var b=$("btn-react"); b.classList.add("hit"); setTimeout(()=>b.classList.remove("hit"),150);
+    if(flash && !flash.preso){ flash.preso=true; rts.push(performance.now()-flash.t); }
+    else falsi++;
+  }
+  function step(now){
+    if(state!=="go") return;
+    var k=Math.min(3,(now-tLast)/16.667); tLast=now;
+    for(var i=0;i<balls.length;i++){
+      var b=balls[i]; b.x+=b.vx*k; b.y+=b.vy*k;
+      var dx=b.x-cx, dy=b.y-cy, d=Math.hypot(dx,dy);
+      if(d>R-b.r){ var nx=dx/d, ny=dy/d, dot=b.vx*nx+b.vy*ny; b.vx-=2*dot*nx; b.vy-=2*dot*ny; b.x=cx+nx*(R-b.r); b.y=cy+ny*(R-b.r);
+        var an=Math.atan2(b.vy,b.vx)+(Math.random()-0.5)*0.5, sp=Math.hypot(b.vx,b.vy); b.vx=Math.cos(an)*sp; b.vy=Math.sin(an)*sp; }
+      if(Math.random()<0.015*k){ var an2=Math.atan2(b.vy,b.vx)+(Math.random()-0.5)*0.5, sp2=Math.hypot(b.vx,b.vy); b.vx=Math.cos(an2)*sp2; b.vy=Math.sin(an2)*sp2; }
+    }
+    collide(); draw(); rafId=requestAnimationFrame(step);
+  }
+  function collide(){
+    for(var i=0;i<balls.length;i++){ for(var j=i+1;j<balls.length;j++){
+      var a=balls[i], b=balls[j], dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy), min=a.r+b.r;
+      if(d>0 && d<min){ var nx=dx/d, ny=dy/d, ov=(min-d)/2; a.x-=nx*ov; a.y-=ny*ov; b.x+=nx*ov; b.y+=ny*ov;
+        var va=a.vx*nx+a.vy*ny, vb=b.vx*nx+b.vy*ny, diff=vb-va; a.vx+=diff*nx; a.vy+=diff*ny; b.vx-=diff*nx; b.vy-=diff*ny; }
+    }}
+  }
+  function stopShuffle(){ if(rafId) cancelAnimationFrame(rafId); clearTimeout(flashTimer); flash=null; state="pick"; setBanner("pick","Tocca le "+cfg.targets+" palline"); $("btn-done").style.display=""; draw(); }
+  function setBanner(cls,txt){ var b=$("banner"); b.className="banner "+cls; b.textContent=txt; }
+  function animBar(ms){ var bf=$("bar-fill"); bf.style.transition="none"; bf.style.width="0%"; void bf.offsetWidth; bf.style.transition="width "+ms+"ms linear"; bf.style.width="100%"; }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,7);
+    if(flash){ ctx.strokeStyle="#ffd24a"; ctx.lineWidth=12; } else { ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=3; }
+    ctx.stroke();
+    for(var i=0;i<balls.length;i++){
+      var b=balls[i], col="#2f8fb0";
+      if(state==="memo") col=b.target?"#e0685c":"#2f8fb0";
+      if(state==="feedback") col=b.target?"#e0685c":"#2f7c96";
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7);
+      var g=ctx.createRadialGradient(b.x-b.r*0.3,b.y-b.r*0.3,b.r*0.2,b.x,b.y,b.r);
+      g.addColorStop(0, lighten(col)); g.addColorStop(1,col); ctx.fillStyle=g; ctx.fill();
+      if((state==="pick"||state==="feedback") && sel.has(i)){ ctx.beginPath(); ctx.arc(b.x,b.y,b.r+5,0,7); ctx.strokeStyle= state==="feedback"?(b.target?"#5be08a":"#ffd27a"):"#8fd0ff"; ctx.lineWidth=4; ctx.stroke(); }
+      if(state==="feedback" && b.target && !sel.has(i)){ ctx.beginPath(); ctx.arc(b.x,b.y,b.r+5,0,7); ctx.setLineDash([5,5]); ctx.strokeStyle="#5be08a"; ctx.lineWidth=3; ctx.stroke(); ctx.setLineDash([]); }
+    }
+  }
+  function lighten(hex){ var c=hex.replace('#',''); var r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16); r=Math.min(255,r+60);g=Math.min(255,g+60);b=Math.min(255,b+60); return "rgb("+r+","+g+","+b+")"; }
+  function onTap(e){
+    if(state!=="pick") return;
+    var rect=cv.getBoundingClientRect(), sx=cv.width/rect.width, sy=cv.height/rect.height;
+    var px=(e.clientX-rect.left)*sx, py=(e.clientY-rect.top)*sy, best=-1, bd=1e9;
+    for(var i=0;i<balls.length;i++){ var d=Math.hypot(px-balls[i].x,py-balls[i].y); if(d<balls[i].r*1.4 && d<bd){ bd=d; best=i; } }
+    if(best>=0){ if(sel.has(best)) sel.delete(best); else sel.add(best); draw(); }
+  }
+  function submit(){
+    if(state!=="pick") return; state="feedback"; $("btn-done").style.display="none";
+    var found=0, wrong=0;
+    balls.forEach(function(b,i){ if(b.target && sel.has(i)) found++; if(!b.target && sel.has(i)) wrong++; });
+    foundTot+=found;
+    var ok=(found===cfg.targets && wrong===0); if(ok) perfect++;
+    storia.push(idx);
+    /* scala adattiva 1-su/1-giù: si registra ogni inversione di direzione */
+    var nd=ok?1:-1; if(dir!==0 && nd!==dir) inversioni.push(idx); dir=nd;
+    idx=Math.max(MIN,Math.min(MAX, idx*(ok?SU:GIU)));
+    draw(); roundI++;
+    timer=setTimeout(newRound, 1300);
+  }
+  function soglia(){
+    var v=inversioni.slice(-6); if(v.length<2) v=storia.slice(-4);
+    if(!v.length) return idx;
+    return Math.exp(v.reduce((s,x)=>s+Math.log(x),0)/v.length);
+  }
+  function chiave(){ return "pnev_sport_mot_"+(cfg.name||"anonimo").toLowerCase(); }
+  function leggiStorico(){ try{ return JSON.parse(localStorage.getItem(chiave())||"[]"); }catch(e){ return []; } }
+  function finish(){
+    var acc=targetTot?Math.round(foundTot/targetTot*100):0, s=soglia();
+    var rtm=rts.length?Math.round(rts.reduce((a,b)=>a+b,0)/rts.length):null;
+    var now=new Date();
+    var rec={d:now.toISOString(), soglia:+s.toFixed(2), acc:acc, t:cfg.targets, n:cfg.tot, dual:cfg.dual, rt:rtm};
+    var st=leggiStorico(); st.push(rec); st=st.slice(-30);
+    try{ localStorage.setItem(chiave(), JSON.stringify(st)); }catch(e){}
+    window._d={acc,s,perfect,rtm,rec,prec:st.length>1?st[st.length-2]:null};
+    $("res-who").textContent=(cfg.name?cfg.name+" · ":"")+cfg.targets+" da seguire su "+cfg.tot+" · "+(cfg.dur/1000)+" s · "+cfg.rounds+" round"+(cfg.dual?" · doppio compito":"");
+    var cards=[
+      {l:"Velocità soglia",n:s.toFixed(2),s:"1.00 = velocità base",c:"green"},
+      {l:"Palline giuste",n:acc+"%",s:foundTot+"/"+targetTot,c:"blue"},
+      {l:"Round perfetti",n:perfect+"/"+cfg.rounds,s:"tutte trovate, nessun errore",c:"violet"}
+    ];
+    if(cfg.dual) cards.push({l:"Reazione al lampo",n:rtm!=null?rtm+" ms":"—",s:rts.length+"/"+lampi+" presi · "+falsi+" a vuoto",c:"amber"});
+    else cards.push({l:"Velocità finale",n:idx.toFixed(2),s:"dove è arrivata la scala",c:""});
+    $("res-cards").innerHTML=cards.map(c=>'<div class="mc '+c.c+'"><div class="l">'+c.l+'</div><div class="n">'+c.n+'</div><div class="s">'+c.s+'</div></div>').join("");
+    var ult=st.slice(-8), mx=Math.max.apply(null, ult.map(x=>x.soglia))||1;
+    $("res-storico").innerHTML='<div class="l">Storico velocità soglia'+(cfg.name?" · "+cfg.name:"")+'</div><div class="barre">'+
+      ult.map((x,i)=>'<div class="c'+(i===ult.length-1?' ora':'')+'"><div class="v">'+x.soglia.toFixed(2)+'</div><div class="b" style="height:'+Math.max(6,Math.round(x.soglia/mx*80))+'px"></div><div class="d">'+new Date(x.d).toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"})+'</div></div>').join("")+'</div>';
+    var p=window._d.prec, t;
+    if(p){ var dlt=Math.round((s/p.soglia-1)*100); t= dlt>=5?"Velocità soglia in crescita del "+dlt+"% rispetto alla sessione precedente.": dlt<=-5?"Velocità soglia più bassa del "+(-dlt)+"% rispetto alla sessione precedente: stanchezza, orario o carico diverso?":"Velocità soglia stabile rispetto alla sessione precedente."; }
+    else t="Prima sessione registrata su questo dispositivo: fa da riferimento per le prossime.";
+    if(cfg.dual && rtm!=null) t+=" Tempo di reazione medio al lampo: "+rtm+" ms.";
+    $("res-interp").innerHTML=t+'<span class="dis">Lo storico resta su questo dispositivo e questo browser. Confronta solo sessioni con le stesse impostazioni.</span>';
+    show("results");
+  }
+  function copyText(){
+    var d=window._d; if(!d) return;
+    var now=new Date(), dt=now.toLocaleDateString("it-IT")+" "+now.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"});
+    var txt="PNEV Sport Vision — Segui la pallina (C)\n"+(cfg.name?"Atleta: "+cfg.name+"\n":"")+"Data: "+dt+"\n"+
+      "Da seguire: "+cfg.targets+" su "+cfg.tot+" · Inseguimento: "+(cfg.dur/1000)+" s · Round: "+cfg.rounds+(cfg.dual?" · Doppio compito":"")+"\n"+
+      "Velocità soglia: "+d.s.toFixed(2)+(d.prec?" (precedente "+d.prec.soglia.toFixed(2)+")":"")+"\n"+
+      "Palline giuste: "+d.acc+"% · Round perfetti: "+d.perfect+"/"+cfg.rounds+
+      (cfg.dual?"\nReazione al lampo: "+(d.rtm!=null?d.rtm+" ms":"—")+" · presi "+rts.length+"/"+lampi+" · a vuoto "+falsi:"");
+    var ok=function(){ var t=$("toast"); t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1600); };
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok).catch(ok); } else ok();
+  }
+  $("btn-start").addEventListener("click", startGame);
+  $("btn-again").addEventListener("click", startGame);
+  $("btn-copy").addEventListener("click", copyText);
+  $("btn-done").addEventListener("click", submit);
+  $("btn-react").addEventListener("pointerdown", function(e){ e.preventDefault(); reagisci(); });
+  document.addEventListener("keydown", function(e){ if(e.code==="Space"){ e.preventDefault(); reagisci(); } });
+  $("btn-settings").addEventListener("click", function(){ if(rafId) cancelAnimationFrame(rafId); clearTimeout(timer); clearTimeout(flashTimer); flash=null; state="idle"; show("start"); });
+  cv.addEventListener("pointerdown", function(e){ e.preventDefault(); onTap(e); });
+})();
+</script>
+</body>
+</html>
