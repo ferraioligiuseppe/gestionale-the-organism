@@ -462,6 +462,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "👁️ Groffman (visual tracing)",
         "📐 PNEV-Chart (schede stampabili)",
         "🥁 PNEV Metronomo",
+        "🎯 Segui la pallina",
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
         "⚡ Protocollo Epilessia",
@@ -879,6 +880,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🥁 PNEV Metronomo":
         from .ui_pnev_metronomo import render_pnev_metronomo
         render_pnev_metronomo(); return True
+    if sotto == "🎯 Segui la pallina":
+        from .ui_pnev_giochi import render_segui_pallina
+        render_segui_pallina(); return True
     if sotto == "🖥️ Somministrazione test":
         try:
             from .ui_test_somministrazione import render_somministrazione
