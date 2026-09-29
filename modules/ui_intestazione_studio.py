@@ -13,7 +13,8 @@ import base64
 import streamlit as st
 
 _COLS = ["nome", "indirizzo", "partita_iva", "telefono",
-         "contatti", "titolo_default", "logo_base64", "carta_intestata_base64"]
+         "contatti", "titolo_default", "logo_base64", "carta_intestata_base64",
+         "timbro_base64"]
 
 
 def _ensure_cols(conn) -> None:
@@ -23,6 +24,7 @@ def _ensure_cols(conn) -> None:
         "ALTER TABLE studi ADD COLUMN IF NOT EXISTS titolo_default TEXT",
         "ALTER TABLE studi ADD COLUMN IF NOT EXISTS logo_base64 TEXT",
         "ALTER TABLE studi ADD COLUMN IF NOT EXISTS carta_intestata_base64 TEXT",
+        "ALTER TABLE studi ADD COLUMN IF NOT EXISTS timbro_base64 TEXT",
     ):
         try:
             cur.execute(ddl)
@@ -38,7 +40,8 @@ def get_intestazione_studio(conn, studio_id: int) -> dict:
         cur = conn.cursor()
         cur.execute(
             "SELECT nome, indirizzo, partita_iva, telefono, contatti, "
-            "titolo_default, logo_base64, carta_intestata_base64 FROM studi WHERE id = %s",
+            "titolo_default, logo_base64, carta_intestata_base64, timbro_base64 "
+            "FROM studi WHERE id = %s",
             (studio_id,),
         )
         row = cur.fetchone()
@@ -50,7 +53,24 @@ def get_intestazione_studio(conn, studio_id: int) -> dict:
     except Exception:
         try: conn.rollback()
         except Exception: pass
-        return {}
+        # Colonna timbro non ancora creata: si rilegge senza, per non perdere
+        # la carta intestata dei PDF.
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT nome, indirizzo, partita_iva, telefono, contatti, "
+                "titolo_default, logo_base64, carta_intestata_base64 FROM studi WHERE id = %s",
+                (studio_id,))
+            row = cur.fetchone()
+            if not row:
+                return {}
+            if isinstance(row, dict):
+                return {k: row.get(k) for k in _COLS[:-1]}
+            return dict(zip(_COLS[:-1], row))
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            return {}
 
 
 def render_intestazione_studio(conn, studio_id: int) -> None:
@@ -75,6 +95,14 @@ def render_intestazione_studio(conn, studio_id: int) -> None:
         except Exception:
             st.caption("(carta intestata presente ma non visualizzabile)")
 
+    timbro_b64 = d.get("timbro_base64")
+    if timbro_b64:
+        try:
+            st.image(base64.b64decode(timbro_b64), width=140,
+                     caption="Timbro e firma attuali (in fondo alle relazioni)")
+        except Exception:
+            st.caption("(timbro presente ma non visualizzabile)")
+
     with st.form(f"intest_studio_{studio_id}"):
         nome = st.text_input("Nome studio", value=d.get("nome") or "")
         titolo = st.text_input(
@@ -96,6 +124,13 @@ def render_intestazione_studio(conn, studio_id: int) -> None:
                    "sfondo delle relazioni/ricette. Sostituisce l'intestazione costruita dai campi sopra.")
         carta_file = st.file_uploader("Carta intestata (PNG o JPG)", type=["png", "jpg", "jpeg"],
                                       key=f"carta_{studio_id}")
+        st.markdown("---")
+        st.markdown("**Timbro con firma**")
+        st.caption("PNG con sfondo trasparente. Compare in fondo alle relazioni stampate su "
+                   "carta intestata, accanto a luogo e data. Non va nei Word, che restano bozze modificabili.")
+        timbro_file = st.file_uploader("Timbro e firma (PNG)", type=["png"], key=f"timbro_{studio_id}")
+        togli_timbro = st.checkbox("Togli il timbro salvato", key=f"timbro_via_{studio_id}",
+                                   disabled=not timbro_b64)
         salva = st.form_submit_button("💾 Salva intestazione", use_container_width=True)
 
     if salva:
@@ -144,6 +179,19 @@ def render_intestazione_studio(conn, studio_id: int) -> None:
                                 "(SELECT MAX(id) FROM studi))")
                 except Exception:
                     pass
+            # Timbro in un'istruzione a parte: se la colonna mancasse, il resto
+            # dell'intestazione resta salvato comunque.
+            new_timbro = timbro_b64
+            if togli_timbro:
+                new_timbro = None
+            if timbro_file is not None:
+                new_timbro = base64.b64encode(timbro_file.getvalue()).decode("ascii")
+            if new_timbro != timbro_b64:
+                try:
+                    cur.execute("UPDATE studi SET timbro_base64=%s WHERE id=%s",
+                                (new_timbro, int(studio_id)))
+                except Exception as e:
+                    st.warning(f"Timbro non salvato: {e}")
             conn.commit()
             # Controllo sul database, non sulla fiducia: si rilegge quello che
             # e' stato davvero scritto.
@@ -161,6 +209,7 @@ def render_intestazione_studio(conn, studio_id: int) -> None:
                 "telefono": tel or "", "contatti": (contatti or tel or ""),
                 "titolo_default": titolo or "", "logo_base64": new_logo or "",
                 "carta_intestata_base64": new_carta or "",
+                "timbro_base64": new_timbro or "",
             }
         except Exception as e:
             try: conn.rollback()
