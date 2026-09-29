@@ -140,10 +140,11 @@ _MODELLO = r"""
   font:600 13px/1 inherit;color:#fff;background:#1D6B44}
 #pnev_ci_bar button.sec{background:#5A6660}
 #pnev_ci_bar span{color:#C8D2CC;font:400 12px/1.4 inherit}
-.pnev_ci_foglio{width:__LARGH__mm;min-height:__ALTEZ__mm;margin:0 auto 22px;
-  background:#fff center/100% 100% no-repeat;position:relative;
+.pnev_ci_foglio{width:__LARGH__mm;height:__ALTEZ__mm;margin:0 auto 22px;overflow:hidden;
+  background:#fff;position:relative;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
   box-shadow:0 5px 22px rgba(0,0,0,.35)}
-.pnev_ci_corpo{position:absolute;left:__LATERALE__mm;right:__LATERALE__mm;
+.pnev_ci_corpo{position:absolute;z-index:1;left:__LATERALE__mm;right:__LATERALE__mm;
   top:__SOPRA__mm;height:__UTILE__mm;overflow:hidden;
   font:400 10.8pt/1.58 Georgia,"Times New Roman",serif;color:#1A1A1A;
   text-align:justify;text-wrap:pretty}
@@ -154,12 +155,14 @@ _MODELLO = r"""
   text-indent:-13pt;text-align:left}
 .pnev_ci_corpo .rif{font-size:9.3pt;line-height:1.45;color:#3E4A43;text-align:left}
 .pnev_ci_corpo .firma{margin-top:14pt;font-size:10.4pt;text-align:left}
-.pnev_ci_np{position:absolute;right:__LATERALE__mm;bottom:calc(__SOTTO__mm - 4mm);
+.pnev_ci_np{position:absolute;z-index:1;right:__LATERALE__mm;bottom:calc(__SOTTO__mm - 4mm);
   font:400 8.6pt/1 Georgia,serif;color:#6E7A73}
 .pnev_ci_manca{max-width:520px;margin:40px auto;background:#fff;border-radius:8px;
   padding:22px 26px;font:400 14px/1.6 inherit;color:#1A1A1A}
 .pnev_ci_manca b{color:#A63528}
 @media print{
+  html,body.pnev_ci_stampa{overflow:visible!important;height:auto!important;
+    margin:0!important;padding:0!important;background:#fff!important}
   body.pnev_ci_stampa>*{display:none!important}
   body.pnev_ci_stampa #pnev_ci_ovl{display:block!important;position:static;
     background:#fff;padding:0;overflow:visible}
@@ -223,7 +226,12 @@ _MODELLO = r"""
       /* titolo di paragrafo: riga breve, isolata, senza punto finale */
       var soloPrima = (i===0) || !righe[i-1].trim();
       var soloDopo  = (i===righe.length-1) || !righe[i+1].trim();
-      if (!inRif && soloPrima && soloDopo && s.length<=64 && !/[.;:,!?]$/.test(s)
+      /* Titolo: riga breve, dopo una riga vuota, senza punto finale, seguita
+         da testo. La relazione generata non lascia la riga vuota DOPO il
+         titolo, e con la regola di prima «Che cosa abbiamo guardato e perché»
+         finiva attaccato al paragrafo. */
+      var seguito = (i < righe.length-1) && righe[i+1].trim();
+      if (!inRif && soloPrima && seguito && s.length<=64 && !/[.;:,!?]$/.test(s)
           && /^[A-ZÀ-Ù]/.test(s)){
         chiudi();
         out.push({t:'h', h:'<h3>'+esc(s)+'</h3>'});
@@ -259,7 +267,15 @@ _MODELLO = r"""
     function nuovoFoglio(){
       f = document.createElement('div');
       f.className = 'pnev_ci_foglio';
-      if (URI) f.style.backgroundImage = 'url("'+URI+'")';
+      /* La carta intestata è un'immagine vera, non uno sfondo CSS: i browser
+         in stampa NON stampano gli sfondi se non si attiva a mano «Grafica di
+         sfondo». Era per questo che a video c'era e sul foglio no. */
+      if (URI){
+        var img = document.createElement('img');
+        img.src = URI; img.alt = '';
+        img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:0;display:block';
+        f.appendChild(img);
+      }
       corpo = document.createElement('div');
       corpo.className = 'pnev_ci_corpo';
       f.appendChild(corpo);
@@ -322,9 +338,23 @@ _MODELLO = r"""
     var bStampa = document.createElement('button');
     bStampa.textContent = '\u2399 Stampa';
     bStampa.onclick = function(){
+      /* Margini a zero solo per questa stampa: con i margini di default del
+         browser il foglio A4 non entrava nella pagina, sbordava su quella dopo
+         e intestazione e piè di pagina finivano spostati. Si aggiunge al
+         momento e si toglie dopo, così «Stampa la scheda intera» resta com'era. */
+      var pg = document.createElement('style');
+      pg.id = 'pnev_ci_page';
+      pg.textContent = '@page{size:A4;margin:0}';
+      document.head.appendChild(pg);
       document.body.classList.add('pnev_ci_stampa');
+      var fine = function(){
+        document.body.classList.remove('pnev_ci_stampa');
+        var x = document.getElementById('pnev_ci_page'); if (x) x.remove();
+        window.removeEventListener('afterprint', fine);
+      };
+      window.addEventListener('afterprint', fine);
       window.print();
-      setTimeout(function(){ document.body.classList.remove('pnev_ci_stampa'); }, 400);
+      setTimeout(fine, 1500);
     };
     var bChiudi = document.createElement('button');
     bChiudi.className = 'sec';
