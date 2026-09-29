@@ -340,9 +340,47 @@ function esito(){
     fldHTML({k:"consigli",l:"Approfondimento consigliato",t:"txt"})+
     fldHTML({k:"comunic",l:"Comunicazione alla famiglia",t:"txt"})+
     fldHTML({k:"note",l:"Note",t:"txt"})+'</div>';
+ h+='<div class="noprint" style="margin-top:12px"><button type="button" onclick="stampaEsito()" '+
+    'style="background:#1D6B44;color:#fff;border:0;border-radius:5px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer">'+
+    '\u2399 Stampa esito su carta intestata</button></div>';
  h+='</div><div class="sig">Screening breve 15 minuti — <b>Associazione The Organism</b> · www.pnev.it · © 2026 Giuseppe Ferraioli<br>'+
     'Prima osservazione funzionale: non costituisce diagnosi e non sostituisce una valutazione.</div>';
  return h;
+}
+/* Esito complessivo in testo semplice, impaginato sulla carta intestata
+   dello studio dallo stesso motore della relazione (stampa_carta_intestata). */
+function esitoTesto(){
+ var sem=semaforo(),nomi={tb:"Telebinocular",vis:"Convergenza, motilità, dominanze",lin:"Linguaggio",
+  app:"Apprendimenti",nm:"Neuromotorio e posturale",mio:"Miofunzionale e fluenza"};
+ var oggi=new Date().toLocaleDateString("it-IT"), r=[];
+ r.push("Screening breve 15 minuti — Esito complessivo");
+ r.push("");
+ r.push((V.nome?"Paziente: "+V.nome+" · ":"")+"Data: "+oggi+".");
+ r.push("");
+ r.push("Aree osservate");
+ r.push("");
+ ["tb","vis","lin","app","nm","mio"].forEach(function(id){
+  var f=flag(id);
+  r.push("— "+nomi[id]+": "+(f===null?"non compilata":f?"segnalata":"non segnalata"));
+ });
+ r.push("");
+ r.push("Esito");
+ r.push("");
+ r.push(sem.t.charAt(0).toUpperCase()+sem.t.slice(1)+".");
+ r.push("");
+ r.push("Rosso: linguaggio segnalato, oppure due o più aree. Giallo: una sola area diversa dal linguaggio. Verde: nessuna area segnalata.");
+ [["consigli","Approfondimento consigliato"],["comunic","Comunicazione alla famiglia"],["note","Note"]].forEach(function(x){
+  var v=(V[x[0]]||"").trim(); if(v){ r.push(""); r.push(x[1]); r.push(""); r.push(v); }
+ });
+ r.push("");
+ r.push("Prima osservazione funzionale: non costituisce diagnosi e non sostituisce una valutazione.");
+ r.push("");
+ r.push("Data ____ / ____ / ________            Firma ______________________________");
+ return r.join("\n");
+}
+function stampaEsito(){
+ if(typeof window.pnevAnteprimaCarta==="function") window.pnevAnteprimaCarta(esitoTesto());
+ else window.print();
 }
 function prog(){
  var sem=semaforo();
