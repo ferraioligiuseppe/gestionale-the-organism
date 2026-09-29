@@ -7540,6 +7540,41 @@ def ui_sedute():
         return
     # === fine fix ===
 
+    # Microfono per le note della seduta: stessa registrazione e trascrizione
+    # dei Colloqui clinici. Sta FUORI dal modulo perché dentro un st.form il
+    # microfono non si aggiorna finché non si preme «Salva seduta»: la
+    # trascrizione viene scritta nelle Note prima che il modulo sia disegnato.
+    _k_note = f"sed_note_{paz_id}"
+    if st.session_state.pop(f"_sed_note_reset_{paz_id}", False):
+        st.session_state.pop(_k_note, None)
+    with st.expander("🎙️ Registra o detta le note della seduta", expanded=False):
+        try:
+            from modules.colloqui_clinici import _acquisisci
+            _cons = st.checkbox(
+                "Il paziente, o chi ne ha la responsabilità, acconsente alla registrazione. "
+                "L'audio viene trascritto e poi eliminato: si conserva solo il testo.",
+                key=f"sed_consenso_{paz_id}")
+            if not _cons:
+                st.caption("Spunta il consenso per attivare il microfono. Per una dettatura tua, "
+                           "senza il paziente, spuntalo comunque.")
+            else:
+                _modo = st.radio("Modo", ["🎙️ Microfono", "📁 File audio"], horizontal=True,
+                                 key=f"sed_modo_{paz_id}", label_visibility="collapsed")
+                if _modo == "🎙️ Microfono":
+                    if hasattr(st, "audio_input"):
+                        _acquisisci(st.audio_input("Premi il microfono per iniziare e di nuovo per fermare",
+                                                   key=f"sed_mic_{paz_id}"),
+                                    _k_note, f"sed_h_mic_{paz_id}", "seduta.wav")
+                    else:
+                        st.caption("Questa versione di Streamlit non registra dal browser: carica un file audio.")
+                else:
+                    _acquisisci(st.file_uploader("File audio (fino a 25 MB)", key=f"sed_file_{paz_id}",
+                                                 type=["mp3", "m4a", "wav", "webm", "ogg", "mp4", "mpeg", "mpga"]),
+                                _k_note, f"sed_h_file_{paz_id}", "seduta.m4a")
+                st.caption("La trascrizione si aggiunge alle Note qui sotto: rileggila prima di salvare.")
+        except Exception as _e:
+            st.caption(f"Registrazione non disponibile: {_e}")
+
     with st.form("nuova_seduta"):
         st.subheader("Nuova seduta")
         data_str = st.text_input("Data (gg/mm/aaaa)", datetime.today().strftime("%d/%m/%Y"))
@@ -7550,7 +7585,7 @@ def ui_sedute():
             costo = st.number_input("Costo seduta", min_value=0.0, step=5.0, value=0.0)
         with col2:
             pagato = st.checkbox("Pagato", value=False)
-        note = st.text_area("Note")
+        note = st.text_area("Note", key=_k_note, height=160)
         salva = st.form_submit_button("Salva seduta")
 
     if salva:
@@ -7581,6 +7616,8 @@ def ui_sedute():
         )
         conn.commit()
         st.success("Seduta salvata.")
+        # Le note appena salvate non devono restare nel modulo per la seduta dopo.
+        st.session_state[f"_sed_note_reset_{paz_id}"] = True
 
     st.markdown("---")
     st.subheader("Sedute esistenti")
