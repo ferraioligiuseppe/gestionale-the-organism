@@ -455,8 +455,10 @@ _MODELLO = r"""
     }
   }
 
-  function apri(){
-    var t = testo();
+  /* Un testo passato esplicitamente (es. l'esito complessivo) ha la
+     precedenza sulla relazione. Dal bottone arriva un evento: si ignora. */
+  function apri(txtForzato){
+    var t = (typeof txtForzato === 'string') ? txtForzato : testo();
     if (!t.trim()){
       alert('La relazione \u00E8 ancora vuota: apri la sezione \u00ABRelazione per la famiglia\u00BB '
           + 'e genera il testo dagli esiti, poi torna qui.');
