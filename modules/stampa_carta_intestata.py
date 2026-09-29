@@ -26,6 +26,7 @@ autonoma e funziona anche a Internet spento.
 from __future__ import annotations
 
 import base64
+import io
 
 # Geometria della carta intestata, identica a quella usata per il Word in
 # relazione_docx.py: se un giorno la carta cambia proporzioni, questi due
@@ -102,7 +103,12 @@ def _perche_manca() -> str:
 
 
 def _timbro_data_uri() -> str:
-    """Timbro con firma dello studio, da «Intestazione dello studio»."""
+    """Timbro con firma: sempre, su ogni relazione stampata.
+
+    Prima quello caricato in «Intestazione dello studio»; se manca, quello
+    di default del gestionale (modules/assets/timbro.png), lo stesso che
+    usano i PDF. Prima, senza timbro caricato, la relazione usciva senza
+    firma e senza data."""
     try:
         import streamlit as st
         from .app_core import get_connection
@@ -113,7 +119,25 @@ def _timbro_data_uri() -> str:
             return "data:image/png;base64," + b64
     except Exception:
         pass
-    return ""
+    try:
+        import os
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "timbro.png")
+        with open(p, "rb") as f:
+            dati = f.read()
+        # Il file di default pesa 2,6 MB: ridotto a 700 px basta per la
+        # stampa e non appesantisce la pagina.
+        try:
+            from PIL import Image
+            img = Image.open(io.BytesIO(dati))
+            img.thumbnail((700, 700))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG", optimize=True)
+            dati = buf.getvalue()
+        except Exception:
+            pass
+        return "data:image/png;base64," + base64.b64encode(dati).decode()
+    except Exception:
+        return ""
 
 
 def _luogo() -> str:
@@ -329,14 +353,16 @@ _MODELLO = r"""
 
     function deborda(){ return corpo.scrollHeight > corpo.clientHeight + 1; }
 
-    /* Con il timbro, luogo e data si scrivono da soli: le righe «Data ____
-       Firma ____» del testo non servono più. */
-    if (TIMBRO){
+    /* Luogo, data e timbro con firma chiudono SEMPRE la relazione: le righe
+       «Data ____ Firma ____» del testo vengono sostituite. Se per qualche
+       motivo il timbro non c'è, resta la riga per la firma a mano. */
+    {
       bl = bl.filter(function(x){ return x.t !== 'firma'; });
       var oggi = new Date();
       var dd = ('0'+oggi.getDate()).slice(-2)+'/'+('0'+(oggi.getMonth()+1)).slice(-2)+'/'+oggi.getFullYear();
       var chiusa = {t:'chiusa', h:'<div class="pnev_ci_chiusa"><div class="data">'+esc(LUOGO)+', '+dd+
-               '</div><img src="'+TIMBRO+'" alt="Timbro e firma"></div>'};
+               '</div>'+(TIMBRO ? '<img src="'+TIMBRO+'" alt="Timbro e firma">'
+                                : '<div style="margin-top:26pt">Firma ______________________________</div>')+'</div>'};
       /* prima dei Riferimenti, se ci sono: la firma chiude la relazione */
       var iRif = -1;
       for (var q=0;q<bl.length;q++){ if (bl[q].t==='h' && /Riferimenti|Bibliografia/i.test(bl[q].h)){ iRif=q; break; } }
