@@ -101,15 +101,52 @@ def _perche_manca() -> str:
         return f"nessuna carta intestata trovata, e il controllo sul database non è riuscito ({e})"
 
 
+def _timbro_data_uri() -> str:
+    """Timbro con firma dello studio, da «Intestazione dello studio»."""
+    try:
+        import streamlit as st
+        from .app_core import get_connection
+        from .ui_intestazione_studio import get_intestazione_studio
+        sid = int(st.session_state.get("studio_id") or 1)
+        b64 = (get_intestazione_studio(get_connection(), sid) or {}).get("timbro_base64")
+        if b64:
+            return "data:image/png;base64," + b64
+    except Exception:
+        pass
+    return ""
+
+
+def _luogo() -> str:
+    """Il comune dall'indirizzo dello studio («Via De Rosa, 46 – Pagani Salerno» → Pagani)."""
+    try:
+        import streamlit as st
+        from .app_core import get_connection
+        from .ui_intestazione_studio import get_intestazione_studio
+        sid = int(st.session_state.get("studio_id") or 1)
+        ind = (get_intestazione_studio(get_connection(), sid) or {}).get("indirizzo") or ""
+        for sep in ("–", "-", ","):
+            if sep in ind:
+                coda = ind.split(sep)[-1].strip()
+                parola = coda.split()[0] if coda.split() else ""
+                if parola and not parola[0].isdigit():
+                    return parola.strip(",")
+    except Exception:
+        pass
+    return "Pagani"
+
+
 def script_stampa_carta() -> str:
     """Il blocco <style> + <script> da iniettare prima di </body>."""
     uri, motivo = _carta_data_uri()
+    timbro, luogo = _timbro_data_uri(), _luogo()
 
     sopra = MM_ALTEZZA * FASCIA_ALTA + MM_ARIA
     sotto = MM_ALTEZZA * FASCIA_BASSA + MM_ARIA
     utile = MM_ALTEZZA - sopra - sotto
 
     return (_MODELLO
+            .replace("__TIMBRO__", timbro)
+            .replace("__LUOGO__", luogo.replace('"', ""))
             .replace("__URI__", uri)
             .replace("__MOTIVO__", motivo.replace("'", "\u2019"))
             .replace("__SOPRA__", f"{sopra:.1f}")
@@ -157,6 +194,10 @@ _MODELLO = r"""
 .pnev_ci_corpo .firma{margin-top:14pt;font-size:10.4pt;text-align:left}
 .pnev_ci_np{position:absolute;z-index:1;right:__LATERALE__mm;bottom:calc(__SOTTO__mm - 4mm);
   font:400 8.6pt/1 Georgia,serif;color:#6E7A73}
+.pnev_ci_chiusa{display:flex;justify-content:space-between;align-items:flex-end;gap:10mm;
+  margin-top:12pt;break-inside:avoid;text-align:left}
+.pnev_ci_chiusa .data{font-size:10.4pt}
+.pnev_ci_chiusa img{width:36mm;height:auto;display:block}
 .pnev_ci_manca{max-width:520px;margin:40px auto;background:#fff;border-radius:8px;
   padding:22px 26px;font:400 14px/1.6 inherit;color:#1A1A1A}
 .pnev_ci_manca b{color:#A63528}
@@ -175,7 +216,7 @@ _MODELLO = r"""
 <div id="pnev_ci_ovl" class="noprint"></div>
 <script>
 (function(){
-  var URI = "__URI__", MOTIVO = "__MOTIVO__";
+  var URI = "__URI__", MOTIVO = "__MOTIVO__", TIMBRO = "__TIMBRO__", LUOGO = "__LUOGO__";
   var ovl = document.getElementById('pnev_ci_ovl');
 
   /* Il testo della relazione: quello corretto a mano dall'operatore se c'è,
@@ -287,6 +328,20 @@ _MODELLO = r"""
     nuovoFoglio();
 
     function deborda(){ return corpo.scrollHeight > corpo.clientHeight + 1; }
+
+    /* Con il timbro, luogo e data si scrivono da soli: le righe «Data ____
+       Firma ____» del testo non servono più. */
+    if (TIMBRO){
+      bl = bl.filter(function(x){ return x.t !== 'firma'; });
+      var oggi = new Date();
+      var dd = ('0'+oggi.getDate()).slice(-2)+'/'+('0'+(oggi.getMonth()+1)).slice(-2)+'/'+oggi.getFullYear();
+      var chiusa = {t:'chiusa', h:'<div class="pnev_ci_chiusa"><div class="data">'+esc(LUOGO)+', '+dd+
+               '</div><img src="'+TIMBRO+'" alt="Timbro e firma"></div>'};
+      /* prima dei Riferimenti, se ci sono: la firma chiude la relazione */
+      var iRif = -1;
+      for (var q=0;q<bl.length;q++){ if (bl[q].t==='h' && /Riferimenti|Bibliografia/i.test(bl[q].h)){ iRif=q; break; } }
+      if (iRif>=0) bl.splice(iRif, 0, chiusa); else bl.push(chiusa);
+    }
 
     for (var i=0;i<bl.length;i++){
       var b = bl[i];
