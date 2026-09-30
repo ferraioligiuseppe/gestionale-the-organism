@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screening adulti — neurologico 20 minuti — Studio The Organism</title>
+<style>
+:root{--navy:#123A6B;--green:#1D6B44;--line:#c9d2dd;--bg:#eef1f5;--alert:#b3261e;--warn:#b4601a}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#16202c;background:var(--bg)}
+header{background:#fff;border-bottom:3px solid var(--green);padding:8px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:30}
+header img{height:32px}header .t{font-weight:600;color:var(--navy)}header .sp{flex:1}
+nav{display:flex;gap:3px;flex-wrap:wrap;background:var(--navy);padding:6px 12px;position:sticky;top:53px;z-index:29}
+nav button{background:transparent;border:0;color:#cfdcee;padding:6px 10px;border-radius:5px;font-size:12.5px;cursor:pointer}
+nav button.on{background:#fff;color:var(--navy);font-weight:600}
+nav button i{font-style:normal;opacity:.65;font-size:11px;margin-left:4px}
+main{max-width:940px;margin:14px auto;padding:0 12px 96px}
+.card{background:#fff;border:1px solid var(--line);border-radius:7px;padding:12px 14px;margin-bottom:11px}
+.card h2{margin:0 0 3px;font-size:15.5px;color:var(--navy)}
+.card h3{margin:13px 0 5px;font-size:13px;color:var(--navy);text-transform:uppercase;letter-spacing:.4px}
+.pnevbox{background:#f2f6fa;border-left:4px solid var(--green);border-radius:0 5px 5px 0;padding:10px 13px;font-size:12.5px;line-height:1.5;margin-bottom:11px}
+.pnevbox b{color:var(--navy)}
+.row{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:9px;margin-top:8px}
+.fld label{display:block;font-size:11.5px;color:#54606d;margin-bottom:2px}
+.fld input,.fld select{width:100%;border:1px solid #dde3ea;border-radius:5px;padding:6px 7px;background:#fbfcfd}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--green);background:#f3f9f5}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{background:var(--navy);color:#fff;text-align:left;padding:6px 8px;font-size:12.5px}
+td{border-bottom:1px solid #e6eaef;padding:5px 8px}
+td.c,th.c{text-align:center}
+.sc{width:19px;height:19px;accent-color:var(--green);cursor:pointer}
+.cons{background:#eef4ef;border-left:3px solid var(--green);padding:7px 10px;font-size:13px;margin:8px 0;border-radius:0 4px 4px 0}
+.cons b{color:var(--green)}
+.tot{display:inline-block;background:#eef2f7;border-radius:5px;padding:4px 10px;font-size:13px;margin:7px 7px 0 0}
+.tot b{color:var(--navy)}
+.flag{border-radius:6px;padding:9px 12px;margin-top:11px;font-size:14px;font-weight:600}
+.flag.no{background:#e9f3ec;color:var(--green)}.flag.si{background:#fbe9e7;color:var(--alert)}
+.flag.nd{background:#f1f3f6;color:#64707d}
+.crit{font-size:12px;color:#64707d;margin-top:5px}
+.tbser{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0 9px}
+.tbser button{border:1px solid var(--line);background:#fff;border-radius:15px;padding:6px 12px;font-size:12.5px;cursor:pointer;color:var(--navy)}
+.tbser button.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:600}
+.tbt{border:1px solid var(--line);border-left:5px solid var(--line);border-radius:6px;padding:7px 10px;margin-bottom:6px;background:#fff}
+.tbt.ok{border-left-color:var(--green)}.tbt.ko{border-left-color:var(--alert)}
+.tbt .hd{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.tbt .n{font-weight:600;color:var(--navy);min-width:28px}
+.tbt .ab{flex:1;font-size:14px}.tbt .dd{font-size:11.5px;color:#5a6673;background:#eef2f7;border-radius:9px;padding:1px 7px}
+.tbo{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.tbo span{border:1px solid var(--line);background:#fbfcfd;border-radius:14px;padding:6px 12px;font-size:13px;cursor:pointer}
+.tbo span.sel{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+.tbo span.sel.bad{background:var(--alert);border-color:var(--alert)}
+.tbpri{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
+.tbgw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+.tbg{min-width:820px}
+.tbgr{display:grid;grid-template-columns:150px 72px 72px minmax(0,2.5fr) minmax(0,1.4fr) minmax(0,1.9fr) 76px;border-bottom:1px solid #e6ebf0}
+.tbgh{background:#f3f6f9;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#5a6673}
+.tbgh>div{padding:8px 6px;text-align:center;line-height:1.25}.tbgh>div:first-child{text-align:left;padding-left:10px}
+.tbgh small{display:block;font-weight:400;text-transform:none;letter-spacing:0}
+.tbgh .zs{background:#fbf3e8;color:#9a5b12}.tbgh .za{background:#e7f1eb;color:#155235}.tbgh .zv{background:#f8eceA;color:#8a3a2e}
+.tbgsep{padding:5px 10px;background:var(--navy);color:#fff;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.tbgl{padding:7px 10px;display:flex;flex-direction:column;gap:2px;justify-content:center;font-size:13px;line-height:1.25}
+.tbgl b{color:var(--navy);font-size:12px}
+.tbgz{padding:6px 4px;display:flex;flex-wrap:wrap;gap:4px;align-content:center;justify-content:center;border-left:1px solid #eef1f4}
+.tbc{min-width:28px;min-height:26px;padding:3px 6px;border:1px solid #c9d2dd;border-radius:13px;background:#fff;font:500 12px/1.15 ui-monospace,Menlo,monospace;
+ display:inline-flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;box-sizing:border-box;white-space:nowrap}
+.tbc:hover{border-color:var(--green);background:#f3f8f5}
+.tbc.lim::after{content:"*";color:#9a5b12}
+.tbc.on{background:#1a1d1b;border:2px solid #1a1d1b;color:#fff;font-weight:600}
+.tbc.nd{align-self:flex-start;margin-top:3px;font-size:11px;min-height:22px}
+.tbgz i{font-style:normal;font-size:11px;font-weight:600;border-radius:10px;padding:4px 8px;white-space:nowrap}
+.tbgz i.ok{background:#e7f1eb;color:#155235}.tbgz i.ko{background:var(--alert);color:#fff}.tbgz i.nn{color:#9aa4ae;font-weight:400}
+@media print{.tbgw{overflow:visible;border-color:#999}.tbg{min-width:0}.tbgr{grid-template-columns:128px 46px 46px 2.6fr 1.5fr 2fr 50px}
+ .tbc{min-width:22px;min-height:20px;padding:2px 4px;font-size:9.5px;border-color:#888}.tbgl{font-size:10.5px}
+ .tbgh{font-size:8.5px}.tbgr{break-inside:avoid}}
+.tbpri input{border:1px solid #dde3ea;border-radius:5px;padding:5px 7px;font-size:13px;width:125px}
+.bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);padding:8px 12px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;z-index:31}
+button.act{background:var(--navy);color:#fff;border:0;border-radius:5px;padding:8px 13px;font-size:13.5px;cursor:pointer}
+button.act.g{background:var(--green)}button.act.o{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+.bar .sp{flex:1}
+.sem{display:inline-block;padding:5px 14px;border-radius:15px;font-size:15px;font-weight:600}
+.sem.v{background:#e9f3ec;color:var(--green)}.sem.g{background:#fdf1e3;color:var(--warn)}
+.sem.r{background:#fbe9e7;color:var(--alert)}.sem.n{background:#f1f3f6;color:#64707d}
+.mut{color:#64707d;font-size:12.5px}
+.sig{text-align:center;font-size:11.5px;color:#7a8594;margin-top:16px}.sig b{color:var(--green)}
+.scbtn{margin-top:4px;background:var(--green);color:#fff;border:0;border-radius:5px;padding:6px 10px;font-size:12.5px;cursor:pointer;width:100%}
+#scov{position:fixed;inset:0;background:#0d1b2a;color:#fff;z-index:99;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+#scov.on{display:flex}
+#scval{font-size:74px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+#scval small{font-size:24px;font-weight:400;opacity:.75}
+#scov .hint{font-size:14px;opacity:.8;max-width:420px;line-height:1.5}
+#scov .rowb{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
+#scov button{border:0;border-radius:7px;padding:11px 18px;font-size:15px;cursor:pointer}
+#scov .b1{background:#fff;color:#123A6B;font-weight:600}
+#scov .b2{background:#274b6d;color:#fff}
+#scov .b3{background:var(--green);color:#fff;font-weight:600}
+#scov .ax{font-size:13px;opacity:.8}
+#scov .warn{background:#5a3b1c;border-radius:7px;padding:10px 14px;font-size:13.5px;max-width:460px}
+@media print{header,nav,.bar,.noprint{display:none!important}body{background:#fff}
+ .card{border:0;border-bottom:1px solid #ccc;border-radius:0;page-break-inside:avoid}
+ .tbo span{border:1px solid #999}.tbo span.sel{background:#123a6b;color:#fff}}
+
+.fld.wide{grid-column:1/-1}.fld textarea{width:100%;border:1px solid #dde3ea;border-radius:5px;padding:6px 7px;background:#fbfcfd;font:inherit}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{border:1px solid var(--line);background:#fff;border-radius:16px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;color:#16202c}
+.chip.on{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+nav button.extra{box-shadow:inset 0 -2px 0 #e0b35a}nav b.med{font-size:10px;background:#b4601a;color:#fff;border-radius:8px;padding:1px 5px;margin-left:3px}
+.redf{margin-top:11px;border-radius:6px;padding:10px 12px;background:#fbe9e7;border:1px solid #efb7b0;color:#7d1a13;font-size:13.5px;line-height:1.5}
+.brano{background:#fbfaf6;border:1px solid #e6e1d4;border-radius:6px;padding:12px 15px;font:17px/1.7 Georgia,serif;margin:6px 0}.brano .bt{font-weight:bold;margin-bottom:6px}
+.stroop{display:grid;grid-template-columns:repeat(6,1fr);gap:10px 14px;background:#fff;border:1px solid var(--line);border-radius:6px;padding:14px;margin:6px 0;font:700 20px/1.2 Helvetica,Arial,sans-serif;text-align:center}
+.wbox{border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin:6px 0;background:#fbfcfd}.wrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.bad{color:var(--alert);font-weight:600}.good{color:var(--green);font-weight:600}
+.act{border:0;border-radius:5px;padding:7px 13px;font:inherit;font-size:13px;cursor:pointer}.act.g{background:var(--green);color:#fff}.act.o{background:#fff;border:1px solid var(--line);color:var(--navy)}
+#stov{position:fixed;inset:0;z-index:100;background:#000;color:#eee;display:none;flex-direction:column;align-items:center;justify-content:flex-start;overflow:auto}
+#stov>*:first-child{margin-top:auto}#stov>*:last-child{margin-bottom:auto}
+.stset{background:#fff;color:#16202c;border-radius:8px;max-width:620px;width:94%;padding:18px 20px;margin:20px 0}.stset h2{margin:0 0 6px;color:var(--navy)}.stset h3{margin:14px 0 4px;font-size:13px;text-transform:uppercase;color:var(--navy)}
+#stcard{border:2px dashed var(--green);border-radius:8px;aspect-ratio:85.6/54;margin:8px 0;max-width:100%}
+.strow{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0}.strow label{font-size:13px;display:flex;flex-direction:column;gap:3px}.strow input,.strow select{border:1px solid var(--line);border-radius:5px;padding:5px 7px;font:inherit}
+.sttop{display:flex;gap:14px;align-items:center;justify-content:center;padding:8px;color:#ddd;font-size:15px}
+.starena{display:grid;grid-template-columns:70px auto 70px;grid-template-rows:60px auto 60px;align-items:center;justify-items:center;gap:4px}.starena canvas{grid-column:2;grid-row:2;image-rendering:pixelated}
+.sta{width:62px;height:52px;border-radius:8px;border:1px solid #555;background:#1b1b1b;color:#fff;font-size:22px;cursor:pointer}.sta.u{grid-column:2;grid-row:1}.sta.d{grid-column:2;grid-row:3}.sta.l{grid-column:1;grid-row:2}.sta.r{grid-column:3;grid-row:2}
+</style></head>
+<body>
+<header><img src="data:image/png;base64,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" alt="The Organism"><div class="t">Screening adulti — neurologico 20 minuti</div><div class="sp"></div><span class="mut" id="prog"></span></header>
+<nav id="nav"></nav>
+<main id="main"></main>
+<div class="bar noprint">
+ <button class="act g" onclick="salva()">Salva</button>
+ <button class="act o" onclick="apri()">Riapri</button>
+ <button class="act o" onclick="esporta()">Esporta</button>
+ <button class="act o" onclick="document.getElementById('imp').click()">Importa</button>
+ <input type="file" id="imp" accept="application/json" style="display:none" onchange="importa(event)">
+ <button class="act o" onclick="window.print()">Stampa la scheda intera</button>
+ <button class="act o" onclick="azzera()">Nuova scheda</button>
+ <span class="sp"></span><span id="msg" class="mut"></span>
+</div>
+<script>
+
+var V={},view="ana";
+function n(k){var x=parseFloat(V[k]);return isFinite(x)?x:null}
+function somma(k,len){var s=0,c=0;for(var i=0;i<len;i++){var v=V[k+i];if(v!==undefined&&v!==""){s+=parseInt(v,10);c++}}return{s:s,c:c}}
+function tutti(k,len){return somma(k,len).c===len}
+function has(k,v){var a=V[k];return Array.isArray(a)&&a.indexOf(v)>=0}
+function eta(){if(V.dn){var d=new Date(V.dn),o=V.data?new Date(V.data):new Date();if(!isNaN(d))return o.getFullYear()-d.getFullYear()-((o.getMonth()<d.getMonth()||(o.getMonth()===d.getMonth()&&o.getDate()<d.getDate()))?1:0)}var m=String(V.eta||"").match(/\d+/);return m?parseInt(m[0],10):null}
+function inS(s){return !s.mot||s.mot.some(function(m){return has("motivo",m)})}
+function sezioni(){return SCHEMA.filter(inS)}
+function AREE(){return sezioni().map(function(s){return s.id}).filter(function(id){return id!=="ana"})}
+function CLIN(){return AREE().filter(function(id){return INDIC.indexOf(id)<0})}
+function flag(id){var f=FLAGS[id];if(!f)return null;try{return f()}catch(e){return null}}
+function rossi(){var r=[];REDS.forEach(function(x){try{if(x.c())r.push(x.t)}catch(e){}});return r}
+function semaforo(){var ids=CLIN(),f=ids.map(flag);
+ if(f.every(function(x){return x===null})&&!rossi().length)return{c:"n",t:"da compilare",ko:[]};
+ var ko=ids.filter(function(id,i){return f[i]===true}),r=rossi(),forte=ko.filter(function(id){return FORTI.indexOf(id)>=0});
+ if(r.length||forte.length||ko.length>=ROSSO)return{c:"r",t:"rosso — "+(r.length||forte.length?INVIO:"approfondimento consigliato"),ko:ko};
+ if(ko.length)return{c:"g",t:"giallo — approfondimento nelle aree segnalate",ko:ko};
+ return{c:"v",t:"verde — nessun seguito",ko:ko}}
+function set(k,v){V[k]=v;sl();draw()}
+function setq(k,v){V[k]=v;sl();prog()}
+function tog(k,v){var a=Array.isArray(V[k])?V[k].slice():[];var i=a.indexOf(v);if(i>=0)a.splice(i,1);else a.push(v);V[k]=a;sl();draw()}
+function esc(t){return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;")}
+function fldHTML(f){var h='<div class="fld'+(f.t==="multi"||f.t==="area"?' wide':'')+'"><label>'+f.l+'</label>';
+ if(f.t==="sel")return h+'<select onchange="set(\''+f.k+'\',this.value)">'+f.o.map(function(o){return '<option'+(V[f.k]===o?" selected":"")+'>'+o+'</option>'}).join("")+'</select></div>';
+ if(f.t==="multi")return h+'<div class="chips">'+f.o.map(function(o){return '<button type="button" class="chip'+(has(f.k,o)?' on':'')+'" onclick="tog(\''+f.k+'\',\''+o.replace(/'/g,"\\'")+'\')">'+o+'</button>'}).join("")+'</div></div>';
+ if(f.t==="area")return h+'<textarea rows="2" oninput="setq(\''+f.k+'\',this.value)">'+esc(V[f.k])+'</textarea></div>';
+ return h+'<input type="'+(f.t==="num"?"number":f.t==="date"?"date":"text")+'" value="'+esc(V[f.k])+'" oninput="setq(\''+f.k+'\',this.value)"'+(f.k==="dn"||f.k==="data"?' onchange="draw()"':'')+'></div>'}
+function nav(){var e=document.getElementById("nav");e.innerHTML="";
+ sezioni().forEach(function(s,i){var b=document.createElement("button");b.innerHTML=(i+1)+" · "+s.t+(s.medica?' <b class="med">medico</b>':'')+'<i>'+s.m+'</i>';
+  b.className=(view===s.id?"on":"")+(s.mot?" extra":"");b.onclick=function(){view=s.id;draw()};e.appendChild(b)});
+ [["e","Esito"],["r","Relazione"]].forEach(function(x){var b=document.createElement("button");b.textContent=x[1];b.className=view===x[0]?"on":"";b.onclick=function(){view=x[0];draw()};e.appendChild(b)})}
+function draw(){nav();var m=document.getElementById("main");
+ if(view==="e"){m.innerHTML=esito();prog();return}
+ if(view==="r"){m.innerHTML=relView();prog();return}
+ var L=sezioni(),s=L.filter(function(x){return x.id===view})[0]||L[0];view=s.id;var h='';
+ if(s.id==="ana")h+='<div class="pnevbox">'+PNEVBOX+'</div>';
+ h+='<div class="card"><h2>'+(L.indexOf(s)+1)+' · '+s.t+'</h2><div class="mut">tempo previsto '+s.m+(s.medica?' · <b>parte medica</b>: la esegue il medico':'')+(s.mot?' · si aggiunge per il motivo dell\'invio':'')+'</div>';
+ s.s.forEach(function(sec){
+  if(sec.h)h+='<h3>'+sec.h+'</h3>';
+  if(sec.cons)h+='<div class="cons"><b>Consegna.</b> «'+sec.cons+'»</div>';
+  if(sec.note)h+='<div class="mut" style="margin:-2px 0 8px">'+sec.note+'</div>';
+  if(sec.items){h+='<table><thead><tr><th style="width:58%">Item</th>';sec.lab.forEach(function(l){h+='<th class="c">'+l+'</th>'});h+='</tr></thead><tbody>';
+   sec.items.forEach(function(it,i){h+='<tr><td>'+it+'</td>';sec.lab.forEach(function(l,v){h+='<td class="c"><input type="radio" class="sc" name="'+sec.k+i+'"'+(V[sec.k+i]===String(v)?" checked":"")+' onchange="set(\''+sec.k+i+'\',\''+v+'\')"></td>'});h+='</tr>'});
+   var t=somma(sec.k,sec.items.length);h+='</tbody></table><span class="tot">'+sec.tot+': <b>'+t.s+'</b> / '+(sec.items.length*sec.max)+' <span class="mut">('+t.c+' di '+sec.items.length+')</span></span>'}
+  if(sec.w)h+=WIDGET[sec.w](sec);
+  if(sec.f)h+='<div class="row">'+sec.f.map(fldHTML).join("")+'</div>'});
+ if(s.id!=="ana"){var fl=flag(s.id),ind=INDIC.indexOf(s.id)>=0;
+  h+='<div class="flag '+(fl===null?"nd":fl?"si":"no")+'">'+(ind?"INDICAZIONE":"SEGNALAZIONE")+': '+(fl===null?"dati insufficienti":fl?"SÌ":"no")+'</div><div class="crit">'+(CRIT[s.id]||"")+'</div>'}
+ var r=rossi();if(r.length)h+='<div class="redf"><b>Attenzione</b><br>'+r.join("<br>")+'</div>';
+ h+='</div>';m.innerHTML=h;prog()}
+function esito(){var sem=semaforo(),r=rossi();
+ var h='<div class="card"><h2>Esito complessivo</h2><table><thead><tr><th>Area</th><th class="c" style="width:22%">Segnalata</th></tr></thead><tbody>';
+ AREE().forEach(function(id){var f=flag(id);h+='<tr><td>'+NOMI[id]+(INDIC.indexOf(id)>=0?' <span class="mut">(indicazione)</span>':'')+'</td><td class="c">'+(f===null?'<span class="mut">—</span>':f?'<b style="color:#b3261e">sì</b>':'no')+'</td></tr>'});
+ h+='</tbody></table>'+(r.length?'<div class="redf"><b>Segnali che richiedono un invio</b><br>'+r.join("<br>")+'</div>':'')+
+  '<div style="margin-top:12px"><span class="sem '+sem.c+'">'+sem.t+'</span></div><div class="crit" style="margin-top:7px">'+REGOLA+'</div>';
+ h+='<div class="row">'+fldHTML({k:"consigli",l:"Approfondimento consigliato",t:"txt"})+fldHTML({k:"comunic",l:"Comunicazione al paziente",t:"txt"})+fldHTML({k:"note",l:"Note",t:"txt"})+'</div>';
+ h+='<div class="noprint" style="margin-top:12px"><button type="button" class="act g" onclick="stampaEsito()">\u2399 Stampa esito su carta intestata</button></div></div>'+
+  '<div class="sig">'+TITOLO+' — <b>Associazione The Organism</b> · www.pnev.it · © 2026 Giuseppe Ferraioli<br>Prima osservazione: non costituisce diagnosi e non sostituisce una visita specialistica.</div>';return h}
+function esitoTesto(){var sem=semaforo(),r=[],oggi=new Date().toLocaleDateString("it-IT");
+ r.push(TITOLO+" — Esito complessivo");r.push("");r.push((V.nome?"Paziente: "+V.nome+" · ":"")+"Data: "+oggi+".");r.push("");r.push("Aree osservate");r.push("");
+ AREE().forEach(function(id){var f=flag(id);r.push("— "+NOMI[id]+": "+(f===null?"non compilata":f?"segnalata":"non segnalata"))});
+ var rr=rossi();if(rr.length){r.push("");r.push("Segnali che richiedono un invio");r.push("");rr.forEach(function(x){r.push("— "+x)})}
+ r.push("");r.push("Esito");r.push("");r.push(sem.t.charAt(0).toUpperCase()+sem.t.slice(1)+".");r.push("");r.push(REGOLA);
+ [["consigli","Approfondimento consigliato"],["comunic","Comunicazione al paziente"],["note","Note"]].forEach(function(x){var v=(V[x[0]]||"").trim();if(v){r.push("");r.push(x[1]);r.push("");r.push(v)}});
+ r.push("");r.push("Prima osservazione: non costituisce diagnosi e non sostituisce una visita specialistica.");r.push("");
+ r.push("Data ____ / ____ / ________            Firma ______________________________");return r.join("\n")}
+function stampaEsito(){if(typeof window.pnevAnteprimaCarta==="function")window.pnevAnteprimaCarta(esitoTesto());else window.print()}
+function relTesto(){var ids=CLIN(),ko=ids.filter(function(id){return flag(id)===true}),nd=ids.filter(function(id){return flag(id)===null}),rr=rossi();
+ var nome=V.nome||"_______________________",L=[];
+ L.push("Gentile "+nome+",");L.push("");L.push(INTRO);L.push("");
+ L.push("Che cosa abbiamo guardato e perché");L.push(PERCHE);L.push("");
+ L.push("Che cosa è emerso");
+ if(!ko.length&&!rr.length)L.push("Nelle aree esaminate non sono emersi elementi che richiedano un approfondimento. Un'osservazione breve fotografa una giornata: se i disturbi che l'hanno portata qui continuano, vale comunque la pena parlarne.");
+ ko.forEach(function(id){var p=TESTI[id].p;L.push("— "+(typeof p==="function"?p():p))});
+ if(ko.length>1){L.push("");L.push("Gli elementi emersi non vanno letti separatamente: quando compaiono insieme, spesso l'uno spiega l'altro, ed è questa relazione a indicare da dove conviene cominciare.")}
+ if(rr.length){L.push("");L.push("Elementi che richiedono un invio");L.push(INVIO_TXT);rr.forEach(function(x){L.push("— "+x)})}
+ INDIC.forEach(function(id){if(AREE().indexOf(id)>=0&&flag(id)===true){L.push("");L.push(TESTI[id].t.charAt(0).toUpperCase()+TESTI[id].t.slice(1));var p=TESTI[id].p;L.push(typeof p==="function"?p():p)}});
+ if(nd.length&&nd.length<ids.length){L.push("");L.push("Aree non esaminate in questa sede: "+nd.map(function(id){return TESTI[id].t}).join("; ")+".")}
+ L.push("");L.push("A chi mostrare questa relazione");L.push(CHI);L.push("");
+ if(ko.length){L.push("Che cosa proponiamo");L.push("Restiamo disponibili per l'approfondimento nelle aree segnalate presso il nostro studio, con strumenti e tempi adeguati. Non è un passaggio obbligato: può rivolgersi a qualunque professionista di sua fiducia. Se sceglie noi, si parte dai rilievi già raccolti anziché ricominciare da capo.");L.push("")}
+ L.push("Restiamo a disposizione per qualsiasi chiarimento.");L.push("");L.push("Associazione The Organism — www.pnev.it");L.push("apstheorganism@gmail.com");L.push("");
+ L.push("Data ____ / ____ / ________            Firma ______________________________");
+ var bib=[];(ko.length?ko:ids).concat(INDIC).forEach(function(id){((TESTI[id]||{}).b||[]).forEach(function(x){if(bib.indexOf(x)<0)bib.push(x)})});
+ L.push("");L.push("Riferimenti");L.push("Le prove impiegate si basano sui criteri descritti nei lavori seguenti. Sono indicati per chi legge a titolo professionale; le prove dello studio sono criteriali e non sostituiscono strumenti tarati.");
+ bib.forEach(function(x){L.push("· "+x)});return L.join("\n")}
+function relView(){if(!V.reltxt)V.reltxt=relTesto();
+ return '<div class="card"><h2>Relazione per il paziente</h2><div class="mut">Generata dagli esiti. Modificabile prima di stampare.</div>'+
+ '<textarea id="rel" style="width:100%;min-height:420px;margin-top:8px;font:14px/1.55 Georgia,serif;padding:12px;border:1px solid #dde3ea;border-radius:6px" oninput="V.reltxt=this.value;sl()">'+esc(V.reltxt)+'</textarea>'+
+ '<div class="noprint" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="act o" onclick="V.reltxt=relTesto();sl();draw()">Rigenera dagli esiti</button><button class="act o" onclick="relCopia()">Copia</button></div></div>'}
+function relCopia(){var t=document.getElementById("rel");if(t){t.select();try{document.execCommand("copy");msg("Copiata")}catch(e){}}}
+function prog(){var sem=semaforo();document.getElementById("prog").textContent=(V.nome?V.nome+" — ":"")+sem.t}
+function sl(){try{localStorage.setItem(KEY,JSON.stringify(V))}catch(e){}}
+function salva(){sl();msg("Salvato")}
+function apri(){try{var x=localStorage.getItem(KEY);if(!x){msg("Nessun salvataggio");return}V=JSON.parse(x);draw();msg("Ripristinato")}catch(e){msg("Lettura non riuscita")}}
+function esporta(){var b=new Blob([JSON.stringify(V,null,1)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);
+ a.download=FILEPFX+((V.nome||"scheda").replace(/\W+/g,"_"))+"_"+(V.data||new Date().toISOString().slice(0,10))+".json";a.click();URL.revokeObjectURL(a.href)}
+function importa(e){var fr=new FileReader();fr.onload=function(){try{V=JSON.parse(fr.result);draw();msg("Importato")}catch(y){msg("File non valido")}};fr.readAsText(e.target.files[0]);e.target.value=""}
+function azzera(){if(!confirm("Iniziare una scheda nuova? I dati non esportati andranno persi."))return;V={};sl();view="ana";draw();msg("Scheda nuova")}
+function msg(m){var s=document.getElementById("msg");s.textContent=m;setTimeout(function(){s.textContent=""},3500)}
+
+
+var KEY="pnev_adulti_neuro_v1",FILEPFX="screening_adulti_neuro_",TITOLO="Screening adulti neurologico 20 minuti",ROSSO=2;
+var INVIO="invio neurologico consigliato";
+var MOTIVI=["Declino cognitivo o di memoria","Esiti di trauma cranico","Cefalea","Vertigini","Formicolii o debolezza","Tremore o movimenti involontari","Ansia o umore","Controllo","Altro"];
+var S02=["0","1","2"],S03=["0","1","2","3"],NA=["","normale","alterato"],NA2=["","normale","alterato dx","alterato sx","alterato bilaterale"];
+var PNEVBOX="<b>Screening adulti neurologico</b> · 17–64 anni · 20 minuti. <b>Parte osservativa</b> (schede 2–5): cognitivo, umore, coordinazione, segni minori — la esegui tu. <b>Parte medica</b> (schede con l'etichetta arancione): nervi cranici, forza, riflessi, sensibilità — la esegue il medico. Le prove cognitive sono dello studio, non sono test tarati.";
+var WIDGET={};
+var SCHEMA=[
+{id:"ana",t:"Anamnesi",m:"2'",s:[{f:[
+ {k:"nome",l:"Cognome e nome",t:"txt"},{k:"dn",l:"Data di nascita",t:"date"},{k:"eta",l:"Età",t:"txt"},{k:"data",l:"Data",t:"date"},
+ {k:"esam",l:"Esaminatore (parte osservativa)",t:"txt"},{k:"medico",l:"Medico (parte medica)",t:"txt"},{k:"inviato",l:"Inviato da",t:"txt"},
+ {k:"motivo",l:"Motivo dell'invio",t:"multi",o:MOTIVI},{k:"descr",l:"Disturbo principale, con parole sue",t:"area"},
+ {k:"scol",l:"Anni di scolarità",t:"num"},{k:"dom",l:"Mano dominante",t:"sel",o:["","dx","sx","ambidestro"]},
+ {k:"patol",l:"Patologie note",t:"txt"},{k:"farmaci",l:"Farmaci",t:"txt"},
+ {k:"red",l:"Segnali d'allarme riferiti (se presenti: invio medico)",t:"multi",o:["debolezza o formicolio improvviso a un lato","difficoltà improvvisa a parlare o a capire","perdita improvvisa della vista","crisi o perdita di coscienza","peggioramento rapido della memoria (settimane)"]}]}]},
+{id:"cog",t:"Screening cognitivo",m:"6'",s:[
+ {h:"Orientamento",max:1,lab:["no","sì"],k:"or",tot:"Orientamento",items:["Giorno della settimana","Data","Mese","Anno","Luogo in cui si trova"]},
+ {h:"Memoria — cinque parole",cons:"Le dico cinque parole: le ripeta e cerchi di ricordarle, gliele chiederò più tardi. ALBERO · CHIAVE · LIMONE · TRENO · VIOLA",note:"Registrazione: due ripetizioni. Richiamo differito dopo almeno 5 minuti, senza aiuti.",max:1,lab:["no","sì"],k:"md",tot:"Richiamo differito",items:["albero","chiave","limone","treno","viola"]},
+ {h:"Attenzione — sottrazioni",cons:"Parta da 100 e tolga 7, poi continui a togliere 7.",note:"93 · 86 · 79 · 72 · 65. Ogni sottrazione giusta rispetto alla precedente vale 1.",f:[{k:"sot",l:"Sottrazioni corrette (/5)",t:"num"}]},
+ {h:"Linguaggio e funzioni esecutive",f:[
+  {k:"fl_a",l:"Animali in 60 secondi",t:"num"},{k:"fl_f",l:"Parole con F in 60 secondi",t:"num"},
+  {k:"rip",l:"Ripete: «Il gatto si nasconde sotto il divano quando entra il cane»",t:"sel",o:["","esatta","con errori"]},
+  {k:"oro",l:"Orologio: disegni le ore 11 e 10 (0–3)",t:"sel",o:["","3 contorno, numeri e lancette corretti","2","1","0"]},
+  {k:"astr",l:"Astrazione: treno-bicicletta, orologio-righello (/2)",t:"sel",o:["","2","1","0"]}]}]},
+{id:"dec",t:"Domande al familiare",m:"2'",mot:["Declino cognitivo o di memoria"],s:[
+ {h:"Rispetto a qualche anno fa, ci sono cambiamenti in… (a un familiare o a chi lo conosce bene)",note:"Items dello studio.",max:1,lab:["no","sì"],k:"fa",tot:"Cambiamenti",items:["Capacità di giudizio o decisioni","Interesse per hobby e attività","Ripete le stesse domande o racconti","Imparare a usare strumenti nuovi","Ricordare il mese o l'anno","Gestire conti e pagamenti","Ricordare appuntamenti","Problemi quotidiani di memoria o ragionamento"]}]},
+{id:"umo",t:"Umore e ansia",m:"2'",s:[
+ {h:"Nelle ultime due settimane (0 mai · 3 quasi ogni giorno)",max:3,lab:S03,k:"au",tot:"Totale",note:"Items dello studio. La domanda 9 va sempre letta: se la risposta non è 0, parlarne subito con la persona e indirizzarla al medico.",
+  items:["Nervosismo, ansia o tensione","Preoccupazioni che non riesce a fermare","Tensione muscolare o irrequietezza","Paura che accada qualcosa di brutto","Poco interesse o piacere nel fare le cose","Si sente giù, triste o senza speranza","Stanchezza o poca energia","Si sente in colpa o un fallimento","Pensieri che sarebbe meglio non esserci o di farsi del male"]}]},
+{id:"coo",t:"Coordinazione e marcia",m:"3'",s:[
+ {h:"Prove (0 normale · 1 incerta · 2 alterata)",max:2,lab:S02,k:"co",tot:"Somma",items:["Dito-naso a occhi chiusi — dx","Dito-naso a occhi chiusi — sx","Tallone-ginocchio — dx","Tallone-ginocchio — sx","Movimenti alternati rapidi (diadococinesia)","Marcia in tandem, 10 passi","Marcia sulle punte e sui talloni","Romberg a occhi chiusi"]},
+ {f:[{k:"tremore",l:"Tremore",t:"sel",o:["","assente","a riposo","posturale","d'azione"]},{k:"nist",l:"Nistagmo osservato",t:"sel",o:["","assente","presente"]}]}]},
+{id:"soft",t:"Segni neurologici minori",m:"2'",s:[
+ {h:"Prove (0 assente · 1 lieve · 2 evidente)",max:2,lab:S02,k:"sg",tot:"Somma",items:["Movimenti speculari della mano opposta","Sequenza dito-pollice","Pugno-taglio-palmo (Luria)","Grafestesia (numeri sul palmo)","Stereognosia (oggetti in mano)","Riconoscimento destra-sinistra sull'esaminatore","Ritmo battuto (ripetizione di sequenze)"]}]},
+{id:"nc",t:"Nervi cranici",m:"2'",medica:true,s:[{f:[
+ {k:"nc_camp",l:"Campo visivo per confronto",t:"sel",o:NA2},{k:"nc_pup",l:"Pupille e riflesso fotomotore",t:"sel",o:NA2},
+ {k:"nc_mot",l:"Motilità oculare, diplopia",t:"sel",o:NA},{k:"nc_sens",l:"Sensibilità del volto (V)",t:"sel",o:NA2},
+ {k:"nc_mim",l:"Mimica facciale (VII)",t:"sel",o:NA2},{k:"nc_ud",l:"Udito (VIII), prove di Weber e Rinne",t:"sel",o:NA2},
+ {k:"nc_pal",l:"Palato e deglutizione (IX–X)",t:"sel",o:NA},{k:"nc_scm",l:"Trapezi e sternocleidomastoidei (XI)",t:"sel",o:NA2},
+ {k:"nc_lin",l:"Lingua (XII)",t:"sel",o:NA},{k:"nc_note",l:"Note",t:"txt"}]}]},
+{id:"mot",t:"Forza, tono, riflessi",m:"2'",medica:true,s:[{note:"Forza secondo la scala MRC (5 normale · 0 assente).",f:[
+ {k:"mrc_asd",l:"Forza arto superiore dx",t:"sel",o:["","5","4","3","2","1","0"]},{k:"mrc_ass",l:"Forza arto superiore sx",t:"sel",o:["","5","4","3","2","1","0"]},
+ {k:"mrc_aid",l:"Forza arto inferiore dx",t:"sel",o:["","5","4","3","2","1","0"]},{k:"mrc_ais",l:"Forza arto inferiore sx",t:"sel",o:["","5","4","3","2","1","0"]},
+ {k:"barre",l:"Barré e Mingazzini",t:"sel",o:["","negativi","positivi dx","positivi sx"]},
+ {k:"tono",l:"Tono",t:"sel",o:["","normale","ridotto","aumentato (spastico)","aumentato (rigido)","asimmetrico"]},
+ {k:"rot",l:"Riflessi osteotendinei",t:"sel",o:["","normali e simmetrici","ridotti","vivaci","asimmetrici","assenti"]},
+ {k:"babi",l:"Babinski",t:"sel",o:["","assente","presente dx","presente sx","bilaterale"]},{k:"hoff",l:"Hoffmann",t:"sel",o:["","assente","presente"]}]}]},
+{id:"sen",t:"Sensibilità",m:"1'",medica:true,s:[{f:[
+ {k:"se_tat",l:"Tattile",t:"sel",o:NA2},{k:"se_dol",l:"Dolorifica",t:"sel",o:NA2},
+ {k:"se_vib",l:"Vibratoria ai piedi (diapason)",t:"sel",o:NA2},{k:"se_pro",l:"Propriocettiva (senso di posizione)",t:"sel",o:NA2},
+ {k:"se_dist",l:"Distribuzione di un'alterazione",t:"txt"}]}]}
+];
+var NOMI={cog:"Screening cognitivo",dec:"Domande al familiare",umo:"Umore e ansia",coo:"Coordinazione e marcia",soft:"Segni neurologici minori",nc:"Nervi cranici",mot:"Forza, tono, riflessi",sen:"Sensibilità"};
+var INDIC=[],FORTI=["nc","mot","sen"];
+function alt(k){return V[k]&&V[k]!=="normale"&&V[k]!==""}
+function cogVoci(){var o=[],or=somma("or",5),md=somma("md",5);
+ if(or.c===5&&or.s<5)o.push("orientamento "+or.s+"/5");if(md.c===5&&md.s<3)o.push("richiamo differito "+md.s+"/5");
+ if(n("sot")!==null&&n("sot")<4)o.push("sottrazioni "+n("sot")+"/5");if(n("fl_a")!==null&&n("fl_a")<15)o.push("animali "+n("fl_a"));
+ if(n("fl_f")!==null&&n("fl_f")<10)o.push("parole con F "+n("fl_f"));if(V.rip==="con errori")o.push("ripetizione con errori");
+ if(V.oro&&V.oro.charAt(0)!=="3")o.push("orologio "+V.oro.charAt(0)+"/3");if(V.astr&&V.astr!=="2")o.push("astrazione "+V.astr+"/2");return o}
+var FLAGS={
+ cog:function(){var any=somma("or",5).c||somma("md",5).c||n("sot")!==null||n("fl_a")!==null||V.oro||V.astr;if(!any)return null;return cogVoci().length>=2},
+ dec:function(){var s=somma("fa",8);if(!s.c)return null;return s.s>=2},
+ umo:function(){var s=somma("au",9);if(!s.c)return null;var a=somma("au",4).s,u=0;for(var i=4;i<8;i++)u+=parseInt(V["au"+i]||0,10);return a>=6||u>=6||parseInt(V.au8||0,10)>0},
+ coo:function(){var s=somma("co",8);if(!s.c&&!V.tremore&&!V.nist)return null;var d=0,u=0;for(var i=0;i<8;i++){var v=parseInt(V["co"+i]||0,10);if(v>=2)d++;else if(v===1)u++}
+  return d>=1||u>=2||(V.tremore&&V.tremore!=="assente")||V.nist==="presente"},
+ soft:function(){var s=somma("sg",7);if(!s.c)return null;return s.s>=4},
+ nc:function(){var k=["nc_camp","nc_pup","nc_mot","nc_sens","nc_mim","nc_ud","nc_pal","nc_scm","nc_lin"];if(!k.some(function(x){return V[x]}))return null;return k.some(alt)},
+ mot:function(){var k=["mrc_asd","mrc_ass","mrc_aid","mrc_ais"];if(!k.some(function(x){return V[x]})&&!V.tono&&!V.rot&&!V.babi&&!V.barre)return null;
+  return k.some(function(x){return V[x]&&V[x]!=="5"})||(V.barre&&V.barre!=="negativi")||(V.tono&&V.tono!=="normale")||(V.rot&&V.rot!=="normali e simmetrici"&&V.rot!=="vivaci")||(V.babi&&V.babi!=="assente")||V.hoff==="presente"},
+ sen:function(){var k=["se_tat","se_dol","se_vib","se_pro"];if(!k.some(function(x){return V[x]}))return null;return k.some(alt)}
+};
+var REDS=[
+ {t:"Segnali d'allarme riferiti in anamnesi: invio medico urgente.",c:function(){return (V.red||[]).length>0}},
+ {t:"Segni all'esame neurologico (nervi cranici, forza, riflessi o sensibilità): invio al neurologo.",c:function(){return ["nc","mot","sen"].some(function(id){return flag(id)===true})}},
+ {t:"Pensieri di non esserci o di farsi del male: parlarne subito con la persona e indirizzarla al medico o ai servizi.",c:function(){return parseInt(V.au8||0,10)>0}}
+];
+var CRIT={cog:"Due o più di: orientamento sotto 5/5, richiamo differito sotto 3/5, sottrazioni sotto 4/5, animali sotto 15, parole con F sotto 10, ripetizione con errori, orologio sotto 3/3, astrazione sotto 2/2. Criteri dello studio: tengono conto della scolarità solo nel giudizio clinico.",
+ dec:"Due o più cambiamenti riferiti dal familiare.",umo:"Ansia 6/12 o più, umore 6/12 o più, qualsiasi risposta diversa da 0 alla domanda 9.",
+ coo:"Una prova alterata o due incerte, tremore, nistagmo.",soft:"Somma 4/14 o più.",
+ nc:"Qualsiasi voce alterata: invio al neurologo.",mot:"Forza sotto 5, Barré o Mingazzini positivi, tono alterato, riflessi ridotti, asimmetrici o assenti, Babinski o Hoffmann presenti: invio al neurologo.",
+ sen:"Qualsiasi modalità alterata: invio al neurologo."};
+var REGOLA="Rosso: un segno all'esame neurologico, un segnale d'allarme, oppure due o più aree osservative segnalate. Giallo: una sola area osservativa. Verde: nessuna area segnalata.";
+var INTRO="lei ha partecipato a uno screening neurologico della durata di circa venti minuti, in parte osservativo e in parte medico. Si tratta di una prima osservazione: serve a capire se ci sono elementi che conviene approfondire con uno specialista. Non contiene una diagnosi e non la sostituisce.";
+var PERCHE="Memoria, attenzione, coordinazione, sensibilità e forza dipendono dal sistema nervoso nel suo insieme. Abbiamo osservato le funzioni cognitive e l'umore, la coordinazione e alcuni segni minori, e il medico ha esaminato nervi cranici, forza, riflessi e sensibilità. I rilievi vanno letti insieme e insieme alla sua storia.";
+var CHI="Le suggeriamo di portarla al suo medico di famiglia e, dove indicato, al neurologo. Questo documento descrive osservazioni, non conclusioni, e lascia a chi ha titolo la decisione diagnostica.";
+var INVIO_TXT="Alcuni rilievi vanno visti da uno specialista prima di qualsiasi altro approfondimento:";
+var TESTI={
+ cog:{t:"le funzioni cognitive",p:function(){return "Nelle prove cognitive sono emersi risultati più bassi dell'atteso ("+cogVoci().join(", ")+"). Sono prove brevi e sensibili a stanchezza, ansia, sonno e scolarità: non indicano un disturbo, ma che vale la pena ripeterle con strumenti tarati."},
+  b:["Nasreddine, Z.S. et al. (2005). The Montreal Cognitive Assessment, MoCA. Journal of the American Geriatrics Society, 53(4), 695-699.","Petersen, R.C. (2004). Mild cognitive impairment as a diagnostic entity. Journal of Internal Medicine, 256(3), 183-194."]},
+ dec:{t:"i cambiamenti notati in famiglia",p:"Chi la conosce bene riferisce cambiamenti rispetto a qualche anno fa. È un'informazione importante quanto le prove: conviene parlarne con il medico di famiglia.",
+  b:["Galvin, J.E. et al. (2005). The AD8: a brief informant interview to detect dementia. Neurology, 65(4), 559-564."]},
+ umo:{t:"umore e ansia",p:"Dalle risposte emergono ansia o abbassamento dell'umore. Umore e ansia influenzano memoria e attenzione, e vanno considerati prima di leggere le altre prove: è utile parlarne con il medico e, se lo ritiene, con uno psicologo.",
+  b:["Kroenke, K. et al. (2009). An ultra-brief screening scale for anxiety and depression: the PHQ-4. Psychosomatics, 50(6), 613-621."]},
+ coo:{t:"la coordinazione",p:"Nelle prove di coordinazione e di marcia sono emersi elementi da approfondire. La coordinazione dipende da cervelletto, sensibilità profonda e vista insieme: conviene una valutazione specialistica.",
+  b:["Campbell, W.W. — DeJong's The Neurologic Examination. Wolters Kluwer."]},
+ soft:{t:"i segni neurologici minori",p:"Sono presenti alcuni segni neurologici minori: piccole imprecisioni nei movimenti fini e nell'integrazione sensoriale. Non indicano una lesione, ma un'organizzazione motoria e sensoriale meno matura, da tenere presente nel percorso.",
+  b:["Buchanan, R.W., Heinrichs, D.W. (1989). The Neurological Evaluation Scale (NES). Psychiatry Research, 27(3), 335-350.","Dazzan, P., Murray, R.M. (2002). Neurological soft signs in first-episode psychosis. British Journal of Psychiatry, 181(Suppl 43), s50-s57."]},
+ nc:{t:"i nervi cranici",p:"L'esame dei nervi cranici ha evidenziato alterazioni che vanno viste dal neurologo.",b:["Fuller, G. — Neurological Examination Made Easy. Elsevier."]},
+ mot:{t:"forza, tono e riflessi",p:"L'esame di forza, tono o riflessi ha evidenziato alterazioni che vanno viste dal neurologo.",b:["Campbell, W.W. — DeJong's The Neurologic Examination. Wolters Kluwer."]},
+ sen:{t:"la sensibilità",p:"L'esame della sensibilità ha evidenziato alterazioni che vanno viste dal neurologo.",b:["Fuller, G. — Neurological Examination Made Easy. Elsevier."]}
+};
+
+
+try{var x=localStorage.getItem(KEY);if(x)V=JSON.parse(x)}catch(e){}
+draw();
+</script>
+</body></html>
