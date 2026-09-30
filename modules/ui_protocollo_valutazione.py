@@ -975,6 +975,12 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
 
     st.markdown("---")
     st.markdown("## PARTE 8 — VALUTAZIONE VISUO-POSTURALE E OPTOMETRICA")
+    # Prismi posturali: si compilano nel loro modulo, qui l'ultimo rilievo.
+    try:
+        from .prismi_posturali import riquadro_sintesi
+        riquadro_sintesi(conn, paz_id)
+    except Exception as e:
+        st.caption(f"Prismi posturali non disponibili: {e}")
     st.markdown("**8.1 Acuità visiva e allineamento**")
     acuita_visiva = _tabella("acuita_visiva", [
         {"Misura": "AV naturale — lontano", "OD": "", "OS": "", "OO": "", "Note": ""},

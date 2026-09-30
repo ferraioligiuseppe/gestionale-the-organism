@@ -105,6 +105,14 @@ def risultati(conn, paz_id) -> dict[str, list[str]]:
         pt = [f"{k.replace('_', ' ')}: {_num(v)}" for k, v in x.items()
               if any(s in k.lower() for s in ("punteggio", "totale", "score")) and v is not None][:6]
         out["whodas"] = [f"WHODAS 2.0 del {_d(x.get('data_somministrazione'))}"] + pt
+
+    try:
+        from .prismi_posturali import sintesi_prismi
+        pr = sintesi_prismi(conn, pid)
+        if pr:
+            out["prismi"] = pr
+    except Exception:
+        pass
     return out
 
 
@@ -114,7 +122,8 @@ def script_risultati(conn, paz_id) -> str:
 
 
 NOMI = {"dem": "DEM interattivo", "inpp": "INPP", "audio": "Audiometria tonale",
-        "uditiva": "Diagnostica uditiva (test tonale e altre prove)", "whodas": "WHODAS 2.0"}
+        "uditiva": "Diagnostica uditiva (test tonale e altre prove)", "whodas": "WHODAS 2.0",
+        "prismi": "Prismi posturali"}
 
 
 def riquadro(conn, paz_id, chiavi) -> None:
@@ -133,7 +142,7 @@ def riquadro(conn, paz_id, chiavi) -> None:
 def render_valutazione_adulti(conn, paz_id, tipo: str) -> None:
     from .ui_protocollo_pdf_app import render_protocollo_pdf_app
     if tipo == "funzionale":
-        riquadro(conn, paz_id, ["dem", "inpp", "audio", "uditiva"])
+        riquadro(conn, paz_id, ["dem", "inpp", "audio", "uditiva", "prismi"])
         render_protocollo_pdf_app(
             conn, paz_id,
             html_file="Valutazione_ADULTI_funzionale_MASTER.html",
