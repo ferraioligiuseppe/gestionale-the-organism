@@ -488,7 +488,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         # La scheda chiede «Seleziona un paziente qui sopra», ma senza questa
         # riga il selettore non veniva disegnato: pagina ferma sull'avviso.
         "📋 Protocollo di valutazione (scheda)", "📋 Protocollo di valutazione",
-    }
+    
+    # Aggiunte 30/09: senza queste voci qui il router non mostrava la scelta
+    # del paziente e il modulo restava su «Seleziona un paziente».
+    "🔺 Prismi posturali",
+    "🩺 Screening breve (20 min)",
+    "🧑 Screening adulti — funzionale",
+    "🧠 Screening adulti — neurologico",
+    "🧑 Valutazione adulti — funzionale completa",
+    "🧠 Valutazione adulti — neurologica completa",
+}
 
     paz_id = None
     if sotto in VOCI_CON_PAZIENTE:
