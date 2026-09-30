@@ -72,14 +72,44 @@ def _storico(conn, paz_id, limit=10):
 
 
 def _tab(righe, fisse, key):
+    """Una riga per voce, con bottoni a un clic al posto della tabella.
+
+    Prima era un st.data_editor: per rispondere bisognava fare doppio clic
+    sulla cella, aprire la tendina e scegliere, e le celle vuote mostravano
+    «None». Ora ogni scelta è un bottone sempre visibile (un clic, un altro
+    clic sullo stesso lo toglie) e i campi di testo sono caselle normali.
+    Restituisce un DataFrame con le stesse colonne di prima: salvataggio,
+    esito e relazione non cambiano."""
     df = pd.DataFrame(righe)
-    cfg = {c: st.column_config.TextColumn(disabled=True) for c in fisse}
-    for c in df.columns:
-        if c not in fisse and c.startswith("0-1-2"):
-            cfg[c] = st.column_config.SelectboxColumn(options=["", "0", "1", "2"])
-        elif c not in fisse and c in ("Sì/No", "Presente"):
-            cfg[c] = st.column_config.SelectboxColumn(options=["", "Sì", "No", "Dubbio"])
-    return st.data_editor(df, key=key, hide_index=True, use_container_width=True, column_config=cfg)
+    colonne = list(df.columns)
+    scelte = {c: (["0", "1", "2"] if c.startswith("0-1-2") else ["Sì", "No", "Dubbio"])
+              for c in colonne if c not in fisse and (c.startswith("0-1-2") or c in ("Sì/No", "Presente"))}
+    testi = [c for c in colonne if c not in fisse and c not in scelte]
+    principale, *secondarie = fisse
+
+    with st.container(border=True):
+        pesi = [4] + [1.6] * len(secondarie) + [2.6] * len(scelte) + [2] * len(testi)
+        intest = st.columns(pesi)
+        for col, nome in zip(intest, [principale] + secondarie + list(scelte) + testi):
+            col.caption(nome)
+        out = []
+        for i, riga in enumerate(righe):
+            celle = st.columns(pesi, vertical_alignment="center")
+            nuova = dict(riga)
+            celle[0].markdown(riga.get(principale, ""))
+            j = 1
+            for c in secondarie:
+                celle[j].caption(riga.get(c, "")); j += 1
+            for c, opz in scelte.items():
+                v = celle[j].segmented_control(c, opz, key=f"{key}_{i}_{c}",
+                                               label_visibility="collapsed")
+                nuova[c] = v or ""; j += 1
+            for c in testi:
+                nuova[c] = celle[j].text_input(c, key=f"{key}_{i}_{c}",
+                                               label_visibility="collapsed",
+                                               placeholder=c.lower()); j += 1
+            out.append(nuova)
+    return pd.DataFrame(out, columns=colonne)
 
 
 def _dati_paziente(conn, paz_id):
