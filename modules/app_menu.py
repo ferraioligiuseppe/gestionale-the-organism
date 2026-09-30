@@ -243,6 +243,8 @@ SOTTOSEZIONI = {
     AREA_SCREENING: [
         "🩺 Screening rapido",
         "🩺 Screening breve (20 min)",
+        "🧑 Screening adulti — funzionale",
+        "🧠 Screening adulti — neurologico",
         "🧸 Screening 0-4 anni",
         # Due strumenti per lo stesso protocollo, con punti di forza opposti:
         #  · "Screening completo" apre l'app HTML — impaginazione A4 fedele,
