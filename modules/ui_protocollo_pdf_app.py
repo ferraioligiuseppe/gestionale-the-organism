@@ -35,7 +35,7 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
                                titolo="📋 Protocollo di valutazione — app stampabile",
                                sottotitolo=("Versione a impaginazione A4 fedele al documento, con "
                                             "calcolatori automatici (PCC, %SS, indici) e stampa diretta."),
-                               kp="pv") -> None:
+                               kp="pv", extra_js="") -> None:
     """kp = prefisso delle chiavi widget: serve per poter montare più varianti
     (protocollo completo, screening breve) senza collisioni di key."""
     st.header(titolo)
@@ -387,7 +387,9 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
     except Exception as e:
         st.caption(f"Anteprima su carta intestata non disponibile: {e}")
 
-    _script_completo = _second_monitor_js + (_precompila_js or "") + _salva_db_js + _carta_js
+    # extra_js: dati passati dal chiamante all'app (es. risultati di altri
+    # moduli del gestionale per le valutazioni adulti complete).
+    _script_completo = (extra_js or "") + _second_monitor_js + (_precompila_js or "") + _salva_db_js + _carta_js
     if "</body>" in html:
         html = html.replace("</body>", _script_completo + "</body>", 1)
     else:

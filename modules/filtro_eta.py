@@ -28,6 +28,8 @@ REGOLE_ETA: dict[str, tuple[int | None, int | None]] = {
     "🩺 Screening breve (20 min)":      (None, 16),   # cinque fasce, dalla nascita ai 16 anni
     "🧑 Screening adulti — funzionale":  (17, 64),     # dai 65 anni: PNEV Argento
     "🧠 Screening adulti — neurologico": (17, 64),
+    "🧑 Valutazione adulti — funzionale completa": (17, 64),
+    "🧠 Valutazione adulti — neurologica completa": (17, 64),
     "🩺 Screening completo":            (6, None),
 
     # Apprendimenti: richiedono che il bambino sia scolarizzato
