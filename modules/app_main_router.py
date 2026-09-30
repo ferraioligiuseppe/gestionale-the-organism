@@ -441,6 +441,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     Le voci cliniche che richiedono un paziente selezionato mostrano
     prima l'header paziente.
     """
+    # La finestra «Seleziona paziente» legge questa voce per proporre solo i
+    # pazienti dell'età giusta (regole in filtro_eta.REGOLE_ETA).
+    st.session_state["_voce_corrente"] = sotto
     from .app_menu import PLACEHOLDER_VOCI
     if sotto in PLACEHOLDER_VOCI:
         st.info(f"🚧 **{sotto}** — sezione in costruzione, arriva presto.")
