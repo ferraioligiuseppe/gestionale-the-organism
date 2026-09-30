@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screening adulti — funzionale 30 minuti — Studio The Organism</title>
+<style>
+:root{--navy:#123A6B;--green:#1D6B44;--line:#c9d2dd;--bg:#eef1f5;--alert:#b3261e;--warn:#b4601a}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#16202c;background:var(--bg)}
+header{background:#fff;border-bottom:3px solid var(--green);padding:8px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:30}
+header img{height:32px}header .t{font-weight:600;color:var(--navy)}header .sp{flex:1}
+nav{display:flex;gap:3px;flex-wrap:wrap;background:var(--navy);padding:6px 12px;position:sticky;top:53px;z-index:29}
+nav button{background:transparent;border:0;color:#cfdcee;padding:6px 10px;border-radius:5px;font-size:12.5px;cursor:pointer}
+nav button.on{background:#fff;color:var(--navy);font-weight:600}
+nav button i{font-style:normal;opacity:.65;font-size:11px;margin-left:4px}
+main{max-width:940px;margin:14px auto;padding:0 12px 96px}
+.card{background:#fff;border:1px solid var(--line);border-radius:7px;padding:12px 14px;margin-bottom:11px}
+.card h2{margin:0 0 3px;font-size:15.5px;color:var(--navy)}
+.card h3{margin:13px 0 5px;font-size:13px;color:var(--navy);text-transform:uppercase;letter-spacing:.4px}
+.pnevbox{background:#f2f6fa;border-left:4px solid var(--green);border-radius:0 5px 5px 0;padding:10px 13px;font-size:12.5px;line-height:1.5;margin-bottom:11px}
+.pnevbox b{color:var(--navy)}
+.row{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:9px;margin-top:8px}
+.fld label{display:block;font-size:11.5px;color:#54606d;margin-bottom:2px}
+.fld input,.fld select{width:100%;border:1px solid #dde3ea;border-radius:5px;padding:6px 7px;background:#fbfcfd}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--green);background:#f3f9f5}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{background:var(--navy);color:#fff;text-align:left;padding:6px 8px;font-size:12.5px}
+td{border-bottom:1px solid #e6eaef;padding:5px 8px}
+td.c,th.c{text-align:center}
+.sc{width:19px;height:19px;accent-color:var(--green);cursor:pointer}
+.cons{background:#eef4ef;border-left:3px solid var(--green);padding:7px 10px;font-size:13px;margin:8px 0;border-radius:0 4px 4px 0}
+.cons b{color:var(--green)}
+.tot{display:inline-block;background:#eef2f7;border-radius:5px;padding:4px 10px;font-size:13px;margin:7px 7px 0 0}
+.tot b{color:var(--navy)}
+.flag{border-radius:6px;padding:9px 12px;margin-top:11px;font-size:14px;font-weight:600}
+.flag.no{background:#e9f3ec;color:var(--green)}.flag.si{background:#fbe9e7;color:var(--alert)}
+.flag.nd{background:#f1f3f6;color:#64707d}
+.crit{font-size:12px;color:#64707d;margin-top:5px}
+.tbser{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0 9px}
+.tbser button{border:1px solid var(--line);background:#fff;border-radius:15px;padding:6px 12px;font-size:12.5px;cursor:pointer;color:var(--navy)}
+.tbser button.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:600}
+.tbt{border:1px solid var(--line);border-left:5px solid var(--line);border-radius:6px;padding:7px 10px;margin-bottom:6px;background:#fff}
+.tbt.ok{border-left-color:var(--green)}.tbt.ko{border-left-color:var(--alert)}
+.tbt .hd{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.tbt .n{font-weight:600;color:var(--navy);min-width:28px}
+.tbt .ab{flex:1;font-size:14px}.tbt .dd{font-size:11.5px;color:#5a6673;background:#eef2f7;border-radius:9px;padding:1px 7px}
+.tbo{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.tbo span{border:1px solid var(--line);background:#fbfcfd;border-radius:14px;padding:6px 12px;font-size:13px;cursor:pointer}
+.tbo span.sel{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+.tbo span.sel.bad{background:var(--alert);border-color:var(--alert)}
+.tbpri{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
+.tbgw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+.tbg{min-width:820px}
+.tbgr{display:grid;grid-template-columns:150px 72px 72px minmax(0,2.5fr) minmax(0,1.4fr) minmax(0,1.9fr) 76px;border-bottom:1px solid #e6ebf0}
+.tbgh{background:#f3f6f9;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#5a6673}
+.tbgh>div{padding:8px 6px;text-align:center;line-height:1.25}.tbgh>div:first-child{text-align:left;padding-left:10px}
+.tbgh small{display:block;font-weight:400;text-transform:none;letter-spacing:0}
+.tbgh .zs{background:#fbf3e8;color:#9a5b12}.tbgh .za{background:#e7f1eb;color:#155235}.tbgh .zv{background:#f8eceA;color:#8a3a2e}
+.tbgsep{padding:5px 10px;background:var(--navy);color:#fff;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.tbgl{padding:7px 10px;display:flex;flex-direction:column;gap:2px;justify-content:center;font-size:13px;line-height:1.25}
+.tbgl b{color:var(--navy);font-size:12px}
+.tbgz{padding:6px 4px;display:flex;flex-wrap:wrap;gap:4px;align-content:center;justify-content:center;border-left:1px solid #eef1f4}
+.tbc{min-width:28px;min-height:26px;padding:3px 6px;border:1px solid #c9d2dd;border-radius:13px;background:#fff;font:500 12px/1.15 ui-monospace,Menlo,monospace;
+ display:inline-flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;box-sizing:border-box;white-space:nowrap}
+.tbc:hover{border-color:var(--green);background:#f3f8f5}
+.tbc.lim::after{content:"*";color:#9a5b12}
+.tbc.on{background:#1a1d1b;border:2px solid #1a1d1b;color:#fff;font-weight:600}
+.tbc.nd{align-self:flex-start;margin-top:3px;font-size:11px;min-height:22px}
+.tbgz i{font-style:normal;font-size:11px;font-weight:600;border-radius:10px;padding:4px 8px;white-space:nowrap}
+.tbgz i.ok{background:#e7f1eb;color:#155235}.tbgz i.ko{background:var(--alert);color:#fff}.tbgz i.nn{color:#9aa4ae;font-weight:400}
+@media print{.tbgw{overflow:visible;border-color:#999}.tbg{min-width:0}.tbgr{grid-template-columns:128px 46px 46px 2.6fr 1.5fr 2fr 50px}
+ .tbc{min-width:22px;min-height:20px;padding:2px 4px;font-size:9.5px;border-color:#888}.tbgl{font-size:10.5px}
+ .tbgh{font-size:8.5px}.tbgr{break-inside:avoid}}
+.tbpri input{border:1px solid #dde3ea;border-radius:5px;padding:5px 7px;font-size:13px;width:125px}
+.bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);padding:8px 12px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;z-index:31}
+button.act{background:var(--navy);color:#fff;border:0;border-radius:5px;padding:8px 13px;font-size:13.5px;cursor:pointer}
+button.act.g{background:var(--green)}button.act.o{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+.bar .sp{flex:1}
+.sem{display:inline-block;padding:5px 14px;border-radius:15px;font-size:15px;font-weight:600}
+.sem.v{background:#e9f3ec;color:var(--green)}.sem.g{background:#fdf1e3;color:var(--warn)}
+.sem.r{background:#fbe9e7;color:var(--alert)}.sem.n{background:#f1f3f6;color:#64707d}
+.mut{color:#64707d;font-size:12.5px}
+.sig{text-align:center;font-size:11.5px;color:#7a8594;margin-top:16px}.sig b{color:var(--green)}
+.scbtn{margin-top:4px;background:var(--green);color:#fff;border:0;border-radius:5px;padding:6px 10px;font-size:12.5px;cursor:pointer;width:100%}
+#scov{position:fixed;inset:0;background:#0d1b2a;color:#fff;z-index:99;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+#scov.on{display:flex}
+#scval{font-size:74px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+#scval small{font-size:24px;font-weight:400;opacity:.75}
+#scov .hint{font-size:14px;opacity:.8;max-width:420px;line-height:1.5}
+#scov .rowb{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
+#scov button{border:0;border-radius:7px;padding:11px 18px;font-size:15px;cursor:pointer}
+#scov .b1{background:#fff;color:#123A6B;font-weight:600}
+#scov .b2{background:#274b6d;color:#fff}
+#scov .b3{background:var(--green);color:#fff;font-weight:600}
+#scov .ax{font-size:13px;opacity:.8}
+#scov .warn{background:#5a3b1c;border-radius:7px;padding:10px 14px;font-size:13.5px;max-width:460px}
+@media print{header,nav,.bar,.noprint{display:none!important}body{background:#fff}
+ .card{border:0;border-bottom:1px solid #ccc;border-radius:0;page-break-inside:avoid}
+ .tbo span{border:1px solid #999}.tbo span.sel{background:#123a6b;color:#fff}}
+
+.fld.wide{grid-column:1/-1}.fld textarea{width:100%;border:1px solid #dde3ea;border-radius:5px;padding:6px 7px;background:#fbfcfd;font:inherit}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{border:1px solid var(--line);background:#fff;border-radius:16px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;color:#16202c}
+.chip.on{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
+nav button.extra{box-shadow:inset 0 -2px 0 #e0b35a}nav b.med{font-size:10px;background:#b4601a;color:#fff;border-radius:8px;padding:1px 5px;margin-left:3px}
+.redf{margin-top:11px;border-radius:6px;padding:10px 12px;background:#fbe9e7;border:1px solid #efb7b0;color:#7d1a13;font-size:13.5px;line-height:1.5}
+.brano{background:#fbfaf6;border:1px solid #e6e1d4;border-radius:6px;padding:12px 15px;font:17px/1.7 Georgia,serif;margin:6px 0}.brano .bt{font-weight:bold;margin-bottom:6px}
+.stroop{display:grid;grid-template-columns:repeat(6,1fr);gap:10px 14px;background:#fff;border:1px solid var(--line);border-radius:6px;padding:14px;margin:6px 0;font:700 20px/1.2 Helvetica,Arial,sans-serif;text-align:center}
+.wbox{border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin:6px 0;background:#fbfcfd}.wrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.bad{color:var(--alert);font-weight:600}.good{color:var(--green);font-weight:600}
+.act{border:0;border-radius:5px;padding:7px 13px;font:inherit;font-size:13px;cursor:pointer}.act.g{background:var(--green);color:#fff}.act.o{background:#fff;border:1px solid var(--line);color:var(--navy)}
+#stov{position:fixed;inset:0;z-index:100;background:#000;color:#eee;display:none;flex-direction:column;align-items:center;justify-content:flex-start;overflow:auto}
+#stov>*:first-child{margin-top:auto}#stov>*:last-child{margin-bottom:auto}
+.stset{background:#fff;color:#16202c;border-radius:8px;max-width:620px;width:94%;padding:18px 20px;margin:20px 0}.stset h2{margin:0 0 6px;color:var(--navy)}.stset h3{margin:14px 0 4px;font-size:13px;text-transform:uppercase;color:var(--navy)}
+#stcard{border:2px dashed var(--green);border-radius:8px;aspect-ratio:85.6/54;margin:8px 0;max-width:100%}
+.strow{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0}.strow label{font-size:13px;display:flex;flex-direction:column;gap:3px}.strow input,.strow select{border:1px solid var(--line);border-radius:5px;padding:5px 7px;font:inherit}
+.sttop{display:flex;gap:14px;align-items:center;justify-content:center;padding:8px;color:#ddd;font-size:15px}
+.starena{display:grid;grid-template-columns:70px auto 70px;grid-template-rows:60px auto 60px;align-items:center;justify-items:center;gap:4px}.starena canvas{grid-column:2;grid-row:2;image-rendering:pixelated}
+.sta{width:62px;height:52px;border-radius:8px;border:1px solid #555;background:#1b1b1b;color:#fff;font-size:22px;cursor:pointer}.sta.u{grid-column:2;grid-row:1}.sta.d{grid-column:2;grid-row:3}.sta.l{grid-column:1;grid-row:2}.sta.r{grid-column:3;grid-row:2}
+</style></head>
+<body>
+<header><img src="data:image/png;base64,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" alt="The Organism"><div class="t">Screening adulti — funzionale 30 minuti</div><div class="sp"></div><span class="mut" id="prog"></span></header>
+<nav id="nav"></nav>
+<main id="main"></main>
+<div class="bar noprint">
+ <button class="act g" onclick="salva()">Salva</button>
+ <button class="act o" onclick="apri()">Riapri</button>
+ <button class="act o" onclick="esporta()">Esporta</button>
+ <button class="act o" onclick="document.getElementById('imp').click()">Importa</button>
+ <input type="file" id="imp" accept="application/json" style="display:none" onchange="importa(event)">
+ <button class="act o" onclick="window.print()">Stampa la scheda intera</button>
+ <button class="act o" onclick="azzera()">Nuova scheda</button>
+ <span class="sp"></span><span id="msg" class="mut"></span>
+</div>
+<script>
+
+var V={},view="ana";
+function n(k){var x=parseFloat(V[k]);return isFinite(x)?x:null}
+function somma(k,len){var s=0,c=0;for(var i=0;i<len;i++){var v=V[k+i];if(v!==undefined&&v!==""){s+=parseInt(v,10);c++}}return{s:s,c:c}}
+function tutti(k,len){return somma(k,len).c===len}
+function has(k,v){var a=V[k];return Array.isArray(a)&&a.indexOf(v)>=0}
+function eta(){if(V.dn){var d=new Date(V.dn),o=V.data?new Date(V.data):new Date();if(!isNaN(d))return o.getFullYear()-d.getFullYear()-((o.getMonth()<d.getMonth()||(o.getMonth()===d.getMonth()&&o.getDate()<d.getDate()))?1:0)}var m=String(V.eta||"").match(/\d+/);return m?parseInt(m[0],10):null}
+function inS(s){return !s.mot||s.mot.some(function(m){return has("motivo",m)})}
+function sezioni(){return SCHEMA.filter(inS)}
+function AREE(){return sezioni().map(function(s){return s.id}).filter(function(id){return id!=="ana"})}
+function CLIN(){return AREE().filter(function(id){return INDIC.indexOf(id)<0})}
+function flag(id){var f=FLAGS[id];if(!f)return null;try{return f()}catch(e){return null}}
+function rossi(){var r=[];REDS.forEach(function(x){try{if(x.c())r.push(x.t)}catch(e){}});return r}
+function semaforo(){var ids=CLIN(),f=ids.map(flag);
+ if(f.every(function(x){return x===null})&&!rossi().length)return{c:"n",t:"da compilare",ko:[]};
+ var ko=ids.filter(function(id,i){return f[i]===true}),r=rossi(),forte=ko.filter(function(id){return FORTI.indexOf(id)>=0});
+ if(r.length||forte.length||ko.length>=ROSSO)return{c:"r",t:"rosso — "+(r.length||forte.length?INVIO:"approfondimento consigliato"),ko:ko};
+ if(ko.length)return{c:"g",t:"giallo — approfondimento nelle aree segnalate",ko:ko};
+ return{c:"v",t:"verde — nessun seguito",ko:ko}}
+function set(k,v){V[k]=v;sl();draw()}
+function setq(k,v){V[k]=v;sl();prog()}
+function tog(k,v){var a=Array.isArray(V[k])?V[k].slice():[];var i=a.indexOf(v);if(i>=0)a.splice(i,1);else a.push(v);V[k]=a;sl();draw()}
+function esc(t){return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;")}
+function fldHTML(f){var h='<div class="fld'+(f.t==="multi"||f.t==="area"?' wide':'')+'"><label>'+f.l+'</label>';
+ if(f.t==="sel")return h+'<select onchange="set(\''+f.k+'\',this.value)">'+f.o.map(function(o){return '<option'+(V[f.k]===o?" selected":"")+'>'+o+'</option>'}).join("")+'</select></div>';
+ if(f.t==="multi")return h+'<div class="chips">'+f.o.map(function(o){return '<button type="button" class="chip'+(has(f.k,o)?' on':'')+'" onclick="tog(\''+f.k+'\',\''+o.replace(/'/g,"\\'")+'\')">'+o+'</button>'}).join("")+'</div></div>';
+ if(f.t==="area")return h+'<textarea rows="2" oninput="setq(\''+f.k+'\',this.value)">'+esc(V[f.k])+'</textarea></div>';
+ return h+'<input type="'+(f.t==="num"?"number":f.t==="date"?"date":"text")+'" value="'+esc(V[f.k])+'" oninput="setq(\''+f.k+'\',this.value)"'+(f.k==="dn"||f.k==="data"?' onchange="draw()"':'')+'></div>'}
+function nav(){var e=document.getElementById("nav");e.innerHTML="";
+ sezioni().forEach(function(s,i){var b=document.createElement("button");b.innerHTML=(i+1)+" · "+s.t+(s.medica?' <b class="med">medico</b>':'')+'<i>'+s.m+'</i>';
+  b.className=(view===s.id?"on":"")+(s.mot?" extra":"");b.onclick=function(){view=s.id;draw()};e.appendChild(b)});
+ [["e","Esito"],["r","Relazione"]].forEach(function(x){var b=document.createElement("button");b.textContent=x[1];b.className=view===x[0]?"on":"";b.onclick=function(){view=x[0];draw()};e.appendChild(b)})}
+function draw(){nav();var m=document.getElementById("main");
+ if(view==="e"){m.innerHTML=esito();prog();return}
+ if(view==="r"){m.innerHTML=relView();prog();return}
+ var L=sezioni(),s=L.filter(function(x){return x.id===view})[0]||L[0];view=s.id;var h='';
+ if(s.id==="ana")h+='<div class="pnevbox">'+PNEVBOX+'</div>';
+ h+='<div class="card"><h2>'+(L.indexOf(s)+1)+' · '+s.t+'</h2><div class="mut">tempo previsto '+s.m+(s.medica?' · <b>parte medica</b>: la esegue il medico':'')+(s.mot?' · si aggiunge per il motivo dell\'invio':'')+'</div>';
+ s.s.forEach(function(sec){
+  if(sec.h)h+='<h3>'+sec.h+'</h3>';
+  if(sec.cons)h+='<div class="cons"><b>Consegna.</b> «'+sec.cons+'»</div>';
+  if(sec.note)h+='<div class="mut" style="margin:-2px 0 8px">'+sec.note+'</div>';
+  if(sec.items){h+='<table><thead><tr><th style="width:58%">Item</th>';sec.lab.forEach(function(l){h+='<th class="c">'+l+'</th>'});h+='</tr></thead><tbody>';
+   sec.items.forEach(function(it,i){h+='<tr><td>'+it+'</td>';sec.lab.forEach(function(l,v){h+='<td class="c"><input type="radio" class="sc" name="'+sec.k+i+'"'+(V[sec.k+i]===String(v)?" checked":"")+' onchange="set(\''+sec.k+i+'\',\''+v+'\')"></td>'});h+='</tr>'});
+   var t=somma(sec.k,sec.items.length);h+='</tbody></table><span class="tot">'+sec.tot+': <b>'+t.s+'</b> / '+(sec.items.length*sec.max)+' <span class="mut">('+t.c+' di '+sec.items.length+')</span></span>'}
+  if(sec.w)h+=WIDGET[sec.w](sec);
+  if(sec.f)h+='<div class="row">'+sec.f.map(fldHTML).join("")+'</div>'});
+ if(s.id!=="ana"){var fl=flag(s.id),ind=INDIC.indexOf(s.id)>=0;
+  h+='<div class="flag '+(fl===null?"nd":fl?"si":"no")+'">'+(ind?"INDICAZIONE":"SEGNALAZIONE")+': '+(fl===null?"dati insufficienti":fl?"SÌ":"no")+'</div><div class="crit">'+(CRIT[s.id]||"")+'</div>'}
+ var r=rossi();if(r.length)h+='<div class="redf"><b>Attenzione</b><br>'+r.join("<br>")+'</div>';
+ h+='</div>';m.innerHTML=h;prog()}
+function esito(){var sem=semaforo(),r=rossi();
+ var h='<div class="card"><h2>Esito complessivo</h2><table><thead><tr><th>Area</th><th class="c" style="width:22%">Segnalata</th></tr></thead><tbody>';
+ AREE().forEach(function(id){var f=flag(id);h+='<tr><td>'+NOMI[id]+(INDIC.indexOf(id)>=0?' <span class="mut">(indicazione)</span>':'')+'</td><td class="c">'+(f===null?'<span class="mut">—</span>':f?'<b style="color:#b3261e">sì</b>':'no')+'</td></tr>'});
+ h+='</tbody></table>'+(r.length?'<div class="redf"><b>Segnali che richiedono un invio</b><br>'+r.join("<br>")+'</div>':'')+
+  '<div style="margin-top:12px"><span class="sem '+sem.c+'">'+sem.t+'</span></div><div class="crit" style="margin-top:7px">'+REGOLA+'</div>';
+ h+='<div class="row">'+fldHTML({k:"consigli",l:"Approfondimento consigliato",t:"txt"})+fldHTML({k:"comunic",l:"Comunicazione al paziente",t:"txt"})+fldHTML({k:"note",l:"Note",t:"txt"})+'</div>';
+ h+='<div class="noprint" style="margin-top:12px"><button type="button" class="act g" onclick="stampaEsito()">\u2399 Stampa esito su carta intestata</button></div></div>'+
+  '<div class="sig">'+TITOLO+' — <b>Associazione The Organism</b> · www.pnev.it · © 2026 Giuseppe Ferraioli<br>Prima osservazione: non costituisce diagnosi e non sostituisce una visita specialistica.</div>';return h}
+function esitoTesto(){var sem=semaforo(),r=[],oggi=new Date().toLocaleDateString("it-IT");
+ r.push(TITOLO+" — Esito complessivo");r.push("");r.push((V.nome?"Paziente: "+V.nome+" · ":"")+"Data: "+oggi+".");r.push("");r.push("Aree osservate");r.push("");
+ AREE().forEach(function(id){var f=flag(id);r.push("— "+NOMI[id]+": "+(f===null?"non compilata":f?"segnalata":"non segnalata"))});
+ var rr=rossi();if(rr.length){r.push("");r.push("Segnali che richiedono un invio");r.push("");rr.forEach(function(x){r.push("— "+x)})}
+ r.push("");r.push("Esito");r.push("");r.push(sem.t.charAt(0).toUpperCase()+sem.t.slice(1)+".");r.push("");r.push(REGOLA);
+ [["consigli","Approfondimento consigliato"],["comunic","Comunicazione al paziente"],["note","Note"]].forEach(function(x){var v=(V[x[0]]||"").trim();if(v){r.push("");r.push(x[1]);r.push("");r.push(v)}});
+ r.push("");r.push("Prima osservazione: non costituisce diagnosi e non sostituisce una visita specialistica.");r.push("");
+ r.push("Data ____ / ____ / ________            Firma ______________________________");return r.join("\n")}
+function stampaEsito(){if(typeof window.pnevAnteprimaCarta==="function")window.pnevAnteprimaCarta(esitoTesto());else window.print()}
+function relTesto(){var ids=CLIN(),ko=ids.filter(function(id){return flag(id)===true}),nd=ids.filter(function(id){return flag(id)===null}),rr=rossi();
+ var nome=V.nome||"_______________________",L=[];
+ L.push("Gentile "+nome+",");L.push("");L.push(INTRO);L.push("");
+ L.push("Che cosa abbiamo guardato e perché");L.push(PERCHE);L.push("");
+ L.push("Che cosa è emerso");
+ if(!ko.length&&!rr.length)L.push("Nelle aree esaminate non sono emersi elementi che richiedano un approfondimento. Un'osservazione breve fotografa una giornata: se i disturbi che l'hanno portata qui continuano, vale comunque la pena parlarne.");
+ ko.forEach(function(id){var p=TESTI[id].p;L.push("— "+(typeof p==="function"?p():p))});
+ if(ko.length>1){L.push("");L.push("Gli elementi emersi non vanno letti separatamente: quando compaiono insieme, spesso l'uno spiega l'altro, ed è questa relazione a indicare da dove conviene cominciare.")}
+ if(rr.length){L.push("");L.push("Elementi che richiedono un invio");L.push(INVIO_TXT);rr.forEach(function(x){L.push("— "+x)})}
+ INDIC.forEach(function(id){if(AREE().indexOf(id)>=0&&flag(id)===true){L.push("");L.push(TESTI[id].t.charAt(0).toUpperCase()+TESTI[id].t.slice(1));var p=TESTI[id].p;L.push(typeof p==="function"?p():p)}});
+ if(nd.length&&nd.length<ids.length){L.push("");L.push("Aree non esaminate in questa sede: "+nd.map(function(id){return TESTI[id].t}).join("; ")+".")}
+ L.push("");L.push("A chi mostrare questa relazione");L.push(CHI);L.push("");
+ if(ko.length){L.push("Che cosa proponiamo");L.push("Restiamo disponibili per l'approfondimento nelle aree segnalate presso il nostro studio, con strumenti e tempi adeguati. Non è un passaggio obbligato: può rivolgersi a qualunque professionista di sua fiducia. Se sceglie noi, si parte dai rilievi già raccolti anziché ricominciare da capo.");L.push("")}
+ L.push("Restiamo a disposizione per qualsiasi chiarimento.");L.push("");L.push("Associazione The Organism — www.pnev.it");L.push("apstheorganism@gmail.com");L.push("");
+ L.push("Data ____ / ____ / ________            Firma ______________________________");
+ var bib=[];(ko.length?ko:ids).concat(INDIC).forEach(function(id){((TESTI[id]||{}).b||[]).forEach(function(x){if(bib.indexOf(x)<0)bib.push(x)})});
+ L.push("");L.push("Riferimenti");L.push("Le prove impiegate si basano sui criteri descritti nei lavori seguenti. Sono indicati per chi legge a titolo professionale; le prove dello studio sono criteriali e non sostituiscono strumenti tarati.");
+ bib.forEach(function(x){L.push("· "+x)});return L.join("\n")}
+function relView(){if(!V.reltxt)V.reltxt=relTesto();
+ return '<div class="card"><h2>Relazione per il paziente</h2><div class="mut">Generata dagli esiti. Modificabile prima di stampare.</div>'+
+ '<textarea id="rel" style="width:100%;min-height:420px;margin-top:8px;font:14px/1.55 Georgia,serif;padding:12px;border:1px solid #dde3ea;border-radius:6px" oninput="V.reltxt=this.value;sl()">'+esc(V.reltxt)+'</textarea>'+
+ '<div class="noprint" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="act o" onclick="V.reltxt=relTesto();sl();draw()">Rigenera dagli esiti</button><button class="act o" onclick="relCopia()">Copia</button></div></div>'}
+function relCopia(){var t=document.getElementById("rel");if(t){t.select();try{document.execCommand("copy");msg("Copiata")}catch(e){}}}
+function prog(){var sem=semaforo();document.getElementById("prog").textContent=(V.nome?V.nome+" — ":"")+sem.t}
+function sl(){try{localStorage.setItem(KEY,JSON.stringify(V))}catch(e){}}
+function salva(){sl();msg("Salvato")}
+function apri(){try{var x=localStorage.getItem(KEY);if(!x){msg("Nessun salvataggio");return}V=JSON.parse(x);draw();msg("Ripristinato")}catch(e){msg("Lettura non riuscita")}}
+function esporta(){var b=new Blob([JSON.stringify(V,null,1)],{type:"application/json"});var a=document.createElement("a");a.href=URL.createObjectURL(b);
+ a.download=FILEPFX+((V.nome||"scheda").replace(/\W+/g,"_"))+"_"+(V.data||new Date().toISOString().slice(0,10))+".json";a.click();URL.revokeObjectURL(a.href)}
+function importa(e){var fr=new FileReader();fr.onload=function(){try{V=JSON.parse(fr.result);draw();msg("Importato")}catch(y){msg("File non valido")}};fr.readAsText(e.target.files[0]);e.target.value=""}
+function azzera(){if(!confirm("Iniziare una scheda nuova? I dati non esportati andranno persi."))return;V={};sl();view="ana";draw();msg("Scheda nuova")}
+function msg(m){var s=document.getElementById("msg");s.textContent=m;setTimeout(function(){s.textContent=""},3500)}
+
+
+var KEY="pnev_adulti_funz_v1",FILEPFX="screening_adulti_funz_",TITOLO="Screening adulti funzionale 30 minuti",ROSSO=3;
+var INVIO="invio medico consigliato";
+var MOTIVI=["Lavoro al videoterminale","Trauma cranico o colpo di frusta","Sport","Genitore di un bambino in terapia","DSA in adulto","ADHD in adulto","Ansia o umore","Vertigini o mal d'auto","Cefalea","Altro"];
+var S03=["0","1","2","3"],S02=["0","1","2"],S04=["0","1","2","3","4"];
+var PNEVBOX="<b>Screening adulti funzionale</b> · 17–64 anni · 30 minuti. Nove aree fisse più una parte aggiuntiva per ogni motivo dell'invio selezionato qui sotto (le schede con la riga arancione). Dai 65 anni si usa PNEV Argento. Le prove sono criteriali e dello studio: non sono test tarati.";
+var BRANO={titolo:"Il ponte di legno",testo:"Nel paese di Castelvetere c'è un ponte di legno che attraversa il torrente da più di duecento anni. Ogni primavera, quando la neve si scioglie e l'acqua cresce, gli abitanti controllano le travi una per una e sostituiscono quelle che hanno ceduto. Nessuno ricorda chi lo abbia costruito, ma tutti sanno che il ponte non è mai rimasto uguale: nel tempo quasi ogni pezzo è stato cambiato. Qualche anno fa un ingegnere propose di sostituirlo con un ponte di cemento, più sicuro e senza manutenzione. Il consiglio comunale votò contro. Non per nostalgia, spiegò il sindaco, ma perché il lavoro di primavera era diventato l'unica occasione in cui l'intero paese si ritrovava per fare qualcosa insieme."};
+BRANO.parole=BRANO.testo.split(/\s+/).length;
+var STROOP=(function(){var W=["ROSSO","BLU","VERDE","GIALLO"],C=["#c62828","#1565c0","#2e7d32","#d4a100"],o=[],s=7;for(var i=0;i<24;i++){s=(s*31+11)%97;var w=s%4,c=(w+1+(s>>2)%3)%4;o.push([W[w],C[c]])}return o})();
+function STcrit(){return 60}
+function stKO(){if(V.stereo_nessuno)return true;if(V.stereo===undefined||V.stereo==="")return null;var v=parseFloat(V.stereo),mn=parseFloat(V.stereo_min);if(v>STcrit()&&isFinite(mn)&&v<=mn&&mn>STcrit())return null;return v>STcrit()}
+function brPpm(){var t=n("br_t");return t?BRANO.parole*60/t:null}
+function ampMin(){var e=eta();return e===null?null:Math.max(0,15-0.25*e)}
+var WIDGET={
+ stereo:function(){var r=V.stereo_txt||"non ancora eseguito",ko=stKO(),nv=ko===null&&V.stereo;
+  return '<div class="wbox"><div class="wrow"><div><b>Risultato:</b> '+r+(ko===true?' <span class="bad">oltre 60″</span>':ko===false?' <span class="good">nei limiti</span>':nv?' <span class="bad">non valutabile: questo schermo non arriva a 60″ a questa distanza. Ripeti più lontano.</span>':'')+'</div><button class="act g" onclick="stApri()">Apri il test di stereopsi</button></div></div>'},
+ amp:function(){var c=n("ppa"),mn=ampMin();if(!c)return '';var d=100/c;return '<div class="tot">Ampiezza: <b'+(mn!==null&&d<mn-2?' style="color:#b3261e"':'')+'>'+d.toFixed(1)+' D</b>'+(mn!==null?' <span class="mut">minimo atteso per l\'età '+mn.toFixed(1)+' D (Hofstetter)</span>':'')+'</div>'},
+ brano:function(){var p=brPpm();return '<div class="brano"><div class="bt">'+BRANO.titolo+'</div>'+BRANO.testo+'</div><div class="mut">'+BRANO.parole+' parole'+(p?' · <b>'+Math.round(p)+' parole al minuto</b>':'')+'</div>'},
+ stroop:function(){var h='<div class="stroop">';STROOP.forEach(function(x){h+='<span style="color:'+x[1]+'">'+x[0]+'</span>'});return h+'</div>'}
+};
+var SCHEMA=[
+{id:"ana",t:"Anamnesi",m:"3'",s:[{f:[
+ {k:"nome",l:"Cognome e nome",t:"txt"},{k:"dn",l:"Data di nascita",t:"date"},{k:"eta",l:"Età",t:"txt"},{k:"data",l:"Data",t:"date"},
+ {k:"esam",l:"Esaminatore",t:"txt"},{k:"inviato",l:"Inviato da",t:"txt"},{k:"prof",l:"Professione",t:"txt"},
+ {k:"motivo",l:"Motivo dell'invio (aggiunge le parti specifiche)",t:"multi",o:MOTIVI},
+ {k:"descr",l:"Disturbo principale, con parole sue",t:"area"},
+ {k:"lenti",l:"Occhiali o lenti a contatto",t:"sel",o:["","no","occhiali","lenti a contatto","entrambi"]},
+ {k:"ultvis",l:"Ultima visita oculistica",t:"txt"},{k:"patol",l:"Patologie note",t:"txt"},{k:"farmaci",l:"Farmaci",t:"txt"},
+ {k:"sportp",l:"Sport o attività fisica",t:"txt"}]}]},
+{id:"vis",t:"Visione binoculare e affaticamento",m:"5'",s:[
+ {h:"Sintomi visivi (0 mai · 4 sempre)",max:4,lab:S04,k:"sv",tot:"Sintomi",
+  items:["Occhi stanchi o pesanti leggendo o al computer","Bruciore, prurito o lacrimazione","Mal di testa dopo il lavoro da vicino","Visione annebbiata da vicino","Visione doppia","Righe che si muovono o si confondono","Perde il segno o rilegge la stessa riga","Fatica a mettere a fuoco passando da vicino a lontano","Sonnolenza leggendo","Fatica a concentrarsi sul testo"]},
+ {h:"Convergenza e accomodazione",f:[
+  {k:"ppc",l:"PPC rottura (cm)",t:"num"},{k:"ppcr",l:"PPC recupero (cm)",t:"num"},
+  {k:"ppa",l:"Punto prossimo di accomodazione OO (cm)",t:"num"},
+  {k:"flip",l:"Facilità accomodativa ±2,00 OO (cicli/min)",t:"num"},
+  {k:"covl",l:"Cover test lontano",t:"sel",o:["","orto","foria","tropia"]},{k:"covv",l:"Cover test vicino",t:"sel",o:["","orto","esoforia","exoforia","tropia"]}]},
+ {w:"amp"},
+ {h:"Stereopsi",w:"stereo",note:"Occhiali rosso-ciano, rosso sull'occhio sinistro. Criterio adulti: 60″."}]},
+{id:"ocu",t:"Movimenti oculari e lettura",m:"4'",s:[
+ {note:"NSUCO: 1 molto scarso · 5 ottimale.",f:[
+  {k:"ns_ia",l:"Inseguimenti — abilità",t:"sel",o:["","1","2","3","4","5"]},{k:"ns_ip",l:"Inseguimenti — precisione",t:"sel",o:["","1","2","3","4","5"]},
+  {k:"ns_sa",l:"Saccadi — abilità",t:"sel",o:["","1","2","3","4","5"]},{k:"ns_sp",l:"Saccadi — precisione",t:"sel",o:["","1","2","3","4","5"]},
+  {k:"ns_capo",l:"Movimenti del capo",t:"sel",o:["","assenti","lievi","marcati"]}]},
+ {h:"Lettura ad alta voce",w:"brano",cons:"Legga ad alta voce, con il suo ritmo. Poi le farò qualche domanda.",f:[{k:"br_t",l:"Tempo (s)",t:"num"},{k:"br_e",l:"Errori",t:"num"},
+  {k:"br_segno",l:"Perde il segno o salta righe",t:"sel",o:["","no","una volta","più volte"]}]},
+ {h:"Comprensione",max:1,lab:["no","sì"],k:"cm",tot:"Comprensione",items:["Da quanto tempo esiste il ponte? (più di duecento anni)","Che cosa fanno gli abitanti ogni primavera? (controllano e sostituiscono le travi)","Che cosa propose l'ingegnere? (un ponte di cemento)","Perché il consiglio votò contro? (il lavoro comune era l'unica occasione per ritrovarsi)"]}]},
+{id:"post",t:"Postura, equilibrio, vestibolare",m:"4'",s:[
+ {h:"Equilibrio su superfici diverse (secondi, massimo 30)",note:"Piedi uniti, braccia conserte. Gommapiuma media-densità.",f:[
+  {k:"ct1",l:"Pavimento, occhi aperti",t:"num"},{k:"ct2",l:"Pavimento, occhi chiusi",t:"num"},{k:"ct3",l:"Gommapiuma, occhi aperti",t:"num"},{k:"ct4",l:"Gommapiuma, occhi chiusi",t:"num"}]},
+ {f:[{k:"mono_dx",l:"Su un piede dx, occhi chiusi (s)",t:"num"},{k:"mono_sx",l:"Su un piede sx, occhi chiusi (s)",t:"num"},
+  {k:"fuk",l:"Fukuda 50 passi — rotazione (gradi)",t:"num"},{k:"fukv",l:"Fukuda — verso",t:"sel",o:["","dx","sx"]},{k:"fukd",l:"Fukuda — avanzamento (cm)",t:"num"},
+  {k:"allin",l:"Allineamento posturale",t:"sel",o:["","nei limiti","asimmetria lieve","asimmetria evidente"]},
+  {k:"capo",l:"Capo",t:"sel",o:["","allineato","inclinato dx","inclinato sx","anteposto"]},
+  {k:"cerv",l:"Rotazione cervicale",t:"sel",o:["","simmetrica","ridotta a dx","ridotta a sx","dolorosa"]},
+  {k:"appog",l:"Appoggio plantare",t:"sel",o:["","neutro","pronato","supinato","cavo","piatto"]}]}]},
+{id:"rif",t:"Riflessi primitivi residui",m:"3'",s:[
+ {h:"Riflessi (0 assente — 4 pienamente presente)",max:4,lab:S04,k:"rf",tot:"Somma",items:["ATNR — tonico asimmetrico del collo (in quadrupedia)","STNR — tonico simmetrico del collo","TLR — tonico labirintico (in piedi, capo in flesso-estensione)","Moro — reazione di allarme","Galant spinale","Riflesso palmare (movimenti associati della bocca)"]}]},
+{id:"udi",t:"Udito e ascolto",m:"2'",s:[{note:"Voce sussurrata a 1 metro, alle spalle, orecchio opposto chiuso: tre numeri per orecchio.",f:[
+ {k:"sus_dx",l:"Sussurro — orecchio dx",t:"sel",o:["","3/3","2/3","1/3","0/3"]},{k:"sus_sx",l:"Sussurro — orecchio sx",t:"sel",o:["","3/3","2/3","1/3","0/3"]},
+ {k:"u_rum",l:"Fatica a seguire una voce nel rumore",t:"sel",o:["","no","a volte","spesso"]},
+ {k:"u_fast",l:"Fastidio per rumori comuni",t:"sel",o:["","no","lieve","marcato"]},
+ {k:"u_acu",l:"Fischi o ronzii (acufeni)",t:"sel",o:["","no","occasionali","frequenti","continui"]},
+ {k:"u_ovat",l:"Orecchio ovattato",t:"sel",o:["","no","a volte","spesso"]}]}]},
+{id:"mio",t:"ATM e miofunzionale",m:"2'",s:[{f:[
+ {k:"apert",l:"Apertura della bocca (mm)",t:"num"},
+ {k:"dev",l:"Traiettoria di apertura",t:"sel",o:["","rettilinea","deviazione lieve","deviazione marcata"]},
+ {k:"click",l:"Rumori articolari",t:"sel",o:["","nessuno","click","crepitio"]},
+ {k:"dolatm",l:"Dolore mandibolare o alla masticazione",t:"sel",o:["","no","sì"]},
+ {k:"brux",l:"Bruxismo o serramento",t:"sel",o:["","no","notturno","diurno","entrambi"]},
+ {k:"resp",l:"Respirazione",t:"sel",o:["","nasale","orale","mista"]},
+ {k:"degl",l:"Deglutizione",t:"sel",o:["","fisiologica","atipica"]},
+ {k:"lingua",l:"Lingua a riposo",t:"sel",o:["","sul palato","bassa","interposta"]}]}]},
+{id:"att",t:"Attenzione e memoria",m:"4'",s:[
+ {h:"Memoria di cifre",note:"Avanti: 5-8-2 · 6-9-4-1 · 4-2-7-3-1 · 6-1-9-4-7-3 · 5-9-1-7-4-2-8 · 5-8-1-9-2-6-4-7. Indietro: 2-4 · 6-2-9 · 3-2-7-9 · 1-5-2-8-6 · 5-3-9-4-1-8 · 8-1-2-9-3-6-5.",f:[
+  {k:"sp_a",l:"Cifre in avanti — lunghezza massima",t:"num"},{k:"sp_i",l:"Cifre all'indietro — lunghezza massima",t:"num"}]},
+ {h:"Colori e parole",w:"stroop",cons:"Mi dica di che colore è scritta ogni parola, non la parola che legge. Più veloce che può.",f:[{k:"st_t",l:"Tempo (s)",t:"num"},{k:"st_e",l:"Errori non corretti",t:"num"}]},
+ {h:"Nella vita di tutti i giorni (0 mai · 1 a volte · 2 spesso)",max:2,lab:S02,k:"qa",tot:"Questionario",items:["Perde il filo mentre legge o ascolta","Dimentica appuntamenti o cose da fare","Fatica a concentrarsi con rumori o interruzioni","Lascia a metà ciò che inizia","Si sente mentalmente stanco a metà giornata","Deve rileggere più volte per capire"]}]},
+{id:"cef",t:"Cefalea e dolore",m:"2'",s:[{f:[
+ {k:"cef_gg",l:"Giorni con mal di testa al mese",t:"num"},{k:"cef_int",l:"Intensità abituale (0–10)",t:"num"},
+ {k:"cef_sede",l:"Sede",t:"sel",o:["","frontale","temporale","nucale","dietro gli occhi","emicrania (metà testa)","diffusa"]},
+ {k:"cef_quando",l:"Quando compare",t:"multi",o:["dopo lavoro da vicino o schermo","al risveglio","a fine giornata","con stress","con il ciclo","senza un momento preciso"]},
+ {k:"cef_farm",l:"Giorni al mese con antidolorifici",t:"num"},
+ {k:"dol_cerv",l:"Dolore cervicale o alle spalle",t:"sel",o:["","no","a volte","spesso"]},
+ {k:"cef_red",l:"Segnali d'allarme (se presenti: invio medico)",t:"multi",o:["esordio improvviso e violento","cefalea nuova dopo i 50 anni","con febbre o rigidità del collo","con debolezza, formicolii o difficoltà a parlare","peggiora progressivamente","la sveglia di notte","dopo un trauma recente"]}]}]},
+{id:"abi",t:"Sonno, stress, alimentazione",m:"1'",s:[{f:[
+ {k:"sonno_h",l:"Ore di sonno per notte",t:"num"},{k:"sonno_q",l:"Sonno",t:"sel",o:["","riposante","fatica ad addormentarsi","risvegli frequenti","risveglio precoce","russa o apnee riferite"]},
+ {k:"stress",l:"Stress percepito (0–10)",t:"num"},{k:"schermi_sera",l:"Schermi nell'ora prima di dormire",t:"sel",o:["","no","sì"]},
+ {k:"colaz",l:"Colazione",t:"sel",o:["","tutti i giorni","a volte","mai"]},{k:"frutta",l:"Frutta e verdura",t:"sel",o:["","5 porzioni o più","2–4 porzioni","meno di 2"]},
+ {k:"industr",l:"Cibi industriali, dolci, bibite zuccherate",t:"sel",o:["","raramente","ogni settimana","ogni giorno"]},
+ {k:"caffe",l:"Caffè al giorno",t:"num"},{k:"alcol",l:"Alcol",t:"sel",o:["","no","occasionale","ogni giorno"]},
+ {k:"movim",l:"Attività fisica",t:"sel",o:["","almeno 150 minuti a settimana","meno","quasi nessuna"]}]}]},
+{id:"vdt",t:"Videoterminale",m:"1'",mot:["Lavoro al videoterminale"],s:[{f:[
+ {k:"vdt_h",l:"Ore al giorno davanti allo schermo",t:"num"},{k:"vdt_pause",l:"Pause",t:"sel",o:["","ogni ora o meno","ogni 2 ore","raramente"]},
+ {k:"vdt_dist",l:"Distanza occhi-schermo (cm)",t:"num"},{k:"vdt_alt",l:"Bordo alto dello schermo",t:"sel",o:["","all'altezza degli occhi o sotto","sopra gli occhi"]},
+ {k:"vdt_luce",l:"Luce e riflessi",t:"sel",o:["","adeguati","finestra davanti o dietro","riflessi sullo schermo"]},
+ {k:"vdt_n",l:"Numero di schermi",t:"num"},{k:"vdt_lenti",l:"Lenti da lavoro",t:"sel",o:["","no","monofocali da vicino","progressive","office"]}]}]},
+{id:"trau",t:"Trauma cranico o colpo di frusta",m:"2'",mot:["Trauma cranico o colpo di frusta"],s:[
+ {f:[{k:"tr_data",l:"Data dell'evento",t:"date"},{k:"tr_tipo",l:"Tipo",t:"sel",o:["","trauma cranico","colpo di frusta","entrambi"]},
+  {k:"tr_pc",l:"Perdita di coscienza",t:"sel",o:["","no","sì, meno di 1 minuto","sì, più a lungo","non ricorda"]},
+  {k:"tr_red",l:"Segnali d'allarme (se presenti: invio medico urgente)",t:"multi",o:["vomito ripetuto","mal di testa in peggioramento","confusione o sonnolenza crescente","debolezza o formicolii","convulsioni","evento da meno di 48 ore"]}]},
+ {h:"Sintomi da allora (0 no · 3 molto)",max:3,lab:S03,k:"pc",tot:"Sintomi",items:["Mal di testa","Vertigini o instabilità","Nausea","Fastidio per la luce","Fastidio per il rumore","Visione offuscata","Visione doppia","Difficoltà di concentrazione","Difficoltà di memoria","Stanchezza","Irritabilità","Sonno alterato"]}]},
+{id:"spo",t:"Sport",m:"1'",mot:["Sport"],s:[{note:"Per le prove di visione dinamica e tempi di reazione usa Segui la pallina · Sport e PNEV Sport Vision.",f:[
+ {k:"sp_disc",l:"Disciplina e ruolo",t:"txt"},{k:"sp_liv",l:"Livello",t:"sel",o:["","amatoriale","agonistico","professionistico"]},
+ {k:"sp_ore",l:"Ore di allenamento a settimana",t:"num"},{k:"sp_inf",l:"Infortuni o traumi",t:"txt"},
+ {k:"sp_vis",l:"Difficoltà visive in gara",t:"multi",o:["seguire la palla o l'avversario","valutare distanze","luce artificiale o controluce","visione laterale","tempi di reazione"]},
+ {k:"sp_mot",l:"Segui la pallina · Sport — velocità soglia",t:"num"}]}]},
+{id:"dsa",t:"DSA in adulto",m:"2'",mot:["DSA in adulto"],s:[
+ {h:"Storia e vita di oggi (0 no · 1 in parte · 2 sì)",max:2,lab:S02,k:"ds",tot:"Questionario",items:["A scuola leggeva più lentamente dei compagni","Ha avuto difficoltà a imparare le tabelline","Fa ancora errori di ortografia che conosce","Evita di leggere ad alta voce in pubblico","Legge lentamente testi lunghi di lavoro","Confonde numeri di telefono o cifre","Fatica a prendere appunti mentre ascolta","In famiglia c'è qualcuno con dislessia"]},
+ {f:[{k:"ds_cert",l:"Certificazione DSA",t:"sel",o:["","no","sì, da bambino","sì, da adulto"]}]}]},
+{id:"adhd",t:"ADHD in adulto",m:"2'",mot:["ADHD in adulto"],s:[
+ {h:"Negli ultimi 6 mesi (0 mai · 1 a volte · 2 spesso)",max:2,lab:S02,k:"ad",tot:"Questionario",note:"Items dello studio, non un test tarato.",items:["Fatica a finire i dettagli di un lavoro","Fatica a organizzare compiti che richiedono ordine","Rimanda le cose che richiedono concentrazione","Muove mani o piedi quando deve stare seduto a lungo","Si sente spinto a fare, come da un motore","Interrompe gli altri o finisce le loro frasi","Perde oggetti di uso quotidiano","Si distrae con rumori o attività intorno","Fatica ad aspettare il proprio turno"]},
+ {f:[{k:"ad_inf",l:"Difficoltà simili già da bambino",t:"sel",o:["","no","non ricorda","sì"]}]}]},
+{id:"ans",t:"Ansia e umore",m:"1'",mot:["Ansia o umore"],s:[
+ {h:"Nelle ultime due settimane (0 mai · 3 quasi ogni giorno)",max:3,lab:S03,k:"au",tot:"Totale",note:"Items dello studio. La domanda 9 va sempre letta: se la risposta non è 0, parlarne subito con la persona e indirizzarla al medico.",
+  items:["Nervosismo, ansia o tensione","Preoccupazioni che non riesce a fermare","Tensione muscolare o irrequietezza","Paura che accada qualcosa di brutto","Poco interesse o piacere nel fare le cose","Si sente giù, triste o senza speranza","Stanchezza o poca energia","Si sente in colpa o un fallimento","Pensieri che sarebbe meglio non esserci o di farsi del male"]}]},
+{id:"vert",t:"Vertigini e mal d'auto",m:"2'",mot:["Vertigini o mal d'auto"],s:[{f:[
+ {k:"ve_tipo",l:"Che cosa prova",t:"sel",o:["","nessuna vertigine","gira tutto (rotatoria)","instabilità, come su una barca","sensazione di svenire","testa leggera"]},
+ {k:"ve_freq",l:"Frequenza",t:"sel",o:["","rara","ogni mese","ogni settimana","ogni giorno"]},
+ {k:"ve_trig",l:"Quando compare",t:"multi",o:["girando la testa o a letto","alzandosi in piedi","in luoghi affollati o supermercati","guardando schermi o scorrendo pagine","in auto o in treno","senza un motivo preciso"]},
+ {k:"ve_red",l:"Insieme alla vertigine (se presenti: invio medico urgente)",t:"multi",o:["visione doppia","difficoltà a parlare o a deglutire","debolezza o formicolio a un lato","perdita improvvisa dell'udito","mal di testa violento"]}]},
+ {h:"Mal di movimento (0 mai · 3 sempre)",max:3,lab:S03,k:"ms",tot:"Mal di movimento",items:["In auto da passeggero","Leggendo in auto","In nave o in traghetto","Al cinema, con i videogiochi o la realtà virtuale","Scorrendo lo schermo del telefono"]}]}
+];
+var NOMI={vis:"Visione binoculare e affaticamento",ocu:"Movimenti oculari e lettura",post:"Postura, equilibrio, vestibolare",rif:"Riflessi primitivi residui",udi:"Udito e ascolto",mio:"ATM e miofunzionale",att:"Attenzione e memoria",cef:"Cefalea e dolore",abi:"Sonno, stress, alimentazione",vdt:"Videoterminale",trau:"Trauma cranico o colpo di frusta",spo:"Sport",dsa:"DSA in adulto",adhd:"ADHD in adulto",ans:"Ansia e umore",vert:"Vertigini e mal d'auto"};
+var INDIC=["abi","vdt","spo"],FORTI=[];
+var FLAGS={
+ vis:function(){var s=somma("sv",10),mn=ampMin(),c=n("ppa"),e=eta(),sk=stKO();
+  if(!s.c&&n("ppc")===null&&!c&&n("flip")===null&&!V.covl&&!V.covv&&sk===null)return null;
+  return (s.c===10&&s.s>=16)||n("ppc")>7||(c&&mn!==null&&100/c<mn-2)||(n("flip")!==null&&n("flip")<8&&(e===null||e<40))||V.covl==="tropia"||V.covv==="tropia"||sk===true},
+ ocu:function(){var ns=["ns_ia","ns_ip","ns_sa","ns_sp"].some(function(k){var v=n(k);return v&&v<=3}),p=brPpm(),c=somma("cm",4);
+  if(!V.ns_ia&&!V.ns_sa&&p===null&&!c.c&&!V.br_segno)return null;
+  return ns||V.ns_capo==="marcati"||(p!==null&&p<150)||(n("br_e")>4)||(c.c===4&&c.s<=2)||V.br_segno==="più volte"},
+ post:function(){var any=["ct1","ct2","ct3","ct4","mono_dx","mono_sx","fuk"].some(function(k){return n(k)!==null})||V.allin||V.cerv;if(!any)return null;
+  return [1,2,3].some(function(i){var v=n("ct"+i);return v!==null&&v<30})||(n("ct4")!==null&&n("ct4")<20)||(n("mono_dx")!==null&&n("mono_dx")<10)||(n("mono_sx")!==null&&n("mono_sx")<10)||n("fuk")>45||n("fukd")>100||V.allin==="asimmetria evidente"||V.cerv==="dolorosa"},
+ rif:function(){var r=somma("rf",6);if(!r.c)return null;for(var i=0;i<6;i++)if(parseInt(V["rf"+i]||0,10)>=2)return true;return false},
+ udi:function(){if(!V.sus_dx&&!V.sus_sx&&!V.u_rum&&!V.u_fast&&!V.u_acu)return null;var b=function(x){return x==="1/3"||x==="0/3"};
+  return b(V.sus_dx)||b(V.sus_sx)||V.u_rum==="spesso"||V.u_fast==="marcato"||V.u_acu==="frequenti"||V.u_acu==="continui"||V.u_ovat==="spesso"},
+ mio:function(){if(n("apert")===null&&!V.dev&&!V.click&&!V.dolatm&&!V.resp&&!V.degl)return null;
+  return (n("apert")!==null&&n("apert")<40)||V.dev==="deviazione marcata"||V.dolatm==="sì"||V.click==="crepitio"||(V.brux&&V.brux!=="no")||V.resp==="orale"||V.degl==="atipica"},
+ att:function(){var a=n("sp_a"),b=n("sp_i"),q=somma("qa",6);if(a===null&&b===null&&n("st_e")===null&&!q.c)return null;
+  return (a!==null&&a<5)||(b!==null&&b<4)||n("st_e")>=3||(q.c===6&&q.s>=7)},
+ cef:function(){if(n("cef_gg")===null&&n("cef_int")===null&&!V.dol_cerv&&!(V.cef_red||[]).length)return null;
+  return n("cef_gg")>=4||n("cef_int")>=7||n("cef_farm")>=10||V.dol_cerv==="spesso"||(V.cef_red||[]).length>0},
+ abi:function(){var any=["sonno_h","sonno_q","stress","colaz","frutta","industr","movim","alcol"].some(function(k){return V[k]!==undefined&&V[k]!==""});if(!any)return null;return abiVoci().length>0},
+ vdt:function(){if(n("vdt_h")===null&&n("vdt_dist")===null&&!V.vdt_pause)return null;return vdtVoci().length>0},
+ trau:function(){var s=somma("pc",12);if(!s.c&&!V.tr_pc&&!(V.tr_red||[]).length)return null;return s.s>=10||(V.tr_pc&&V.tr_pc!=="no")||(V.tr_red||[]).length>0},
+ spo:function(){return (V.sp_vis||[]).length?true:(V.sp_disc?false:null)},
+ dsa:function(){var s=somma("ds",8);if(!s.c)return null;return s.s>=8||(V.ds_cert&&V.ds_cert!=="no")},
+ adhd:function(){var s=somma("ad",9);if(!s.c)return null;return s.s>=10&&V.ad_inf!=="no"},
+ ans:function(){var s=somma("au",9);if(!s.c)return null;var a=somma("au",4).s,u=0;for(var i=4;i<8;i++)u+=parseInt(V["au"+i]||0,10);return a>=6||u>=6||parseInt(V.au8||0,10)>0},
+ vert:function(){var m=somma("ms",5);if(!V.ve_tipo&&!m.c&&!(V.ve_trig||[]).length)return null;
+  return (V.ve_tipo&&V.ve_tipo!=="nessuna vertigine"&&(V.ve_freq==="ogni settimana"||V.ve_freq==="ogni giorno"))||m.s>=7||(V.ve_red||[]).length>0}
+};
+function abiVoci(){var o=[],h=n("sonno_h");
+ if(h!==null&&h<7)o.push("dorme meno delle 7 ore raccomandate");if(V.sonno_q&&V.sonno_q!=="riposante")o.push("il sonno non è riposante ("+V.sonno_q+")");
+ if(n("stress")>=7)o.push("lo stress percepito è alto");if(V.schermi_sera==="sì")o.push("usa schermi nell'ora prima di dormire");
+ var al=0;if(V.colaz==="mai")al++;if(V.frutta==="meno di 2")al++;if(V.industr==="ogni giorno")al++;if(V.alcol==="ogni giorno")al++;if(n("caffe")>=4)al++;
+ if(al>=2)o.push("l'alimentazione ha più elementi su cui intervenire");if(V.movim&&V.movim!=="almeno 150 minuti a settimana")o.push("l'attività fisica è sotto i 150 minuti settimanali raccomandati");return o}
+function vdtVoci(){var o=[];if(n("vdt_h")>=6&&V.vdt_pause==="raramente")o.push("molte ore di schermo con poche pause");
+ if(n("vdt_dist")!==null&&n("vdt_dist")<50)o.push("lo schermo è più vicino di 50 cm");if(V.vdt_alt==="sopra gli occhi")o.push("il bordo alto dello schermo è sopra gli occhi");
+ if(V.vdt_luce==="finestra davanti o dietro"||V.vdt_luce==="riflessi sullo schermo")o.push("luce e riflessi non sono adeguati");return o}
+var REDS=[
+ {t:"Cefalea con segnali d'allarme: invio medico prima di ogni altro approfondimento.",c:function(){return AREE().indexOf("cef")>=0&&(V.cef_red||[]).length>0}},
+ {t:"Trauma con segnali d'allarme: invio medico urgente o pronto soccorso.",c:function(){return AREE().indexOf("trau")>=0&&(V.tr_red||[]).length>0}},
+ {t:"Vertigine con segni neurologici: invio medico urgente.",c:function(){return AREE().indexOf("vert")>=0&&(V.ve_red||[]).length>0}},
+ {t:"Pensieri di non esserci o di farsi del male: parlarne subito con la persona e indirizzarla al medico o ai servizi.",c:function(){return AREE().indexOf("ans")>=0&&parseInt(V.au8||0,10)>0}},
+ {t:"Deviazione manifesta degli occhi (tropia): visita oculistica.",c:function(){return V.covl==="tropia"||V.covv==="tropia"}}
+];
+var CRIT={vis:"Sintomi 16/40 o più, PPC oltre 7 cm, ampiezza accomodativa oltre 2 D sotto il minimo per l'età, facilità accomodativa sotto 8 cicli/min (sotto i 40 anni), tropia, stereopsi oltre 60″.",
+ ocu:"Una voce NSUCO a 3 o meno, movimenti del capo marcati, lettura sotto 150 parole al minuto o oltre 4 errori, comprensione ≤ 2/4, perde il segno più volte.",
+ post:"Meno di 30 s in una delle prime tre condizioni o meno di 20 s su gommapiuma a occhi chiusi, meno di 10 s su un piede, Fukuda oltre 45 gradi o oltre 1 m, asimmetria evidente, rotazione cervicale dolorosa.",
+ rif:"Almeno un riflesso a 2 o più.",udi:"Sussurro 1/3 o meno, fatica frequente nel rumore, fastidio marcato, acufeni frequenti o continui, orecchio spesso ovattato.",
+ mio:"Apertura sotto 40 mm, deviazione marcata, dolore, crepitio, bruxismo, respirazione orale, deglutizione atipica.",
+ att:"Cifre in avanti sotto 5 o indietro sotto 4, 3 o più errori a colori e parole, questionario 7/12 o più.",
+ cef:"4 o più giorni al mese, intensità 7 o più, antidolorifici 10 o più giorni al mese, dolore cervicale frequente, qualsiasi segnale d'allarme.",
+ abi:"Indicazione, non area clinica: sonno sotto 7 ore o non riposante, stress 7 o più, due o più voci alimentari da migliorare, poca attività fisica.",
+ vdt:"Indicazione: molte ore senza pause, schermo sotto 50 cm o sopra gli occhi, luce inadeguata.",
+ trau:"Sintomi 10/36 o più, perdita di coscienza, qualsiasi segnale d'allarme.",spo:"Indicazione: difficoltà visive riferite in gara.",
+ dsa:"Questionario 8/16 o più, oppure certificazione DSA.",adhd:"Questionario 10/18 o più, con difficoltà già presenti da bambino (o non ricordate).",
+ ans:"Ansia 6/12 o più, umore 6/12 o più, qualsiasi risposta diversa da 0 alla domanda 9.",
+ vert:"Vertigine settimanale o quotidiana, mal di movimento 7/15 o più, qualsiasi segno neurologico associato."};
+var REGOLA="Rosso: 3 o più aree segnalate, oppure un segnale d'allarme. Giallo: una o due aree. Verde: nessuna area. Sonno, stress, alimentazione, videoterminale e sport sono indicazioni a parte e non entrano nel semaforo.";
+var INTRO="ha partecipato a uno screening funzionale della durata di circa trenta minuti. Si tratta di una prima osservazione, non di una valutazione: serve a capire se ci sono aree che conviene guardare con più tempo e strumenti adeguati. Non contiene una diagnosi e non la sostituisce.";
+INTRO="lei "+INTRO;
+var PERCHE="Stanchezza visiva, mal di testa, fatica a concentrarsi o a leggere a lungo raramente hanno una causa sola. Dipendono spesso da sistemi che lavorano insieme — i due occhi, l'equilibrio, la postura, l'ascolto, la respirazione, il sonno — e che in un adulto possono essersi adattati per anni a una fatica senza che ce ne si accorga. Per questo li abbiamo esaminati nella stessa sessione e abbiamo letto i rilievi incrociandoli fra loro.";
+var CHI="Le suggeriamo di portarla al suo medico di famiglia, che conosce la sua storia e può indirizzarla, e dove indicato all'oculista, all'otorinolaringoiatra o al neurologo. Questo documento descrive osservazioni, non conclusioni, e lascia a chi ha titolo la decisione diagnostica.";
+var INVIO_TXT="Alcune risposte indicano elementi che vanno visti da un medico prima di qualsiasi altro approfondimento:";
+var TESTI={
+ vis:{t:"la collaborazione fra i due occhi",p:"Nelle prove sulla visione binoculare e sulla messa a fuoco sono emersi elementi che meritano attenzione. Si può vedere bene da lontano e affaticarsi comunque da vicino: quando i due occhi faticano a restare allineati sulla stessa parola, o la messa a fuoco non regge ore di lavoro ravvicinato, compaiono stanchezza, mal di testa, righe che si muovono. È un aspetto che una visita di controllo dell'acuità visiva di solito non indaga.",
+  b:["Scheiman, M., Wick, B. — Clinical Management of Binocular Vision. Wolters Kluwer.","Convergence Insufficiency Treatment Trial Study Group (2008). Archives of Ophthalmology, 126(10), 1336-1349.","Rosenfield, M. (2011). Computer vision syndrome: a review of ocular causes and potential treatments. Ophthalmic and Physiological Optics, 31(5), 502-515.","Hofstetter, H.W. (1950). Useful age-amplitude formula. Optometry World, 38, 42-45."]},
+ ocu:{t:"i movimenti degli occhi nella lettura",p:"Sono emersi elementi nel modo in cui gli occhi si muovono lungo la riga e nella lettura. Quando i salti fra una parola e l'altra sono imprecisi si rilegge, si perde il segno e si arriva a fine pagina senza ricordare cosa si è letto: la fatica sembra di concentrazione, ma parte dal movimento.",
+  b:["Maples, W.C., Atchley, J., Ficklin, T. (1992). Northeastern State University College of Optometry's oculomotor norms. Journal of Behavioral Optometry, 3(6), 143-150.","Rayner, K. (1998). Eye movements in reading and information processing: 20 years of research. Psychological Bulletin, 124(3), 372-422."]},
+ post:{t:"l'equilibrio e la postura",p:"Nelle prove di equilibrio e di postura sono emersi elementi da approfondire. L'equilibrio si regge su vista, orecchio interno e sensibilità del corpo: quando uno dei tre è meno affidabile, gli altri compensano, e la compensazione ha un costo in stanchezza, tensione del collo e a volte instabilità.",
+  b:["Shumway-Cook, A., Horak, F.B. (1986). Assessing the influence of sensory interaction on balance. Physical Therapy, 66(10), 1548-1550.","Fukuda, T. (1959). The stepping test: two phases of the labyrinthine reflex. Acta Oto-Laryngologica, 50, 95-108."]},
+ rif:{t:"i riflessi primitivi",p:"Sono emersi riflessi primitivi ancora attivi, che nello sviluppo tipico si integrano nei primi anni di vita. In un adulto possono accompagnarsi a tensioni posturali, fatica nella coordinazione e maggiore reattività allo stress; non sono una diagnosi, ma un elemento da tenere presente nel percorso.",
+  b:["Zafeiriou, D.I. (2004). Primitive reflexes and postural reactions in the neurodevelopmental examination. Pediatric Neurology, 31(1), 1-8.","Goddard Blythe, S. (2009). Attention, Balance and Coordination: The A.B.C. of Learning Success. Wiley-Blackwell."]},
+ udi:{t:"l'ascolto",p:"Sono emersi elementi nell'ascolto: fatica a seguire una voce nel rumore, fastidio per i suoni, fischi o sensazione di orecchio ovattato. Conviene un controllo audiometrico e, se è nella norma, una valutazione dell'elaborazione uditiva.",
+  b:["Baguley, D., McFerran, D., Hall, D. (2013). Tinnitus. The Lancet, 382(9904), 1600-1607.","American Academy of Audiology (2010). Clinical Practice Guidelines: Central Auditory Processing Disorder."]},
+ mio:{t:"l'articolazione della mandibola e la respirazione",p:"Sono emersi elementi a carico dell'articolazione della mandibola o delle funzioni orali: apertura, rumori, dolore, serramento, respirazione. Mandibola, lingua e collo lavorano insieme alla postura, e una tensione in un punto si trasmette agli altri.",
+  b:["Schiffman, E. et al. (2014). Diagnostic Criteria for Temporomandibular Disorders (DC/TMD). Journal of Oral & Facial Pain and Headache, 28(1), 6-27."]},
+ att:{t:"l'attenzione e la memoria di lavoro",p:"Sono emersi elementi nell'attenzione e nella memoria di lavoro. Sono funzioni molto sensibili al sonno, allo stress e alla fatica visiva o uditiva: vanno lette insieme alle altre aree prima di pensarle come un problema a sé.",
+  b:["Diamond, A. (2013). Executive functions. Annual Review of Psychology, 64, 135-168.","Stroop, J.R. (1935). Studies of interference in serial verbal reactions. Journal of Experimental Psychology, 18(6), 643-662."]},
+ cef:{t:"il mal di testa",p:"Il mal di testa è frequente o intenso. Quando compare dopo il lavoro da vicino o si accompagna a tensione del collo, ha spesso una componente visiva o posturale su cui si può lavorare; va comunque inquadrato dal medico, soprattutto se l'uso di antidolorifici è frequente.",
+  b:["Headache Classification Committee of the International Headache Society (2018). ICHD-3. Cephalalgia, 38(1), 1-211.","Do, T.P. et al. (2019). Red and orange flags for secondary headaches in clinical practice: SNNOOP10 list. Neurology, 92(3), 134-144."]},
+ abi:{t:"sonno, stress e alimentazione",p:function(){return "Sono emerse abitudini su cui si può lavorare subito: "+abiVoci().join("; ")+". Sono la base su cui poggiano attenzione, umore e resistenza alla fatica, e intervenire qui è spesso la cosa più rapida nei risultati."},
+  b:["Hirshkowitz, M. et al. (2015). National Sleep Foundation's sleep time duration recommendations. Sleep Health, 1(1), 40-43.","World Health Organization (2020). Guidelines on physical activity and sedentary behaviour. Geneva: WHO.","Kousmine, C. — Salvate il vostro corpo! Tecniche Nuove."]},
+ vdt:{t:"la postazione al videoterminale",p:function(){return "Nella postazione di lavoro: "+vdtVoci().join("; ")+". Piccoli aggiustamenti di distanza, altezza, luce e pause riducono in modo sensibile l'affaticamento visivo."},
+  b:["Sheppard, A.L., Wolffsohn, J.S. (2018). Digital eye strain: prevalence, measurement and amelioration. BMJ Open Ophthalmology, 3(1), e000146."]},
+ trau:{t:"gli esiti del trauma",p:"Dopo il trauma sono presenti sintomi che meritano attenzione. Visione, equilibrio e convergenza sono tra le funzioni che più spesso restano affaticate dopo un trauma cranico o un colpo di frusta, anche quando gli esami strumentali sono negativi, e si possono riabilitare.",
+  b:["McCrory, P. et al. (2017). Consensus statement on concussion in sport. British Journal of Sports Medicine, 51(11), 838-847.","Ciuffreda, K.J. et al. (2007). Occurrence of oculomotor dysfunctions in acquired brain injury. Optometry, 78(4), 155-161."]},
+ spo:{t:"la visione nello sport",p:"Sono riferite difficoltà visive in gara. Le abilità visive dello sport — seguire più oggetti, valutare distanze, reagire in fretta — si possono misurare e allenare: il percorso PNEV Sport Vision parte da qui.",
+  b:["Erickson, G.B. (2007). Sports Vision: Vision Care for the Enhancement of Sports Performance. Butterworth-Heinemann.","Appelbaum, L.G., Erickson, G. (2018). Sports vision training: a review of the state-of-the-art in digital training techniques. International Review of Sport and Exercise Psychology, 11(1), 160-189."]},
+ dsa:{t:"lettura e scrittura",p:"Dal questionario emergono difficoltà di lettura, scrittura o calcolo presenti fin dalla scuola. In un adulto un disturbo specifico dell'apprendimento si può ancora riconoscere e certificare, e riconoscerlo cambia gli strumenti a disposizione nello studio e nel lavoro.",
+  b:["Istituto Superiore di Sanità (2022). Linea guida sulla gestione dei disturbi specifici dell'apprendimento."]},
+ adhd:{t:"attenzione e impulsività",p:"Dal questionario emergono difficoltà di attenzione, organizzazione o impulsività, presenti da tempo. È un quadro che in età adulta passa spesso inosservato; conviene una valutazione specialistica.",
+  b:["Kessler, R.C. et al. (2005). The World Health Organization Adult ADHD Self-Report Scale (ASRS). Psychological Medicine, 35(2), 245-256.","Faraone, S.V. et al. (2021). The World Federation of ADHD International Consensus Statement. Neuroscience & Biobehavioral Reviews, 128, 789-818."]},
+ ans:{t:"ansia e umore",p:"Dalle risposte emergono ansia o abbassamento dell'umore. Non è una diagnosi, ma merita ascolto: è utile parlarne con il medico di famiglia e, se lo ritiene, con uno psicologo.",
+  b:["Kroenke, K. et al. (2009). An ultra-brief screening scale for anxiety and depression: the PHQ-4. Psychosomatics, 50(6), 613-621."]},
+ vert:{t:"vertigini e mal di movimento",p:"Sono riferite vertigini o sensibilità al movimento. Quando compaiono con gli schermi, nei luoghi affollati o in auto, spesso vista e orecchio interno danno informazioni che il cervello fatica a mettere d'accordo: è un aspetto che si può valutare e trattare.",
+  b:["Bisdorff, A. et al. (2009). Classification of vestibular symptoms. Journal of Vestibular Research, 19(1-2), 1-13.","Golding, J.F. (2006). Motion sickness susceptibility. Autonomic Neuroscience, 129(1-2), 67-76."]}
+};
+
+/* ---------- stereopsi random-dot anaglifica ---------- */
+var ST={};
+function stCal(){try{return JSON.parse(localStorage.getItem("pnev_stereo_cal")||"null")}catch(e){return null}}
+function stOv(){var o=document.getElementById("stov");if(o)return o;o=document.createElement("div");o.id="stov";document.body.appendChild(o);return o}
+function stApri(){var o=stOv(),c=stCal()||{w:320,dist:40,rossoSx:true};ST.cal=c;o.style.display="flex";
+ document.addEventListener("keydown",stKey);
+ o.innerHTML='<div class="stset"><h2>Test di stereopsi</h2>'+
+ '<p>Occhiali <b>rosso-ciano</b>. Serve una stanza con luce normale, schermo alla massima luminosità.</p>'+
+ '<h3>1 · Calibra lo schermo</h3><p>Appoggia una tessera (bancomat, tessera sanitaria) sullo schermo e allarga il rettangolo finché è largo come la tessera. Si fa una volta sola per schermo.</p>'+
+ '<div id="stcard" style="width:'+c.w+'px"></div><input type="range" min="120" max="900" value="'+c.w+'" oninput="stW(this.value)" style="width:100%">'+
+ '<h3>2 · Distanza e occhiali</h3><div class="strow"><label>Distanza occhi-schermo (cm) <input type="number" id="stdist" value="'+c.dist+'" min="25" max="300" oninput="stLv()"></label>'+
+ '<label>Filtro rosso <select id="strosso" onchange="stLv()"><option value="1"'+(c.rossoSx?" selected":"")+'>sull\'occhio sinistro</option><option value="0"'+(!c.rossoSx?" selected":"")+'>sull\'occhio destro</option></select></label></div>'+
+ '<div id="stlv" class="mut"></div>'+
+ '<div class="strow"><button class="act g" onclick="stVia()">Inizia</button><button class="act o" onclick="stChiudi()">Chiudi</button></div>'+
+ '<p class="mut">Il bambino indica dove galleggia il quadrato: in alto, in basso, a sinistra, a destra. Tu premi la freccia corrispondente (o i tasti freccia). Se non lo vede, «Non lo vedo». Controllo: senza occhiali il quadrato non deve vedersi.</p></div>';
+ stLv()}
+function stW(v){ST.cal.w=parseInt(v,10);document.getElementById("stcard").style.width=v+"px";stLv()}
+function stLivelli(){var c=ST.cal,dpr=window.devicePixelRatio||1,mmCss=85.6/c.w,mmDev=mmCss/dpr,dist=c.dist*10;
+ var out=[],seen={};[800,400,200,100,70,50,40,30,20].forEach(function(a){var d=Math.round(a/206265*dist/mmDev);
+  if(d>=1&&!seen[d]){seen[d]=1;out.push({d:d,a:Math.round(d*mmDev/dist*206265)})}});return out}
+function stLv(){var d=document.getElementById("stdist"),r=document.getElementById("strosso");if(d)ST.cal.dist=parseFloat(d.value)||40;if(r)ST.cal.rossoSx=r.value==="1";
+ try{localStorage.setItem("pnev_stereo_cal",JSON.stringify(ST.cal))}catch(e){}
+ var L=stLivelli(),e=document.getElementById("stlv");if(!e)return;
+ e.innerHTML='Livelli misurabili su questo schermo a '+ST.cal.dist+' cm: <b>'+L.map(function(x){return x.a+'″'}).join(' · ')+'</b>'+
+  (L.length&&L[L.length-1].a>STcrit()?'<br><span class="bad">Il livello più fine è sopra il criterio della fascia ('+STcrit()+'″): allontanati dallo schermo.</span>':'')}
+function stVia(){ST.L=stLivelli();if(!ST.L.length){alert("Schermo o distanza non adatti: allontanati.");return}
+ ST.i=0;ST.ok=0;ST.ko=0;ST.prova=2;ST.pass=null;var o=stOv();
+ o.innerHTML='<div class="sttop"><span id="stst"></span><button class="act o" onclick="stChiudi()">Interrompi</button></div>'+
+  '<div class="starena"><button class="sta u" onclick="stRisp(0)">▲</button><button class="sta l" onclick="stRisp(3)">◀</button>'+
+  '<canvas id="stcv"></canvas><button class="sta r" onclick="stRisp(1)">▶</button><button class="sta d" onclick="stRisp(2)">▼</button></div>'+
+  '<div class="sttop"><button class="act o" onclick="stRisp(-1)">Non lo vedo</button><span id="stfb"></span></div>';
+ stTrial()}
+function stTrial(){ST.pos=Math.floor(Math.random()*4);var lv=ST.L[ST.i],cv=document.getElementById("stcv"),dpr=window.devicePixelRatio||1;
+ var css=Math.floor(Math.min(window.innerWidth-160,window.innerHeight-190,620));cv.style.width=css+"px";cv.style.height=css+"px";
+ var W=Math.floor(css*dpr);cv.width=W;cv.height=W;var ctx=cv.getContext("2d"),img=ctx.createImageData(W,W),D=img.data;
+ var cell=Math.max(2,Math.round(2*dpr)),nc=Math.ceil(W/cell)+Math.ceil(lv.d/cell)+2,P=new Uint8Array(nc*nc);
+ for(var i=0;i<P.length;i++)P[i]=Math.random()<0.5?1:0;
+ var sz=Math.floor(W*0.26),off=Math.floor(W*0.25),cx=W/2,cy=W/2;
+ var tx=[cx,cx+off,cx,cx-off][ST.pos]-sz/2,ty=[cy-off,cy,cy+off,cy][ST.pos]-sz/2,d=lv.d,rs=ST.cal.rossoSx;
+ for(var y=0;y<W;y++){var ry=Math.floor(y/cell)*nc;for(var x=0;x<W;x++){
+  var inT=x>=tx&&x<tx+sz&&y>=ty&&y<ty+sz,l=P[ry+Math.floor(x/cell)],r=inT?P[ry+Math.floor((x+d)/cell)]:l;
+  var a=rs?l:r,b=rs?r:l,k=(y*W+x)*4;D[k]=a?255:0;D[k+1]=b?255:0;D[k+2]=b?255:0;D[k+3]=255}}
+ ctx.putImageData(img,0,0);
+ document.getElementById("stst").textContent=(ST.prova>0?"Prova di allenamento":"Livello "+lv.a+"″ ("+(ST.i+1)+" di "+ST.L.length+")");
+}
+function stRisp(p){var giusto=p===ST.pos,fb=document.getElementById("stfb");
+ if(ST.prova>0){ST.prova--;fb.textContent=giusto?"Giusto!":"Era "+["in alto","a destra","in basso","a sinistra"][ST.pos];stTrial();return}
+ fb.textContent="";if(giusto)ST.ok++;else ST.ko++;
+ if(ST.ok>=2){ST.pass=ST.L[ST.i].a;ST.i++;ST.ok=0;ST.ko=0;if(ST.i>=ST.L.length){stFine();return}}
+ else if(ST.ko>=2){stFine();return}
+ stTrial()}
+function stFine(){var mn=ST.L[ST.L.length-1].a,mx=ST.L[0].a;
+ if(ST.pass===null){V.stereo="";V.stereo_nessuno=true;V.stereo_txt="nessun livello superato (oltre "+mx+"″) a "+ST.cal.dist+" cm"}
+ else{V.stereo=String(ST.pass);V.stereo_nessuno=false;V.stereo_txt=ST.pass+"″ a "+ST.cal.dist+" cm"+(ST.pass===mn?" (livello più fine misurabile su questo schermo)":"")}
+ V.stereo_min=String(mn);sl();stChiudi();draw();msg("Stereopsi: "+V.stereo_txt)}
+function stKey(e){var o=document.getElementById("stov");if(!o||o.style.display==="none")return;
+ var k={ArrowUp:0,ArrowRight:1,ArrowDown:2,ArrowLeft:3}[e.key];if(k!==undefined&&document.getElementById("stcv")){e.preventDefault();stRisp(k)}
+ if(e.key==="Escape")stChiudi()}
+function stChiudi(){var o=document.getElementById("stov");if(o){o.style.display="none";o.innerHTML=""}document.removeEventListener("keydown",stKey)}
+
+try{var x=localStorage.getItem(KEY);if(x)V=JSON.parse(x)}catch(e){}
+draw();
+</script>
+</body></html>
