@@ -344,6 +344,37 @@ def _corpo_seleziona(conn, ns="default"):
             or q in str(p.get("id", ""))
         ]
 
+    # Filtro per età della scheda aperta: in Screening 0-4 anni si vedono solo
+    # i bambini di quell'età, in WHODAS solo gli adulti, e così via. Le fasce
+    # sono le stesse del menu (filtro_eta.REGOLE_ETA). Si può togliere.
+    voce = st.session_state.get("_voce_corrente") or ""
+    try:
+        from .filtro_eta import REGOLE_ETA
+        e_min, e_max = REGOLE_ETA.get(voce, (None, None))
+    except Exception:
+        e_min, e_max = None, None
+    if e_min is not None or e_max is not None:
+        fascia_txt = (f"da {e_min} a {e_max} anni" if e_min is not None and e_max is not None
+                      else f"da {e_min} anni in su" if e_min is not None else f"fino a {e_max} anni")
+        if st.toggle(f"🎯 Solo pazienti {fascia_txt} — {voce}", value=True,
+                     key=f"paz_attivo_eta_tgl_{ns}"):
+            prima = len(pazienti)
+            senza_dn = 0
+            tenuti = []
+            for p in pazienti:
+                a = _eta_anni(p.get("data_nascita"))
+                if a is None:
+                    senza_dn += 1
+                    continue
+                if (e_min is None or a >= e_min) and (e_max is None or a <= e_max):
+                    tenuti.append(p)
+            pazienti = tenuti
+            nascosti = prima - len(pazienti)
+            if nascosti:
+                st.caption(f"{nascosti} pazienti nascosti perché fuori fascia"
+                           + (f" ({senza_dn} senza data di nascita)" if senza_dn else "")
+                           + ": togli il filtro per vederli.")
+
     st.caption(f"{len(pazienti)} paziente/i")
 
     ordina_recenti = False
