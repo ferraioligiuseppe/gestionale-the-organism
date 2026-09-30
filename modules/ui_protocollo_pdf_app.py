@@ -196,12 +196,21 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
     if (!fatto && typeof window.V === 'object' && window.V !== null) {{
       window.V.nome = NOME;
       if (ETA) window.V.eta = ETA;
+      // Screening 20 minuti: la data di nascita sceglie da sola la fascia d'età
+      if (DN) {{
+        var dn = DN;
+        var mm = dn.match(/^(\\d{{1,2}})[\\/.-](\\d{{1,2}})[\\/.-](\\d{{4}})$/);
+        if (mm) dn = mm[3] + '-' + ('0'+mm[2]).slice(-2) + '-' + ('0'+mm[1]).slice(-2);
+        window.V.dn = dn;
+      }}
       if (!window.V.data) {{
         var oggi = new Date();
         window.V.data = oggi.getFullYear() + '-' +
           String(oggi.getMonth()+1).padStart(2,'0') + '-' +
           String(oggi.getDate()).padStart(2,'0');
       }}
+      try {{ if (!window.V.fascia && typeof window.fasciaDa === 'function')
+              {{ var fz = window.fasciaDa(window.eMesi()); if (fz) window.setFascia(fz); }} }} catch(e){{}}
       try {{ if (typeof window.sl === 'function') window.sl(); }} catch(e){{}}
       try {{ if (typeof window.draw === 'function') window.draw(); }} catch(e){{}}
       try {{ if (typeof window.prog === 'function') window.prog(); }} catch(e){{}}
