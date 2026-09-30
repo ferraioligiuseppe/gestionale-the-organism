@@ -33,11 +33,29 @@ def _assicura_colonne(conn) -> None:
     """Crea le colonne accessorie se mancano. Una volta per sessione."""
     if st.session_state.get(KEY_SCHEMA_OK):
         return
+    # Prima si guarda se le colonne ci sono già. «ALTER TABLE … IF NOT EXISTS»
+    # chiede comunque il blocco esclusivo della tabella pazienti anche quando
+    # non deve cambiare niente: se un'altra postazione ha una lettura aperta
+    # su pazienti, l'ALTER resta in attesa e con lui la finestra «Seleziona
+    # paziente», che si apriva vuota e non si caricava più. Ora l'ALTER parte
+    # solo se una colonna manca davvero, e non aspetta più di 3 secondi.
     try:
         cur = conn.cursor()
-        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();")
-        cur.execute("ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS ultimo_accesso TIMESTAMPTZ;")
-        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;")
+        cur.execute(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE (table_name='pazienti' AND column_name IN ('creato_il','ultimo_accesso')) "
+            "OR (table_name='auth_users' AND column_name='ultimo_paziente_id')")
+        ci = {(r[0], r[1]) if not isinstance(r, dict) else (r["table_name"], r["column_name"])
+              for r in (cur.fetchall() or [])}
+        mancanti = [sql for chiave, sql in (
+            (("pazienti", "creato_il"), "ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS creato_il TIMESTAMPTZ DEFAULT NOW();"),
+            (("pazienti", "ultimo_accesso"), "ALTER TABLE pazienti ADD COLUMN IF NOT EXISTS ultimo_accesso TIMESTAMPTZ;"),
+            (("auth_users", "ultimo_paziente_id"), "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS ultimo_paziente_id BIGINT;"),
+        ) if chiave not in ci]
+        if mancanti:
+            cur.execute("SET LOCAL lock_timeout = '3s'")
+            for sql in mancanti:
+                cur.execute(sql)
         conn.commit()
         st.session_state[KEY_SCHEMA_OK] = True
     except Exception:
@@ -110,6 +128,12 @@ def _carica_lista_pazienti(_conn):
         )
         rows = cur.fetchall() or []
         cols = [d[0] for d in cur.description] if cur.description else []
+        # Chiude la lettura: una transazione lasciata aperta tiene un blocco
+        # sulla tabella pazienti e fa aspettare le altre postazioni.
+        try:
+            conn.commit()
+        except Exception:
+            pass
         # Forza dict Python puri (non DictRow / RealDictRow / sqlite Row)
         # altrimenti st.cache_data fallisce con UnserializableReturnValueError
         result = []
@@ -313,8 +337,12 @@ def _dialog_seleziona(conn):
 
 
 def _corpo_seleziona(conn, ns="default"):
-    pazienti = _carica_lista_pazienti(conn)
+    with st.spinner("Carico l'elenco dei pazienti…"):
+        pazienti = _carica_lista_pazienti(conn)
     if not pazienti:
+        st.warning("L'elenco dei pazienti non si è caricato. Se succede di nuovo, chiudi la finestra "
+                   "e riprova tra qualche secondo: di solito è un'altra postazione che sta salvando.")
+        _carica_lista_pazienti.clear()
         st.info("Nessun paziente registrato. Puoi aggiungerne uno qui sotto.")
         st.markdown("##### ➕ Nuovo paziente")
         _form_nuovo_paziente(conn, key_suffix="empty")
@@ -383,100 +411,57 @@ def _corpo_seleziona(conn, ns="default"):
         if ordina_recenti:
             pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
 
-    # Tabella ag-grid
-    try:
-        from st_aggrid import (
-            AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode,
-        )
-        import pandas as pd
-    except ImportError:
-        # Fallback: selectbox
-        st.warning("Tabella avanzata non disponibile, uso selettore semplice.")
-        opts = [
-            f"{p['id']} - {p.get('cognome', '')} {p.get('nome', '')} "
-            f"· {_fmt_dn(p.get('data_nascita'))}"
-            for p in pazienti
-        ]
-        sel = st.selectbox("Paziente", opts, key=f"paz_attivo_fb_{ns}")
-        if st.button("Conferma", type="primary", use_container_width=True):
-            try:
-                pid = int(sel.split(" - ", 1)[0])
-                set_paziente_attivo(conn, pid)
-                st.rerun()
-            except Exception:
-                st.error("Selezione non valida.")
-        return
-
-    rows_df = []
+    # Tabella nativa di Streamlit con selezione di riga. Prima era AgGrid:
+    # dentro la finestra il clic sulla riga a volte non arrivava al programma
+    # (componente esterno in un iframe, rieseguito a pezzi) e il paziente non
+    # veniva selezionato. st.dataframe con on_select è parte di Streamlit e
+    # funziona anche dentro le finestre di dialogo.
+    import pandas as pd
+    righe_tab = []
     for p in pazienti:
-        rows_df.append({
+        righe_tab.append({
             "_id": p.get("id"),
             "": _badge_stato(p.get("stato_paziente")),
             "Paziente": f"{(p.get('cognome') or '').strip()} {(p.get('nome') or '').strip()}".strip(),
             "Nato il": _fmt_dn(p.get("data_nascita")),
-            "Età": _eta_anni(p.get("data_nascita")) or "",
+            "Età": _eta_anni(p.get("data_nascita")),
             "Telefono": p.get("telefono", "") or "",
             "Registrato il": _fmt_dn(p.get("creato_il")) if p.get("creato_il") else "",
         })
-    df = pd.DataFrame(rows_df)
-
-    # Età come intero nullable: evita il mix int/"" (colonna object) che rompe
-    # la serializzazione pyarrow di AgGrid. Solo se la colonna esiste (lista non vuota).
-    if "Età" in df.columns:
-        try:
+    df = pd.DataFrame(righe_tab)
+    if df.empty:
+        st.info("Nessun paziente corrisponde alla ricerca.")
+    else:
+        if "Età" in df.columns:
             df["Età"] = pd.to_numeric(df["Età"], errors="coerce").astype("Int64")
-        except Exception:
-            df["Età"] = df["Età"].astype(str)
-
-    gob = GridOptionsBuilder.from_dataframe(df)
-    gob.configure_default_column(filter=True, sortable=True, resizable=True)
-    gob.configure_column("_id", hide=True)
-    gob.configure_column("", width=44, minWidth=44, maxWidth=44, filter=False, sortable=False)
-    gob.configure_column("Paziente", flex=3, minWidth=240,
-                         sort=None if ordina_recenti else "asc")
-    gob.configure_column("Nato il", flex=1, minWidth=105)
-    gob.configure_column("Età", flex=0, width=70, type=["numericColumn"])
-    gob.configure_column("Telefono", flex=1, minWidth=120)
-    gob.configure_column("Registrato il", flex=1, minWidth=110)
-    gob.configure_selection(selection_mode="single", use_checkbox=False)
-    gob.configure_grid_options(
-        rowHeight=36, headerHeight=36,
-        suppressCellFocus=True, domLayout="normal",
-        # un secondo clic (o un doppio clic) non deve togliere la selezione
-        suppressRowDeselection=True,
-    )
-
-    grid_response = AgGrid(
-        df,
-        gridOptions=gob.build(),
-        height=480,
-        update_mode=GridUpdateMode.SELECTION_CHANGED,
-        data_return_mode=DataReturnMode.AS_INPUT,
-        allow_unsafe_jscode=False,
-        theme="balham",
-        fit_columns_on_grid_load=True,
-        # _grid_nonce cambia dopo ogni scelta: alla riapertura la tabella parte
-        # pulita. Prima ricordava la riga scelta l'ultima volta, e cliccare di
-        # nuovo quella riga non produceva nessun cambiamento: il paziente non
-        # veniva selezionato.
-        key=f"aggrid_paz_attivo_{ns}_{st.session_state.get('_pa_grid_nonce', 0)}_{cerca}",
-    )
-
-    selected = grid_response.get("selected_rows", [])
-    if hasattr(selected, "to_dict"):
+        st.caption("Clicca la casella a sinistra del paziente per selezionarlo.")
+        ev = st.dataframe(
+            df.drop(columns=["_id"]),
+            hide_index=True, use_container_width=True, height=480,
+            on_select="rerun", selection_mode="single-row",
+            column_config={
+                "": st.column_config.TextColumn("", width="small"),
+                "Paziente": st.column_config.TextColumn("Paziente", width="large"),
+                "Età": st.column_config.NumberColumn("Età", format="%d", width="small"),
+            },
+            key=f"paz_df_{ns}_{st.session_state.get('_pa_grid_nonce', 0)}_{cerca}",
+        )
+        sel_rows = []
         try:
-            selected = selected.to_dict("records")
+            sel_rows = list(ev.selection.rows)
         except Exception:
-            selected = []
-
-    if selected:
-        try:
-            pid = int(selected[0].get("_id"))
-            set_paziente_attivo(conn, pid)
-            st.session_state["_pa_grid_nonce"] = st.session_state.get("_pa_grid_nonce", 0) + 1
-            st.rerun()
-        except Exception:
-            st.error("Selezione non valida.")
+            try:
+                sel_rows = list((ev or {}).get("selection", {}).get("rows", []))
+            except Exception:
+                sel_rows = []
+        if sel_rows:
+            try:
+                pid = int(df.iloc[sel_rows[0]]["_id"])
+                set_paziente_attivo(conn, pid)
+                st.session_state["_pa_grid_nonce"] = st.session_state.get("_pa_grid_nonce", 0) + 1
+                st.rerun()
+            except Exception as e:
+                st.error(f"Selezione non riuscita: {e}")
 
     # Nuovo paziente: sotto l'elenco e chiuso. Si apre solo se serve; dopo
     # «Crea e seleziona» il paziente diventa attivo e la finestra si chiude.
