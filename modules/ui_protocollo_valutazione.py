@@ -94,6 +94,7 @@ def _relazione_template_pv(nome_completo, dati) -> str:
         f"PROTOCOLLO DI VALUTAZIONE — {nome_completo}", "",
     ]
     etichette = {
+        "prima_infanzia": "PRIMA INFANZIA — Sviluppo neuroevolutivo (0;0–2;11)",
         "parte1_bilancio_fonetico": "PARTE 1 — Bilancio fonetico", "parte2_linguaggio": "PARTE 2 — Linguaggio",
         "parte3_fluenza": "PARTE 3 — Disturbi della fluenza", "parte4_apprendimento": "PARTE 4 — Apprendimento",
         "parte5_sintesi": "PARTE 5 — Sintesi del profilo", "parte6_miofunzionale": "PARTE 6 — Miofunzionale",
@@ -206,8 +207,9 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     esaminatore = c1.text_input("Esaminatore", key="pv_esaminatore")
     inviato_da = c2.text_input("Inviato da", key="pv_inviato_da")
     motivo = st.text_area("Motivo della richiesta", key="pv_motivo", height=68)
-    fascia = st.radio("Fascia applicata", ["A 3;0–5;11 prescolare", "B 6;0–10;11 primaria", "C 11 anni e oltre"],
-                       key="pv_fascia", horizontal=True)
+    fascia = st.radio("Fascia applicata", ["0 · 0;0–2;11 prima infanzia", "A 3;0–5;11 prescolare",
+                                           "B 6;0–10;11 primaria", "C 11 anni e oltre"],
+                       key="pv_fascia", horizontal=True, index=1)
 
     # Un tempo qui c'erano sedici campi a testo libero, una terza copia di
     # gravidanza, parto e tappe. Ora e' l'anamnesi unica del paziente: la
@@ -240,6 +242,23 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
     sviluppo = _va.get("sviluppo", {})
 
     st.markdown("---")
+    # Fascia 0: sotto i 3 anni le PARTI 1-4 (fonetica, linguaggio strutturato,
+    # fluenza, apprendimento) non si somministrano. Restano in una scheda a
+    # parte, raggiungibile, cosi' il resto del protocollo non cambia; al loro
+    # posto c'e' la valutazione neuroevolutiva della prima infanzia.
+    prima_infanzia = {}
+    _box_parti14 = None
+    if str(fascia).startswith("0"):
+        _t0, _t14 = st.tabs(["🍼 Prima infanzia 0;0–2;11", "PARTI 1–4 · dai 3 anni"])
+        with _t0:
+            try:
+                from .prima_infanzia_pnev import render_prima_infanzia
+                prima_infanzia = render_prima_infanzia(conn, paz_id)
+            except Exception as e:
+                st.error(f"Valutazione prima infanzia non disponibile: {e}")
+        _box_parti14 = _t14
+        _box_parti14.__enter__()
+        st.caption("Sotto i 3 anni queste parti non si somministrano: compilale solo se ha senso per il caso.")
     st.markdown("## PARTE 1 — BILANCIO FONETICO")
 
     st.markdown("**1.2 Lista stimoli per fono e posizione**")
@@ -837,6 +856,9 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
         {"Problema": "P4", "Comprensione testo (0-2)": "", "Rappresentazione (0-2)": "", "Piano risolutivo (0-2)": "", "Esecuzione (0-2)": "", "Note": ""},
     ], ["Problema"], "pv_problemi_tab")
 
+    if _box_parti14 is not None:
+        _box_parti14.__exit__(None, None, None)
+
     st.markdown("---")
     st.markdown("## PARTE 5 — SINTESI DEL PROFILO")
     st.caption("Giudizio: N nella norma attesa · B borderline · D prestazione deficitaria · NV non valutabile.")
@@ -1119,6 +1141,7 @@ def render_protocollo_valutazione(conn=None, paz_id=None, paziente=None) -> None
 
     dati = {
         "generali": {"esaminatore": esaminatore, "inviato_da": inviato_da, "motivo": motivo, "fascia": fascia},
+        "prima_infanzia": prima_infanzia,
         "anamnesi": {
             "gravidanza": gravidanza, "parto_tipo": parto_tipo, "giro_cordone": giro_cordone,
             "peso_nascita": peso_nascita, "apgar": apgar, "tin_ittero": tin_ittero,
