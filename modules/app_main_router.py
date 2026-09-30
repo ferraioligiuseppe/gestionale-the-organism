@@ -1075,14 +1075,14 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🧸 Screening 0-4 anni":
         from .ui_screening_04 import render_screening_04
         render_screening_04(conn, paz_id); return True
-    if sotto == "🩺 Screening breve (15 min)":
+    if sotto == "🩺 Screening breve (20 min)":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(
             conn, paz_id,
             html_file="Screening_BREVE_15min_app_MASTER.html",
             pdf_file="Screening_BREVE_15min.pdf",
-            titolo="🩺 Screening breve (15 minuti) — app stampabile",
-            sottotitolo="Versione rapida a impaginazione A4, con calcolatori e stampa diretta.",
+            titolo="🩺 Screening breve (20 minuti) — app stampabile",
+            sottotitolo="Cinque fasce d'età, dalla nascita ai 16 anni: le prove cambiano con la fascia.",
             kp="sb")
         return True
     if sotto == "🩺 Screening completo":
@@ -1377,14 +1377,14 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🧸 Screening 0-4 anni":
             from .ui_screening_04 import render_screening_04
             render_screening_04(conn, paz_id); return
-        if sotto == "🩺 Screening breve (15 min)":
+        if sotto == "🩺 Screening breve (20 min)":
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             render_protocollo_pdf_app(
                 conn, paz_id,
                 html_file="Screening_BREVE_15min_app_MASTER.html",
                 pdf_file="Screening_BREVE_15min.pdf",
-                titolo="🩺 Screening breve (15 minuti) — app stampabile",
-                sottotitolo="Versione rapida a impaginazione A4, con calcolatori e stampa diretta.",
+                titolo="🩺 Screening breve (20 minuti) — app stampabile",
+                sottotitolo="Cinque fasce d'età, dalla nascita ai 16 anni: le prove cambiano con la fascia.",
                 kp="sb")
             return
         if sotto in ("📋 Protocollo di valutazione (scheda)", "📋 Protocollo di valutazione"):

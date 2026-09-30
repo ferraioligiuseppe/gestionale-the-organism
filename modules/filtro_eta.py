@@ -25,7 +25,7 @@ import streamlit as st
 REGOLE_ETA: dict[str, tuple[int | None, int | None]] = {
     # Screening: la fascia è nel nome, seguirla è il minimo
     "🧸 Screening 0-4 anni":            (None, 5),
-    "🩺 Screening breve (15 min)":      (6, None),
+    "🩺 Screening breve (20 min)":      (None, 16),   # cinque fasce, dalla nascita ai 16 anni
     "🩺 Screening completo":            (6, None),
 
     # Apprendimenti: richiedono che il bambino sia scolarizzato
