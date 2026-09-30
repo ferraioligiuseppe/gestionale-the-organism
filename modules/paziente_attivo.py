@@ -411,6 +411,8 @@ def _corpo_seleziona(conn, ns="default"):
     gob.configure_grid_options(
         rowHeight=36, headerHeight=36,
         suppressCellFocus=True, domLayout="normal",
+        # un secondo clic (o un doppio clic) non deve togliere la selezione
+        suppressRowDeselection=True,
     )
 
     grid_response = AgGrid(
@@ -422,7 +424,11 @@ def _corpo_seleziona(conn, ns="default"):
         allow_unsafe_jscode=False,
         theme="balham",
         fit_columns_on_grid_load=True,
-        key=f"aggrid_paz_attivo_{ns}_{cerca}",
+        # _grid_nonce cambia dopo ogni scelta: alla riapertura la tabella parte
+        # pulita. Prima ricordava la riga scelta l'ultima volta, e cliccare di
+        # nuovo quella riga non produceva nessun cambiamento: il paziente non
+        # veniva selezionato.
+        key=f"aggrid_paz_attivo_{ns}_{st.session_state.get('_pa_grid_nonce', 0)}_{cerca}",
     )
 
     selected = grid_response.get("selected_rows", [])
@@ -436,6 +442,7 @@ def _corpo_seleziona(conn, ns="default"):
         try:
             pid = int(selected[0].get("_id"))
             set_paziente_attivo(conn, pid)
+            st.session_state["_pa_grid_nonce"] = st.session_state.get("_pa_grid_nonce", 0) + 1
             st.rerun()
         except Exception:
             st.error("Selezione non valida.")
@@ -516,6 +523,27 @@ def _mostra_moduli_pnev_attivi(conn, pid):
     )
 
 
+def _indice_header() -> int:
+    """Numero stabile per le chiavi dei bottoni dell'header.
+
+    Prima era un contatore che cresceva a OGNI caricamento della pagina: il
+    bottone «Seleziona paziente» cambiava chiave fra il clic e il caricamento
+    successivo, e Streamlit perdeva il clic. Per questo a volte la finestra
+    dei pazienti non si apriva. Ora il numero riparte da 1 a ogni caricamento
+    e sale solo se l'header compare più volte nella stessa pagina: stessa
+    chiave a ogni giro, nessun duplicato."""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        usate = get_script_run_ctx().widget_user_keys_this_run
+        n = 1
+        while f"nopid_apri_sel_{n}" in usate or f"hdr_apri_sel_{n}" in usate:
+            n += 1
+        return n
+    except Exception:
+        st.session_state["_hpa_render_n"] = st.session_state.get("_hpa_render_n", 0) + 1
+        return st.session_state["_hpa_render_n"]
+
+
 def header_paziente_attivo(conn) -> int | None:
     """Mostra l'header del paziente attivo (banner + bottone Cambia).
 
@@ -529,8 +557,7 @@ def header_paziente_attivo(conn) -> int | None:
     # Questo header può essere richiamato più volte nello stesso caricamento
     # da punti diversi del codice (router + modulo specifico): rendo ogni
     # chiave dei suoi widget sempre unica per evitare "duplicate element key".
-    st.session_state["_hpa_render_n"] = st.session_state.get("_hpa_render_n", 0) + 1
-    _hpa_n = st.session_state["_hpa_render_n"]
+    _hpa_n = _indice_header()
     # Niente ripristino automatico dell'ultimo paziente: si lavorava per
     # sbaglio sulla scheda di chi era stato aperto l'ultima volta. Il
     # paziente si sceglie sempre dall'elenco.
