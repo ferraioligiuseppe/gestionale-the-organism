@@ -232,8 +232,13 @@ function azzera(){if(!confirm("Iniziare una scheda nuova? I dati non esportati a
 function msg(m){var s=document.getElementById("msg");s.textContent=m;setTimeout(function(){s.textContent=""},3500)}
 
 
+var S02=["0","1","2"],S03=["0","1","2","3"],S04=["0","1","2","3","4"],NA=["","normale","alterato"],NA2=["","normale","alterato dx","alterato sx","alterato bilaterale"];
+function DS(k,l,t,o){return [{k:k+"_dx",l:l+" — dx",t:t,o:o},{k:k+"_sx",l:l+" — sx",t:t,o:o}]}
+function flat(a){return [].concat.apply([],a)}
+
+
 var KEY="pnev_val_adulti_funz_v1",FILEPFX="valutazione_adulti_funz_",TITOLO="Valutazione adulti funzionale completa",ROSSO=3,INVIO="invio medico consigliato";
-var PNEVBOX="<b>Valutazione adulti funzionale completa</b> · 17–64 anni. Dieci aree. DEM, INPP, audiometria e diagnostica uditiva non si ripetono qui: i risultati salvati nei loro moduli compaiono nelle sezioni corrispondenti. Per VMI, TVPS e DHI si inseriscono solo i punteggi, i materiali sono quelli originali. Le soglie delle altre prove sono criteri dello studio.";
+var PNEVBOX="<b>Valutazione adulti funzionale completa</b> · 17–64 anni. Nove aree più l'anamnesi. DEM, INPP, audiometria e diagnostica uditiva non si ripetono qui: i risultati salvati nei loro moduli compaiono nelle sezioni corrispondenti. Per VMI, TVPS e DHI si inseriscono solo i punteggi, i materiali sono quelli originali. Le soglie delle altre prove sono criteri dello studio.";
 var BRANO={titolo:"Il ponte di legno",testo:"Nel paese di Castelvetere c'è un ponte di legno che attraversa il torrente da più di duecento anni. Ogni primavera, quando la neve si scioglie e l'acqua cresce, gli abitanti controllano le travi una per una e sostituiscono quelle che hanno ceduto. Nessuno ricorda chi lo abbia costruito, ma tutti sanno che il ponte non è mai rimasto uguale: nel tempo quasi ogni pezzo è stato cambiato. Qualche anno fa un ingegnere propose di sostituirlo con un ponte di cemento, più sicuro e senza manutenzione. Il consiglio comunale votò contro. Non per nostalgia, spiegò il sindaco, ma perché il lavoro di primavera era diventato l'unica occasione in cui l'intero paese si ritrovava per fare qualcosa insieme."};
 BRANO.parole=BRANO.testo.split(/\s+/).length;
 function STcrit(){return 60}
@@ -326,7 +331,7 @@ var SCHEMA=[
    {k:"labbra",l:"Labbra a riposo",t:"sel",o:["","competenti","incompetenti"]},{k:"mast",l:"Masticazione",t:"sel",o:["","bilaterale","prevalente dx","prevalente sx"]},
    {k:"brux",l:"Bruxismo",t:"sel",o:["","no","notturno","diurno","entrambi"]}]])},
  {h:"Palpazione muscolare (0 nessun dolore · 1 lieve · 2 evidente)",max:2,lab:S02,k:"pm",tot:"Dolore",items:["Massetere dx","Massetere sx","Temporale dx","Temporale sx","Pterigoideo laterale dx","Pterigoideo laterale sx","Sternocleidomastoideo dx","Sternocleidomastoideo sx","Trapezio superiore dx","Trapezio superiore sx"]}]},
-{id:"pos",t:"Posturologia",m:"12'",s:[
+{id:"pos",t:"Posturologia",m:"12'",s:[{w:"est",est:["prismi"],nome:"Prismi posturali"},
  {h:"Pedana stabilometrica",f:[{k:"st_sup_oa",l:"Superficie ellisse occhi aperti (mm²)",t:"num"},{k:"st_sup_oc",l:"Superficie ellisse occhi chiusi (mm²)",t:"num"},{k:"st_vel",l:"Velocità media (mm/s)",t:"num"},{k:"st_lung",l:"Lunghezza gomitolo (mm)",t:"num"},{k:"st_carico",l:"Carico dx/sx (%)",t:"txt"}]},
  {f:[{k:"rom_post",l:"Romberg posturale",t:"sel",o:["","stabile","oscilla","deviazione anteriore","deviazione posteriore","deviazione dx","deviazione sx"]},
   {k:"conv_pod",l:"Test di convergenza podalica",t:"sel",o:["","simmetrica","asimmetrica"]},{k:"rot",l:"Test dei rotatori",t:"sel",o:["","simmetrici","asimmetrici"]},
@@ -351,7 +356,7 @@ var FLAGS={
   return /saccade/.test((V.hit_dx||"")+(V.hit_sx||""))||/positivo/.test((V.dix_dx||"")+(V.dix_sx||"")+(V.roll_dx||"")+(V.roll_sx||""))||V.hs==="presente"||V.vorc==="alterata"||V.nist_sp==="presente"||n("dva")>=3||n("dhi")>=16||
    [1,2,3,4].some(function(i){var v=n("ct"+i);return v!==null&&v<30})||[5,6].some(function(i){var v=n("ct"+i);return v!==null&&v<20})||n("fuk")>45},
  rif:function(){var r=somma("rf",RIFL.length);if(!r.c)return null;for(var i=0;i<RIFL.length;i++)if(parseInt(V["rf"+i]||0,10)>=2)return true;return false},
- udi:function(){var d=n("dic_dx"),s=n("dic_sx");if(!any(["dic_dx","lat_ud","iperac","acuf","thi","rumore"])&&!est("audio").length&&!est("uditiva").length)return null;
+ udi:function(){var d=n("dic_dx"),s=n("dic_sx");if(!any(["dic_dx","dic_sx","lat_ud","lat_tel","iperac","acuf","thi","rumore"]))return null;
   var li=d!==null&&s!==null&&d+s>0?(d-s)/(d+s)*100:null;return (li!==null&&li<-10)||V.lat_ud==="sinistra"||V.iperac==="marcata"||V.acuf==="frequenti"||V.acuf==="continui"||n("thi")>=38||V.rumore==="spesso"},
  mio:function(){var p=somma("pm",10);if(!any(["apert","traiet","click_dx","resp","degl"])&&!p.c)return null;
   return (n("apert")!==null&&n("apert")<40)||V.traiet==="deflessione (non torna)"||/crepitio|reciproco/.test((V.click_dx||"")+(V.click_sx||""))||p.s>=4||V.resp==="orale"||V.degl==="atipica"||V.lingua==="interposta"||V.frenulo==="corto"},
@@ -395,10 +400,6 @@ var TESTI={
   b:["Gagey, P.M., Weber, B. — Posturologia. Regolazione e perturbazioni della stazione eretta. Marrapese.","Kapteyn, T.S. et al. (1983). Standardization in platform stabilometry. Agressologie, 24(7), 321-326."]}
 };
 
-
-var S02=["0","1","2"],S03=["0","1","2","3"],S04=["0","1","2","3","4"],NA=["","normale","alterato"],NA2=["","normale","alterato dx","alterato sx","alterato bilaterale"];
-function DS(k,l,t,o){return [{k:k+"_dx",l:l+" — dx",t:t,o:o},{k:k+"_sx",l:l+" — sx",t:t,o:o}]}
-function flat(a){return [].concat.apply([],a)}
 function est(k){var E=window.PNEV_ESTERNI||{};return E[k]||[]}
 WIDGET.est=function(sec){var h='<div class="wbox"><b>Dal gestionale — '+sec.nome+'</b>';var r=[];sec.est.forEach(function(k){r=r.concat(est(k))});
  h+=r.length?'<ul style="margin:6px 0 0 18px;padding:0">'+r.map(function(x){return '<li>'+esc(x)+'</li>'}).join("")+'</ul>':'<div class="mut">Nessun risultato salvato: esegui il test dal suo modulo e riapri la pagina.</div>';return h+'</div>'};

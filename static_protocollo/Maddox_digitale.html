@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scala di Maddox digitale — Studio The Organism</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#16202c;background:#eef1f5}
+a{color:#1D6B44}a:hover{color:#155235}
+.wrap{max-width:900px;margin:0 auto;padding:14px}
+.card{background:#fff;border:1px solid #c9d2dd;border-radius:7px;padding:12px 14px;margin-bottom:10px}
+h2{margin:0 0 4px;font-size:16px;color:#123A6B}h3{margin:10px 0 4px;font-size:12.5px;text-transform:uppercase;color:#123A6B}
+.mut{color:#64707d;font-size:13px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:6px 0}
+label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:#54606d}
+input,select{border:1px solid #dde3ea;border-radius:5px;padding:6px 8px;font:inherit}
+button{border:0;border-radius:5px;padding:8px 14px;font:inherit;font-size:14px;cursor:pointer}
+.g{background:#1D6B44;color:#fff}.o{background:#fff;border:1px solid #c9d2dd;color:#123A6B}
+#card{border:2px dashed #1D6B44;border-radius:8px;aspect-ratio:85.6/54;margin:8px 0;max-width:100%}
+#ris{font-size:17px;font-weight:600;color:#123A6B;margin-top:6px}
+#sc{position:fixed;inset:0;background:#000;display:none;z-index:10;cursor:crosshair}
+#sc canvas{display:block}
+#sc .bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;justify-content:center;padding:10px;background:rgba(0,0,0,.6)}
+#sc .bar button{background:#222;color:#fff;border:1px solid #555}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="card">
+  <h2>Scala di Maddox digitale</h2>
+  <div class="mut">Scala tangente in diottrie prismatiche, calibrata sullo schermo. Il paziente guarda la luce al centro con la bacchetta di Maddox davanti a un occhio e indica dove la striscia rossa taglia la scala; tu tocchi quel punto.</div>
+  <h3>1 · Calibra lo schermo (una volta sola)</h3>
+  <div class="mut">Appoggia una tessera (bancomat, tessera sanitaria) sullo schermo e allarga il rettangolo finché è largo come la tessera.</div>
+  <div id="card"></div>
+  <input type="range" id="w" min="120" max="1400" value="320" style="width:100%">
+  <h3>2 · Impostazioni</h3>
+  <div class="row">
+   <label>Distanza paziente-schermo (cm)<input type="number" id="dist" value="300" min="40" max="600"></label>
+   <label>Misura<select id="modo"><option value="h">orizzontale (striscia verticale)</option><option value="v">verticale (striscia orizzontale)</option></select></label>
+   <label>Maddox davanti a<select id="occ"><option>OD</option><option>OS</option></select></label>
+   <label>Fino a (Δ)<input type="number" id="max" value="20" min="5" max="40"></label>
+  </div>
+  <div class="mut" id="info"></div>
+  <div class="row"><button class="g" onclick="apri()">Schermo intero</button><button class="o" onclick="copia()">Copia risultato</button></div>
+  <div id="ris">Nessuna misura.</div>
+ </div>
+</div>
+<div id="sc"><canvas id="cv"></canvas><div class="bar"><span id="lv" style="color:#ddd;align-self:center"></span><button onclick="chiudi()">Chiudi (Esc)</button></div></div>
+<script>
+var cal=JSON.parse(localStorage.getItem("pnev_maddox_cal")||'{"w":320,"dist":300,"max":20}'),ultimo="";
+var $=function(i){return document.getElementById(i)};
+$("w").value=cal.w;$("dist").value=cal.dist;$("max").value=cal.max;
+function mmpx(){return 85.6/cal.w}
+function pxDelta(){return cal.dist/10/mmpx()} /* 1 Δ = distanza(cm)/100 cm = dist/10 mm */
+function upd(){cal.w=+$("w").value;cal.dist=+$("dist").value||300;cal.max=+$("max").value||20;$("card").style.width=cal.w+"px";
+ localStorage.setItem("pnev_maddox_cal",JSON.stringify(cal));
+ var need=2*cal.max*pxDelta(),avail=$("modo").value==="h"?screen.width:screen.height;
+ $("info").textContent="1 Δ = "+pxDelta().toFixed(1)+" px a "+cal.dist+" cm. La scala fino a "+cal.max+" Δ occupa "+Math.round(need)+" px"+(need>avail?": più dello schermo, riduci «Fino a» o avvicina il paziente.":".")}
+["w","dist","max","modo"].forEach(function(i){$(i).addEventListener("input",upd)});upd();
+function disegna(){var c=$("cv"),W=window.innerWidth,H=window.innerHeight,x=c.getContext("2d");c.width=W;c.height=H;
+ x.fillStyle="#000";x.fillRect(0,0,W,H);var h=$("modo").value==="h",p=pxDelta(),cx=W/2,cy=H/2;
+ x.strokeStyle="#bbb";x.fillStyle="#fff";x.lineWidth=2;x.font="bold "+Math.max(14,Math.min(40,p*0.8))+"px Helvetica";x.textAlign="center";x.textBaseline="middle";
+ x.beginPath();if(h){x.moveTo(cx-cal.max*p,cy);x.lineTo(cx+cal.max*p,cy)}else{x.moveTo(cx,cy-cal.max*p);x.lineTo(cx,cy+cal.max*p)}x.stroke();
+ for(var i=-cal.max;i<=cal.max;i++){if(!i)continue;var q=i*p,t=i%5===0?22:10;x.beginPath();
+  if(h){x.moveTo(cx+q,cy-t);x.lineTo(cx+q,cy+t);x.stroke();if(i%2===0)x.fillText(Math.abs(i),cx+q,cy-t-18)}
+  else{x.moveTo(cx-t,cy+q);x.lineTo(cx+t,cy+q);x.stroke();if(i%2===0)x.fillText(Math.abs(i),cx-t-26,cy+q)}}
+ x.fillStyle="#fff";x.beginPath();x.arc(cx,cy,Math.max(6,p*0.25),0,7);x.fill();
+ $("lv").textContent=(h?"Orizzontale":"Verticale")+" · Maddox su "+$("occ").value+" · "+cal.dist+" cm · tocca dove passa la striscia"}
+function apri(){$("sc").style.display="block";var e=$("sc");if(e.requestFullscreen)e.requestFullscreen().catch(function(){});setTimeout(disegna,150)}
+function chiudi(){$("sc").style.display="none";if(document.fullscreenElement)document.exitFullscreen()}
+window.addEventListener("resize",function(){if($("sc").style.display==="block")disegna()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape")chiudi()});
+$("cv").addEventListener("pointerdown",function(e){var h=$("modo").value==="h",p=pxDelta(),occ=$("occ").value;
+ var d=h?(e.clientX-window.innerWidth/2)/p:(e.clientY-window.innerHeight/2)/p,v=Math.round(Math.abs(d)*2)/2,tipo;
+ if(v<0.5)tipo="orto";
+ else if(h){var stessoLato=(occ==="OD"&&d>0)||(occ==="OS"&&d<0);tipo=stessoLato?"esoforia (non crociata)":"exoforia (crociata)"}
+ else{tipo=d>0?"iperforia "+occ:"iperforia "+(occ==="OD"?"OS":"OD")}
+ ultimo=(h?"Maddox orizzontale":"Maddox verticale")+" a "+cal.dist+" cm: "+(v<0.5?"orto":v.toString().replace(".",",")+" Δ "+tipo)+" (bacchetta su "+occ+")";
+ $("ris").textContent=ultimo;chiudi()});
+function copia(){if(!ultimo)return;try{navigator.clipboard.writeText(ultimo)}catch(e){}$("ris").textContent=ultimo+" — copiato"}
+</script>
+</body>
+</html>
