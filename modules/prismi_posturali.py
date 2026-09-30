@@ -22,6 +22,14 @@ import os
 import streamlit as st
 import streamlit.components.v1 as components
 
+BIBLIO = [
+    "Martins da Cunha, H. (1983). Informação proprioceptiva e visual no Síndroma de Deficiência Postural (S.D.P.). Acta Reumatológica Portuguesa, 8(3), 157-166.",
+    "Martins da Cunha, H., Alves da Silva, O. (1986). Le syndrome de déficience posturale. Son intérêt en ophtalmologie. Journal Français d'Ophtalmologie, 9(11), 747-755.",
+    "Martins da Cunha, H. (1987). Le syndrome de déficience posturale (SDP). Agressologie, 28(9), 941-943.",
+    "Alves da Silva, O. (1987). Scotométrie directionnelle et corrections prismatiques dans le syndrome de déficience posturale. Agressologie, 28(9), 945-946.",
+    "Alves da Silva, O., Mendes, A., Pinhal, F., Martins da Cunha, H. (1987). A new aspect of convergence insufficiency orthoptic training by improvement of postural deficiency syndrome. Journal Français d'Orthoptique, 19, 157-162.",
+]
+
 BASI = ["", "su (BS)", "giù (BI)", "interna (BN)", "esterna (BT)", "obliqua"]
 DIOTTRIE = ["", "0,5", "1", "1,5", "2", "2,5", "3", "4", "5", "6"]
 
@@ -130,7 +138,10 @@ def render_prismi_posturali(conn, paz_id) -> None:
         st.info("Seleziona un paziente.")
         return
     righe = _righe(conn, paz_id)
-    t_nuova, t_storico, t_maddox = st.tabs(["➕ Valutazione o controllo", f"📈 Storico ({len(righe)})", "📏 Scala di Maddox digitale"])
+    t_nuova, t_kap, t_storico, t_maddox = st.tabs(["➕ Valutazione o controllo", "🧩 Prismi gemellati (Kaplan)",
+                                                   f"📈 Storico ({len(righe)})", "📏 Scala di Maddox digitale"])
+    with t_kap:
+        render_kaplan(conn, paz_id, righe)
 
     with t_nuova:
         px = f"pp_{paz_id}"
@@ -231,6 +242,16 @@ def render_prismi_posturali(conn, paz_id) -> None:
                         s, c = r["dati"].get(f"{k}_senza"), r["dati"].get(f"{k}_con")
                         if s or c:
                             st.markdown(f"- **{nome}**: senza {s or '—'} · con {c or '—'}")
+                    if r["dati"].get("kaplan"):
+                        tot = {}
+                        for kk, vv in r["dati"].items():
+                            if kk.count("|") == 2 and vv != "":
+                                cond = kk.split("|")[2]
+                                tot.setdefault(cond, []).append(int(vv))
+                        for cond, vals in tot.items():
+                            st.markdown(f"- **{cond}**: media {sum(vals) / len(vals):.2f} su {len(vals)} voci")
+                        if r["dati"].get("osservazione"):
+                            st.caption("Osservazione: " + ", ".join(r["dati"]["osservazione"]))
                     if r.get("note"):
                         st.caption(r["note"])
                     if _testo_prisma(r["prescrizione"]):
@@ -325,7 +346,7 @@ def pdf_prescrizione(conn, paz_id, riga) -> bytes:
     x0, x1 = 2.0 * cm, W - 2.0 * cm
     y = H - 5.4 * cm
     c.setFont("Helvetica-Bold", 14); c.setFillColor(verde)
-    c.drawCentredString(W / 2, y, "Prescrizione di prismi posturali")
+    c.drawCentredString(W / 2, y, "Prescrizione di prismi gemellati" if p.get("gemellati") else "Prescrizione di prismi posturali")
     y -= 1.0 * cm
     c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 10)
     c.drawString(x0, y, "Paziente:"); c.setFont("Helvetica", 10); c.drawString(x0 + 2.0 * cm, y, nome)
@@ -353,6 +374,45 @@ def pdf_prescrizione(conn, paz_id, riga) -> bytes:
             c.drawString(col[i] + 0.2 * cm, y, t)
         c.setStrokeColor(colors.HexColor("#C9D2DD")); c.setLineWidth(0.5)
         c.line(x0, y - 0.3 * cm, x1, y - 0.3 * cm)
+
+    # Schema TABO: asse della base per ciascun occhio, visto dall'esaminatore
+    import math
+    y -= 0.6 * cm
+    rr = 1.25 * cm
+    for i, occhio in enumerate(("OD", "OS")):
+        cx = W / 2 + (-1 if i == 0 else 1) * 3.6 * cm
+        cy = y - rr - 0.5 * cm
+        c.setStrokeColor(colors.HexColor("#9AA5B1")); c.setLineWidth(0.6)
+        c.circle(cx, cy, rr, stroke=1, fill=0)
+        c.setFont("Helvetica", 7); c.setFillColor(colors.HexColor("#54606D"))
+        for g in range(0, 360, 30):
+            a = math.radians(g)
+            c.line(cx + math.cos(a) * rr * 0.9, cy + math.sin(a) * rr * 0.9, cx + math.cos(a) * rr, cy + math.sin(a) * rr)
+            if g % 90 == 0:
+                c.drawCentredString(cx + math.cos(a) * (rr + 0.35 * cm), cy + math.sin(a) * (rr + 0.35 * cm) - 2.5, f"{g}°")
+        c.setFont("Helvetica-Bold", 10); c.setFillColor(colors.black)
+        c.drawCentredString(cx, cy - rr - 0.75 * cm, occhio)
+        b, d, gr = p.get(f"{occhio}_base") or "", p.get(f"{occhio}_dt") or "", p.get(f"{occhio}_gradi") or ""
+        ori = _orientamento(occhio, b, gr) if b else "—"
+        try:
+            ang = math.radians(float(ori.replace("°", "")))
+        except Exception:
+            ang = None
+        if ang is not None and d:
+            c.setStrokeColor(verde); c.setFillColor(verde); c.setLineWidth(2)
+            ex, ey = cx + math.cos(ang) * rr * 0.85, cy + math.sin(ang) * rr * 0.85
+            c.line(cx, cy, ex, ey)
+            ph = c.beginPath()
+            for k, off in enumerate((0, 2.6, -2.6)):
+                aa = ang + math.pi + (0 if k == 0 else off * 0.12)
+                px_, py_ = (ex, ey) if k == 0 else (ex + math.cos(aa) * 0.3 * cm, ey + math.sin(aa) * 0.3 * cm)
+                (ph.moveTo if k == 0 else ph.lineTo)(px_, py_)
+            ph.close(); c.drawPath(ph, fill=1, stroke=0)
+            c.setFont("Helvetica", 8); c.setFillColor(colors.black)
+            c.drawCentredString(cx, cy + rr + 0.7 * cm, f"{d} Δ base {ori}")
+        c.circle(cx, cy, 1.2, stroke=0, fill=1)
+    y = y - 2 * rr - 1.9 * cm
+    c.setFillColor(colors.black)
 
     righe = []
     if p.get("rx_od") or p.get("rx_os"):
@@ -382,13 +442,167 @@ def pdf_prescrizione(conn, paz_id, riga) -> bytes:
 
     y -= 0.4 * cm
     c.setFont("Helvetica-Oblique", 9); c.setFillColor(colors.HexColor("#54606D"))
-    c.drawString(x0, y, "Prismi posturali secondo il metodo Martins da Cunha / Alves da Silva. "
-                        "Base espressa rispetto all'occhio indicato.")
+    if p.get("gemellati"):
+        c.drawString(x0, y, f"Prismi gemellati (yoked) {p['gemellati']}: stessa direzione della base nei due occhi, "
+                            "secondo Kaplan.")
+    else:
+        c.drawString(x0, y, "Prismi posturali secondo il metodo Martins da Cunha / Alves da Silva. "
+                            "Base espressa rispetto all'occhio indicato.")
     c.setFillColor(colors.black)
     yf = 6.5 * cm if _carta_intestata_bytes() else 5.5 * cm
+    # Riferimenti del metodo: se non entrano sopra il piè di pagina della carta
+    # intestata, vanno su una seconda pagina.
     c.setStrokeColor(colors.black); c.setLineWidth(0.5)
     c.line(x1 - 6.5 * cm, yf, x1, yf)
     c.setFont("Helvetica", 9); c.drawCentredString(x1 - 3.25 * cm, yf - 0.4 * cm, "Timbro e firma")
+    limite = (7.8 if _carta_intestata_bytes() else 6.2) * cm
+    if y - 0.7 * cm - (len(BIBLIO) + (len(BIBLIO_KAPLAN) if p.get("gemellati") else 0)) * 0.85 * cm < limite:
+        draw_footer(c)
+        c.showPage()
+        draw_intestazione(c, "", "")
+        y = H - 5.0 * cm
+    y -= 0.7 * cm
+    c.setFont("Helvetica-Bold", 8.5); c.drawString(x0, y, "Riferimenti")
+    y -= 0.42 * cm
+    c.setFont("Helvetica", 7.5)
+    larg = x1 - x0 - 7.0 * cm
+    refs = BIBLIO + (BIBLIO_KAPLAN if p.get("gemellati") else [])
+    for ref in refs:
+        parole, linea = ref.split(), ""
+        for w in parole:
+            prova = (linea + " " + w).strip()
+            if c.stringWidth(prova, "Helvetica", 7.5) > larg:
+                c.drawString(x0, y, linea); y -= 0.34 * cm; linea = w
+            else:
+                linea = prova
+        c.drawString(x0, y, linea); y -= 0.42 * cm
     draw_footer(c)
     c.showPage(); c.save()
     return buf.getvalue()
+
+
+# ── Prismi gemellati (yoked) — batteria non verbale di Kaplan ──────────
+
+BIBLIO_KAPLAN = [
+    "Kaplan, M. (2006). Seeing Through New Eyes: Changing the Lives of Children with Autism, Asperger Syndrome and Other Developmental Disabilities Through Vision Therapy. London: Jessica Kingsley.",
+    "Kaplan, M., Carmody, D.P., Gaydos, A. (1996). Postural orientation modifications in autism in response to ambient lenses. Child Psychiatry and Human Development, 27(2), 81-91.",
+    "Carmody, D.P., Kaplan, M., Gaydos, A.M. (2001). Spatial orientation adjustments in children with autism in Hong Kong. Child Psychiatry and Human Development, 31(3), 233-247.",
+]
+
+CONDIZIONI = ["Abituale", "BU", "BD", "BR", "BL"]
+VOCI_4 = ["Capo", "Corpo", "Attenzione visiva", "Disposizione"]
+VOCI_3 = ["Movimento e postura", "Attenzione", "Disposizione"]
+# (chiave, compito, voci osservate, nota per l'esaminatore)
+COMPITI = [
+    ("k1", "1 · Video seduto", VOCI_4, "Il suo video preferito, seduto con i piedi a terra. I genitori non danno indicazioni."),
+    ("k2", "2 · Video in piedi sulla tavoletta basculante", VOCI_4, "Stesso video. Se è molto disorientato si comincia seduto sulla tavoletta."),
+    ("k3", "3 · Gioco con la palla appesa", VOCI_3, "Palla legata a un filo all'altezza del petto. Va verso la palla o la evita? Prende la palla o il filo?"),
+    ("k4", "4 · Inseguimenti seduto", VOCI_3, "Mira luminosa in cerchio e lungo i meridiani. Occhi soli, occhi e capo, o tutto il corpo?"),
+    ("k5", "5 · Inseguimenti in piedi", VOCI_3, "Come sopra, in piedi. Trattiene il respiro, si agita, evita lo stimolo?"),
+    ("k6", "6 · Su un piede davanti allo specchio", VOCI_4, "Prima un piede poi l'altro. A 5 anni si attende l'equilibrio fino a 10."),
+    ("k7", "7 · Su un piede guardando il video", VOCI_4, "Confronto con lo specchio: attento a sé o allo spazio?"),
+    ("k8", "8 · Palloncino", VOCI_3, "Colpire il palloncino in alto alternando le mani, contando fino a 10."),
+    ("k9", "9 · Cammina e siediti", VOCI_3, "Due sedie a 2,5–3 m. Senza toccare la sedia con le mani."),
+]
+OSSERV = ["cammina sulle punte", "piedi in dentro", "tocca le pareti camminando", "sfarfallio delle mani",
+          "capo inclinato", "guarda con la coda dell'occhio", "scoliosi funzionale", "evita il contatto visivo",
+          "si copre le orecchie", "movimenti ripetitivi"]
+SEDUTA = ["", "centrato", "corto (davanti alla sedia)", "lungo (urta la sedia)", "a sinistra", "a destra"]
+
+
+def _gemellati_in_basi(direzione):
+    """Prismi gemellati → base per ciascun occhio, per la tabella e lo schema TABO."""
+    return {"BU": ("su (BS)", "su (BS)"), "BD": ("giù (BI)", "giù (BI)"),
+            "BR": ("esterna (BT)", "interna (BN)"), "BL": ("interna (BN)", "esterna (BT)")}.get(direzione, ("", ""))
+
+
+def render_kaplan(conn, paz_id, righe) -> None:
+    px = f"kp_{paz_id}"
+    st.caption("Batteria non verbale di Kaplan: ogni compito si osserva senza lenti e con i prismi gemellati "
+               "(stessa base nei due occhi). Punteggio 4 ottimale · 0 assente. Consigliato videoregistrare.")
+    c = st.columns(3)
+    data = c[0].date_input("Data", datetime.date.today(), key=f"{px}_data")
+    forza = c[1].selectbox("Potere dei prismi di prova (Δ)", ["2", "3", "4", "5", "6", "8", "10", "15", "20"], index=2, key=f"{px}_dt")
+    usa = c[2].multiselect("Condizioni provate", CONDIZIONI, default=CONDIZIONI, key=f"{px}_cond")
+    dati = {"kaplan": True, "potere_prova": forza, "condizioni": usa}
+    dati["osservazione"] = st.multiselect("Osservazione iniziale, prima dei compiti", OSSERV, key=f"{px}_oss")
+    totali = {k: 0 for k in usa}
+    contati = {k: 0 for k in usa}
+    for chiave, nome, voci, nota in COMPITI:
+        with st.expander(nome):
+            st.caption(nota)
+            if chiave == "k9":
+                cc = st.columns(len(usa) or 1)
+                for i, cond in enumerate(usa):
+                    dati[f"{chiave}_seduta_{cond}"] = cc[i].selectbox(f"{cond} — dove si siede", SEDUTA, key=f"{px}_{chiave}_sed_{cond}")
+                st.caption("Con prismi di disturbo 15–20 Δ: con base in giù tende a urtare la sedia, con base in su "
+                           "si ferma prima, con base a destra si siede a sinistra e viceversa.")
+            h = st.columns([2] + [1] * len(usa))
+            h[0].caption("Voce")
+            for i, cond in enumerate(usa):
+                h[i + 1].caption(cond)
+            for v in voci:
+                r = st.columns([2] + [1] * len(usa), vertical_alignment="center")
+                r[0].markdown(v)
+                for i, cond in enumerate(usa):
+                    val = r[i + 1].selectbox(f"{nome} {v} {cond}", ["", "4", "3", "2", "1", "0"],
+                                             key=f"{px}_{chiave}_{v}_{cond}", label_visibility="collapsed")
+                    dati[f"{chiave}|{v}|{cond}"] = val
+                    if val != "":
+                        totali[cond] += int(val)
+                        contati[cond] += 1
+            dati[f"{chiave}_note"] = st.text_input("Note", key=f"{px}_{chiave}_note")
+
+    st.markdown("**Confronto fra le condizioni**")
+    if any(contati.values()):
+        base = totali.get("Abituale") if contati.get("Abituale") else None
+        righe_t = []
+        for cond in usa:
+            if not contati[cond]:
+                continue
+            media = totali[cond] / contati[cond]
+            diff = "" if base is None or cond == "Abituale" else f"{media - totali['Abituale'] / contati['Abituale']:+.2f}"
+            righe_t.append({"Condizione": cond, "Punteggio medio": round(media, 2), "Rispetto all'abituale": diff,
+                            "Voci": contati[cond]})
+        st.dataframe(righe_t, hide_index=True, use_container_width=True)
+        prove = [x for x in righe_t if x["Condizione"] != "Abituale"]
+        if prove:
+            migliore = max(prove, key=lambda x: x["Punteggio medio"])
+            st.caption(f"Condizione con il punteggio più alto: {migliore['Condizione']}. È un'indicazione: la scelta "
+                       "resta clinica, confrontando anche la risposta del bambino e dei genitori.")
+    else:
+        st.caption("Il confronto compare quando inserisci i punteggi.")
+
+    st.markdown("**Prescrizione dei prismi gemellati**")
+    c = st.columns(4)
+    dirz = c[0].selectbox("Direzione della base", ["", "BU", "BD", "BR", "BL"], key=f"{px}_pr_dir")
+    dt = c[1].selectbox("Δ per occhio", DIOTTRIE, key=f"{px}_pr_dt")
+    uso = c[2].selectbox("Uso", ["", "tutto il giorno", "durante la terapia", "solo per lettura e schermo",
+                                 "in movimento e all'aperto"], key=f"{px}_pr_uso")
+    sett = c[3].number_input("Controllo tra (settimane)", 0, 52, 6, key=f"{px}_pr_s")
+    c = st.columns(2)
+    rxod = c[0].text_input("Correzione ottica da associare — OD", key=f"{px}_pr_rxod")
+    rxos = c[1].text_input("Correzione ottica da associare — OS", key=f"{px}_pr_rxos")
+    ott = st.text_input("Indicazioni per l'ottico", key=f"{px}_pr_ott")
+    note = st.text_area("Osservazioni", key=f"{px}_note", height=68)
+    bod, bos = _gemellati_in_basi(dirz)
+    presc = {"gemellati": f"base {dirz} {dt} Δ" if dirz and dt else "", "OD_base": bod, "OD_dt": dt, "OS_base": bos, "OS_dt": dt,
+             "rx_od": rxod, "rx_os": rxos, "uso": uso, "ottico": ott, "montaggio": "incorporato nella lente"}
+    prossimo = data + datetime.timedelta(weeks=int(sett)) if sett else None
+    if st.button("💾 Salva la valutazione Kaplan", type="primary", key=f"{px}_salva"):
+        try:
+            cur = conn.cursor()
+            cur.execute("INSERT INTO prismi_posturali (paziente_id, data, tipo, dati, prescrizione, prossimo, note, creato_da) "
+                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (int(paz_id), data, "prismi gemellati (Kaplan)", json.dumps(dati, ensure_ascii=False),
+                         json.dumps(presc if presc["gemellati"] else {}, ensure_ascii=False), prossimo, note,
+                         str(st.session_state.get("username") or "")))
+            conn.commit()
+            st.success("Salvato. La prescrizione da stampare è nella scheda «Storico».")
+            st.rerun()
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            st.error(f"Non salvato: {e}")
