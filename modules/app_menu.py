@@ -247,6 +247,7 @@ SOTTOSEZIONI = {
         "🧠 Screening adulti — neurologico",
         "🧑 Valutazione adulti — funzionale completa",
         "🧠 Valutazione adulti — neurologica completa",
+        "🔺 Prismi posturali",
         "🧸 Screening 0-4 anni",
         # Due strumenti per lo stesso protocollo, con punti di forza opposti:
         #  · "Screening completo" apre l'app HTML — impaginazione A4 fedele,
