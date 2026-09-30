@@ -1078,6 +1078,10 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🧸 Screening 0-4 anni":
         from .ui_screening_04 import render_screening_04
         render_screening_04(conn, paz_id); return True
+    if sotto in ("🧑 Valutazione adulti — funzionale completa", "🧠 Valutazione adulti — neurologica completa"):
+        from .valutazione_adulti import render_valutazione_adulti
+        render_valutazione_adulti(conn, paz_id, "funzionale" if "funzionale" in sotto else "neurologica")
+        return True
     if sotto in ("🧑 Screening adulti — funzionale", "🧠 Screening adulti — neurologico"):
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         _funz = sotto.endswith("funzionale")
@@ -1392,6 +1396,10 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🧸 Screening 0-4 anni":
             from .ui_screening_04 import render_screening_04
             render_screening_04(conn, paz_id); return
+        if sotto in ("🧑 Valutazione adulti — funzionale completa", "🧠 Valutazione adulti — neurologica completa"):
+            from .valutazione_adulti import render_valutazione_adulti
+            render_valutazione_adulti(conn, paz_id, "funzionale" if "funzionale" in sotto else "neurologica")
+            return
         if sotto in ("🧑 Screening adulti — funzionale", "🧠 Screening adulti — neurologico"):
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             _funz = sotto.endswith("funzionale")
