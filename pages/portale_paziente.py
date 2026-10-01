@@ -121,48 +121,83 @@ if c2.button("Esci"):
     st.session_state.portale_step = "password"
     st.rerun()
 
-programma = db.get_programma_corrente(conn, paziente_id)
-if not programma:
-    st.info("Non ci sono ancora procedure assegnate per casa. Verranno mostrate qui appena lo studio le invia.")
-    st.stop()
+t_es, t_dia = st.tabs(["📋 Esercizi a casa", "🥗 Diario alimentare"])
 
-st.markdown(f"#### 📋 Programma — {programma['protocollo']} · settimana {programma['settimana']}")
-st.caption(f"Assegnato il {programma['data_assegnazione']:%d/%m/%Y}")
+with t_es:
+    programma = db.get_programma_corrente(conn, paziente_id)
+    if not programma:
+        st.info("Non ci sono ancora procedure assegnate per casa. Verranno mostrate qui appena lo studio le invia.")
+    else:
 
-oggi = datetime.date.today()
-data_sel = st.date_input("Giorno", value=oggi, max_value=oggi)
+        st.markdown(f"#### 📋 Programma — {programma['protocollo']} · settimana {programma['settimana']}")
+        st.caption(f"Assegnato il {programma['data_assegnazione']:%d/%m/%Y}")
 
-for proc in programma["procedure"]:
-    nome = proc if isinstance(proc, str) else proc.get("nome", str(proc))
-    with st.container(border=True):
-        st.markdown(f"**{nome}**")
-        video_url = db.get_video_url(conn, nome)
-        if video_url:
-            st.video(video_url)
-        else:
-            st.caption("Video non ancora disponibile per questa procedura.")
-        cc1, cc2 = st.columns([1, 2])
-        fatto = cc1.checkbox("✅ Fatto oggi", key=f"fatto_{nome}_{data_sel}")
-        valutazione = cc2.select_slider("Com'è andata?", options=[1, 2, 3, 4, 5], value=3,
-                                         key=f"val_{nome}_{data_sel}",
-                                         format_func=lambda v: "😣😕😐🙂😄"[v-1])
-        video_file = st.file_uploader("🎥 Registra/carica un video del bambino che lo esegue (facoltativo)",
-                                      type=["mp4", "mov", "webm"], key=f"video_{nome}_{data_sel}")
-        if st.button("💾 Salva", key=f"save_{nome}_{data_sel}"):
-            video_url = None
-            if video_file is not None:
-                try:
-                    from modules.dropbox_upload import upload_audio_bytes
-                    ext = video_file.name.rsplit(".", 1)[-1] if "." in video_file.name else "mp4"
-                    path = f"/portale-famiglia/{paziente_id}/{nome.replace(' ','_')}_{data_sel}.{ext}"
-                    video_url = upload_audio_bytes(video_file.getvalue(), path)
-                except Exception:
+        oggi = datetime.date.today()
+        data_sel = st.date_input("Giorno", value=oggi, max_value=oggi)
+
+        for proc in programma["procedure"]:
+            nome = proc if isinstance(proc, str) else proc.get("nome", str(proc))
+            with st.container(border=True):
+                st.markdown(f"**{nome}**")
+                video_url = db.get_video_url(conn, nome)
+                if video_url:
+                    st.video(video_url)
+                else:
+                    st.caption("Video non ancora disponibile per questa procedura.")
+                cc1, cc2 = st.columns([1, 2])
+                fatto = cc1.checkbox("✅ Fatto oggi", key=f"fatto_{nome}_{data_sel}")
+                valutazione = cc2.select_slider("Com'è andata?", options=[1, 2, 3, 4, 5], value=3,
+                                                 key=f"val_{nome}_{data_sel}",
+                                                 format_func=lambda v: "😣😕😐🙂😄"[v-1])
+                video_file = st.file_uploader("🎥 Registra/carica un video del bambino che lo esegue (facoltativo)",
+                                              type=["mp4", "mov", "webm"], key=f"video_{nome}_{data_sel}")
+                if st.button("💾 Salva", key=f"save_{nome}_{data_sel}"):
                     video_url = None
-            db.salva_feedback(conn, paziente_id, nome, data_sel, fatto, valutazione, video_url)
-            st.success("Salvato ✅" + (" — video caricato" if video_url else ""))
+                    if video_file is not None:
+                        try:
+                            from modules.dropbox_upload import upload_audio_bytes
+                            ext = video_file.name.rsplit(".", 1)[-1] if "." in video_file.name else "mp4"
+                            path = f"/portale-famiglia/{paziente_id}/{nome.replace(' ','_')}_{data_sel}.{ext}"
+                            video_url = upload_audio_bytes(video_file.getvalue(), path)
+                        except Exception:
+                            video_url = None
+                    db.salva_feedback(conn, paziente_id, nome, data_sel, fatto, valutazione, video_url)
+                    st.success("Salvato ✅" + (" — video caricato" if video_url else ""))
 
-st.markdown("---")
-riep = db.get_aderenza_riepilogo(conn, paziente_id, giorni=30)
-if riep["totali"]:
-    st.caption(f"Ultimi 30 giorni: {riep['pct']}% delle procedure fatte "
-               f"({riep['fatti']}/{riep['totali']}) · valutazione media {riep['media_valutazione'] or '—'}/5")
+        st.markdown("---")
+        riep = db.get_aderenza_riepilogo(conn, paziente_id, giorni=30)
+        if riep["totali"]:
+            st.caption(f"Ultimi 30 giorni: {riep['pct']}% delle procedure fatte "
+                       f"({riep['fatti']}/{riep['totali']}) · valutazione media {riep['media_valutazione'] or '—'}/5")
+
+
+with t_dia:
+    # Il diario alimentare scrive nella stessa tabella del gestionale:
+    # quello che la famiglia compila qui compare nella scheda Alimentazione
+    # del paziente, con l'icona della casa.
+    from modules import alimentazione as alim
+    st.caption("Ogni giorno, scrivete cosa ha mangiato e bevuto. Lo studio lo vede subito.")
+    g = alim.modulo_giorno("portale_dia", compatto=True)
+    if g:
+        err = alim.salva_giorno(conn, paziente_id, g, "casa")
+        if err:
+            st.error("Non salvato. Riprova o chiama lo studio allo 0815152334.")
+        else:
+            st.success(f"Giorno {g['data']:%d/%m/%Y} salvato ✅")
+    st.markdown("**Ultimi giorni compilati**")
+    try:
+        ultimi = [r for r in alim._diario(conn, paziente_id)][:7]
+    except Exception:
+        ultimi = []
+    if not ultimi:
+        st.caption("Ancora nessun giorno.")
+    for r in ultimi:
+        pasti = [f"{n}: {r.get(k)}" for n, k in (("Colazione", "colazione"), ("Spuntini", "spuntini"),
+                                                 ("Pranzo", "pranzo"), ("Cena", "cena")) if r.get(k)]
+        with st.expander(f"{r['data']:%d/%m/%Y}" + (" · scritto in studio" if r.get("fonte") == "studio" else "")):
+            for x in pasti:
+                st.markdown("- " + x)
+            altri = [x for x in (r.get("acqua"), r.get("sonno") and f"sonno {r['sonno']}",
+                                 r.get("sintomi"), r.get("nota")) if x]
+            if altri:
+                st.caption(" · ".join(altri))
