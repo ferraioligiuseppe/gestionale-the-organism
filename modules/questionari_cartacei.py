@@ -58,6 +58,52 @@ def _costruisci(flow) -> bytes:
     return buf.getvalue()
 
 
+def _blocco_scala(intest, etichette, voci, nota=""):
+    """Domande con una riga di cerchi per ogni risposta possibile."""
+    from xml.sax.saxutils import escape
+    from reportlab.lib.enums import TA_CENTER
+    out = []
+    if intest:
+        out.append(Paragraph(f"<b>{escape(intest)}</b>", _S_LABEL))
+    if nota:
+        out.append(Paragraph(escape(nota), _S_SOTTO))
+    centro = ParagraphStyle("c", parent=_S_ITEM, alignment=TA_CENTER)
+    w_lab = 12 * mm if len(etichette) > 2 else 14 * mm
+    righe = [[Paragraph("", _S_ITEM)] + [Paragraph(f"<b>{escape(e)}</b>", centro) for e in etichette]]
+    for i, v in enumerate(voci, 1):
+        righe.append([Paragraph(f"{i}. {escape(v)}", _S_ITEM)] + [Paragraph(_CERCHIO, centro) for _e in etichette])
+    t = Table(righe, colWidths=[174 * mm - w_lab * len(etichette)] + [w_lab] * len(etichette), repeatRows=1)
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.HexColor("#1D6B44")),
+        ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#D5DDD8")),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    out += [t, Spacer(1, 8)]
+    return out
+
+
+def _blocco_campi(campi):
+    """Domande a scelta (caselle) o a risposta libera (riga)."""
+    from xml.sax.saxutils import escape
+    out = []
+    for et, opz, multipla in campi:
+        if opz:
+            nota = " <i>(anche più di una)</i>" if multipla else ""
+            scelte = "&nbsp;&nbsp;&nbsp; ".join(f"{_BOX}&nbsp;{escape(o)}" for o in opz)
+            out.append(Paragraph(f"<b>{escape(et)}</b>{nota}<br/>{scelte}", _S_ITEM))
+        else:
+            out.append(Paragraph(f"<b>{escape(et)}</b>: " + "_" * max(12, 70 - len(et)), _S_ITEM))
+        out.append(Spacer(1, 4))
+    return out
+
+
+def _da_dati(codice):
+    from .questionari_cartacei_dati import QUESTIONARI_EXTRA
+    _et, titolo, sotto, blocchi = QUESTIONARI_EXTRA[codice]
+    return _pdf_bytes(titolo, sotto, [(b[0], b[1:] if b[0] == "scala" else b[1]) for b in blocchi])
+
+
 def _pdf_bytes(titolo, sottotitolo, blocchi):
     """blocchi: lista di ('h3', testo) | ('item', [label,...]) | ('radio', [(n,a,b),...])
     | ('label', testo) | ('linea', n_righe) | ('checkbox_inline', testo)."""
@@ -81,6 +127,10 @@ def _pdf_bytes(titolo, sottotitolo, blocchi):
         elif kind == "item":
             for label in payload:
                 flow.append(Paragraph(f"{_BOX}&nbsp;&nbsp;{label}", _S_ITEM))
+        elif kind == "scala":
+            flow += _blocco_scala(*payload)
+        elif kind == "campi":
+            flow += _blocco_campi(payload)
         elif kind == "radio":
             for num, a, b in payload:
                 flow.append(Paragraph(f"<b>{num}.</b> {_CERCHIO} A: {a}", _S_RADIO))
@@ -366,6 +416,15 @@ _GENERATORI = {
     "VISIONE_BAMBINI": ("👁️ Visione Bambini", _pdf_visione_bambini),
     "VISIONE_ADULTI":  ("👁️ Visione Adulti", _pdf_visione_adulti),
 }
+try:
+    from .questionari_cartacei_dati import QUESTIONARI_EXTRA as _QE
+    for _k, _v in _QE.items():
+        _GENERATORI[_k] = (_v[0], (lambda k=_k: _da_dati(k)))
+except Exception:
+    pass
+
+_PER_BAMBINI = {"ANAMNESI_PNEV", "INPPS", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI"}
+_PER_ADULTI = {"MELILLO_ADULTI", "VISIONE_ADULTI", "INPPS_ADULTI"}
 
 
 def pdf_insieme(codici) -> bytes:
@@ -393,8 +452,18 @@ def render_questionari_cartacei(conn=None, paz_id=None):
     st.caption("Stesse domande della versione online, su carta intestata, da stampare o inviare. "
                "Le risposte date su carta vanno poi trascritte nel questionario online per entrare "
                "nella relazione.")
-    codici = st.multiselect("Questionari", list(_GENERATORI.keys()),
+    per = st.radio("Per", ["Tutti", "Bambini (genitori)", "Adulti"], horizontal=True, key="qc_per")
+
+    def _ok(k):
+        if per == "Bambini (genitori)":
+            return k in _PER_BAMBINI or k.startswith("B_")
+        if per == "Adulti":
+            return k in _PER_ADULTI or k.startswith("A_")
+        return True
+    codici = st.multiselect("Questionari", [k for k in _GENERATORI if _ok(k)],
                             format_func=lambda k: _GENERATORI[k][0], key="qc_scelta")
+    st.caption("Le scale con licenza (Epworth, ISI, BDI-II, HADS, MoCA, MMSE) non sono incluse: "
+               "si usano i moduli originali e nel gestionale si riportano solo i punteggi.")
     if not codici:
         st.info("Scegli uno o più questionari: escono in un unico PDF, ognuno da pagina nuova.")
         return
