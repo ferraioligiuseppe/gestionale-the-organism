@@ -164,11 +164,28 @@ def render_eventi_section():
 
     tab_lista, tab_nuovo = st.tabs(["📅 Lista eventi", "🆕 Nuovo evento"])
 
-    with tab_lista:
-        _render_lista_eventi(conn)
-
+    # Il modulo «Nuovo evento» si disegna PRIMA della lista. Streamlit esegue
+    # tutte e due le schede a ogni giro, nell'ordine del codice: la lista, che
+    # per ogni evento legge gli iscritti più volte, restava a lavorare a lungo
+    # e la scheda «Nuovo evento» compariva vuota finché non aveva finito (o
+    # restava vuota del tutto se la lista andava in errore).
     with tab_nuovo:
-        _render_form_crea_evento(conn)
+        try:
+            _render_form_crea_evento(conn)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore nel modulo di creazione: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+
+    with tab_lista:
+        try:
+            _render_lista_eventi(conn)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore nella lista eventi: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
 
 
 # =============================================================================
@@ -352,7 +369,15 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
     st.markdown("**🔗 Link pubblico per iscrizioni**")
     base_pubblico = st.secrets.get("APP_URL_PUBBLICO", APP_URL_PUBBLICO_DEFAULT).rstrip("/")
     link_pubblico = f"{base_pubblico}/?azione=iscrizione_evento&slug={ev['slug']}"
-    st.code(link_pubblico, language=None)
+    # Link corto: una pagina di pnev.it (cartella /e/) che rimanda al modulo
+    # di iscrizione. Si configura con [eventi] LINK_CORTO nei Secrets.
+    base_corto = str((st.secrets.get("eventi", {}) or {}).get("LINK_CORTO", "https://www.pnev.it/e/")).rstrip("/")
+    link_corto = f"{base_corto}/?{ev['slug']}"
+    st.code(link_corto, language=None)
+    if ev.get("wp_url"):
+        st.caption(f"Oppure la pagina dell'evento su pnev.it: {ev['wp_url']}")
+    with st.expander("Link completo (se il link corto non funziona)"):
+        st.code(link_pubblico, language=None)
     st.caption(
         "Copia questo link e incollalo nel post Facebook, in email, su WhatsApp, ecc. "
         + ("Chi lo apre scegli la fascia oraria libera e l'appuntamento viene creato "
@@ -586,16 +611,25 @@ def _render_tab_iscritti(conn, ev: dict):
         mime="text/csv",
         key=f"dl_csv_{ev['id']}",
     )
-    try:
-        c_pdf.download_button(
-            "🖨️ Elenco in PDF da stampare",
-            data=_pdf_iscritti(ev, iscrizioni, filtro_stato),
-            file_name=f"elenco_{ev['slug']}.pdf",
-            mime="application/pdf",
-            key=f"dl_pdf_{ev['id']}",
-        )
-    except Exception as e:
-        c_pdf.caption(f"PDF non disponibile: {e}")
+    # Il PDF si prepara solo quando serve: prima veniva generato per ogni
+    # evento dell'elenco a ogni clic, anche con la scheda chiusa.
+    k_pdf = f"_pdf_pronto_{ev['id']}"
+    if not st.session_state.get(k_pdf):
+        if c_pdf.button("🖨️ Prepara l'elenco in PDF", key=f"prep_pdf_{ev['id']}", use_container_width=True):
+            st.session_state[k_pdf] = True
+            st.rerun()
+    else:
+        try:
+            c_pdf.download_button(
+                "⬇️ Scarica l'elenco in PDF",
+                data=_pdf_iscritti(ev, iscrizioni, filtro_stato),
+                file_name=f"elenco_{ev['slug']}.pdf",
+                mime="application/pdf",
+                key=f"dl_pdf_{ev['id']}",
+                use_container_width=True,
+            )
+        except Exception as e:
+            c_pdf.caption(f"PDF non disponibile: {e}")
 
     st.divider()
 
