@@ -32,16 +32,36 @@ _S_RADIO = ParagraphStyle("radio", parent=_STILI["Normal"], fontSize=9, leading=
 _S_LABEL = ParagraphStyle("label", parent=_STILI["Normal"], fontSize=10, spaceAfter=6)
 
 
+# Caselle disegnate con ZapfDingbats: Helvetica non ha i caratteri ☐ e ○ e
+# nel PDF uscivano come quadratini neri.
+_BOX = '<font name="ZapfDingbats" size="10">o</font>'
+_CERCHIO = '<font name="ZapfDingbats" size="9">m</font>'
+_RACCOLTA = None   # se è una lista, i generatori vi aggiungono il contenuto invece di produrre il PDF
+
+
+def _pagina(c, doc):
+    """Carta intestata dello studio su ogni pagina (la stessa di relazioni e prescrizioni)."""
+    try:
+        from .pdf_templates import draw_intestazione, draw_footer
+        draw_intestazione(c)
+        draw_footer(c)
+    except Exception:
+        c.setFont("Helvetica", 8)
+        for i, r in enumerate(_INTESTAZIONE.strip().split("\n")):
+            c.drawString(16 * mm, A4[1] - 12 * mm - i * 10, r)
+
+
+def _costruisci(flow) -> bytes:
+    buf = BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, topMargin=54 * mm, bottomMargin=47 * mm,
+                      leftMargin=18 * mm, rightMargin=18 * mm).build(flow, onFirstPage=_pagina, onLaterPages=_pagina)
+    return buf.getvalue()
+
+
 def _pdf_bytes(titolo, sottotitolo, blocchi):
     """blocchi: lista di ('h3', testo) | ('item', [label,...]) | ('radio', [(n,a,b),...])
     | ('label', testo) | ('linea', n_righe) | ('checkbox_inline', testo)."""
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4,
-                            topMargin=16*mm, bottomMargin=14*mm,
-                            leftMargin=16*mm, rightMargin=16*mm)
     flow = []
-    flow.append(Paragraph(_INTESTAZIONE.strip().replace("\n", "<br/>"), _S_TESTATA))
-    flow.append(Spacer(1, 6))
     flow.append(Paragraph(titolo, _S_TITOLO))
     if sottotitolo:
         flow.append(Paragraph(sottotitolo, _S_SOTTO))
@@ -60,13 +80,15 @@ def _pdf_bytes(titolo, sottotitolo, blocchi):
                 flow.append(Spacer(1, 4))
         elif kind == "item":
             for label in payload:
-                flow.append(Paragraph(f"☐&nbsp;&nbsp;{label}", _S_ITEM))
+                flow.append(Paragraph(f"{_BOX}&nbsp;&nbsp;{label}", _S_ITEM))
         elif kind == "radio":
             for num, a, b in payload:
-                flow.append(Paragraph(f"<b>{num}.</b> ○ A: {a}", _S_RADIO))
-                flow.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;○ B: {b}", _S_RADIO))
-    doc.build(flow)
-    return buf.getvalue()
+                flow.append(Paragraph(f"<b>{num}.</b> {_CERCHIO} A: {a}", _S_RADIO))
+                flow.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;{_CERCHIO} B: {b}", _S_RADIO))
+    if _RACCOLTA is not None:
+        _RACCOLTA.append(flow)
+        return b""
+    return _costruisci(flow)
 
 
 def _label_of(it):
@@ -346,23 +368,93 @@ _GENERATORI = {
 }
 
 
-def render_questionari_cartacei():
-    """Pannello: scegli un questionario, scarica la versione cartacea in PDF
-    (stesse domande della versione online, in bianco)."""
-    st.subheader("🖨️ Questionari — Versione cartacea")
-    st.caption(
-        "Stesse domande della versione online, da stampare e far compilare a mano "
-        "quando il genitore/paziente non può farlo da remoto. Le risposte su carta "
-        "vanno poi trascritte a mano nel questionario online per entrare nella relazione AI."
-    )
-    q_code = st.selectbox("Scegli il questionario", list(_GENERATORI.keys()),
-                          format_func=lambda k: _GENERATORI[k][0], key="qc_scelta")
-    label, fn = _GENERATORI[q_code]
-    pdf_bytes = fn()
-    st.download_button(
-        f"⬇️ Scarica {label} (PDF)",
-        data=pdf_bytes,
-        file_name=f"{q_code.lower()}_cartaceo.pdf",
-        mime="application/pdf",
-        key=f"qc_dl_{q_code}",
-    )
+def pdf_insieme(codici) -> bytes:
+    """Più questionari in un solo PDF, uno dopo l'altro, ognuno da pagina nuova."""
+    global _RACCOLTA
+    from reportlab.platypus import PageBreak
+    _RACCOLTA = []
+    try:
+        for k in codici:
+            _GENERATORI[k][1]()
+        flow = []
+        for i, f in enumerate(_RACCOLTA):
+            if i:
+                flow.append(PageBreak())
+            flow += f
+    finally:
+        _RACCOLTA = None
+    return _costruisci(flow)
+
+
+def render_questionari_cartacei(conn=None, paz_id=None):
+    """Scegli uno o più questionari e scarica la versione cartacea in PDF,
+    su carta intestata, oppure inviala per email al paziente."""
+    st.subheader("🖨️ Questionari cartacei")
+    st.caption("Stesse domande della versione online, su carta intestata, da stampare o inviare. "
+               "Le risposte date su carta vanno poi trascritte nel questionario online per entrare "
+               "nella relazione.")
+    codici = st.multiselect("Questionari", list(_GENERATORI.keys()),
+                            format_func=lambda k: _GENERATORI[k][0], key="qc_scelta")
+    if not codici:
+        st.info("Scegli uno o più questionari: escono in un unico PDF, ognuno da pagina nuova.")
+        return
+    try:
+        pdf = _GENERATORI[codici[0]][1]() if len(codici) == 1 else pdf_insieme(codici)
+    except Exception as e:
+        st.error(f"PDF non creato: {e}")
+        return
+    nome_file = (codici[0].lower() if len(codici) == 1 else "questionari") + "_cartaceo.pdf"
+    st.download_button("⬇️ Scarica il PDF da stampare", data=pdf, file_name=nome_file,
+                       mime="application/pdf", key="qc_dl", type="primary")
+
+    st.markdown("**✉️ Invia per email**")
+    email_def = ""
+    if conn is not None and paz_id:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT email FROM pazienti WHERE id=%s", (int(paz_id),))
+            r = cur.fetchone()
+            email_def = (r.get("email") if isinstance(r, dict) else (r[0] if r else "")) or ""
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+    dest = c1.text_input("Indirizzo", email_def, key="qc_mail")
+    if c2.button("Invia", key="qc_invia", use_container_width=True):
+        if not dest or "@" not in dest:
+            st.error("Indirizzo non valido.")
+        else:
+            titoli = ", ".join(_GENERATORI[k][0].split(" ", 1)[-1] for k in codici)
+            ok, motivo = _invia_con_allegato(
+                dest.strip(), "Questionari da compilare — Studio The Organism",
+                f"Gentile famiglia,\n\nin allegato trovate i questionari da compilare ({titoli}).\n"
+                "Potete stamparli, compilarli a penna e riportarli alla prossima seduta.\n\n"
+                "Per qualsiasi dubbio: 081 515 2334 · apstheorganism@gmail.com\n\nStudio The Organism — www.pnev.it",
+                pdf, nome_file)
+            st.success(f"Inviato a {dest}.") if ok else st.error(f"Non inviato: {motivo}")
+
+
+def _invia_con_allegato(to_email, oggetto, corpo, allegato: bytes, nome_file: str):
+    """Email con il PDF allegato, con la stessa configurazione (gmail o smtp) delle altre email."""
+    try:
+        from email.mime.application import MIMEApplication
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from .email_otp import _config_invio, _spedisci
+        conf, motivo = _config_invio()
+        if not conf:
+            return False, motivo
+        host, porta, ssl_diretto, mittente, password = conf
+        msg = MIMEMultipart()
+        msg["Subject"], msg["From"], msg["To"] = oggetto, mittente, to_email
+        msg.attach(MIMEText(corpo, "plain", "utf-8"))
+        a = MIMEApplication(allegato, _subtype="pdf")
+        a.add_header("Content-Disposition", "attachment", filename=nome_file)
+        msg.attach(a)
+        _spedisci(mittente, password, host, porta, ssl_diretto, to_email, msg)
+        return True, ""
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"

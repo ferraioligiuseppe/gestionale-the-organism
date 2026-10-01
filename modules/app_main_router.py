@@ -472,7 +472,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
-        "📋 Questionari remoti", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
+        "📋 Questionari remoti", "🖨️ Questionari cartacei", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
         "🔉 Diagnostica uditiva completa",
         "🎧 MAPS", "🗂 Programmi MAPS", "🎧 MAPS-CLEAR in studio",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
@@ -698,6 +698,10 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         return True
 
     # ── INVII AL PAZIENTE ─────────────────────────────────────────────
+    if sotto == "🖨️ Questionari cartacei":
+        from .questionari_cartacei import render_questionari_cartacei
+        render_questionari_cartacei(conn, paz_id)
+        return True
     if sotto == "📋 Questionari remoti":
         try:
             from .ui_questionari import render_questionari_section
@@ -1515,6 +1519,11 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA QUESTIONARI ──────────────────────────────────────────────
     elif area == AREA_QUESTIONARI:
+        if sotto == "🖨️ Questionari cartacei":
+            from .paziente_attivo import header_paziente_attivo
+            from .questionari_cartacei import render_questionari_cartacei
+            render_questionari_cartacei(conn, header_paziente_attivo(conn))
+            return
         if sotto == "📋 Questionari remoti":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
