@@ -124,6 +124,16 @@ def _assicura_tabelle(conn) -> None:
         cur.execute("CREATE TABLE IF NOT EXISTS alim_diario (id SERIAL PRIMARY KEY, paziente_id INTEGER NOT NULL, "
                     "data DATE NOT NULL, budwig BOOLEAN, ph NUMERIC(3,1), intestino BOOLEAN, sonno TEXT, nota TEXT, "
                     "UNIQUE (paziente_id, data))")
+        # Diario alimentare vero e proprio: pasti, acqua, sintomi, e chi l'ha
+        # scritto (studio o famiglia dal portale). Le colonne si aggiungono solo
+        # se mancano e senza aspettare oltre 3 secondi un eventuale blocco.
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='alim_diario'")
+        ci = {(r[0] if not isinstance(r, dict) else r["column_name"]) for r in (cur.fetchall() or [])}
+        nuove = [c for c in ("colazione", "spuntini", "pranzo", "cena", "acqua", "sintomi", "fonte") if c not in ci]
+        if nuove:
+            cur.execute("SET LOCAL lock_timeout = '3s'")
+            for c in nuove:
+                cur.execute(f"ALTER TABLE alim_diario ADD COLUMN IF NOT EXISTS {c} TEXT")
         cur.execute("CREATE TABLE IF NOT EXISTS alim_misure (paziente_id INTEGER NOT NULL, misura TEXT NOT NULL, "
                     "settimana INTEGER NOT NULL, valore TEXT, PRIMARY KEY (paziente_id, misura, settimana))")
         conn.commit()
@@ -633,26 +643,121 @@ def _diario(conn, paz_id):
     return _q(conn, "SELECT * FROM alim_diario WHERE paziente_id=%s ORDER BY data DESC", (int(paz_id),))
 
 
+SONNO = ["", "buono", "agitato", "risvegli"]
+ACQUA = ["", "meno di 4 bicchieri", "4–6 bicchieri", "6–8 bicchieri", "più di 8 bicchieri"]
+
+
+def salva_giorno(conn, paz_id, g: dict, fonte: str) -> str:
+    """Un giorno del diario. Usato dal gestionale e dal Portale famiglia."""
+    _assicura_tabelle(conn)
+    vuoto = lambda x: (x or "").strip() or None
+    return _esegui(conn,
+        "INSERT INTO alim_diario (paziente_id, data, budwig, ph, intestino, sonno, nota, "
+        "colazione, spuntini, pranzo, cena, acqua, sintomi, fonte) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (paziente_id, data) DO UPDATE SET "
+        "budwig=EXCLUDED.budwig, ph=EXCLUDED.ph, intestino=EXCLUDED.intestino, sonno=EXCLUDED.sonno, "
+        "nota=EXCLUDED.nota, colazione=EXCLUDED.colazione, spuntini=EXCLUDED.spuntini, pranzo=EXCLUDED.pranzo, "
+        "cena=EXCLUDED.cena, acqua=EXCLUDED.acqua, sintomi=EXCLUDED.sintomi, fonte=EXCLUDED.fonte",
+        (int(paz_id), g["data"], bool(g.get("budwig")), g.get("ph") or None, bool(g.get("intestino")),
+         vuoto(g.get("sonno")), vuoto(g.get("nota")), vuoto(g.get("colazione")), vuoto(g.get("spuntini")),
+         vuoto(g.get("pranzo")), vuoto(g.get("cena")), vuoto(g.get("acqua")), vuoto(g.get("sintomi")), fonte))
+
+
+def modulo_giorno(px, data_default=None, compatto=False) -> dict | None:
+    """Il modulo di un giorno. Restituisce i dati quando si preme Salva."""
+    with st.form(f"{px}_dia", clear_on_submit=True):
+        data = st.date_input("Giorno", data_default or datetime.date.today(), format="DD/MM/YYYY",
+                             max_value=datetime.date.today(), key=f"{px}_dd")
+        st.caption("Scrivi cosa e quanto, con parole tue. Lascia vuoto quello che non c'è stato.")
+        g = {"data": data}
+        g["colazione"] = st.text_area("☀️ Colazione", key=f"{px}_col", height=68)
+        g["spuntini"] = st.text_area("🍎 Spuntini (mattina e pomeriggio)", key=f"{px}_spu", height=68)
+        g["pranzo"] = st.text_area("🍽️ Pranzo", key=f"{px}_pra", height=68)
+        g["cena"] = st.text_area("🌙 Cena", key=f"{px}_cen", height=68)
+        c = st.columns(2)
+        g["acqua"] = c[0].selectbox("💧 Acqua", ACQUA, key=f"{px}_acq")
+        g["sonno"] = c[1].selectbox("😴 Sonno", SONNO, key=f"{px}_ds")
+        c = st.columns(3)
+        g["budwig"] = c[0].checkbox("Crema Budwig", key=f"{px}_db")
+        g["intestino"] = c[1].checkbox("Evacuazione", key=f"{px}_di")
+        g["ph"] = c[2].number_input("pH urine (0 = non misurato)", 0.0, 9.0, 0.0, 0.1, key=f"{px}_dp")
+        g["sintomi"] = st.text_input("Sintomi o reazioni (mal di pancia, gonfiore, irritabilità…)", key=f"{px}_sin")
+        g["nota"] = st.text_input("Note", key=f"{px}_dn", placeholder="es. festa, mangiato fuori")
+        if st.form_submit_button("💾 Salva il giorno", type="primary", use_container_width=compatto):
+            return g
+    return None
+
+
+def pdf_scheda_settimana(conn, paz_id, lunedi) -> bytes:
+    """Scheda cartacea di 7 giorni su carta intestata, da compilare a mano."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.lib.styles import ParagraphStyle
+    from .pdf_templates import draw_intestazione, draw_footer
+    verde = colors.HexColor("#1D6B44")
+    nome = ""
+    r = _q(conn, "SELECT cognome, nome FROM pazienti WHERE id=%s", (int(paz_id),))
+    if r:
+        nome = f"{r[0].get('cognome') or ''} {r[0].get('nome') or ''}".strip()
+    tit = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=13, leading=16)
+    sm = ParagraphStyle("s", fontName="Helvetica", fontSize=8.5, leading=11, textColor=colors.HexColor("#3F4A44"))
+    gg = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+    giorni = [lunedi + datetime.timedelta(days=i) for i in range(7)]
+    righe = [["", *[f"{gg[i]}\n{d:%d/%m}" for i, d in enumerate(giorni)]]]
+    voci = [("Colazione", 2.0), ("Spuntino\nmattina", 1.3), ("Pranzo", 2.2), ("Spuntino\npomeriggio", 1.3),
+            ("Cena", 2.2), ("Acqua\n(bicchieri)", 0.8), ("Crema\nBudwig (sì/no)", 0.8), ("pH urine", 0.8),
+            ("Evacuazione\n(sì/no)", 0.8), ("Sonno", 0.8), ("Sintomi /\nnote", 1.6)]
+    for v, _h in voci:
+        righe.append([v] + [""] * 7)
+    t = Table(righe, colWidths=[2.6 * cm] + [2.06 * cm] * 7,
+              rowHeights=[0.9 * cm] + [h * cm for _v, h in voci])
+    t.setStyle(TableStyle([
+        ("FONT", (0, 0), (-1, -1), "Helvetica", 8),
+        ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8.5), ("FONT", (0, 1), (0, -1), "Helvetica-Bold", 8),
+        ("BACKGROUND", (0, 0), (-1, 0), verde), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#EEF4F0")),
+        ("ALIGN", (1, 0), (-1, 0), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#9DB0A5")),
+    ]))
+    storia = [Paragraph("Diario alimentare — settimana dal " + f"{lunedi:%d/%m/%Y}", tit),
+              Paragraph(nome or "Nome ______________________________", sm), Spacer(1, 6), t, Spacer(1, 6),
+              Paragraph("Scrivete cosa e quanto ha mangiato, anche i fuori pasto e le bevande. Riportate la scheda "
+                        "alla prossima seduta oppure compilate il diario dal Portale famiglia.", sm)]
+
+    def _pagina(c, doc):
+        draw_intestazione(c)
+        draw_footer(c)
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.6 * cm, rightMargin=1.6 * cm, topMargin=5.4 * cm,
+                      bottomMargin=4.7 * cm, title="Diario alimentare").build(storia, onFirstPage=_pagina, onLaterPages=_pagina)
+    return buf.getvalue()
+
+
 def _tab_diario(conn, paz_id, px):
     import pandas as pd
     avvio, sett = settimana_corrente(conn, paz_id)
-    with st.form(f"{px}_dia", clear_on_submit=True):
-        c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
-        data = c1.date_input("Giorno", datetime.date.today(), format="DD/MM/YYYY", key=f"{px}_dd")
-        bud = c2.checkbox("Budwig", key=f"{px}_db")
-        intest = c3.checkbox("Evacuazione", key=f"{px}_di")
-        sonno = c4.selectbox("Sonno", [_NO, "buono", "agitato", "risvegli"], key=f"{px}_ds")
-        c5, c6 = st.columns([1, 4])
-        ph = c5.number_input("pH (0 = non misurato)", 0.0, 9.0, 0.0, 0.1, key=f"{px}_dp")
-        nota = c6.text_input("Nota", key=f"{px}_dn", placeholder="es. festa, dolci, niente Budwig")
-        if st.form_submit_button("Aggiungi al diario", type="primary"):
-            err = _esegui(conn,
-                "INSERT INTO alim_diario (paziente_id, data, budwig, ph, intestino, sonno, nota) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (paziente_id, data) DO UPDATE SET "
-                "budwig=EXCLUDED.budwig, ph=EXCLUDED.ph, intestino=EXCLUDED.intestino, "
-                "sonno=EXCLUDED.sonno, nota=EXCLUDED.nota",
-                (int(paz_id), data, bud, ph or None, intest, None if sonno == _NO else sonno, nota.strip()))
-            st.error(err) if err else st.success(f"Giorno {_fmt_d(data)} registrato.")
+    c1, c2 = st.columns([3, 2])
+    with c2.container(border=True):
+        st.markdown("**📄 Scheda cartacea**")
+        oggi = datetime.date.today()
+        lun = st.date_input("Settimana che inizia lunedì", oggi - datetime.timedelta(days=oggi.weekday()),
+                            format="DD/MM/YYYY", key=f"{px}_lun")
+        lun = lun - datetime.timedelta(days=lun.weekday())
+        try:
+            st.download_button("Scarica la scheda di 7 giorni (PDF)", pdf_scheda_settimana(conn, paz_id, lun),
+                               file_name=f"diario_alimentare_{lun:%Y%m%d}.pdf", mime="application/pdf",
+                               key=f"{px}_pdf", use_container_width=True)
+        except Exception as e:
+            st.caption(f"PDF non disponibile: {e}")
+        st.caption("🏠 La famiglia può compilarlo anche da casa, dal Portale famiglia (scheda «Diario alimentare»). "
+                   "Quello che scrive compare qui sotto con l'icona della casa.")
+    with c1:
+        g = modulo_giorno(px)
+        if g:
+            err = salva_giorno(conn, paz_id, g, "studio")
+            st.error(err) if err else st.success(f"Giorno {_fmt_d(g['data'])} registrato.")
 
     righe = _diario(conn, paz_id)
     if not righe:
@@ -675,10 +780,14 @@ def _tab_diario(conn, paz_id, px):
             st.bar_chart(pd.DataFrame({"pH": {f"sett. {k:02d}": round(sum(v) / len(v), 2)
                                               for k, v in sorted(per_sett.items()) if k > 0}}))
     st.dataframe(pd.DataFrame([{
-        "Giorno": _fmt_d(r["data"]), "Budwig": "✅" if r.get("budwig") else "—",
+        "Da": "🏠" if r.get("fonte") == "casa" else "🏥",
+        "Giorno": _fmt_d(r["data"]), "Colazione": r.get("colazione") or "", "Spuntini": r.get("spuntini") or "",
+        "Pranzo": r.get("pranzo") or "", "Cena": r.get("cena") or "", "Acqua": r.get("acqua") or "",
+        "Budwig": "✅" if r.get("budwig") else "—",
         "pH": str(r["ph"]).replace(".", ",") if r.get("ph") else "", "Evacuazione": "✅" if r.get("intestino") else "—",
-        "Sonno": r.get("sonno") or "", "Nota": r.get("nota") or ""} for r in righe[:28]]),
+        "Sonno": r.get("sonno") or "", "Sintomi": r.get("sintomi") or "", "Nota": r.get("nota") or ""} for r in righe[:28]]),
         hide_index=True, use_container_width=True)
+    st.caption("🏠 scritto dalla famiglia dal portale · 🏥 scritto in studio")
 
 
 # ── 5 · Esiti ─────────────────────────────────────────────────────────
