@@ -376,8 +376,10 @@ def _render_tab_info(conn, ev: dict, confermati: int, in_attesa: int, annullati:
     st.code(link_corto, language=None)
     if ev.get("wp_url"):
         st.caption(f"Oppure la pagina dell'evento su pnev.it: {ev['wp_url']}")
-    with st.expander("Link completo (se il link corto non funziona)"):
-        st.code(link_pubblico, language=None)
+    # Niente expander qui: questa parte sta già dentro la scheda dell'evento,
+    # che è un expander, e Streamlit non ne permette uno dentro l'altro.
+    st.caption("Link completo, se quello corto non funziona:")
+    st.code(link_pubblico, language=None)
     st.caption(
         "Copia questo link e incollalo nel post Facebook, in email, su WhatsApp, ecc. "
         + ("Chi lo apre scegli la fascia oraria libera e l'appuntamento viene creato "
