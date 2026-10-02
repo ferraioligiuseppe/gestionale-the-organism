@@ -328,6 +328,30 @@ def invia_conferma_iscritto(
     )
 
 
+def invia_testo(to_email: str, oggetto: str, corpo: str, copia_studio: bool = True) -> tuple[bool, str]:
+    """Email di solo testo, con copia nascosta allo studio. Restituisce
+    (riuscito, motivo) invece di sollevare: il motivo va nel registro."""
+    if not to_email or "@" not in to_email:
+        return False, f"indirizzo non valido: {to_email!r}"
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = oggetto
+        msg["From"] = _from_address()
+        msg["To"] = to_email.strip()
+        clinic = _clinic_email()
+        if copia_studio and clinic and clinic.lower() != to_email.strip().lower():
+            msg["Bcc"] = clinic
+        msg.set_content(corpo)
+        _send(msg)
+        return True, f"inviata a {to_email}" + (f" (copia a {clinic})" if copia_studio and clinic else "")
+    except smtplib.SMTPRecipientsRefused as ex:
+        return False, f"destinatario rifiutato dal server: {ex}"
+    except smtplib.SMTPAuthenticationError as ex:
+        return False, f"login email rifiutato: {ex}"
+    except Exception as ex:
+        return False, f"{type(ex).__name__}: {ex}"
+
+
 def invia_notifica_studio(evento: dict, iscrizione: dict) -> None:
     """
     Invia notifica di nuova iscrizione allo studio (CLINIC_EMAIL).

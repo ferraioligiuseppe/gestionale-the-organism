@@ -583,6 +583,20 @@ def _render_tab_iscritti(conn, ev: dict):
         st.info("Nessuna iscrizione trovata.")
         return
 
+    # Esito dell'ultima email per iscritto, dal registro
+    from .db_eventi import log_email
+    _log = log_email(conn, ev["id"])
+    _ultima = {}
+    for r in _log:
+        _ultima.setdefault(r.get("iscrizione_id"), r)
+
+    def _stato_mail(i):
+        r = _ultima.get(i["id"])
+        if r:
+            quando = r["ts"].strftime("%d/%m %H:%M") if hasattr(r.get("ts"), "strftime") else str(r.get("ts") or "")[:16]
+            return ("✅ " if r.get("ok") else "❌ ") + quando
+        return "✅" if i.get("email_conferma_inviata") else "—"
+
     # Tabella riassuntiva
     table_data = [
         {
@@ -593,7 +607,7 @@ def _render_tab_iscritti(conn, ev: dict):
             "Orario": i["slot_orario"].strftime("%d/%m %H:%M") if i.get("slot_orario") else "",
             "Stato": i["stato"],
             "Iscritto il": i["created_at"].strftime("%d/%m/%Y %H:%M") if i.get("created_at") else "",
-            "Email conferma": "✅" if i.get("email_conferma_inviata") else "—",
+            "Ultima email": _stato_mail(i),
             "Paziente": i.get("paziente_id") or "—",
         }
         for i in iscrizioni
@@ -686,6 +700,8 @@ def _render_tab_iscritti(conn, ev: dict):
                     except Exception: pass
                     st.error(f"Errore: {e}")
 
+        _email_singola(conn, ev, sel)
+
         col1, col2, col3 = st.columns(3)
         with col1:
             if sel["stato"] != "annullata":
@@ -731,6 +747,24 @@ def _render_tab_iscritti(conn, ev: dict):
                         st.rerun()
                     except Exception as e:
                         st.error(f"Errore: {e}")
+
+    st.markdown("---")
+    if st.toggle(f"📬 Registro email di questo evento ({len(_log)})", key=f"tg_log_{ev['id']}"):
+        if not _log:
+            st.caption("Nessun invio registrato. Il registro parte da questo aggiornamento: "
+                       "le email partite prima non compaiono.")
+        else:
+            nomi = {i["id"]: f"{i['cognome']} {i['nome']}" for i in lista_iscrizioni(conn, ev["id"])}
+            st.dataframe([{
+                "Quando": r["ts"].strftime("%d/%m/%Y %H:%M") if hasattr(r.get("ts"), "strftime") else str(r.get("ts") or "")[:16],
+                "Esito": "✅ inviata" if r.get("ok") else "❌ non partita",
+                "Iscritto": nomi.get(r.get("iscrizione_id"), "—"),
+                "A": r.get("destinatario") or "",
+                "Tipo": r.get("tipo") or "",
+                "Da": r.get("da") or "",
+                "Oggetto": r.get("oggetto") or "",
+                "Dettaglio": r.get("dettaglio") or "",
+            } for r in _log], use_container_width=True, hide_index=True)
 
     st.markdown("---")
     st.markdown("**🔧 Sanatoria iscrizioni già presenti**")
@@ -784,7 +818,11 @@ def _render_tab_iscritti(conn, ev: dict):
                 if ev.get("sede"):
                     corpo += f"Sede: {ev['sede']}\n"
                 corpo += "\nPer qualsiasi domanda scrivi a apstheorganism@gmail.com.\n\nStudio The Organism"
-                if _invia(i["email"], ogg, corpo):
+                from .email_eventi import invia_testo
+                from .db_eventi import registra_email
+                ok_s, det_s = invia_testo(i["email"], ogg, corpo)
+                registra_email(conn, ev["id"], i["id"], "conferma", i["email"], ogg, ok_s, det_s, "reinvio dallo studio")
+                if ok_s:
                     try: mark_email_conferma_inviata(conn, i["id"])
                     except Exception: pass
                     inviate += 1
@@ -794,6 +832,65 @@ def _render_tab_iscritti(conn, ev: dict):
                 falliti += 1
         st.success(f"Email inviate: {inviate} · saltate (già inviate/annullate): {saltate} · fallite: {falliti}")
         st.rerun()
+
+def _testo_conferma(ev: dict, i: dict) -> tuple[str, str]:
+    slot_txt = (f"Appuntamento: {i['slot_orario'].strftime('%d/%m/%Y alle %H:%M')}\n" if i.get("slot_orario") else
+                (f"Data: {ev['data_ora'].strftime('%d/%m/%Y alle %H:%M')}\n" if ev.get("data_ora") else ""))
+    if i.get("stato") == "lista_attesa":
+        corpo = (f"Ciao {i.get('nome','')},\n\nla tua iscrizione a \"{ev['titolo']}\" è stata "
+                 f"registrata in LISTA D'ATTESA.\nTi contatteremo se si libera un posto.\n")
+        ogg = f"Sei in lista d'attesa — {ev['titolo']}"
+    else:
+        corpo = f"Ciao {i.get('nome','')},\n\nla tua iscrizione a \"{ev['titolo']}\" è confermata.\n" + slot_txt
+        ogg = f"Iscrizione confermata — {ev['titolo']}"
+    if ev.get("sede"):
+        corpo += f"Sede: {ev['sede']}\n"
+    corpo += "\nPer qualsiasi domanda scrivi a apstheorganism@gmail.com.\n\nStudio The Organism"
+    return ogg, corpo
+
+
+def _email_singola(conn, ev: dict, sel: dict) -> None:
+    """Email a un solo iscritto: reinvio della conferma o messaggio libero,
+    con copia allo studio e riga nel registro."""
+    from .email_eventi import invia_testo
+    from .db_eventi import registra_email, log_email, mark_email_conferma_inviata
+    st.markdown(f"**✉️ Email a {sel.get('nome','')} {sel.get('cognome','')}** · {sel.get('email') or 'nessun indirizzo'}")
+    if not sel.get("email"):
+        st.caption("Questa iscrizione non ha un indirizzo email: aggiungilo con «Modifica dati».")
+        return
+    chi = str(st.session_state.get("username") or st.session_state.get("user") or "studio")
+    c1, c2 = st.columns([1, 2])
+    if c1.button("🔁 Rimanda la conferma", key=f"rim_{sel['id']}", use_container_width=True):
+        ogg, corpo = _testo_conferma(ev, sel)
+        ok, det = invia_testo(sel["email"], ogg, corpo)
+        registra_email(conn, ev["id"], sel["id"], "conferma", sel["email"], ogg, ok, det, chi)
+        if ok:
+            try: mark_email_conferma_inviata(conn, sel["id"])
+            except Exception: pass
+            st.success(f"Conferma inviata. {det}")
+        else:
+            st.error(f"Non partita: {det}")
+    if c2.toggle("✍️ Scrivi un messaggio", key=f"tg_msg_{sel['id']}"):
+        with st.form(f"form_msg_{sel['id']}", clear_on_submit=True):
+            ogg = st.text_input("Oggetto", value=f"{ev['titolo']}", key=f"msg_ogg_{sel['id']}")
+            corpo = st.text_area("Testo", height=140, key=f"msg_txt_{sel['id']}",
+                                 value=f"Ciao {sel.get('nome','')},\n\n\n\nStudio The Organism\napstheorganism@gmail.com · 0815152334")
+            invia = st.form_submit_button("Invia", type="primary")
+        if invia:
+            ok, det = invia_testo(sel["email"], ogg.strip(), corpo.strip())
+            registra_email(conn, ev["id"], sel["id"], "messaggio", sel["email"], ogg.strip(), ok, det, chi)
+            st.success(f"Messaggio inviato. {det}") if ok else st.error(f"Non partito: {det}")
+    storia = log_email(conn, ev["id"], sel["id"])
+    if storia:
+        st.caption("Email a questo iscritto: " + " · ".join(
+            ("✅ " if r.get("ok") else "❌ ") + (r.get("tipo") or "") + " "
+            + (r["ts"].strftime("%d/%m %H:%M") if hasattr(r.get("ts"), "strftime") else str(r.get("ts") or "")[:16])
+            for r in storia[:6]))
+        ultima_ko = next((r for r in storia if not r.get("ok")), None)
+        if ultima_ko and storia[0] is ultima_ko:
+            st.caption(f"Ultimo errore: {ultima_ko.get('dettaglio')}")
+    st.markdown("")
+
 
 def _crea_paziente_da_iscrizione(conn, sel: dict) -> int:
     """Crea una nuova anagrafica dai dati dell'iscrizione a un evento.

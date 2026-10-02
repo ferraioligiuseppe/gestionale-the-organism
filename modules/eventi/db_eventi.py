@@ -792,6 +792,88 @@ def mark_email_conferma_inviata(conn: Any, iscrizione_id: int) -> bool:
             pass
 
 
+# =============================================================================
+# REGISTRO EMAIL — ogni invio, riuscito o no, con il motivo
+# =============================================================================
+
+def _assicura_log(conn: Any) -> None:
+    try:
+        import streamlit as st
+        if st.session_state.get("_ev_email_log_ok"):
+            return
+    except Exception:
+        st = None
+    cur = conn.cursor()
+    try:
+        if _is_postgres(conn):
+            cur.execute("""CREATE TABLE IF NOT EXISTS ev_email_log (
+                id SERIAL PRIMARY KEY, evento_id INTEGER, iscrizione_id INTEGER,
+                tipo TEXT, destinatario TEXT, oggetto TEXT, ok BOOLEAN,
+                dettaglio TEXT, da TEXT, ts TIMESTAMPTZ DEFAULT NOW())""")
+            cur.execute("CREATE INDEX IF NOT EXISTS ev_email_log_ev ON ev_email_log (evento_id, iscrizione_id)")
+        else:
+            cur.execute("""CREATE TABLE IF NOT EXISTS ev_email_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, evento_id INTEGER, iscrizione_id INTEGER,
+                tipo TEXT, destinatario TEXT, oggetto TEXT, ok INTEGER,
+                dettaglio TEXT, da TEXT, ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+        conn.commit()
+        if st is not None:
+            st.session_state["_ev_email_log_ok"] = True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+
+
+def registra_email(conn: Any, evento_id, iscrizione_id, tipo: str, destinatario: str,
+                   oggetto: str, ok: bool, dettaglio: str = "", da: str = "") -> None:
+    """Scrive una riga nel registro. Non solleva mai: un problema del registro
+    non deve bloccare l'iscrizione o l'invio."""
+    try:
+        _assicura_log(conn)
+        ph = _placeholder(conn)
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO ev_email_log (evento_id, iscrizione_id, tipo, destinatario, oggetto, ok, dettaglio, da) "
+            f"VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})",
+            (evento_id, iscrizione_id, tipo, destinatario, oggetto,
+             bool(ok) if _is_postgres(conn) else int(bool(ok)), (dettaglio or "")[:500], da))
+        conn.commit()
+        cur.close()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def log_email(conn: Any, evento_id: int, iscrizione_id: Optional[int] = None) -> list[dict]:
+    try:
+        _assicura_log(conn)
+        ph = _placeholder(conn)
+        cur = conn.cursor()
+        if iscrizione_id:
+            cur.execute(f"SELECT * FROM ev_email_log WHERE evento_id={ph} AND iscrizione_id={ph} ORDER BY ts DESC",
+                        (evento_id, iscrizione_id))
+        else:
+            cur.execute(f"SELECT * FROM ev_email_log WHERE evento_id={ph} ORDER BY ts DESC", (evento_id,))
+        righe = _rows_to_dicts(cur, cur.fetchall())
+        cur.close()
+        return righe
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return []
+
+
 def mark_email_promemoria_inviata(conn: Any, iscrizione_id: int) -> bool:
     """Marca l'email di promemoria come inviata, registra timestamp."""
     ph = _placeholder(conn)
