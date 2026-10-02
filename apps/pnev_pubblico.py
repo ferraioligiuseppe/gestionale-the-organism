@@ -552,8 +552,21 @@ def azione_iscrizione_evento(conn):
                         f"Sei in lista d'attesa — {ev['titolo']}" if stato_iscr == "lista_attesa"
                         else f"Iscrizione confermata — {ev['titolo']}"
                     )
-                    ok_m, dett_m = invia_email(email.strip(), oggetto_genitore, corpo_email,
-                                               dettaglio=True)
+                    # Stessa configurazione delle altre email degli eventi, con
+                    # copia nascosta allo studio; ogni tentativo va nel registro,
+                    # così nel gestionale si vede a chi è arrivata e a chi no.
+                    try:
+                        from modules.eventi.email_eventi import invia_testo
+                        ok_m, dett_m = invia_testo(email.strip(), oggetto_genitore, corpo_email)
+                    except Exception:
+                        ok_m, dett_m = invia_email(email.strip(), oggetto_genitore, corpo_email,
+                                                   dettaglio=True)
+                    try:
+                        from modules.eventi.db_eventi import registra_email
+                        registra_email(conn, ev["id"], iscr["id"], "conferma", email.strip(),
+                                       oggetto_genitore, ok_m, dett_m, "iscrizione online")
+                    except Exception:
+                        pass
                     if ok_m:
                         # Senza questo la colonna "Email conferma" nel gestionale
                         # resta "—" anche quando la mail e' partita davvero: veniva
