@@ -292,6 +292,7 @@ SOTTOSEZIONI = {
     ],
     AREA_AEROSAL: [
         "🌬️ Aerosal · Haloterapia",
+        "💳 Crediti e convenzioni",
     ],
     AREA_STUDIO: [
         "📊 Dashboard incassi",

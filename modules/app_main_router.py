@@ -1157,6 +1157,27 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
                 st.code(traceback.format_exc())
         return True
 
+    if sotto == "💳 Crediti e convenzioni":
+        try:
+            from .aerosal.db_aerosal import assicura_schema, impostazioni
+            from .crediti import render_crediti
+            _sid = str(st.session_state.get("studio_id", 1))
+            if not st.session_state.get(f"_aerosal_schema_v5_ok_{_sid}"):
+                _err = assicura_schema(conn, _sid)
+                if _err:
+                    st.error(f"Tabelle crediti non create: {_err}")
+                    return True
+                st.session_state[f"_aerosal_schema_v5_ok_{_sid}"] = True
+            render_crediti(conn, _sid,
+                           operatore=st.session_state.get("username") or st.session_state.get("user"),
+                           impostazioni=impostazioni(conn, _sid))
+        except Exception as e:
+            import traceback
+            st.error(f"Errore Crediti: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+
     # ── STUDIO ────────────────────────────────────────────────────────
     if sotto == "📊 Dashboard incassi":
         from .sections.ui_cliniche import render_dashboard_section

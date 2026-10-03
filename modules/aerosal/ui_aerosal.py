@@ -11,14 +11,17 @@ già esistente: il modulo non legge direttamente la tabella pazienti.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 import pandas as pd
 import streamlit as st
 
+from modules.crediti import db_crediti as dbc
+
 from . import db_aerosal as db
 
+URL_PUBBLICA = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck7n.streamlit.app"
 SOGLIA_PM10 = "Erogazione nei primi minuti · max ~40 µg/m³ PM10 (soglia 50 µg/m³)"
 
 
@@ -26,6 +29,10 @@ def _euro(v) -> str:
     if v is None:
         return "—"
     return f"{Decimal(v):,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _si(v) -> str:
+    return "✓" if v else ""
 
 
 def _scegli_paziente(pazienti, key: str, paziente_id=None):
@@ -43,7 +50,7 @@ def _tab_listino(conn, studio_id):
     mostra_tutto = st.toggle("Mostra anche le promo scadute", value=False)
     righe = db.listino(conn, studio_id, solo_attivi=not mostra_tutto)
     if not righe:
-        st.info("Listino vuoto: aggiungi una voce qui sotto.")
+        st.info("Listino vuoto: esegui `02_aerosal_seed.sql` oppure aggiungi una voce qui sotto.")
     else:
         df = pd.DataFrame(righe)
         df["€/seduta"] = df.apply(
@@ -85,68 +92,6 @@ def _tab_listino(conn, studio_id):
                 st.rerun()
 
 
-# ------------------------------------------------------- Offerte sul sito
-URL_GESTIONALE = "https://gestionale-the-organism.streamlit.app"
-URL_PUBBLICA = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck7n.streamlit.app"
-
-
-def _stato_offerta(v, oggi):
-    if not v.get("attivo"):
-        return "⚫ disattivata"
-    if not v.get("pubblica_sito"):
-        return "⚪ non pubblicata"
-    if v.get("valido_al") and v["valido_al"] < oggi:
-        return "⚫ scaduta"
-    if v.get("valido_dal") and v["valido_dal"] > oggi:
-        return f"🟡 programmata dal {v['valido_dal']:%d/%m}"
-    return "🟢 online ora"
-
-
-def _tab_sito(conn, studio_id):
-    st.caption("Le promo spuntate qui compaiono su www.pnev.it nelle date di validità e "
-               "spariscono da sole alla scadenza o quando finiscono i pacchetti disponibili. "
-               "Per programmare un'offerta crea la voce nel Listino con le date, poi pubblicala qui.")
-    oggi = date.today()
-    voci = db.voci_sito(conn, studio_id)
-    if not voci:
-        st.info("Nessuna promo nel listino. Creala nella scheda Listino con tipo «promo».")
-    mostra_scadute = st.toggle("Mostra anche le promo scadute", value=False, key="sito_scadute")
-    for v in voci:
-        scaduta = bool(v.get("valido_al") and v["valido_al"] < oggi)
-        if scaduta and not mostra_scadute:
-            continue
-        periodo = " – ".join(f"{x:%d/%m/%Y}" for x in (v.get("valido_dal"), v.get("valido_al")) if x) or "senza date"
-        with st.expander(f"{_stato_offerta(v, oggi)} · {v.get('promo_nome') or v['codice']} · "
-                         f"{v['descrizione']} · {periodo}"):
-            with st.form(f"sito_{v['id']}"):
-                pub = st.toggle("Pubblica su www.pnev.it", value=bool(v.get("pubblica_sito")))
-                titolo = st.text_input("Titolo sul sito", v.get("titolo_sito") or v.get("promo_nome") or "",
-                                       placeholder="es. Ricomincia ora")
-                testo = st.text_area("Testo sul sito", v.get("testo_sito") or "", height=80,
-                                     placeholder="es. 20 sedute di haloterapia per tutta la famiglia, "
-                                                 "solo per i primi 5 pacchetti.")
-                if st.form_submit_button("💾 Salva", type="primary"):
-                    db.imposta_pubblicazione(conn, studio_id, v["id"], pub, titolo.strip(), testo.strip())
-                    st.rerun()
-            if v.get("limite_pacchetti"):
-                st.caption(f"Pacchetti venduti: {db.promo_vendute(conn, studio_id, v['id'])} "
-                           f"su {v['limite_pacchetti']}.")
-
-    st.markdown("---")
-    online = db.offerte_pubbliche(conn, studio_id)
-    st.markdown(f"**Oggi su www.pnev.it: {len(online)} offert{'a' if len(online) == 1 else 'e'}**")
-    # La pagina sta nell'app PUBBLICA (quella delle iscrizioni agli eventi):
-    # il gestionale chiede il login, quindi da pnev.it non si vedrebbe niente.
-    base = str(st.secrets.get("APP_PUBBLICA_URL", URL_PUBBLICA)).rstrip("/")
-    url = f"{base}/?azione=offerte_sale&embed=true"
-    st.markdown(f"[👁️ Apri l'anteprima della pagina]({url})")
-    with st.expander("🔗 Codice da incollare su www.pnev.it (una volta sola)"):
-        st.caption("Incollalo nella pagina della Stanza del Sale, in un blocco HTML. "
-                   "Da lì in poi le offerte si aggiornano da sole dal gestionale.")
-        st.code(f'<iframe src="{url}" style="width:100%;min-height:760px;border:0" '
-                f'title="Offerte Stanza del Sale" loading="lazy"></iframe>', language="html")
-
-
 # ------------------------------------------------------------- Prime prove
 def _tab_prove(conn, studio_id, pazienti):
     cat = db.categorie_prova(conn)
@@ -184,6 +129,13 @@ def _tab_prove(conn, studio_id, pazienti):
     m2.metric("Convertite in pacchetto", k["convertite"])
     m3.metric("Conversione", f"{k['tasso']} %")
 
+    with st.expander("Da ricontattare: prova fatta, nessun pacchetto (con consenso)"):
+        rc = db.prove_da_ricontattare(conn, studio_id)
+        if rc:
+            st.dataframe(pd.DataFrame(rc), hide_index=True, use_container_width=True)
+        else:
+            st.write("Nessuno da ricontattare.")
+
     righe = db.prove(conn, studio_id, dal, al)
     if righe:
         st.dataframe(pd.DataFrame(righe).drop(columns=["pacchetto_id"]),
@@ -202,7 +154,7 @@ def _tab_prove(conn, studio_id, pazienti):
 
 
 # ----------------------------------------------------------------- Vendita
-def _tab_vendita(conn, studio_id, pazienti, paziente_id):
+def _tab_vendita(conn, studio_id, pazienti, paziente_id, operatore):
     voci = db.listino(conn, studio_id, solo_attivi=True)
     voci = [v for v in voci if v["prezzo"] and v["prezzo"] > 0]
     if not voci:
@@ -210,6 +162,7 @@ def _tab_vendita(conn, studio_id, pazienti, paziente_id):
         return
 
     pid = _scegli_paziente(pazienti, "vend_paz", paziente_id)
+    etichetta_paz = dict(pazienti or []).get(pid, f"Paziente {pid}")
     etichette = {f"{v['descrizione']} — {_euro(v['prezzo'])}": v for v in voci}
     voce = etichette[st.selectbox("Pacchetto", list(etichette))]
 
@@ -217,14 +170,41 @@ def _tab_vendita(conn, studio_id, pazienti, paziente_id):
         vendute = db.promo_vendute(conn, studio_id, voce["id"])
         residue = voce["limite_pacchetti"] - vendute
         (st.error if residue <= 0 else st.info)(
-            f"Promo a disponibilità limitata: {vendute}/{voce['limite_pacchetti']} già venduti.")
+            f"Promo «{voce['promo_nome']}»: {vendute}/{voce['limite_pacchetti']} abbonamenti già venduti (tutti i formati).")
 
-    prezzo = st.number_input("Prezzo applicato €", min_value=0.0,
-                             value=float(voce["prezzo"]), step=1.0, format="%.2f")
+    prezzo = Decimal(str(st.number_input("Prezzo di listino applicato €", min_value=0.0,
+                                         value=float(voce["prezzo"]), step=1.0, format="%.2f")))
     data_acq = st.date_input("Data acquisto", value=date.today(), key="vend_data")
+
+    # --- credito della prova open day
+    st.markdown("**Credito prova open day**")
+    cerca = st.text_input("Cerca credito per nome o telefono",
+                          value=etichetta_paz.split()[0] if pazienti else "", key="vend_cerca")
+    crediti = dbc.crediti_disponibili(conn, studio_id, data_acq, settore="aerosal", cerca=cerca or None)
+    credito_id, scalato = None, Decimal("0")
+    if crediti:
+        opz = {"Nessun credito": None}
+        opz.update({f"{c['nominativo']} · {_euro(c['residuo'])} · scade {c['scade_il']:%d/%m/%Y}": c
+                    for c in crediti})
+        scelta = opz[st.selectbox("Credito della prova", list(opz))]
+        if scelta:
+            credito_id = scelta["id"]
+            if voce["tipo"] == "promo":
+                st.info(f"Pacchetto in promo: il credito non si somma allo sconto. "
+                        f"Alla vendita diventa un buono di {_euro(scelta['residuo'])} "
+                        "per ottica o telefonia.")
+            else:
+                scalato = min(Decimal(scelta["residuo"]), prezzo)
+    else:
+        st.caption("Nessun credito Aerosal attivo trovato.")
+    netto = prezzo - scalato
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Listino", _euro(prezzo))
+    c2.metric("Credito scalato", _euro(scalato))
+    c3.metric("Da incassare", _euro(netto))
+
     modalita = st.radio("Pagamento", ["unica", "rateale"], horizontal=True,
                         format_func=lambda x: "Unica soluzione" if x == "unica" else "Rateale")
-
     provider = n_rate = metodo = None
     pagato_subito = False
     if modalita == "rateale":
@@ -233,7 +213,7 @@ def _tab_vendita(conn, studio_id, pazienti, paziente_id):
                                      "Interno: genera il piano rate mensile.")
         if provider == "Interno":
             n_rate = st.number_input("Numero rate", min_value=2, max_value=24, value=3)
-            anteprima = db.piano_rate(Decimal(str(prezzo)), int(n_rate), data_acq)
+            anteprima = db.piano_rate(netto, int(n_rate), data_acq)
             st.dataframe(pd.DataFrame([{"scadenza": r["scadenza"], "importo": _euro(r["importo"])}
                                        for r in anteprima]), hide_index=True)
         else:
@@ -243,16 +223,170 @@ def _tab_vendita(conn, studio_id, pazienti, paziente_id):
         pagato_subito = st.checkbox("Incassato oggi", value=True)
 
     detraibile = st.checkbox("Detraibile (dispositivo medico)", value=True)
+    consenso = st.checkbox("Consenso marketing per vantaggi ottica/telefonia")
     note = st.text_input("Note", key="vend_note")
 
     if st.button("Registra vendita", type="primary"):
-        nuovo = db.vendi_pacchetto(conn, studio_id, {
-            "paziente_id": int(pid), "listino_id": voce["id"], "descrizione": voce["descrizione"],
-            "n_sedute": voce["n_sedute"], "prezzo_totale": Decimal(str(prezzo)),
-            "data_acquisto": data_acq, "modalita": modalita, "provider_rate": provider,
-            "n_rate": int(n_rate) if n_rate else None, "metodo": metodo,
-            "pagato_subito": pagato_subito, "detraibile": detraibile, "note": note or None})
-        st.success(f"Pacchetto n. {nuovo} registrato.")
+        try:
+            esito = db.vendi_pacchetto(conn, studio_id, {
+                "paziente_id": int(pid), "nominativo": etichetta_paz, "listino_id": voce["id"],
+                "descrizione": voce["descrizione"], "n_sedute": voce["n_sedute"],
+                "prezzo_totale": prezzo, "data_acquisto": data_acq, "modalita": modalita,
+                "provider_rate": provider, "n_rate": int(n_rate) if n_rate else None,
+                "metodo": metodo, "pagato_subito": pagato_subito, "detraibile": detraibile,
+                "credito_id": credito_id, "consenso_marketing": consenso,
+                "operatore": operatore, "note": note or None})
+        except ValueError as e:
+            st.error(str(e))
+        else:
+            st.success(f"Pacchetto n. {esito['pacchetto_id']} registrato · "
+                       f"credito scalato {_euro(esito['credito_scalato'])} · "
+                       f"da fatturare {_euro(esito['netto'])}")
+            if esito.get("buono_da_promo"):
+                b = esito["buono_da_promo"]
+                st.info(f"Emesso buono {_euro(b['importo'])} per ottica o telefonia, "
+                        f"valido fino al {b['scade_il']:%d/%m/%Y}.")
+            for c in esito["convenzioni"]:
+                if c.get("credito_id"):
+                    st.info(f"Emesso buono {_euro(c['valore'])} spendibile in "
+                            f"{dbc.ETICHETTE_SETTORE[c['settore']]} — {c['nome']}")
+                else:
+                    st.info(f"Consegna il vantaggio: {c['nome']}")
+
+
+# --------------------------------------------------------------- Open day
+def _tab_open_day(conn, studio_id, operatore):
+    imp = db.impostazioni(conn, studio_id)
+    st.caption(f"{db.MODALITA_PREZZO[imp['modalita_prezzo']]} · prova {_euro(imp['prezzo_prova_adulto'])} · "
+               f"credito valido {imp['giorni_validita_credito']} giorni · "
+               f"{'la prova conta come seduta' if imp['prova_scala_seduta'] else 'si scala solo l importo'}")
+
+    with st.expander("Nuova giornata di open day", expanded=False):
+        c1, c2 = st.columns(2)
+        g_data = c1.date_input("Data", value=date.today() + timedelta(days=7), key="od_data")
+        g_sede = c2.text_input("Sede", key="od_sede")
+        c3, c4, c5 = st.columns(3)
+        g_ini = c3.time_input("Dalle", value=time(9, 0), key="od_ini")
+        g_fin = c4.time_input("Alle", value=time(13, 0), key="od_fin")
+        g_dur = c5.number_input("Slot (min)", min_value=15, max_value=90,
+                                value=int(imp["durata_slot_min"]), step=5)
+        g_scr = st.checkbox("Screening visivo per i bambini in attesa", value=True)
+        if st.button("Crea giornata"):
+            if not g_sede:
+                st.error("Indica la sede.")
+            else:
+                db.crea_open_day(conn, studio_id, {"data": g_data, "sede": g_sede, "ora_inizio": g_ini,
+                                                   "ora_fine": g_fin, "durata_slot": int(g_dur),
+                                                   "screening_visivo": g_scr})
+                st.rerun()
+
+    giornate = db.open_day(conn, studio_id, date.today() - timedelta(days=7))
+    if not giornate:
+        st.info("Nessun open day in programma: creane uno qui sopra.")
+        return
+    opz = {f"{g['data']:%a %d/%m} · {g['sede']} · {g['prenotati']} prenotati": g for g in giornate}
+    g = opz[st.selectbox("Giornata", list(opz))]
+    slots = db.slot_open_day(conn, studio_id, g["id"])
+
+    liberi = [s["ora"] for s in slots if not s.get("prova_id")]
+    tab = pd.DataFrame([{
+        "ora": s["ora"].strftime("%H:%M"), "nominativo": s.get("nominativo", "— libero —"),
+        "categoria": s.get("categoria", ""), "importo": _euro(s["importo"]) if s.get("importo") else "",
+        "pagata": _si(s.get("pagata")), "presente": _si(s.get("presentato")),
+        "screening": _si(s.get("screening_visivo_fatto")), "convertita": _si(s.get("convertita"))}
+        for s in slots])
+    st.dataframe(tab, hide_index=True, use_container_width=True)
+
+    # --- prenotazione
+    if liberi:
+        st.markdown("**Prenota uno slot**")
+        cat = db.categorie_prova(conn)
+        mappa = {c["descrizione"]: c for c in cat}
+        c1, c2, c3 = st.columns(3)
+        ora = c1.selectbox("Orario", liberi, format_func=lambda t: t.strftime("%H:%M"))
+        nom = c2.text_input("Nominativo", key="od_nom")
+        tel = c3.text_input("Telefono", key="od_tel")
+        c4, c5 = st.columns(2)
+        categoria = mappa[c4.selectbox("Categoria", list(mappa), key="od_cat")]
+        speciale = c5.checkbox("Prezzo convenzione (cliente ottica/telefonia)")
+        prezzo_spec = None
+        if speciale:
+            prezzo_spec = Decimal(str(st.number_input("Prezzo adulto convenzione €", min_value=0.0,
+                                                      value=10.0, step=1.0)))
+        importo = db.prezzo_prova(imp, categoria["bambini"], prezzo_spec)
+        st.write(f"Importo prova: **{_euro(importo)}**")
+        c6, c7 = st.columns(2)
+        pagata = c6.checkbox("Pagata alla prenotazione")
+        metodo = c7.selectbox("Metodo", db.METODI_PAGAMENTO, key="od_met") if pagata else None
+        consenso = st.checkbox("Consenso marketing (per buono ottica/telefonia e comunicazioni)")
+        if st.button("Prenota", type="primary"):
+            if not nom:
+                st.error("Inserisci il nominativo.")
+            else:
+                db.prenota_slot(conn, studio_id, {
+                    "nominativo": nom, "telefono": tel or None, "categoria": categoria["codice"],
+                    "data_prova": g["data"], "open_day_id": g["id"], "ora_slot": ora,
+                    "importo": importo, "pagata": pagata, "metodo": metodo,
+                    "consenso_marketing": consenso})
+                st.rerun()
+    else:
+        st.warning("Giornata al completo.")
+
+    # --- gestione il giorno dell'open day
+    prenotati = [s for s in slots if s.get("prova_id")]
+    if prenotati:
+        st.markdown("**Il giorno dell'open day**")
+        opz_p = {f"{s['ora']:%H:%M} · {s['nominativo']}": s for s in prenotati}
+        s = opz_p[st.selectbox("Prenotazione", list(opz_p))]
+        c1, c2, c3, c4 = st.columns(4)
+        if not s["pagata"]:
+            met = c1.selectbox("Metodo", db.METODI_PAGAMENTO, key="od_inc_met")
+            if c1.button(f"Incassa {_euro(s['importo'])}"):
+                db.incassa_prova(conn, studio_id, s["prova_id"], met)
+                st.rerun()
+        if c2.button("Presente"):
+            db.aggiorna_prova(conn, studio_id, s["prova_id"], presentato=True)
+            st.rerun()
+        if g["screening_visivo"] and c3.button("Screening visivo fatto"):
+            db.aggiorna_prova(conn, studio_id, s["prova_id"], screening_visivo_fatto=True)
+            st.rerun()
+        if c4.button("Caricata su Carta Respiro"):
+            db.aggiorna_prova(conn, studio_id, s["prova_id"], registrata_carta_respiro=True)
+            st.rerun()
+        st.caption("L'incasso emette in automatico il credito da scalare sul pacchetto.")
+
+
+# ------------------------------------------------------------ Impostazioni
+def _tab_impostazioni(conn, studio_id):
+    imp = db.impostazioni(conn, studio_id)
+    modalita = st.radio("Prezzo della prova", list(db.MODALITA_PREZZO),
+                        index=list(db.MODALITA_PREZZO).index(imp["modalita_prezzo"]),
+                        format_func=db.MODALITA_PREZZO.get)
+    c1, c2 = st.columns(2)
+    adulto = c1.number_input("Prezzo prova (adulto / slot) €", min_value=0.0,
+                             value=float(imp["prezzo_prova_adulto"]), step=1.0)
+    bimbo = c2.number_input("Supplemento per bambino €", min_value=0.0,
+                            value=float(imp["prezzo_prova_bambino"]), step=1.0,
+                            disabled=modalita != "adulto_bambino")
+    scala = st.radio("Quando il cliente compra il pacchetto",
+                     [False, True], index=int(imp["prova_scala_seduta"]), horizontal=True,
+                     format_func=lambda x: "Scalo la prova anche come seduta" if x
+                     else "Scalo solo l'importo")
+    c3, c4 = st.columns(2)
+    validita = c3.number_input("Validità credito (giorni)", min_value=1, max_value=365,
+                               value=int(imp["giorni_validita_credito"]))
+    durata = c4.number_input("Durata slot predefinita (min)", min_value=15, max_value=90,
+                             value=int(imp["durata_slot_min"]), step=5)
+    converti = st.toggle("Credito non usato → buono ottica/telefonia", value=imp["converti_in_buono"])
+    gg_buono = st.number_input("Validità buono (giorni)", min_value=1, max_value=365,
+                               value=int(imp["giorni_validita_buono"]), disabled=not converti)
+    if st.button("Salva impostazioni", type="primary"):
+        db.salva_impostazioni(conn, studio_id, {
+            "modalita_prezzo": modalita, "prezzo_prova_adulto": Decimal(str(adulto)),
+            "prezzo_prova_bambino": Decimal(str(bimbo)), "prova_scala_seduta": scala,
+            "giorni_validita_credito": int(validita), "converti_in_buono": converti,
+            "giorni_validita_buono": int(gg_buono), "durata_slot_min": int(durata)})
+        st.success("Impostazioni salvate.")
 
 
 # ------------------------------------------------------------------ Sedute
@@ -386,28 +520,92 @@ def _tab_sale(conn, studio_id):
 
 
 # ------------------------------------------------------------------- Entry
+def _stato_offerta(v, oggi):
+    if not v.get("attivo"):
+        return "⚫ disattivata"
+    if not v.get("pubblica_sito"):
+        return "⚪ non pubblicata"
+    if v.get("valido_al") and v["valido_al"] < oggi:
+        return "⚫ scaduta"
+    if v.get("valido_dal") and v["valido_dal"] > oggi:
+        return f"🟡 programmata dal {v['valido_dal']:%d/%m}"
+    return "🟢 online ora"
+
+
+def _tab_sito(conn, studio_id):
+    st.caption("Le promo spuntate qui compaiono su www.pnev.it nelle date di validità e "
+               "spariscono da sole alla scadenza o quando finiscono i pacchetti disponibili. "
+               "Per programmare un'offerta crea la voce nel Listino con le date, poi pubblicala qui.")
+    oggi = date.today()
+    voci = db.voci_sito(conn, studio_id)
+    if not voci:
+        st.info("Nessuna promo nel listino. Creala nella scheda Listino con tipo «promo».")
+    mostra_scadute = st.toggle("Mostra anche le promo scadute", value=False, key="sito_scadute")
+    for v in voci:
+        scaduta = bool(v.get("valido_al") and v["valido_al"] < oggi)
+        if scaduta and not mostra_scadute:
+            continue
+        periodo = " – ".join(f"{x:%d/%m/%Y}" for x in (v.get("valido_dal"), v.get("valido_al")) if x) or "senza date"
+        with st.expander(f"{_stato_offerta(v, oggi)} · {v.get('promo_nome') or v['codice']} · "
+                         f"{v['descrizione']} · {periodo}"):
+            with st.form(f"sito_{v['id']}"):
+                pub = st.toggle("Pubblica su www.pnev.it", value=bool(v.get("pubblica_sito")))
+                titolo = st.text_input("Titolo sul sito", v.get("titolo_sito") or v.get("promo_nome") or "",
+                                       placeholder="es. Ricomincia ora")
+                testo = st.text_area("Testo sul sito", v.get("testo_sito") or "", height=80,
+                                     placeholder="es. 20 sedute di haloterapia per tutta la famiglia, "
+                                                 "solo per i primi 5 pacchetti.")
+                if st.form_submit_button("💾 Salva", type="primary"):
+                    db.imposta_pubblicazione(conn, studio_id, v["id"], pub, titolo.strip(), testo.strip())
+                    st.rerun()
+            if v.get("limite_pacchetti"):
+                st.caption(f"Pacchetti venduti: {db.promo_vendute(conn, studio_id, v['id'])} "
+                           f"su {v['limite_pacchetti']}.")
+
+    st.markdown("---")
+    online = db.offerte_pubbliche(conn, studio_id)
+    st.markdown(f"**Oggi su www.pnev.it: {len(online)} offert{'a' if len(online) == 1 else 'e'}**")
+    # La pagina sta nell'app PUBBLICA (quella delle iscrizioni agli eventi):
+    # il gestionale chiede il login, quindi da pnev.it non si vedrebbe niente.
+    base = str(st.secrets.get("APP_PUBBLICA_URL", URL_PUBBLICA)).rstrip("/")
+    url = f"{base}/?azione=offerte_sale&embed=true"
+    st.markdown(f"[👁️ Apri l'anteprima della pagina]({url})")
+    with st.expander("🔗 Codice da incollare su www.pnev.it (una volta sola)"):
+        st.caption("Incollalo nella pagina della Stanza del Sale, in un blocco HTML. "
+                   "Da lì in poi le offerte si aggiornano da sole dal gestionale.")
+        st.code(f'<iframe src="{url}" style="width:100%;min-height:760px;border:0" '
+                f'title="Offerte Stanza del Sale" loading="lazy"></iframe>', language="html")
+
+
+
 def render_aerosal(conn, studio_id: str, pazienti=None, paziente_id=None, operatore=None):
     st.header("Aerosal · Haloterapia")
-    chiave = f"_aerosal_schema_ok_{studio_id}"
+    # Le tabelle si creano da sole la prima volta (anche quelle nuove di open
+    # day e crediti): non serve eseguire gli script SQL su Neon a mano.
+    chiave = f"_aerosal_schema_v5_ok_{studio_id}"
     if not st.session_state.get(chiave):
         err = db.assicura_schema(conn, studio_id)
         if err:
             st.error(f"Tabelle Aerosal non create: {err}")
             return
         st.session_state[chiave] = True
-    tabs = st.tabs(["Listino", "🌐 Offerte sul sito", "Prime prove", "Vendita pacchetto",
-                    "Sedute", "Rate", "Sale"])
+    tabs = st.tabs(["Open day", "Vendita pacchetto", "Sedute", "Rate", "Prime prove",
+                    "Listino", "🌐 Offerte sul sito", "Sale", "Impostazioni"])
     with tabs[0]:
-        _tab_listino(conn, studio_id)
+        _tab_open_day(conn, studio_id, operatore)
     with tabs[1]:
-        _tab_sito(conn, studio_id)
+        _tab_vendita(conn, studio_id, pazienti, paziente_id, operatore)
     with tabs[2]:
-        _tab_prove(conn, studio_id, pazienti)
-    with tabs[3]:
-        _tab_vendita(conn, studio_id, pazienti, paziente_id)
-    with tabs[4]:
         _tab_sedute(conn, studio_id, pazienti, paziente_id, operatore)
-    with tabs[5]:
+    with tabs[3]:
         _tab_rate(conn, studio_id)
+    with tabs[4]:
+        _tab_prove(conn, studio_id, pazienti)
+    with tabs[5]:
+        _tab_listino(conn, studio_id)
     with tabs[6]:
+        _tab_sito(conn, studio_id)
+    with tabs[7]:
         _tab_sale(conn, studio_id)
+    with tabs[8]:
+        _tab_impostazioni(conn, studio_id)
