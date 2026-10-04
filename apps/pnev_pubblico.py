@@ -51,6 +51,19 @@ VERDE = "#1D6B44"
 APP_URL_DEFAULT = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck7n.streamlit.app"
 
 
+def _ora(dt):
+    """Orario italiano. Gli eventi sono salvati come TIMESTAMPTZ e arrivano
+    dal database in UTC: senza conversione un evento delle 19:00 compariva
+    alle 17:00 (le 19 meno le due ore dell'ora legale)."""
+    if dt is not None and getattr(dt, "tzinfo", None) is not None:
+        try:
+            from zoneinfo import ZoneInfo
+            return dt.astimezone(ZoneInfo("Europe/Rome"))
+        except Exception:
+            return dt
+    return dt
+
+
 def app_url():
     return st.secrets.get("APP_URL", APP_URL_DEFAULT).rstrip("/")
 
@@ -308,7 +321,7 @@ def azione_iscrizione_evento(conn):
         st.stop()
 
     st.title(f"📋 {ev['titolo']}")
-    data_str = ev["data_ora"].strftime("%d/%m/%Y") if ev.get("data_ora") else ""
+    data_str = _ora(ev["data_ora"]).strftime("%d/%m/%Y") if ev.get("data_ora") else ""
     riga_meta = " · ".join(x for x in [ev.get("sede"), data_str] if x)
     if riga_meta:
         st.caption(f"📍 {riga_meta}")
@@ -328,10 +341,10 @@ def azione_iscrizione_evento(conn):
                 "Scrivici a apstheorganism@gmail.com per essere messo in lista d'attesa."
             )
             st.stop()
-        opzioni_slot = {s["orario"].strftime("%H:%M"): s["orario"] for s in liberi}
+        opzioni_slot = {_ora(s["orario"]).strftime("%H:%M"): s["orario"] for s in liberi}
     else:
         if ev.get("data_ora"):
-            st.info(f"Orario: **{ev['data_ora'].strftime('%H:%M')}**")
+            st.info(f"Orario: **{_ora(ev['data_ora']).strftime('%H:%M')}**")
 
     # Tutto dentro un form: Streamlit NON ricarica la pagina ad ogni campo
     # compilato (prima ogni uscita da un campo rifaceva le query su evento e
@@ -552,9 +565,9 @@ def azione_iscrizione_evento(conn):
                             + " è confermata.\n"
                         )
                     if slot_scelto:
-                        corpo_email += f"Appuntamento: {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}\n"
+                        corpo_email += f"Appuntamento: {_ora(slot_scelto).strftime('%d/%m/%Y alle %H:%M')}\n"
                     elif ev.get("data_ora"):
-                        corpo_email += f"Data: {ev['data_ora'].strftime('%d/%m/%Y alle %H:%M')}\n"
+                        corpo_email += f"Data: {_ora(ev['data_ora']).strftime('%d/%m/%Y alle %H:%M')}\n"
                     if ev.get("sede"):
                         corpo_email += f"Sede: {ev['sede']}\n"
                     corpo_email += "\nPer qualsiasi domanda scrivi a apstheorganism@gmail.com.\n\nStudio The Organism"
@@ -595,8 +608,8 @@ def azione_iscrizione_evento(conn):
                 try:
                     from modules.email_otp import invia_email
                     riga_slot = (
-                        f"Slot: {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}\n" if slot_scelto
-                        else (f"Data: {ev['data_ora'].strftime('%d/%m/%Y alle %H:%M')}\n" if ev.get("data_ora") else "")
+                        f"Slot: {_ora(slot_scelto).strftime('%d/%m/%Y alle %H:%M')}\n" if slot_scelto
+                        else (f"Data: {_ora(ev['data_ora']).strftime('%d/%m/%Y alle %H:%M')}\n" if ev.get("data_ora") else "")
                     )
                     corpo_staff = (
                         f"Nuova iscrizione — stato: {stato_iscr.upper()}\n\n"
@@ -622,7 +635,7 @@ def azione_iscrizione_evento(conn):
 
             st.success("🎉 Iscrizione confermata!")
             if slot_scelto:
-                st.markdown(f"**Il tuo appuntamento:** {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}")
+                st.markdown(f"**Il tuo appuntamento:** {_ora(slot_scelto).strftime('%d/%m/%Y alle %H:%M')}")
             st.info("Ti abbiamo inviato una email di conferma. Se non arriva controlla anche lo spam, oppure scrivi a apstheorganism@gmail.com.")
             if firma_url:
                 st.markdown("**Ultimo passo: il consenso privacy.** Puoi firmarlo adesso o dal link che ti abbiamo mandato per email.")
