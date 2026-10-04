@@ -8867,6 +8867,43 @@ def _ensure_documenti_table(conn):
                 conn.rollback()
             except Exception:
                 pass
+    # La tabella vecchia ha anche colonne obbligatorie che questo codice non
+    # conosce (es. «url»): restano, ma non piu' obbligatorie, e «url» viene
+    # riempita con lo stesso percorso di s3_key (vedi _db_insert_documento).
+    try:
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name='documenti' "
+            "AND is_nullable='NO' AND column_default IS NULL "
+            "AND column_name NOT IN ('id','paziente_id')")
+        _obblig = [(r["column_name"] if isinstance(r, dict) else r[0]) for r in (cur.fetchall() or [])]
+        conn.commit()
+    except Exception:
+        _obblig = []
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    for _col in _obblig:
+        try:
+            cur.execute(f'ALTER TABLE public.documenti ALTER COLUMN "{_col}" DROP NOT NULL;')
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    try:
+        cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema='public' "
+                    "AND table_name='documenti' AND column_name='url'")
+        global _DOCUMENTI_HA_URL
+        _DOCUMENTI_HA_URL = bool(cur.fetchone())
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
     try:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documenti_paziente ON public.documenti(paziente_id);")
         conn.commit()
@@ -8875,6 +8912,9 @@ def _ensure_documenti_table(conn):
             conn.rollback()
         except Exception:
             pass
+
+_DOCUMENTI_HA_URL = False
+
 
 def _sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
@@ -9000,11 +9040,18 @@ def _db_insert_documento(conn, paziente_id: int, tipo: str, s3_key: str, sha256:
         )
     else:
         try:
-            cur.execute(
-                """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime, blob)
-                     VALUES (%s, %s, %s, %s, %s, 'application/pdf', %s)""",
-                (paziente_id, tipo, s3_key, filename, sha256, blob),
-            )
+            if _DOCUMENTI_HA_URL:
+                cur.execute(
+                    """INSERT INTO public.documenti (paziente_id, tipo, s3_key, url, filename, sha256, mime, blob)
+                         VALUES (%s, %s, %s, %s, %s, %s, 'application/pdf', %s)""",
+                    (paziente_id, tipo, s3_key, s3_key, filename, sha256, blob),
+                )
+            else:
+                cur.execute(
+                    """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime, blob)
+                         VALUES (%s, %s, %s, %s, %s, 'application/pdf', %s)""",
+                    (paziente_id, tipo, s3_key, filename, sha256, blob),
+                )
         except Exception:
             # senza rollback la connessione resta bloccata e salta anche il
             # salvataggio del consenso subito dopo
