@@ -395,6 +395,8 @@ def azione_iscrizione_evento(conn):
             ("Acconsento al trattamento dei miei dati personali per le finalità di questo "
              "incontro, secondo l'informativa privacy dello Studio The Organism. *")
         )
+        st.caption("Dopo l'iscrizione ti mandiamo per email il link per firmare il consenso "
+                   "privacy completo: ci vogliono due minuti dal telefono.")
         cons_contatto = st.checkbox(
             "Acconsento a essere ricontattato/a per comunicare l'esito e un eventuale approfondimento."
             if evento_minori else
@@ -473,6 +475,7 @@ def azione_iscrizione_evento(conn):
                 if gcal_id:
                     salva_gcal_event_id(conn, iscr["id"], gcal_id)
 
+                firma_url = ""
                 # Anagrafica automatica: crea il paziente se non esiste già
                 # (match su email o su cognome+nome del bambino), senza intervento manuale.
                 try:
@@ -501,22 +504,29 @@ def azione_iscrizione_evento(conn):
                             (cog_b, nom_b, telefono or None, email.strip().lower() or None))
                         r_new = cur_an.fetchone()
                         paz_auto_id = int(r_new["id"] if isinstance(r_new, dict) else r_new[0])
-                        try:
-                            cur_an.execute("""
-                                INSERT INTO consensi_privacy
-                                (paziente_id, tipo, consenso_trattamento, consenso_comunicazioni,
-                                 canale_email, canale_whatsapp, data_ora, note)
-                                VALUES (%s,%s,1,1,1,1,NOW(),
-                                        'Consenso firmato in fase di iscrizione evento')
-                            """, (paz_auto_id, "minore" if evento_minori else "adulto"))
-                        except Exception:
-                            pass
+                        # Qui prima si registrava un consenso «firmato» che nessuno
+                        # aveva firmato: era solo la casella del modulo. Ora parte
+                        # la richiesta di firma vera (sotto).
                     conn.commit()
                     try:
                         from modules.eventi.db_eventi import aggancia_paziente
                         aggancia_paziente(conn, iscr["id"], paz_auto_id)
                     except Exception:
                         pass
+                    # Firma della privacy: link per email, salvo che abbia gia'
+                    # firmato online. Se a questa app mancano i secrets [privacy],
+                    # la richiesta resta «da inviare» nel gestionale (Firme
+                    # privacy in attesa) e si manda da li' con un clic.
+                    try:
+                        from modules.privacy import firma_remota as fr
+                        _doc = "minore" if evento_minori else "adulto"
+                        if not fr.gia_firmato(conn, paz_auto_id, _doc):
+                            _ok_f, _mot_f, firma_url = fr.crea_e_invia(
+                                conn, paz_auto_id, _doc, email.strip().lower(), "evento",
+                                f"Evento: {ev['titolo']}")
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
                 except Exception as _e_anag:
                     try: conn.rollback()
                     except Exception: pass
@@ -614,6 +624,10 @@ def azione_iscrizione_evento(conn):
             if slot_scelto:
                 st.markdown(f"**Il tuo appuntamento:** {slot_scelto.strftime('%d/%m/%Y alle %H:%M')}")
             st.info("Ti abbiamo inviato una email di conferma. Se non arriva controlla anche lo spam, oppure scrivi a apstheorganism@gmail.com.")
+            if firma_url:
+                st.markdown("**Ultimo passo: il consenso privacy.** Puoi firmarlo adesso o dal link che ti abbiamo mandato per email.")
+                st.link_button("✍️ Firma ora il consenso privacy", firma_url, type="primary",
+                               use_container_width=True)
             st.stop()
         except ValueError as e:
             st.error(str(e))
