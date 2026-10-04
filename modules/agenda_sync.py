@@ -16,8 +16,10 @@
 """
 
 import datetime as _dt
+import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 try:
     from zoneinfo import ZoneInfo
@@ -36,14 +38,38 @@ def ical_url_pubblico(cal_id: str) -> str:
 #  FETCH + PARSE ICS (parser minimale, senza librerie esterne)
 # ─────────────────────────────────────────────────────────────────────
 
-def _scarica(url: str, timeout: int = 8) -> str | None:
+def _scarica_diretto(url: str, timeout: int = 30) -> tuple[str | None, str]:
+    """Ritorna (testo, motivo). I due calendari che non si leggevano erano i
+    calendari PRINCIPALI degli account Gmail: contengono anni di eventi, il
+    file .ics pesa parecchi MB e Google ci mette piu' degli 8 secondi che
+    aspettavamo. I calendari creati a parte (piccoli) rispondevano subito."""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "TheOrganism/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
-        return raw.decode("utf-8", errors="replace")
-    except Exception:
-        return None
+        return raw.decode("utf-8", errors="replace"), ""
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403, 404):
+            return None, "indirizzo iCal non piu' valido (forse reimpostato in Google): serve quello nuovo"
+        return None, f"Google ha risposto con errore {e.code}"
+    except Exception as e:
+        if "timed out" in str(e).lower():
+            return None, "Google non ha risposto in tempo (calendario molto grande)"
+        return None, f"non raggiungibile: {e}"
+
+
+try:
+    import streamlit as _st
+
+    @_st.cache_data(ttl=300, show_spinner=False)
+    def _scarica_cache(url: str):
+        return _scarica_diretto(url)
+except Exception:
+    _scarica_cache = _scarica_diretto
+
+
+def _scarica(url: str, timeout: int = 30) -> str | None:
+    return _scarica_cache(url)[0]
 
 
 def _unfold(text: str) -> list[str]:
@@ -181,15 +207,18 @@ def appuntamenti(conn, professionisti: list[dict], giorno_da: _dt.date,
     pazienti = carica_pazienti_match(conn)
     eventi = []
     errori = []
-    for p in professionisti:
-        cid = (p.get("cal_id") or "").strip()
-        if not cid:
-            continue
-        url = p.get("ical_url") or ical_url_pubblico(cid)
-        text = _scarica(url)
+    attivi = [p for p in professionisti if (p.get("cal_id") or "").strip()]
+    urls = [p.get("ical_url") or ical_url_pubblico(p["cal_id"].strip()) for p in attivi]
+    # Tutti i calendari insieme invece che uno dopo l'altro: l'attesa e'
+    # quella del calendario piu' lento, non la somma di tutti. Il risultato
+    # resta in memoria 5 minuti, cosi' cambiare giorno non riscarica tutto.
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        risposte = list(ex.map(_scarica_cache, urls))
+    for p, (text, motivo) in zip(attivi, risposte):
+        cid = p["cal_id"].strip()
         if not text or "BEGIN:VCALENDAR" not in text:
             errori.append({"nome": p.get("nome", cid),
-                           "motivo": "feed non leggibile (serve l'indirizzo iCal segreto)"})
+                           "motivo": motivo or "feed non leggibile (serve l'indirizzo iCal segreto)"})
             continue
         for ev in _eventi_da_ics(text):
             d0 = _solo_data(ev.get("inizio"))
