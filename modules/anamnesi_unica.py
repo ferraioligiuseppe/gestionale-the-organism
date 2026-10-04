@@ -720,13 +720,15 @@ def _widget(label, tipo, opts, val, key):
     if tipo == "mesi":
         etich = label if "mesi" in label.lower() else f"{label} (mesi)"
         return st.number_input(etich, min_value=0, max_value=144, step=1, key=key,
-                               help="0 = non noto")
+                               help="Lascia 0 se non lo sai")
     if tipo == "num":
         return st.number_input(label, min_value=0, max_value=int(opts or 999), step=1, key=key,
-                               help="0 = non noto")
+                               help="Lascia 0 se non lo sai")
     if tipo == "scala":
-        return st.select_slider(label, options=[0, 1, 2, 3, 4, 5], key=key,
-                                format_func=lambda x: "non valutato" if x == 0 else str(x))
+        # Pulsanti in riga invece del cursore: il cursore ripeteva «non
+        # valutato» due volte e dal telefono era difficile da spostare.
+        return st.radio(label, options=[0, 1, 2, 3, 4, 5], key=key, horizontal=True,
+                        format_func=lambda x: "non so" if x == 0 else str(x))
     if tipo == "chk":
         return st.checkbox(label, key=key)
     if tipo == "multi":
@@ -738,7 +740,8 @@ def _widget(label, tipo, opts, val, key):
     if tipo == "sel":
         cur = st.session_state.get(key)
         o = list(opts) + ([cur] if cur and cur not in opts else [])
-        return st.selectbox(label, o, key=key)
+        return st.selectbox(label, o, key=key,
+                            format_func=lambda x: "— scegli —" if x == _NO else x)
     if tipo == "area":
         return st.text_area(label, key=key, height=68)
     return st.text_input(label, key=key)
