@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frenulo come perturbazione · PNEV Academy</title>
+<style>
+:root{--v:#1D6B44;--vd:#155235;--b:#12385f;--line:#d7dfe8;--ink:#1d2a33;--mut:#5f6f7a;--bg:#f4f6f8;--warn:#b5651d}
+*{box-sizing:border-box}body{margin:0;font:14px/1.5 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+a{color:var(--v)}a:hover{color:var(--vd)}
+.topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border-bottom:3px solid var(--v);padding:8px 14px}
+.topbar b{font-size:16px;color:var(--b)}.topbar .st{margin-left:auto;color:var(--mut);font-size:12px}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;background:var(--b);padding:6px 10px}
+.tabs button{background:none;border:0;color:#fff;padding:6px 10px;border-radius:4px;cursor:pointer;font:inherit;font-size:13px}
+.tabs button.on{background:#fff;color:var(--b);font-weight:600}
+main{max-width:1000px;margin:16px auto;padding:0 14px 60px}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin-bottom:14px}
+h2{margin:0 0 4px;color:var(--b);font-size:18px}h3{margin:14px 0 6px;font-size:14px;color:var(--vd)}
+.mut{color:var(--mut);font-size:12.5px}.cons{background:#eef5f1;border-left:3px solid var(--v);padding:6px 10px;margin:8px 0;font-size:13px}
+.warnbox{background:#fff6ea;border-left:3px solid var(--warn);padding:8px 12px;font-size:13px;margin:8px 0}
+.row{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin:6px 0}
+label{display:flex;flex-direction:column;font-size:12.5px;color:var(--mut);gap:3px}
+input,select,textarea{font:inherit;font-size:14px;color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:6px 8px;background:#fff}
+textarea{min-height:64px;width:100%}
+.chk{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:13.5px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:6px;text-align:left;vertical-align:top}
+th{background:#f0f3f6;font-weight:600}td input,td select{width:100%;padding:4px 6px}
+.pill{display:inline-block;padding:3px 10px;border-radius:12px;font-weight:600;font-size:12.5px}
+.g1{background:#e3f3e9;color:#155235}.g2{background:#fff4d6;color:#7a5600}.g3{background:#ffe6d1;color:#8a3b00}.g4{background:#fde0e0;color:#8a1c1c}
+.timer{font:600 22px/1 ui-monospace,Menlo,monospace;color:var(--b)}
+.btn{background:var(--v);color:#fff;border:0;border-radius:5px;padding:7px 13px;font:inherit;font-size:13px;cursor:pointer}
+.btn.sec{background:#5f6f7a}
+.d-pos{color:#155235;font-weight:600}.d-neg{color:#8a1c1c;font-weight:600}
+.hide{display:none}
+@media print{.topbar,.tabs,.noprint{display:none!important}.sec-p{display:block!important}body{background:#fff}.card{border:0}}
+</style></head><body>
+<div class="topbar"><b>Frenulo come perturbazione</b><span class="mut">PNEV Academy · protocollo di ricerca pre/post anestesia</span><span class="st" id="stato">da compilare</span></div>
+<nav class="tabs" id="tabs"></nav>
+<main id="app"></main>
+<script>
+var V = {}; var KEY='pnev_frenulo_v1';
+try{ V = JSON.parse(localStorage.getItem(KEY)||'{}') || {}; }catch(e){ V={}; }
+function sl(){ try{ localStorage.setItem(KEY, JSON.stringify(V)); }catch(e){} }
+var FASI=['T0','T1','T2','T3'];
+var NOMI_FASI={T0:'T0 · baseline',T1:'T1 · gel A',T2:'T2 · gel B',T3:'T3 · post frenulotomia'};
+// Batteria breve, ordine fisso (scheda operativa)
+var TEST=[
+ {id:'trmr',n:'1 · TRMR (controllo)',t:'1 min',campi:[['v','TRMR %','num']],nota:'Deve restare stabile: l\'anestetico non allunga il frenulo. Se cambia, è cambiata la collaborazione.'},
+ {id:'stab',n:'2 · Stabilometria',t:'3 min',campi:[['ao_area','OA area ellisse mm²','num'],['ao_lung','OA lunghezza gomitolo mm','num'],['oc_area','OC area ellisse mm²','num'],['oc_lung','OC lunghezza gomitolo mm','num'],['romb','Quoziente di Romberg','num']],nota:'Durata: 15 s (4–7 anni), 30 s (8–14), 51,2 s (adolescenti/adulti). Più basso = più stabile.',meglio:'basso'},
+ {id:'fuku',n:'3 · Fukuda',t:'1,5 min',campi:[['rot','Rotazione °','num'],['avanz','Avanzamento cm','num'],['lato','Lato','sel',['','destra','sinistra','nessuno']]],nota:'30 passi (4–7 anni), 50 passi dagli 8 anni.',meglio:'basso'},
+ {id:'ppc',n:'4 · PPC',t:'1 min',campi:[['rott','Rottura cm','num'],['rec','Recupero cm','num']],nota:'Più vicino = migliore.',meglio:'basso'},
+ {id:'cover',n:'5 · Cover test da vicino',t:'1 min',campi:[['pd','Deviazione Δ','num'],['tipo','Tipo','sel',['','orto','exo','eso','iper']]],meglio:'basso'},
+ {id:'nsuco',n:'6 · NSUCO saccadi',t:'1,5 min',campi:[['ab','Abilità 1–5','num'],['ac','Accuratezza 1–5','num'],['te','Testa 1–5','num'],['co','Corpo 1–5','num']],nota:'Punteggio 1–5 per area: più alto = migliore.',meglio:'alto'},
+ {id:'crt',n:'7 · Errore di riposizionamento cervicale (Revel)',t:'2 min',campi:[['dx','Dopo rotazione dx, cm','num'],['sx','Dopo rotazione sx, cm','num']],nota:'Dagli 8 anni. Errore in cm dal punto di partenza. Più basso = migliore.',meglio:'basso'},
+ {id:'rifl',n:'8 · ATNR, STNR',t:'2 min',campi:[['atnr','ATNR 0–4','num'],['stnr','STNR 0–4','num']],nota:'0 = assente, 4 = completo. Più basso = migliore.',meglio:'basso'},
+ {id:'suz',n:'9 · Suzione, Babkin',t:'1 min',campi:[['suz','Suzione 0–4','num'],['bab','Babkin 0–4','num']],meglio:'basso'}
+];
+var SEZ=[
+ {id:'disegno',n:'0 · Disegno e sicurezza'},
+ {id:'frenulo',n:'1 · Frenulo (TRMR)'},
+ {id:'orali',n:'2 · Funzioni orali (T0)'},
+ {id:'batteria',n:'3 · Batteria T0 / T1 / T2'},
+ {id:'confronto',n:'4 · Confronto'},
+ {id:'esito',n:'Esito e relazione'}
+];
+var cur = V._tab || 'disegno';
+function g(k,d){ return V[k]==null ? (d==null?'':d) : V[k]; }
+function inp(k,lab,tipo,opts){
+  var val = g(k);
+  if(tipo==='sel') return '<label>'+lab+'<select data-k="'+k+'">'+opts.map(function(o){return '<option'+(o===val?' selected':'')+'>'+o+'</option>'}).join('')+'</select></label>';
+  if(tipo==='area') return '<label style="grid-column:1/-1">'+lab+'<textarea data-k="'+k+'">'+(val||'')+'</textarea></label>';
+  if(tipo==='chk') return '<label class="chk"><input type="checkbox" data-k="'+k+'"'+(val?' checked':'')+'> '+lab+'</label>';
+  return '<label>'+lab+'<input data-k="'+k+'" type="'+(tipo==='num'?'number':(tipo||'text'))+'" step="any" value="'+(val==null?'':String(val).replace(/"/g,'&quot;'))+'"></label>';
+}
+function num(k){ var x=parseFloat(String(g(k)).replace(',','.')); return isNaN(x)?null:x; }
+function trmr(){
+  var a=[],b=[]; for(var i=1;i<=3;i++){ var x=num('fr_a'+i), y=num('fr_b'+i); if(x&&y!=null){a.push(x);b.push(y);} }
+  if(!a.length) return null;
+  var ma=a.reduce(function(s,x){return s+x},0)/a.length, mb=b.reduce(function(s,x){return s+x},0)/b.length;
+  return {a:ma,b:mb,r:mb/ma*100};
+}
+function grado(r){ if(r==null) return null; return r>80?1:r>=50?2:r>=25?3:4; }
+var GTXT={1:'Mobilità normale (oltre 80%)',2:'Restrizione lieve (50–80%)',3:'Restrizione moderata (25–50%)',4:'Restrizione grave (sotto 25%)'};
+
+function vista(){
+  var h='';
+  if(cur==='disegno'){
+    h+='<div class="card"><h2>Razionale e disegno</h2><p>Il frenulo linguale corto viene trattato come <b>perturbazione del sistema</b>. Si misura il sistema con il frenulo attivo, poi con le sue afferenze spente con un anestetico topico, e si confronta.</p>'+
+    '<div class="cons"><b>Componente afferente:</b> miglioramento con l\'anestetico e non con il placebo.<br><b>Componente meccanica:</b> nessun cambiamento con l\'anestetico, cambiamento dopo la frenulotomia.</div>'+
+    '<table><tr><th>Fase</th><th>Condizione</th><th>Batteria</th><th>Quando</th></tr><tr><td>T0</td><td>Baseline</td><td>Completa</td><td>Giorno 1</td></tr><tr><td>T1</td><td>Gel A (in cieco)</td><td>Breve</td><td>Giorno 1, dopo T0</td></tr><tr><td>T2</td><td>Gel B (condizione opposta)</td><td>Breve, con baseline breve</td><td>Giorno 2, a 2–7 giorni</td></tr><tr><td>T3</td><td>Post frenulotomia (opzionale)</td><td>Completa</td><td>A 2 settimane e a 3 mesi</td></tr></table></div>';
+    h+='<div class="card"><h3>Modalità dello studio</h3><div class="row">'+inp('modalita','Disegno','sel',['','pilota aperto (senza cieco, senza controllo)','doppio cieco con placebo'])+'</div><div class="mut">Nel pilota aperto si applica solo l\'anestetico a T1: non c\'è T2 né busta. Nel doppio cieco T1 e T2 sono gel A e gel B in ordine randomizzato.</div></div>';
+    h+='<div class="card"><h3>Dati della seduta</h3><div class="row">'+inp('nome','Cognome e nome')+inp('dn','Data di nascita','date')+inp('data','Data T0','date')+inp('fascia','Fascia d\'età','sel',['','4–7 anni','8–14 anni','adolescenti/adulti'])+inp('esaminatore','Esaminatore')+inp('applicatore','Medico/odontoiatra applicatore')+inp('codice','Codice busta (randomizzazione)')+'</div>'+
+    '<div class="mut">La busta la gestisce l\'applicatore: esaminatore e paziente non sanno quale gel è stato applicato fino al confronto.</div></div>';
+    h+='<div class="card"><h3>Sicurezza — verifica dell\'applicatore</h3><div class="warnbox">L\'anestetico lo prescrive e lo applica un medico o un odontoiatra. Solo topico, sul frenulo, in quantità minima. Niente blocco del nervo linguale. Benzocaina da evitare sotto i 2 anni.</div>'+
+    ['Nessuna allergia agli anestetici locali','Nessuna cardiopatia o aritmia non valutata','Nessuna epilessia non controllata','Nessuna lesione della mucosa orale','Dose calcolata dal medico sul peso','Placebo uguale per aspetto, gusto e consistenza','Consenso informato scritto (entrambi i genitori per i minori)','Assenso del minore (dagli 8 anni)','Parere del comitato etico (se i dati saranno pubblicati)','Stessa stanza, ora e luce dei due giorni; niente notte insonne né sport nelle 2 ore prima'].map(function(t,i){return inp('sic'+i,t,'chk')}).join('')+'</div>';
+  }
+  if(cur==='frenulo'){
+    var t=trmr(), gr=t?grado(t.r):null;
+    h+='<div class="card"><h2>TRMR — Tongue Range of Motion Ratio (Yoon 2017)</h2><div class="cons"><b>A</b> «Apri la bocca più che puoi» · <b>B</b> «Metti la punta della lingua qui dietro i denti, sul palato, e apri più che puoi». Calibro in mm, 3 misure alternate.</div>'+
+    '<table><tr><th>Prova</th><th>A · apertura massima (mm)</th><th>B · lingua sulla papilla (mm)</th></tr>'+[1,2,3].map(function(i){return '<tr><td>'+i+'</td><td>'+inp('fr_a'+i,'','num')+'</td><td>'+inp('fr_b'+i,'','num')+'</td></tr>'}).join('')+'</table>'+
+    (t?'<p style="margin-top:12px">TRMR = B / A × 100 = <b>'+t.r.toFixed(1)+'%</b> &nbsp; <span class="pill g'+gr+'">Grado '+gr+' · '+GTXT[gr]+'</span></p>':'<p class="mut">Inserisci almeno una coppia A/B.</p>')+
+    '<div class="mut">Ipotesi del protocollo: anche un frenulo di grado 1–2, che muove la lingua in modo apparentemente adeguato, può perturbare il sistema. Il TRMR descrive la mobilità, non esclude la perturbazione.</div>'+
+    '<h3>Osservazione</h3><div class="row">'+inp('fr_inserz','Inserzione linguale','sel',['','apice','sotto l\'apice','metà lingua','base'])+inp('fr_forma','Forma della lingua in elevazione','sel',['','normale','a cuore','piatta','asimmetrica'])+inp('fr_tipo','Frenulo','sel',['','sottile/elastico','spesso/fibroso','sottomucoso'])+'</div>'+inp('fr_note','Note sull\'osservazione','area')+'</div>';
+  }
+  if(cur==='orali'){
+    h+='<div class="card"><h2>Funzioni orali — solo a T0</h2><h3>Deglutizione di acqua</h3><div class="mut">Tre sorsi liberi, poi deglutizione con labbra divaricate.</div>'+
+    ['Spinta linguale anteriore','Contrazione periorale','Movimento del capo','Interposizione linguale','Residuo in bocca'].map(function(t,i){return inp('dg'+i,t,'chk')}).join('')+
+    '<h3>Respirazione</h3><div class="row">'+inp('glatzel','Specchio di Glatzel','sel',['','simmetrico','ridotto a dx','ridotto a sx','ridotto bilaterale'])+inp('rosenthal','Test di Rosenthal (20 respiri nasali)','sel',['','20 senza fatica','20 con fatica','apre la bocca prima'])+inp('ros_n','Se apre: dopo quanti respiri','num')+'</div>'+
+    '<h3>Postura linguale a riposo</h3><div class="row">'+inp('post_oss','Osservata','sel',['','al palato (spot)','sui denti inferiori','tra i denti','pavimento della bocca'])+inp('post_rif','Riferita dal paziente (dagli 8 anni)','text')+inp('labbra','Labbra a riposo','sel',['','chiuse','socchiuse','aperte'])+'</div>'+inp('orali_note','Note','area')+'</div>';
+  }
+  if(cur==='batteria'){
+    var fasci=g('fascia');
+    h+='<div class="card noprint"><h2>Batteria breve · ordine fisso</h2><div class="mut">La finestra utile dell\'anestetico topico è di 15–30 minuti: la batteria breve parte subito e si chiude entro 15 minuti.'+(fasci?' Fascia: <b>'+fasci+'</b>.':'')+'</div>'+
+    '<div style="display:flex;gap:12px;align-items:center;margin-top:8px"><span class="timer" id="tm">15:00</span><button class="btn" id="tmgo">▶ Avvia 15 minuti</button><button class="btn sec" id="tmst">■ Ferma</button></div></div>';
+    TEST.forEach(function(te){
+      h+='<div class="card"><h3>'+te.n+' <span class="mut">· '+te.t+'</span></h3>'+(te.nota?'<div class="mut">'+te.nota+'</div>':'')+
+      '<table><tr><th>Misura</th>'+FASI.map(function(f){return '<th>'+NOMI_FASI[f]+'</th>'}).join('')+'</tr>'+
+      te.campi.map(function(c){return '<tr><td>'+c[1]+'</td>'+FASI.map(function(f){return '<td>'+inp('b_'+te.id+'_'+c[0]+'_'+f,'',c[2],c[3])+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>';
+    });
+  }
+  if(cur==='confronto'){
+    var aperto = String(g('modalita')).indexOf('pilota')===0;
+    if(aperto){ h+='<div class="card"><h2>Confronto</h2><div class="mut">Pilota aperto: T1 è l\'anestetico, non c\'è placebo. Un miglioramento a T1 è compatibile con una componente afferente, ma senza placebo non si può escludere l\'effetto del solo gel in bocca o dell\'aspettativa.</div></div>'; }
+    else { h+='<div class="card"><h2>Confronto</h2><div class="row">'+inp('gelA','Il gel A era…','sel',['','non ancora svelato','anestetico','placebo'])+'</div><div class="mut">Svela solo a batterie concluse. Il gel B è la condizione opposta.</div></div>'; }
+    var gA=g('gelA'), anes = aperto?'T1':(gA==='anestetico'?'T1':gA==='placebo'?'T2':null), plac = aperto?null:(anes==='T1'?'T2':anes==='T2'?'T1':null);
+    h+='<div class="card"><table><tr><th>Test · misura</th><th>T0</th><th>Δ anestetico</th><th>Δ placebo</th><th>Δ post frenulotomia</th></tr>';
+    TEST.forEach(function(te){ te.campi.forEach(function(c){ if(c[2]!=='num') return;
+      var base=num('b_'+te.id+'_'+c[0]+'_T0'); function d(f){ if(!f) return '—'; var x=num('b_'+te.id+'_'+c[0]+'_'+f); if(x==null||base==null) return '—'; var dd=x-base; var buono = te.meglio==='alto'? dd>0 : dd<0; return '<span class="'+(dd===0?'':buono?'d-pos':'d-neg')+'">'+(dd>0?'+':'')+dd.toFixed(1)+'</span>'; }
+      h+='<tr><td>'+te.n.replace(/^\d+ · /,'')+' · '+c[1]+'</td><td>'+(base==null?'—':base)+'</td><td>'+d(anes)+'</td><td>'+d(plac)+'</td><td>'+d('T3')+'</td></tr>'; }); });
+    h+='</table><div class="mut" style="margin-top:8px">Verde = miglioramento rispetto a T0, rosso = peggioramento. <b>Afferente</b>: cambia con l\'anestetico e non con il placebo. <b>Meccanica</b>: non cambia con l\'anestetico, cambia dopo la frenulotomia.</div></div>';
+  }
+  if(cur==='esito'){
+    var t2=trmr(),gr2=t2?grado(t2.r):null;
+    h+='<div class="card"><h2>Esito</h2><p>TRMR: '+(t2?'<b>'+t2.r.toFixed(1)+'%</b> · grado '+gr2:'—')+' · Gel A: <b>'+(g('gelA')||'non svelato')+'</b></p><div class="row">'+inp('lettura','Lettura del caso','sel',['','componente afferente','componente meccanica','entrambe','nessuna perturbazione rilevata','dati insufficienti'])+'</div>'+inp('esito_note','Sintesi clinica','area')+inp('relazione','Relazione (modificabile, per la cartella)','area')+'</div>';
+  }
+  document.getElementById('app').innerHTML=h;
+  document.getElementById('tabs').innerHTML=SEZ.map(function(s){return '<button data-t="'+s.id+'" class="'+(s.id===cur?'on':'')+'">'+s.n+'</button>'}).join('');
+  var n=Object.keys(V).filter(function(k){return k[0]!=='_'&&V[k]!==''&&V[k]!=null&&V[k]!==false}).length;
+  document.getElementById('stato').textContent = n? n+' campi compilati' : 'da compilare';
+  timerBind();
+}
+document.addEventListener('click',function(e){ var b=e.target.closest('[data-t]'); if(b){ cur=V._tab=b.dataset.t; sl(); vista(); window.scrollTo(0,0);} });
+document.addEventListener('change',function(e){ var k=e.target.dataset&&e.target.dataset.k; if(!k) return;
+  V[k]= e.target.type==='checkbox'? e.target.checked : e.target.value; sl();
+  if(/^fr_|^gelA|^b_|^modalita/.test(k) && (cur==='frenulo'||cur==='confronto'||cur==='esito')) vista(); else { var n=Object.keys(V).filter(function(x){return x[0]!=='_'&&V[x]}).length; document.getElementById('stato').textContent=n+' campi compilati'; } });
+var tmI=null, tmEnd=null;
+function timerBind(){ var go=document.getElementById('tmgo'), stp=document.getElementById('tmst'); if(!go) return;
+  go.onclick=function(){ tmEnd=Date.now()+15*60000; clearInterval(tmI); tmI=setInterval(tick,500); tick(); };
+  stp.onclick=function(){ clearInterval(tmI); tmI=null; };
+  if(tmI) tick(); }
+function tick(){ var el=document.getElementById('tm'); if(!el||!tmEnd) return; var s=Math.max(0,Math.round((tmEnd-Date.now())/1000));
+  el.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); el.style.color = s<180?'#8a1c1c':''; if(!s){clearInterval(tmI);} }
+vista();
+</script></body></html>

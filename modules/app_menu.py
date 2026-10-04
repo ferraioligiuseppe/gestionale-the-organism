@@ -277,6 +277,7 @@ SOTTOSEZIONI = {
     ],
     AREA_ACADEMY: [
         "📅 Eventi e iscrizioni",
+        "🔬 Ricerca · Frenulo come perturbazione",
     ],
     AREA_TEST_LIVE: [
         "🖥️ Somministrazione test",

@@ -647,9 +647,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🔒 Privacy & Consensi":
         from .privacy.ui_privacy_section import render_privacy_section
         render_privacy_section(); return True
-    if sotto == "✍️ Firme privacy in attesa":
-        from .privacy.firma_remota import render_in_attesa
-        render_in_attesa(conn); return True
     if sotto == "📥 Import pazienti":
         from .sections.ui_cliniche import render_import_section
         render_import_section(); return True
@@ -1124,6 +1121,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             sottotitolo="Cinque fasce d'età, dalla nascita ai 16 anni: le prove cambiano con la fascia.",
             kp="sb")
         return True
+    if sotto == "🔬 Ricerca · Frenulo come perturbazione":
+        from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+        render_protocollo_pdf_app(
+            conn, paz_id,
+            html_file="Frenulo_perturbazione_MASTER.html",
+            pdf_file="Frenulo_perturbazione_manuale.pdf",
+            titolo="🔬 Frenulo come perturbazione — protocollo di ricerca",
+            sottotitolo="Batteria pre/post anestesia topica del frenulo: pilota aperto o doppio cieco con placebo.",
+            kp="frn")
+        return True
     if sotto == "🩺 Screening completo":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(conn, paz_id); return True
@@ -1289,9 +1296,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 return
             from .privacy.ui_privacy_section import render_privacy_section
             render_privacy_section(); return
-        if sotto == "✍️ Firme privacy in attesa":
-            from .privacy.firma_remota import render_in_attesa
-            render_in_attesa(conn); return
         if sotto == "📥 Import pazienti":
             from .sections.ui_cliniche import render_import_section
             render_import_section(); return
@@ -1447,6 +1451,16 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto in ("🧑 Valutazione adulti — funzionale completa", "🧠 Valutazione adulti — neurologica completa"):
             from .valutazione_adulti import render_valutazione_adulti
             render_valutazione_adulti(conn, paz_id, "funzionale" if "funzionale" in sotto else "neurologica")
+            return
+        if sotto == "🔬 Ricerca · Frenulo come perturbazione":
+            from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+            render_protocollo_pdf_app(
+                conn, paz_id,
+                html_file="Frenulo_perturbazione_MASTER.html",
+                pdf_file="Frenulo_perturbazione_manuale.pdf",
+                titolo="🔬 Frenulo come perturbazione — protocollo di ricerca",
+                sottotitolo="Batteria pre/post anestesia topica del frenulo: pilota aperto o doppio cieco con placebo.",
+                kp="frn")
             return
         if sotto in ("🧑 Screening adulti — funzionale", "🧠 Screening adulti — neurologico"):
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
