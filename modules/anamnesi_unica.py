@@ -733,7 +733,8 @@ def _widget(label, tipo, opts, val, key):
         # Le voci recuperate dalle anamnesi vecchie restano, anche se scritte
         # in modo diverso da quelle proposte qui.
         extra = [x for x in (st.session_state.get(key) or []) if x not in opts]
-        return st.multiselect(label, list(opts) + extra, key=key)
+        return st.multiselect(label, list(opts) + extra, key=key,
+                              placeholder="Scegli una o più voci")
     if tipo == "sel":
         cur = st.session_state.get(key)
         o = list(opts) + ([cur] if cur and cur not in opts else [])
