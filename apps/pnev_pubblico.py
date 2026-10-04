@@ -48,7 +48,7 @@ VERDE = "#1D6B44"
 
 # URL pubblico di QUESTA app (per costruire il magic link assoluto nelle email).
 # Sovrascrivibile dai secrets con APP_URL.
-APP_URL_DEFAULT = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck7n.streamlit.app"
+APP_URL_DEFAULT = "https://pnev-eventi-prova.streamlit.app"
 
 
 def _ora(dt):
