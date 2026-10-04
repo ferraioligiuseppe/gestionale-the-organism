@@ -249,6 +249,7 @@ SOTTOSEZIONI = {
         "🧑 Valutazione adulti — funzionale completa",
         "🧠 Valutazione adulti — neurologica completa",
         "🔺 Prismi posturali",
+        "👅 Valutazione del frenulo",
         "🧸 Screening 0-4 anni",
         "🎧 Screening uditivo",
         # Due strumenti per lo stesso protocollo, con punti di forza opposti:

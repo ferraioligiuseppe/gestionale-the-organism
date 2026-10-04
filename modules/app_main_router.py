@@ -1452,6 +1452,16 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             from .valutazione_adulti import render_valutazione_adulti
             render_valutazione_adulti(conn, paz_id, "funzionale" if "funzionale" in sotto else "neurologica")
             return
+        if sotto == "👅 Valutazione del frenulo":
+            from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+            render_protocollo_pdf_app(
+                conn, paz_id,
+                html_file="Frenulo_valutazione_clinica_MASTER.html",
+                pdf_file="Frenulo_perturbazione_manuale.pdf",
+                titolo="👅 Valutazione del frenulo",
+                sottotitolo="Mobilità linguale, funzioni orali e batteria sistemica: il frenulo come possibile perturbazione anche quando la lingua si muove bene.",
+                kp="frc")
+            return
         if sotto == "🔬 Ricerca · Frenulo come perturbazione":
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             render_protocollo_pdf_app(
