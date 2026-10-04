@@ -227,7 +227,6 @@ SOTTOSEZIONI = {
     AREA_INVII: [
         "📋 Questionari remoti",
         "🖨️ Questionari cartacei",
-        "🎧 Screening uditivo",
         "📋 Consenso screening scolastico",
     ],
     AREA_OCULISTICA: [
@@ -250,6 +249,7 @@ SOTTOSEZIONI = {
         "🧠 Valutazione adulti — neurologica completa",
         "🔺 Prismi posturali",
         "🧸 Screening 0-4 anni",
+        "🎧 Screening uditivo",
         # Due strumenti per lo stesso protocollo, con punti di forza opposti:
         #  · "Screening completo" apre l'app HTML — impaginazione A4 fedele,
         #    calcolatori automatici, stampa diretta, secondo monitor. Ma per
