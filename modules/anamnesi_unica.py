@@ -60,7 +60,7 @@ GRUPPI = [
           "Infezioni (TORCH)", "Sanguinamenti", "Minaccia d'aborto", "Placenta previa",
           "Oligoidramnios / polidramnios", "Cadute / traumi addominali", "Ricoveri",
           "Farmaci", "Fumo / alcol / sostanze", "Altro"]),
-        ("grav_stato_em", "Stato emotivo della madre (1 molto difficile · 5 sereno)", "scala", None),
+        ("grav_stato_em", "Stato emotivo della madre in gravidanza", "scala", None),
         ("grav_coppia", "Qualità della relazione di coppia", "scala", None),
         ("grav_supporto", "Supporto familiare e sociale", "scala", None),
         ("grav_eventi", "Eventi stressanti", "multi",
@@ -702,6 +702,42 @@ def _recupera_e_salva(conn, paz_id) -> dict:
 
 # ── Disegno ───────────────────────────────────────────────────────────
 
+# Cosa vuol dire ogni punto delle scale 1-5: senza, un genitore non sa se
+# «3» e' tanto o poco, e due famiglie diverse danno allo stesso vissuto
+# numeri diversi. Le parole qui sotto rendono le risposte confrontabili.
+ANCORE_SCALA = {
+    "grav_stato_em": {
+        1: "molto difficile — ansia o tristezza forti, quasi sempre",
+        2: "difficile — momenti pesanti frequenti",
+        3: "alti e bassi",
+        4: "per lo più serena",
+        5: "serena per quasi tutta la gravidanza",
+    },
+    "grav_coppia": {
+        1: "conflitti forti o continui, oppure partner assente",
+        2: "tensioni frequenti",
+        3: "alti e bassi",
+        4: "buona, con qualche difficoltà",
+        5: "molto buona, di sostegno reciproco",
+    },
+    "grav_supporto": {
+        1: "nessun aiuto da famiglia o amici",
+        2: "poco aiuto, solo in caso di bisogno",
+        3: "qualche aiuto",
+        4: "buon aiuto, presente quando serviva",
+        5: "molto presente e costante",
+    },
+}
+_ANCORE_GENERICHE = {1: "molto basso", 2: "basso", 3: "medio", 4: "buono", 5: "molto buono"}
+
+
+def _ancore_per(key):
+    for campo, ancore in ANCORE_SCALA.items():
+        if key.endswith(campo):
+            return ancore
+    return _ANCORE_GENERICHE
+
+
 def _widget(label, tipo, opts, val, key):
     if key not in st.session_state:
         if tipo in ("mesi", "num"):
@@ -727,8 +763,11 @@ def _widget(label, tipo, opts, val, key):
     if tipo == "scala":
         # Pulsanti in riga invece del cursore: il cursore ripeteva «non
         # valutato» due volte e dal telefono era difficile da spostare.
-        return st.radio(label, options=[0, 1, 2, 3, 4, 5], key=key, horizontal=True,
-                        format_func=lambda x: "non so" if x == 0 else str(x))
+        anc = _ancore_per(key)
+        # In colonna, con la spiegazione accanto al numero: si legge anche dal telefono.
+        return st.radio(label, options=[0, 1, 2, 3, 4, 5], key=key,
+                        format_func=lambda x: "non so / preferisco non rispondere" if x == 0
+                        else f"{x} · {anc.get(x, '')}")
     if tipo == "chk":
         return st.checkbox(label, key=key)
     if tipo == "multi":
