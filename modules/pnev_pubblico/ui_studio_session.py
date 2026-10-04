@@ -15,7 +15,7 @@ import streamlit.components.v1 as components
 
 from modules.pnev_pubblico import db_pnev_pubblico as db
 
-APP_URL_PUBBLICO_DEFAULT = "https://gestionale-the-organism-n77ucp3n4us2hmqke9ck7n.streamlit.app"
+APP_URL_PUBBLICO_DEFAULT = "https://pnev-eventi-prova.streamlit.app"
 
 
 def render_maps_clear_studio(conn, paz_id, paziente):
