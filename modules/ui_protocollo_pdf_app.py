@@ -40,9 +40,7 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
     (protocollo completo, screening breve) senza collisioni di key."""
     st.header(titolo)
     st.caption(sottotitolo)
-    st.warning("⚠️ Salvataggio: usa **Esporta** per scaricare i dati come file, e **Importa** per "
-               "riaprirli — così restano legati al paziente indipendentemente dal browser usato. "
-               "\"Salva\"/\"Riapri\" nella barra della app usano solo la memoria di questo browser.")
+    st.caption("Compila la scheda e, alla fine, premi «💾 Salva nel fascicolo» sotto la scheda.")
 
     # Scheda bianca e manuale d'uso, se presenti in static_protocollo/.
     # Prima un PDF mancante veniva ignorato in silenzio: il bottone
@@ -79,90 +77,110 @@ def render_protocollo_pdf_app(conn=None, paz_id=None, paziente=None,
         st.error(f"File del protocollo non trovato: {e}")
         return
 
-    # Selettore paziente dall'anagrafica del gestionale: precompila Cognome/Nome
-    # e Data di nascita nell'HTML statico (che di per sé non ha accesso al DB).
     nome_precompilato = data_nascita_precompilata = eta_precompilata = ""
-    if conn is not None:
-        with st.expander("➕ Nuovo paziente (non ancora in anagrafica)"):
-            # Dentro un form: il pulsante invia i campi cosi' come sono a schermo.
-            # Senza, i campi riempiti dal completamento automatico del browser
-            # non arrivavano a Streamlit e «Crea» li trovava vuoti.
-            with st.form(f"{kp}_html_form_nuovo", clear_on_submit=False, border=False):
-                cn1, cn2 = st.columns(2)
-                nuovo_cognome = cn1.text_input("Cognome", key=f"{kp}_html_nuovo_cognome")
-                nuovo_nome = cn2.text_input("Nome", key=f"{kp}_html_nuovo_nome")
-                nuova_dn = st.date_input("Data di nascita", key=f"{kp}_html_nuova_dn",
-                                          value=None, min_value=datetime.date(1930, 1, 1))
-                crea = st.form_submit_button("Crea e usa questo paziente", type="primary")
-            if crea:
-                if not (nuovo_cognome or "").strip() or not (nuovo_nome or "").strip():
-                    st.warning("Cognome e nome sono obbligatori.")
-                else:
-                    try:
-                        cur = conn.cursor()
-                        # stato_paziente e' obbligatorio nella tabella: senza,
-                        # la creazione falliva con «null value in column stato_paziente».
-                        # Maiuscolo come in anagrafica, cosi' la ricerca lo trova.
-                        cur.execute("INSERT INTO pazienti (cognome, nome, data_nascita, stato_paziente) "
-                                    "VALUES (%s, %s, %s, 'ATTIVO') RETURNING id",
-                                    (nuovo_cognome.strip().upper(), nuovo_nome.strip().upper(), nuova_dn))
-                        _r = cur.fetchone()
-                        nuovo_id = int(_r["id"] if isinstance(_r, dict) else _r[0])
-                        conn.commit()
-                        # L'elenco pazienti e' in cache: senza svuotarla il nuovo
-                        # paziente non comparirebbe nel selettore.
-                        try:
-                            from .paziente_attivo import _carica_lista_pazienti
-                            _carica_lista_pazienti.clear()
-                        except Exception:
-                            pass
-                        st.session_state["_paziente_attivo_id"] = nuovo_id
-                        paz_id = nuovo_id
-                        st.success(f"Paziente creato (#{nuovo_id}) e impostato come attivo.")
-                        st.rerun()
-                    except Exception as e:
-                        try: conn.rollback()
-                        except Exception: pass
-                        st.error(f"Errore creazione: {e}")
+
+    def _metti_paziente(cognome_sel, nome_sel, dn_sel):
+        nonlocal nome_precompilato, data_nascita_precompilata, eta_precompilata
+        nome_precompilato = f"{cognome_sel or ''} {nome_sel or ''}".strip()
+        data_nascita_precompilata = (dn_sel.strftime("%d/%m/%Y") if hasattr(dn_sel, "strftime")
+                                     else (str(dn_sel) if dn_sel else ""))
+        try:
+            _dn = dn_sel
+            if isinstance(_dn, str):
+                _dn = datetime.date.fromisoformat(_dn[:10])
+            if hasattr(_dn, "year"):
+                _oggi = datetime.date.today()
+                _anni = _oggi.year - _dn.year - ((_oggi.month, _oggi.day) < (_dn.month, _dn.day))
+                _mesi = (_oggi.month - _dn.month) % 12
+                eta_precompilata = f"{_anni};{_mesi:02d}"
+        except Exception:
+            pass
+
+    # Paziente gia' scelto in alto («Paziente in lavorazione»): i suoi dati
+    # vanno nella scheda da soli. Prima bisognava sceglierlo una seconda volta
+    # nel menu «Precompila da anagrafica», altrimenti la scheda restava vuota.
+    if conn is not None and paz_id:
         try:
             cur = conn.cursor()
-            cur.execute("SELECT id, cognome, nome, data_nascita FROM pazienti "
-                        "ORDER BY cognome, nome LIMIT 3000")
-            righe = cur.fetchall() or []
+            cur.execute("SELECT cognome, nome, data_nascita FROM pazienti WHERE id=%s", (int(paz_id),))
+            _r = cur.fetchone()
+            if _r:
+                _g0 = (lambda k, i: _r.get(k) if hasattr(_r, "get") else _r[i])
+                _metti_paziente(_g0("cognome", 0), _g0("nome", 1), _g0("data_nascita", 2))
+                st.caption(f"Scheda di **{nome_precompilato}**: nome, data di nascita ed età sono già inseriti.")
         except Exception as e:
-            righe = []
             try: conn.rollback()
             except Exception: pass
-            st.error(f"Impossibile leggere l'anagrafica: {e}")
-        if righe:
-            def _g(r, i, k):
-                return r.get(k) if hasattr(r, "get") else r[i]
-            opzioni = ["— nessuno (compilo a mano) —"] + [
-                f"{_g(r,1,'cognome') or ''} {_g(r,2,'nome') or ''} — #{_g(r,0,'id')}" for r in righe
-            ]
-            scelta = st.selectbox("👤 Precompila da anagrafica", opzioni, key=f"{kp}_html_pick_paziente")
-            if scelta != opzioni[0]:
-                idx_sel = opzioni.index(scelta) - 1
-                r = righe[idx_sel]
-                # Il paziente scelto qui e' quello a cui si aggancia il
-                # salvataggio e la relazione.
-                paz_id = _g(r, 0, "id")
-                cognome_sel = _g(r, 1, "cognome") or ""
-                nome_sel = _g(r, 2, "nome") or ""
-                dn_sel = _g(r, 3, "data_nascita")
-                nome_precompilato = f"{cognome_sel} {nome_sel}".strip()
-                data_nascita_precompilata = dn_sel.strftime("%d/%m/%Y") if hasattr(dn_sel, "strftime") else (str(dn_sel) if dn_sel else "")
-                try:
-                    _dn = dn_sel
-                    if isinstance(_dn, str):
-                        _dn = datetime.date.fromisoformat(_dn[:10])
-                    if hasattr(_dn, "year"):
-                        _oggi = datetime.date.today()
-                        _anni = _oggi.year - _dn.year - ((_oggi.month, _oggi.day) < (_dn.month, _dn.day))
-                        _mesi = (_oggi.month - _dn.month) % 12
-                        eta_precompilata = f"{_anni};{_mesi:02d}"
-                except Exception:
-                    pass
+            st.caption(f"Dati del paziente non letti: {e}")
+
+    # Senza paziente in alto: si puo' sceglierlo qui o crearne uno nuovo.
+    if conn is not None and not paz_id:
+        if conn is not None:
+            with st.expander("➕ Nuovo paziente (non ancora in anagrafica)"):
+                # Dentro un form: il pulsante invia i campi cosi' come sono a schermo.
+                # Senza, i campi riempiti dal completamento automatico del browser
+                # non arrivavano a Streamlit e «Crea» li trovava vuoti.
+                with st.form(f"{kp}_html_form_nuovo", clear_on_submit=False, border=False):
+                    cn1, cn2 = st.columns(2)
+                    nuovo_cognome = cn1.text_input("Cognome", key=f"{kp}_html_nuovo_cognome")
+                    nuovo_nome = cn2.text_input("Nome", key=f"{kp}_html_nuovo_nome")
+                    nuova_dn = st.date_input("Data di nascita", key=f"{kp}_html_nuova_dn",
+                                              value=None, min_value=datetime.date(1930, 1, 1))
+                    crea = st.form_submit_button("Crea e usa questo paziente", type="primary")
+                if crea:
+                    if not (nuovo_cognome or "").strip() or not (nuovo_nome or "").strip():
+                        st.warning("Cognome e nome sono obbligatori.")
+                    else:
+                        try:
+                            cur = conn.cursor()
+                            # stato_paziente e' obbligatorio nella tabella: senza,
+                            # la creazione falliva con «null value in column stato_paziente».
+                            # Maiuscolo come in anagrafica, cosi' la ricerca lo trova.
+                            cur.execute("INSERT INTO pazienti (cognome, nome, data_nascita, stato_paziente) "
+                                        "VALUES (%s, %s, %s, 'ATTIVO') RETURNING id",
+                                        (nuovo_cognome.strip().upper(), nuovo_nome.strip().upper(), nuova_dn))
+                            _r = cur.fetchone()
+                            nuovo_id = int(_r["id"] if isinstance(_r, dict) else _r[0])
+                            conn.commit()
+                            # L'elenco pazienti e' in cache: senza svuotarla il nuovo
+                            # paziente non comparirebbe nel selettore.
+                            try:
+                                from .paziente_attivo import _carica_lista_pazienti
+                                _carica_lista_pazienti.clear()
+                            except Exception:
+                                pass
+                            st.session_state["_paziente_attivo_id"] = nuovo_id
+                            paz_id = nuovo_id
+                            st.success(f"Paziente creato (#{nuovo_id}) e impostato come attivo.")
+                            st.rerun()
+                        except Exception as e:
+                            try: conn.rollback()
+                            except Exception: pass
+                            st.error(f"Errore creazione: {e}")
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT id, cognome, nome, data_nascita FROM pazienti "
+                            "ORDER BY cognome, nome LIMIT 3000")
+                righe = cur.fetchall() or []
+            except Exception as e:
+                righe = []
+                try: conn.rollback()
+                except Exception: pass
+                st.error(f"Impossibile leggere l'anagrafica: {e}")
+            if righe:
+                def _g(r, i, k):
+                    return r.get(k) if hasattr(r, "get") else r[i]
+                opzioni = ["— nessuno (compilo a mano) —"] + [
+                    f"{_g(r,1,'cognome') or ''} {_g(r,2,'nome') or ''} — #{_g(r,0,'id')}" for r in righe
+                ]
+                scelta = st.selectbox("👤 Precompila da anagrafica", opzioni, key=f"{kp}_html_pick_paziente")
+                if scelta != opzioni[0]:
+                    idx_sel = opzioni.index(scelta) - 1
+                    r = righe[idx_sel]
+                    # Il paziente scelto qui e' quello a cui si aggancia il
+                    # salvataggio e la relazione.
+                    paz_id = _g(r, 0, "id")
+                    _metti_paziente(_g(r, 1, "cognome"), _g(r, 2, "nome"), _g(r, 3, "data_nascita"))
 
     _precompila_js = ""
     if nome_precompilato:
