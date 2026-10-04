@@ -1,3 +1,9 @@
 [server]
 enableStaticServing = true
 fileWatcherType = "none"
+
+[client]
+# Nasconde l'elenco delle pagine tecniche (cron, debug, diagnostica…) nella
+# barra laterale: lo vedevano anche i pazienti che aprivano un questionario.
+# Le pagine restano raggiungibili dal loro indirizzo diretto.
+showSidebarNavigation = false
