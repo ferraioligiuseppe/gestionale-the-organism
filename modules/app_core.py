@@ -8851,16 +8851,30 @@ def _ensure_documenti_table(conn):
         );
         """
     )
-    # Migrazione: aggiungi colonna blob se manca
-    try:
-        cur.execute("ALTER TABLE public.documenti ADD COLUMN IF NOT EXISTS blob BYTEA;")
-    except Exception:
-        pass
+    # Migrazione. Sul database OVH la tabella documenti esisteva gia' con
+    # un'altra struttura (senza s3_key): CREATE TABLE IF NOT EXISTS non la
+    # tocca, e ogni PDF di consenso firmato online falliva con «column s3_key
+    # does not exist». Si aggiungono le colonne che mancano, una per volta.
+    conn.commit()
+    for _col, _tipo in (("tipo", "TEXT"), ("s3_key", "TEXT"), ("filename", "TEXT"),
+                        ("sha256", "TEXT"), ("mime", "TEXT DEFAULT 'application/pdf'"),
+                        ("created_at", "TIMESTAMP DEFAULT NOW()"), ("blob", "BYTEA")):
+        try:
+            cur.execute(f"ALTER TABLE public.documenti ADD COLUMN IF NOT EXISTS {_col} {_tipo};")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
     try:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_documenti_paziente ON public.documenti(paziente_id);")
+        conn.commit()
     except Exception:
-        pass
-    conn.commit()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 def _sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
@@ -8985,11 +8999,20 @@ def _db_insert_documento(conn, paziente_id: int, tipo: str, s3_key: str, sha256:
             (paziente_id, tipo, s3_key, filename, sha256, blob),
         )
     else:
-        cur.execute(
-            """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime, blob)
-                 VALUES (%s, %s, %s, %s, %s, 'application/pdf', %s)""",
-            (paziente_id, tipo, s3_key, filename, sha256, blob),
-        )
+        try:
+            cur.execute(
+                """INSERT INTO public.documenti (paziente_id, tipo, s3_key, filename, sha256, mime, blob)
+                     VALUES (%s, %s, %s, %s, %s, 'application/pdf', %s)""",
+                (paziente_id, tipo, s3_key, filename, sha256, blob),
+            )
+        except Exception:
+            # senza rollback la connessione resta bloccata e salta anche il
+            # salvataggio del consenso subito dopo
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
     conn.commit()
 
 def _db_list_documenti(conn, paziente_id: int, tipo: str | None = None):
@@ -9572,21 +9595,15 @@ def ui_privacy_pdf():
     except Exception as e:
         st.warning(f"Storico non disponibile: {e}")
 
-    # ── GENERA LINK FIRMA ONLINE ──────────────────────────────────────────
-    st.markdown("**Invia link firma online al paziente**")
-    st.caption("Il paziente apre il link sul telefono, legge il consenso, firma con il dito e invia. La firma viene salvata automaticamente.")
-    exp = int(_secrets_get_root("privacy", {}).get("TOKEN_EXPIRE_SECONDS", 172800))
-    if st.button("Genera link firma online", key=f"gen_sign_{pid}_{doc_type}", type="primary"):
-        try:
-            token = _make_sign_token(int(pid), doc_type, exp)
-            url   = _public_sign_url(token)
-            st.success("Link generato — valido 48 ore")
-            st.code(url)
-            mail_body = "Apri questo link per firmare il consenso privacy:\n" + url
-            st.markdown(f"- Invia via Email: {_mailto_link('Consenso privacy – Studio The Organism', mail_body)}")
-            st.markdown(f"- Invia via WhatsApp: {_whatsapp_link('Apri questo link per firmare il consenso privacy: ' + url)}")
-        except Exception as e:
-            st.error(f"Impossibile generare il link: {type(e).__name__}: {e}")
+    # ── FIRMA A DISTANZA ──────────────────────────────────────────────────
+    # Prima il link andava copiato e mandato a mano, e non si sapeva chi
+    # avesse firmato. Ora parte per email, resta in «Firme privacy in attesa»
+    # finché il paziente non firma, e allo studio arriva l'avviso con il PDF.
+    try:
+        from modules.privacy.firma_remota import render_invio_link
+        render_invio_link(conn, int(pid), doc_type)
+    except Exception as e:
+        st.error(f"Firma a distanza non disponibile: {type(e).__name__}: {e}")
 
 
 def ui_public_sign_page():
@@ -9613,6 +9630,21 @@ def ui_public_sign_page():
 
     conn = get_connection()
     _ensure_documenti_table(conn)
+
+    # Pagina pensata per il telefono, e collegata alla richiesta di firma:
+    # email gia' compilata, niente doppio invio, avviso se e' gia' firmato.
+    _fr = None
+    _rich = None
+    try:
+        from modules.privacy import firma_remota as _fr
+        _fr.css_telefono()
+        _rich = _fr.richiesta_da_token(conn, tok)
+    except Exception:
+        _fr = None
+    _chiave_fatto = "sign_fatto_" + hashlib.sha256(tok.encode("utf-8")).hexdigest()[:16]
+    if st.session_state.get(_chiave_fatto) or (_rich and _rich.get("stato") == "firmata"):
+        st.success("✅ Il consenso è già stato firmato e archiviato. Grazie, puoi chiudere questa pagina.")
+        return
 
     # Recupera paziente
     paz_list, _, _ = fetch_pazienti_for_select(conn)
@@ -9659,7 +9691,7 @@ def ui_public_sign_page():
 
     otp_email_input = st.text_input(
         "La tua email" if doc_type == "adulto" else "Email genitore/tutore",
-        value=f"{cogn.lower()}@" if cogn else "",
+        value=((_rich or {}).get("email") or ""),
         key="otp_email_field",
         placeholder="nome@esempio.it",
     )
@@ -9757,8 +9789,8 @@ def ui_public_sign_page():
             stroke_width=3,
             stroke_color="#111111",
             background_color="#ffffff",
-            height=160,
-            width=None,
+            height=170,
+            width=330,  # larghezza di un telefono: con None usciva dallo schermo
             drawing_mode="freedraw",
             key="sig_canvas_pub",
         )
@@ -9965,21 +9997,31 @@ def ui_public_sign_page():
         except Exception as e:
             st.warning(f"Consenso non salvato nello storico DB: {e}")
 
-        # --- INVIO EMAIL ---
-        email_ok = True
+        # --- DOPO LA FIRMA: copia al paziente, avviso allo studio, richiesta chiusa ---
+        # Prima l'invio passava solo da [smtp]: con la sola configurazione
+        # [gmail] nessuno riceveva nulla. firma_remota usa l'una o l'altra.
+        st.session_state[_chiave_fatto] = True
+        email_ok = False
         try:
-            to_list = [email.strip(), _clinic_email()]
-            subject = "Consenso informato e privacy – Studio The Organism"
-            body_mail = "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism"
-            _send_email_with_pdf(to_list, subject, body_mail, final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
-        except Exception as e:
-            email_ok = False
-            st.warning(f"Consenso archiviato, ma invio email non riuscito: {e}")
+            if _fr is None:
+                raise RuntimeError("modulo firma_remota non disponibile")
+            ok_p, _ok_s, _msg = _fr.dopo_firma(conn, int(pid), doc_type, email.strip(),
+                                               final_pdf, f"Consenso_{doc_type}_firmato.pdf", tok)
+            email_ok = ok_p
+        except Exception:
+            try:
+                _send_email_with_pdf([email.strip(), _clinic_email()],
+                                     "Consenso informato e privacy – Studio The Organism",
+                                     "In allegato trovi copia del consenso informato e privacy firmato.\n\nStudio The Organism",
+                                     final_pdf, f"Consenso_{doc_type}.pdf", extra_pdf, extra_name)
+                email_ok = True
+            except Exception as e:
+                st.warning(f"Consenso archiviato, ma invio email non riuscito: {e}")
 
         if email_ok:
-            st.success("Consenso archiviato e inviato via email. Puoi chiudere questa pagina.")
+            st.success("✅ Consenso firmato e archiviato. Ti abbiamo mandato una copia per email: puoi chiudere questa pagina.")
         else:
-            st.success("Consenso archiviato. Puoi chiudere questa pagina.")
+            st.success("✅ Consenso firmato e archiviato. Puoi chiudere questa pagina.")
 
 # ======================================
 # AUDIOGRAMMA FUNZIONALE (TEST) – MVP
@@ -11788,6 +11830,12 @@ def main():
     # --- PUBLIC SIGN PAGE (no login) ---
     if st.query_params.get('sign'):
         ui_public_sign_page()
+        return
+
+    # --- PRIMO CONTATTO da pnev.it (no login): crea il paziente e lo manda a firmare ---
+    if st.query_params.get('primo_contatto'):
+        from modules.privacy.firma_remota import render_primo_contatto
+        render_primo_contatto(get_connection())
         return
 
     # --- PHOTOREF MOBILE ENTRY (no login) ---
