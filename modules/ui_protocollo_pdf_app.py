@@ -369,6 +369,19 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
   });
   topbar3.appendChild(btn3);
 })();
+// Copia continua dei dati compilati nella memoria del browser, sotto una
+// chiave che il gestionale sa leggere: il bottone «Salva nel fascicolo»
+// li prende da qui, senza copia-incolla.
+(function(){
+  var K = 'pnev_proto_export___KP__';
+  function scrivi(){
+    try { localStorage.setItem(K, JSON.stringify({V: window.V || {}, C: window.C || {}, t: Date.now()})); }
+    catch(e){}
+  }
+  setInterval(scrivi, 1500);
+  document.addEventListener('input', scrivi, true);
+  document.addEventListener('change', scrivi, true);
+})();
 </script>
 """
     # Anteprima e stampa della relazione su carta intestata.
@@ -389,6 +402,7 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
 
     # extra_js: dati passati dal chiamante all'app (es. risultati di altri
     # moduli del gestionale per le valutazioni adulti complete).
+    _salva_db_js = _salva_db_js.replace("__KP__", str(kp))
     _script_completo = (extra_js or "") + _second_monitor_js + (_precompila_js or "") + _salva_db_js + _carta_js
     if "</body>" in html:
         html = html.replace("</body>", _script_completo + "</body>", 1)
@@ -398,16 +412,40 @@ font-size:11px;font-family:sans-serif;padding:6px 10px;border-radius:6px;max-wid
     components.html(html, height=1400, scrolling=True)
 
     st.markdown("---")
-    st.markdown("#### 💾 Salva questo screening nel gestionale")
-    st.caption("Registra i dati compilati collegati a un'anagrafica leggera (nome, data di nascita, "
-               "contatto) — se il bambino diventerà paziente dello studio, potrai agganciare questo "
-               "screening al suo fascicolo senza reinserire nulla.")
-    dati_json_incollati = st.text_area(
-        "1) Clicca '📤 Prepara dati per il salvataggio' nella barra della app qui sopra, poi copia "
-        "il testo che appare e incollalo qui:", key=f"{kp}_html_dati_export", height=90)
-    c_s1, c_s2 = st.columns(2)
-    contatto_screening = c_s1.text_input("Telefono/email di contatto (facoltativo)", key=f"{kp}_html_contatto")
-    if c_s2.button("💾 Salva nel gestionale", key=f"{kp}_html_salva_db", type="primary"):
+    st.markdown("#### 💾 Salva nel fascicolo")
+    st.caption("I dati che compili nella scheda qui sopra vengono tenuti da parte mentre lavori. "
+               "Quando hai finito, premi il bottone: finiscono nel fascicolo del paziente.")
+    contatto_screening = st.text_input("Telefono/email di contatto (facoltativo)", key=f"{kp}_html_contatto")
+    _flag = f"{kp}_leggi_auto"
+    if st.button("💾 Salva nel fascicolo", key=f"{kp}_html_salva_auto", type="primary"):
+        st.session_state[_flag] = st.session_state.get(_flag + "_n", 0) + 1
+        st.session_state[_flag + "_n"] = st.session_state[_flag]
+    if st.session_state.get(_flag):
+        _raw = None
+        try:
+            from streamlit_javascript import st_javascript
+            _raw = st_javascript(f"localStorage.getItem('pnev_proto_export_{kp}')",
+                                 key=f"{kp}_js_{st.session_state[_flag]}")
+        except Exception as e:
+            st.error(f"Lettura automatica non disponibile ({e}): usa il metodo manuale qui sotto.")
+            st.session_state[_flag] = 0
+        if _raw in (0, None, ""):
+            st.caption("Leggo i dati dalla scheda…")
+        else:
+            st.session_state[_flag] = 0
+            st.session_state[f"{kp}_html_dati_export"] = _raw
+            st.session_state[f"{kp}_salva_ora"] = True
+            st.rerun()
+
+    with st.expander("Metodo manuale (se il salvataggio automatico non funziona)"):
+        st.caption("Registra i dati compilati collegati a un'anagrafica leggera (nome, data di nascita, "
+                   "contatto) — se il bambino diventerà paziente dello studio, potrai agganciare questo "
+                   "screening al suo fascicolo senza reinserire nulla.")
+        dati_json_incollati = st.text_area(
+            "1) Clicca '📤 Prepara dati per il salvataggio' nella barra della app qui sopra, poi copia "
+            "il testo che appare e incollalo qui:", key=f"{kp}_html_dati_export", height=90)
+        _manuale = st.button("💾 Salva il testo incollato", key=f"{kp}_html_salva_db")
+    if _manuale or st.session_state.pop(f"{kp}_salva_ora", False):
         if not dati_json_incollati.strip():
             st.warning("Incolla prima i dati esportati dalla barra della app.")
         elif conn is None:
