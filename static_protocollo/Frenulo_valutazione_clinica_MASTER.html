@@ -55,6 +55,10 @@ var TEST=[
  {id:'rifl',n:'8 · ATNR, STNR',t:'2 min',campi:[['atnr','ATNR 0–4','num'],['stnr','STNR 0–4','num']],nota:'0 = assente, 4 = completo. Più basso = migliore.',meglio:'basso'},
  {id:'suz',n:'9 · Suzione, Babkin',t:'1 min',campi:[['suz','Suzione 0–4','num'],['bab','Babkin 0–4','num']],meglio:'basso'}
 ];
+var PROC = {"trmr":{"v":"https://m.youtube.com/shorts/CJF5CCquruw","p":"Paziente seduto, testa dritta. A: «apri la bocca più che puoi» — calibro tra i bordi degli incisivi centrali. B: «punta della lingua sulla papilla, dietro i denti di sopra, e apri più che puoi» senza staccarla. 3 misure alternate, media. Ripetute con almeno 10% di scarto: rifare."},"stab":{"v":"","p":"Pedana in stanza silenziosa, piedi nella posizione standard della pedana, braccia lungo i fianchi, sguardo su un punto a 2 m all'altezza degli occhi. Prima occhi aperti, poi occhi chiusi, con la durata della fascia d'età. Niente parlare durante la prova."},"fuku":{"v":"https://www.youtube.com/watch?v=ljGJbokAOXM","p":"Stanza silenziosa e poco illuminata, scalzo, piedi uniti al centro della griglia (cerchi di 0,5 e 1 m, settori di 30°). Braccia tese avanti a 90°, occhi chiusi o bendati. Marcia sul posto alzando le ginocchia, ritmo costante (contare o metronomo), senza indicazioni durante la prova. Alla fine: rotazione in gradi e spostamento in cm."},"ppc":{"v":"https://www.aao.org/education/1-minute-video/measuring-near-point-of-convergence-in-children","p":"Mira accomodativa a 40 cm sulla linea mediana, all'altezza della radice del naso. Avvicinare lentamente: rottura quando riferisce doppio o l'esaminatore vede un occhio deviare; poi allontanare fino al recupero. 3 prove di seguito."},"cover":{"v":"","p":"Mira accomodativa a 40 cm. Cover-uncover per le tropie, poi cover alternato per le forie, senza lasciare fondere tra un occhio e l'altro. Misura con la barra di prismi fino a neutralizzare il movimento."},"nsuco":{"v":"","p":"Paziente in piedi, senza istruzioni sulla testa. Due mire a 10 cm l'una dall'altra, a 40 cm, simmetriche rispetto alla linea mediana. «Guarda la rossa… guarda la verde», per 10 saccadi. Punteggio 1–5 in abilità, accuratezza, movimento della testa e del corpo."},"crt":{"v":"https://www.physiotutors.com/wiki/joint-position-sense-error/","p":"Seduto, puntatore laser sulla fronte, bersaglio a 90 cm. Occhi chiusi: ruotare lentamente la testa tutta a destra e tornare al punto di partenza, dicendo «ci sono». Misurare in cm la distanza dal centro. 3 prove per lato. Movimento lento: se è veloce si misura il vestibolo, non il collo."},"rifl":{"v":"","p":"Procedura INPP: posizione quadrupedica per ATNR (rotazione passiva lenta della testa) e STNR (flessione/estensione della testa). Punteggio 0–4 secondo la scala INPP, sempre con la stessa sequenza e lo stesso numero di ripetizioni."},"suz":{"v":"","p":"Suzione: sfioramento delle labbra. Babkin: pressione contemporanea sui palmi, paziente supino o seduto. Punteggio 0–4 INPP."}};
+function procHtml(id){ var x=PROC[id]; if(!x) return '';
+  return '<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:#1D6B44;font-weight:600">📋 Come si fa (procedura standard)</summary><div style="font-size:13px;margin:6px 0">'+x.p+'</div>'+
+    (x.v ? '<a href="'+x.v+'" target="_blank" rel="noopener" class="btn" style="text-decoration:none;display:inline-block">▶ Guarda il video</a>' : '<span class="mut">Video standard dello Studio da registrare.</span>')+'</details>'; }
 var SEZ = USO==='clinica' ? [
  {id:'anamnesi',n:'1 · Paziente e anamnesi'},
  {id:'frenulo',n:'2 · Frenulo (TRMR)'},
@@ -89,11 +93,11 @@ function grado(r){ if(r==null) return null; return r>80?1:r>=50?2:r>=25?3:4; }
 var GTXT={1:'Mobilità normale (oltre 80%)',2:'Restrizione lieve (50–80%)',3:'Restrizione moderata (25–50%)',4:'Restrizione grave (sotto 25%)'};
 
 var SOGLIE=[
- ['b_ppc_rott_T0','PPC, rottura oltre 6 cm',function(x){return x>6}],
+ ['b_ppc_rott_T0','PPC, rottura oltre 5 cm',function(x){return x>5}],
  ['b_cover_pd_T0','Foria da vicino oltre 6 Δ',function(x){return Math.abs(x)>6}],
  ['b_nsuco_ac_T0','NSUCO accuratezza sotto 3',function(x){return x<3}],
- ['b_fuku_rot_T0','Fukuda, rotazione oltre 45°',function(x){return Math.abs(x)>45}],
- ['b_fuku_avanz_T0','Fukuda, avanzamento oltre 50 cm',function(x){return x>50}],
+ ['b_fuku_rot_T0','Fukuda, rotazione oltre 30° (50 passi)',function(x){return Math.abs(x)>30}],
+ ['b_fuku_avanz_T0','Fukuda, spostamento oltre 50 cm (50 passi)',function(x){return x>50}],
  ['b_crt_dx_T0','Riposizionamento cervicale dx oltre 4,5 cm',function(x){return x>4.5}],
  ['b_crt_sx_T0','Riposizionamento cervicale sx oltre 4,5 cm',function(x){return x>4.5}],
  ['b_rifl_atnr_T0','ATNR 2 o più',function(x){return x>=2}],
@@ -141,7 +145,7 @@ function vista(){
   }
   if(cur==='frenulo'){
     var t=trmr(), gr=t?grado(t.r):null;
-    h+='<div class="card"><h2>TRMR — Tongue Range of Motion Ratio (Yoon 2017)</h2><div class="cons"><b>A</b> «Apri la bocca più che puoi» · <b>B</b> «Metti la punta della lingua qui dietro i denti, sul palato, e apri più che puoi». Calibro in mm, 3 misure alternate.</div>'+
+    h+='<div class="card"><h2>TRMR — Tongue Range of Motion Ratio (Yoon 2017)</h2><div class="cons"><b>A</b> «Apri la bocca più che puoi» · <b>B</b> «Metti la punta della lingua qui dietro i denti, sul palato, e apri più che puoi». Calibro in mm, 3 misure alternate.</div>'+procHtml('trmr')+
     '<table><tr><th>Prova</th><th>A · apertura massima (mm)</th><th>B · lingua sulla papilla (mm)</th></tr>'+[1,2,3].map(function(i){return '<tr><td>'+i+'</td><td>'+inp('fr_a'+i,'','num')+'</td><td>'+inp('fr_b'+i,'','num')+'</td></tr>'}).join('')+'</table>'+
     (t?'<p style="margin-top:12px">TRMR = B / A × 100 = <b>'+t.r.toFixed(1)+'%</b> &nbsp; <span class="pill g'+gr+'">Grado '+gr+' · '+GTXT[gr]+'</span></p>':'<p class="mut">Inserisci almeno una coppia A/B.</p>')+
     '<div class="mut">Ipotesi del protocollo: anche un frenulo di grado 1–2, che muove la lingua in modo apparentemente adeguato, può perturbare il sistema. Il TRMR descrive la mobilità, non esclude la perturbazione.</div>'+
@@ -158,7 +162,7 @@ function vista(){
     h+='<div class="card noprint"><h2>Batteria breve · ordine fisso</h2><div class="mut">La finestra utile dell\'anestetico topico è di 15–30 minuti: la batteria breve parte subito e si chiude entro 15 minuti.'+(fasci?' Fascia: <b>'+fasci+'</b>.':'')+'</div>'+
     '<div style="display:flex;gap:12px;align-items:center;margin-top:8px"><span class="timer" id="tm">15:00</span><button class="btn" id="tmgo">▶ Avvia 15 minuti</button><button class="btn sec" id="tmst">■ Ferma</button></div></div>';
     TEST.forEach(function(te){
-      h+='<div class="card"><h3>'+te.n+' <span class="mut">· '+te.t+'</span></h3>'+(te.nota?'<div class="mut">'+te.nota+'</div>':'')+
+      h+='<div class="card"><h3>'+te.n+' <span class="mut">· '+te.t+'</span></h3>'+(te.nota?'<div class="mut">'+te.nota+'</div>':'')+procHtml(te.id)+
       '<table><tr><th>Misura</th>'+FASI.map(function(f){return '<th>'+NOMI_FASI[f]+'</th>'}).join('')+'</tr>'+
       te.campi.map(function(c){return '<tr><td>'+c[1]+'</td>'+FASI.map(function(f){return '<td>'+inp('b_'+te.id+'_'+c[0]+'_'+f,'',c[2],c[3])+'</td>'}).join('')+'</tr>'}).join('')+'</table></div>';
     });

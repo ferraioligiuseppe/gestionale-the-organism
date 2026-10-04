@@ -1121,6 +1121,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             sottotitolo="Cinque fasce d'età, dalla nascita ai 16 anni: le prove cambiano con la fascia.",
             kp="sb")
         return True
+    if sotto == "👅 Valutazione del frenulo":
+        from .ui_protocollo_pdf_app import render_protocollo_pdf_app
+        render_protocollo_pdf_app(
+            conn, paz_id,
+            html_file="Frenulo_valutazione_clinica_MASTER.html",
+            pdf_file="Frenulo_perturbazione_manuale.pdf",
+            titolo="👅 Valutazione del frenulo",
+            sottotitolo="Mobilità linguale, funzioni orali e batteria sistemica: il frenulo come possibile perturbazione anche quando la lingua si muove bene.",
+            kp="frc")
+        return True
     if sotto == "🔬 Ricerca · Frenulo come perturbazione":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(
