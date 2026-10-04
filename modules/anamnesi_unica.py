@@ -738,7 +738,51 @@ def _ancore_per(key):
     return _ANCORE_GENERICHE
 
 
+# Spiegazioni in parole semplici, sotto i campi tecnici: la stessa
+# anamnesi la compila il genitore a casa, che non sa cos'e' un ATNR.
+SPIEGAZIONI = {
+    "grav_termine": "A termine = nato tra la 38ª e la 42ª settimana.",
+    "grav_movimenti": "Come sentiva muovere il bambino nella pancia, rispetto a quanto le dicevano normale.",
+    "parto_presentazione": "Come era girato il bambino al momento del parto: cefalica = a testa in giù (la più comune), podalica = di sedere o di piedi.",
+    "parto_travaglio": "Rapido = meno di 3 ore; prolungato = oltre 18-20 ore. Se non ricorda, lasci vuoto.",
+    "parto_apgar1": "Il punteggio da 0 a 10 dato dall'ostetrica appena nato. Di solito è scritto nel libretto pediatrico o nella lettera di dimissione.",
+    "parto_apgar5": "Lo stesso punteggio, ripetuto a 5 minuti dalla nascita.",
+    "neo_suzione": "Come si attaccava e succhiava al seno o al biberon nei primi giorni.",
+    "neo_tono": "Ipotonico = molto morbido, «molle», si lasciava andare in braccio. Ipertonico = rigido, teso, inarcava la schiena.",
+    "neo_rifl_moro": "Al rumore improvviso o se perdeva l'appoggio, apriva di scatto le braccia e poi le richiudeva. Se non lo sa, lasci vuoto: lo valutiamo noi.",
+    "neo_rifl_suzione": "Succhiava anche senza mangiare: il dito, il ciuccio, le mani.",
+    "neo_rifl_prensione": "Se gli toccava il palmo della mano, la stringeva forte sul suo dito.",
+    "neo_rifl_babinski": "Accarezzando la pianta del piede, l'alluce si alzava e le dita si aprivano a ventaglio. È un controllo del pediatra: se non lo sa, lasci vuoto.",
+    "neo_rifl_galant": "Accarezzando la schiena di lato alla colonna, il bambino piegava il corpo da quel lato. Se non lo sa, lasci vuoto.",
+    "neo_rifl_rtln": "Quando portava la testa indietro, braccia e gambe si allungavano; quando la portava avanti, si raccoglieva. Se non lo sa, lasci vuoto.",
+    "mot_simmetria": "Nei primi mesi, sdraiato, stava dritto o teneva sempre la testa e il corpo girati dallo stesso lato?",
+    "mot_tilt": "Inclinandolo di lato in braccio, raddrizzava da solo la testa per tenerla dritta? Se non lo ha mai notato, scelga «Non osservato».",
+    "mot_atnr": "Girando la testa di lato, allungava il braccio da quel lato e piegava l'altro, come uno schermidore. Normale fino a circa 6 mesi.",
+    "mot_gatt_schema": "Crociato = mano destra avanti insieme al ginocchio sinistro, e viceversa (il modo normale). Omolaterale = mano e ginocchio dello stesso lato insieme. Strisciamento = sulla pancia, senza sollevarsi.",
+    "mot_gatt_simm": "Usava le due braccia e le due gambe allo stesso modo, o «trascinava» un lato?",
+    "mot_appoggio": "Quando ha iniziato a camminare: appoggiava prima il tallone e poi la punta (normale), camminava sulle punte, oppure con il piede tutto piatto?",
+    "mot_base": "Allargata = camminava con i piedi molto distanti tra loro, per stare in equilibrio.",
+    "mot_cadute": "Rispetto ai bambini della sua età, quando ha iniziato a camminare.",
+    "mot_rifl_prot": "Quando cadeva, metteva le mani avanti per proteggersi?",
+    "mot_lateral": "Prima di un anno usava sempre e solo una mano, anche quando l'oggetto era dall'altra parte?",
+    "mot_crossing": "Ad esempio: per prendere un gioco a destra usava solo la mano destra, senza mai portare la sinistra oltre il centro del corpo?",
+    "com_tracking": "A quanti mesi seguiva con gli occhi un oggetto o un volto che si muoveva.",
+    "com_lallazione": "A quanti mesi ha iniziato a fare suoni ripetuti come «ba-ba», «da-da».",
+    "com_imitazione": "Rifaceva i gesti e le espressioni degli adulti: ciao con la mano, battere le mani, sorridere.",
+    "al_svez": "Autosvezzamento (BLW) = il bambino mangia da solo pezzi di cibo invece delle pappe.",
+}
+
+
 def _widget(label, tipo, opts, val, key):
+    w = _widget_base(label, tipo, opts, val, key)
+    for campo, testo in SPIEGAZIONI.items():
+        if key.endswith("_" + campo):
+            st.caption(testo)
+            break
+    return w
+
+
+def _widget_base(label, tipo, opts, val, key):
     if key not in st.session_state:
         if tipo in ("mesi", "num"):
             massimo = 144 if tipo == "mesi" else int(opts or 999)
