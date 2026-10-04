@@ -647,6 +647,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🔒 Privacy & Consensi":
         from .privacy.ui_privacy_section import render_privacy_section
         render_privacy_section(); return True
+    if sotto == "✍️ Firme privacy in attesa":
+        from .privacy.firma_remota import render_in_attesa
+        render_in_attesa(conn); return True
     if sotto == "📥 Import pazienti":
         from .sections.ui_cliniche import render_import_section
         render_import_section(); return True
@@ -1286,6 +1289,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 return
             from .privacy.ui_privacy_section import render_privacy_section
             render_privacy_section(); return
+        if sotto == "✍️ Firme privacy in attesa":
+            from .privacy.firma_remota import render_in_attesa
+            render_in_attesa(conn); return
         if sotto == "📥 Import pazienti":
             from .sections.ui_cliniche import render_import_section
             render_import_section(); return

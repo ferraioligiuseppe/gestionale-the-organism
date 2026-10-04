@@ -162,6 +162,7 @@ PAZIENTI_RAMI = {
         "📅 Sedute / Terapie",
         "📈 Esiti / Follow-up",
         "🔒 Privacy & Consensi",
+        "✍️ Firme privacy in attesa",
     ],
     "💡 Strumenti": [
         "💡 Assistente PNEV",
