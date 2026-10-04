@@ -1332,7 +1332,7 @@ def _render_tab_azioni(conn, ev: dict):
                 conn,
                 titolo=dup_titolo.strip() or ev.get("titolo", "Evento"),
                 tipo=ev.get("tipo", "altro"),
-                data_ora=datetime.combine(dup_data, dup_ora),
+                data_ora=datetime.combine(dup_data, dup_ora, tzinfo=ROME_TZ),  # senza fuso finiva 2 ore avanti
                 durata_minuti=ev.get("durata_minuti"),
                 sede=ev.get("sede"),
                 descrizione=ev.get("descrizione"),
