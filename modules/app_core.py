@@ -11885,6 +11885,12 @@ def main():
         render_primo_contatto(get_connection())
         return
 
+    # --- DIARIO DEL RESPIRO (no login): il paziente registra la Pausa Controllo ---
+    if st.query_params.get('diario'):
+        from modules.buteyko import render_diario_pubblico
+        render_diario_pubblico(get_connection(), st.query_params.get('diario'))
+        return
+
     # --- PHOTOREF MOBILE ENTRY (no login) ---
     photoref_token = st.query_params.get('photoref_token', '')
     if isinstance(photoref_token, list):

@@ -49,6 +49,7 @@ AREA_SCREENING     = "🩺 Screening"
 AREA_TERAPIA       = "📄 Relazioni & studio clinico"
 AREA_STUDIO        = "⚙️ Studio"
 AREA_AEROSAL       = "🌬️ Aerosal"
+AREA_RESPIRAZIONE  = "🫁 Respirazione"
 
 # ── Alias legacy (mantengono validi gli import esistenti in
 #    app_main_router.py e app_main.py) — puntano all'area più coerente
@@ -70,6 +71,7 @@ AREE_ORDINE = [
     AREA_INVII,
     AREA_PNEV,
     AREA_TERAPIA_PNEV,
+    AREA_RESPIRAZIONE,
     AREA_OCULISTICA,
     AREA_TNPEE,
     AREA_PECS,
@@ -289,6 +291,12 @@ SOTTOSEZIONI = {
         "📄 Report PDF con grafici",
         "📊 Export statistici",
         "🧪 Caso demo",
+    ],
+    # Metodo Buteyko: valutazione, questionari, programma, dispense (app HTML)
+    # e diario della Pausa Controllo che il paziente compila da casa.
+    AREA_RESPIRAZIONE: [
+        "🫁 Valutazione e programma Buteyko",
+        "📈 Diario Pausa Controllo",
     ],
     AREA_AEROSAL: [
         "🌬️ Aerosal · Haloterapia",

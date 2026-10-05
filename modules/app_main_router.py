@@ -466,6 +466,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📐 PNEV-Chart (schede stampabili)",
         "🥁 PNEV Metronomo",
         "🎯 Segui la pallina",
+        "🫁 Valutazione e programma Buteyko", "📈 Diario Pausa Controllo",
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
         "⚡ Protocollo Epilessia",
@@ -1131,6 +1132,12 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             sottotitolo="Mobilità linguale, funzioni orali e batteria sistemica: il frenulo come possibile perturbazione anche quando la lingua si muove bene.",
             kp="frc")
         return True
+    if sotto == "🫁 Valutazione e programma Buteyko":
+        from .buteyko import render_buteyko
+        render_buteyko(conn, paz_id); return True
+    if sotto == "📈 Diario Pausa Controllo":
+        from .buteyko import render_diario
+        render_diario(conn, paz_id); return True
     if sotto == "🔬 Ricerca · Frenulo come perturbazione":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(
