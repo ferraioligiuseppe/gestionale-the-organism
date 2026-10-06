@@ -173,6 +173,9 @@ def _scheda_clinica(e):
         st.markdown(f"**Aiuti dell'operatore:** {e['aiuti_operatore']}")
     if e.get("riflesso"):
         st.markdown(f"**Riflesso:** {e['riflesso']}")
+    if e.get("animazione"):
+        st.markdown(f"[🎬 Animazione e approfondimento del riflesso]"
+                    f"(https://www.pnev.it/wp-content/uploads/riflessi/{e['animazione']})")
     if e.get("tenuta_secondi") or e.get("ripetizioni"):
         st.markdown(f"**Dose:** pressione {e.get('tenuta_secondi') or '—'} s"
                     + (f" al {e['forza']} della forza" if e.get("forza") else "")

@@ -220,6 +220,7 @@ SOTTOSEZIONI = {
         "🧩 Programma PNEV",
         "🎵 TMR — Movimenti ritmici",
         "🎯 Piano Vision Therapy",
+        "👁️ Stimolazione visiva a casa",
         "🎧 MAPS",
         "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS",

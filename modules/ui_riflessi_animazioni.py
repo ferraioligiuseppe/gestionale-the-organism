@@ -21,7 +21,7 @@ RIFLESSI = [
     ("moro.html",       "Riflesso di Moro",       "Allarme e soglia allo stress",      "2-4 mesi"),
     ("palmare.html",    "Riflesso Palmare",       "Presa della mano, scrittura",       "4-6 mesi"),
     ("plantare.html",   "Riflesso Plantare",      "Appoggio del piede, andatura",      "7-9 mesi"),
-    ("ricerca.html",    "Riflesso di Ricerca",    "Rooting, orientamento orale",       "3-4 mesi"),
+    ("rooting.html",    "Riflesso di Ricerca",    "Rooting, orientamento orale",       "3-4 mesi"),
     ("suzione.html",    "Riflesso di Suzione",    "Suzione, deglutizione, linguaggio", "3-4 mesi"),
     ("atnr.html",       "ATNR",                   "Tonico asimmetrico del collo",      "6 mesi"),
     ("stnr.html",       "STNR",                   "Tonico simmetrico del collo",       "9-11 mesi"),
@@ -52,7 +52,10 @@ def render_riflessi_animazioni(mostra_indice=True):
     st.subheader("🧬 Animazioni dei riflessi primitivi")
     st.caption("Dodici sequenze animate con i segni della mancata integrazione. "
               "Aprile durante la valutazione per mostrare al paziente o al "
-              "genitore cosa stai cercando.")
+              "genitore cosa stai cercando. In fondo a ogni scheda c'è "
+              "l'approfondimento PNEV: neurofisiologia, quando inviare al "
+              "neurologo, collegamenti con udito, integrazione sensoriale e "
+              "visione, bibliografia.")
 
     if mostra_indice:
         st.markdown(

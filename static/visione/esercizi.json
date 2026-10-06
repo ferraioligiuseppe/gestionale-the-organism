@@ -1,0 +1,87 @@
+{
+  "libreria": "PNEV stimolazione visiva a casa",
+  "versione": "2026-10-06",
+  "note": "Esercizi dell'app www.pnev.it/wp-content/uploads/visione/esercizi.html. I codici V1–V10 devono restare uguali a quelli dell'app.",
+  "esercizi": [
+    {
+      "codice": "V1",
+      "nome": "Inseguimento lento",
+      "area": "Motilità oculare · pursuit",
+      "minuti_default": 2,
+      "clinica": "Bersaglio in movimento continuo su quattro traiettorie (orizzontale, verticale, cerchio, otto), 20 s ciascuna. Capo fermo. Velocità per livello.",
+      "osservare": "Saccadi di recupero, movimenti del capo, perdita del bersaglio agli estremi"
+    },
+    {
+      "codice": "V2",
+      "nome": "Saccadi orizzontali",
+      "area": "Motilità oculare · saccadi",
+      "minuti_default": 2,
+      "clinica": "Lettera alternata a destra e a sinistra dello schermo; il paziente la nomina e tocca per la successiva. Filtro colorato applicabile.",
+      "osservare": "Ipometria, movimenti del capo, latenza"
+    },
+    {
+      "codice": "V3",
+      "nome": "Tabella di lettura (Hart / DEM)",
+      "area": "Saccadi in sequenza · lettura",
+      "minuti_default": 3,
+      "clinica": "Griglia casuale di lettere (o numeri con t=n), riga evidenziata, avanzamento a tocco. Filtro colorato applicabile.",
+      "osservare": "Salti di riga, omissioni, uso del dito, tempo per riga"
+    },
+    {
+      "codice": "V4",
+      "nome": "Cordicella di Brock guidata",
+      "area": "Vergenze",
+      "minuti_default": 3,
+      "clinica": "Richiede la cordicella con tre perline. Lo schermo indica a voce e a colore la perlina da fissare (verde lontana, gialla media, rossa vicina), con cambio ogni 6 s al livello 2.",
+      "osservare": "Soppressione (una sola cordicella), incrocio prima o dopo la perlina, diplopia persistente"
+    },
+    {
+      "codice": "V5",
+      "nome": "Flessibilità accomodativa vicino/lontano",
+      "area": "Accomodazione",
+      "minuti_default": 3,
+      "clinica": "Alternanza VICINO (riga sullo schermo) / LONTANO (tabella stampata a 3 m), cambio ogni 5 s al livello 2. Filtro colorato applicabile.",
+      "osservare": "Tempo di rifocalizzazione, sfocatura persistente, astenopia"
+    },
+    {
+      "codice": "V6",
+      "nome": "Consapevolezza periferica",
+      "area": "Campo visivo funzionale · periferia",
+      "minuti_default": 2,
+      "clinica": "Fissazione centrale; stimoli singoli in periferia (no flicker, intervallo ≥ 0,9 s), risposta a tocco. Registra stimoli visti e tempo medio.",
+      "osservare": "Perdita della fissazione, settori meno rilevati"
+    },
+    {
+      "codice": "V7",
+      "nome": "Occhio-mano",
+      "area": "Integrazione visuo-motoria",
+      "minuti_default": 2,
+      "clinica": "Bersagli casuali da toccare, tempo di permanenza per livello. Registra prese e tocchi fuori.",
+      "osservare": "Mano preferita, attraversamento della linea mediana, precisione vs velocità"
+    },
+    {
+      "codice": "V8",
+      "nome": "Memoria visiva delle forme",
+      "area": "Visuo-percezione · memoria visiva",
+      "minuti_default": 3,
+      "clinica": "Matrice 2×2 di forme colorate esposta 3,5 s (livello 2), poi scelta fra 4 alternative. Registra giuste/totali.",
+      "osservare": "Strategie verbali, errori su posizione vs forma"
+    },
+    {
+      "codice": "V9",
+      "nome": "Colore di quiete",
+      "area": "Regolazione · luce e colore",
+      "minuti_default": 3,
+      "clinica": "Campo colorato fisso a tutto schermo (colore c=verde|blu|giallo|rosso|viola|arancio) con respirazione guidata 5 s / 5 s. Nessun flicker. Non è optometria sintonica: la sintonica si fa solo in studio con lo strumento.",
+      "osservare": "Rilassamento, fastidio al colore, sintomi"
+    },
+    {
+      "codice": "V10",
+      "nome": "Saccadi a metronomo",
+      "area": "Ritmo · saccadi",
+      "minuti_default": 2,
+      "clinica": "Bersaglio alternato a destra e sinistra sul battito del metronomo (b=30–120 bpm, scalato per livello).",
+      "osservare": "Anticipo o ritardo sul battito, perdita del ritmo"
+    }
+  ]
+}
