@@ -246,6 +246,14 @@ def _riassunto_storico(conn, paz_id) -> str:
         pass
 
     try:
+        inpp = sintesi_inpp(conn, paz_id)
+        if inpp:
+            parti.append("")
+            parti.extend(inpp)
+    except Exception:
+        pass
+
+    try:
         from .rilievi_pnev import sintesi_rilievi
         ril = sintesi_rilievi(conn, paz_id)
         if ril:
@@ -264,6 +272,68 @@ def _riassunto_storico(conn, paz_id) -> str:
         pass
 
     return "\n".join(parti).strip()
+
+
+def sintesi_inpp(conn, paz_id) -> list[str]:
+    """L'ultima valutazione INPP (riflessi e sviluppo neurologico) in righe di testo.
+
+    Prima la diagnosi non la leggeva affatto: la valutazione dei riflessi
+    restava chiusa nel suo modulo e la relazione usciva senza. Qui entrano
+    i totali per sezione, le prove con punteggio 2 o piu' (0 = nessuna
+    anomalia, 4 = anomalia completa), le prove descrittive e le note."""
+    from .inpp import db_inpp
+    from .inpp.protocollo import PROTOCOLLO_INPP, riepilogo_punteggi, SCORING_LABELS
+    try:
+        lst = db_inpp.lista_valutazioni(conn, int(paz_id))
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return []
+    if not lst:
+        return []
+    v = db_inpp.carica_valutazione(conn, lst[0]["id"]) or {}
+    ris = v.get("risultati") or {}
+    dv = v.get("data_valutazione")
+    out = [f"VALUTAZIONE INPP — riflessi e sviluppo neurologico"
+           f"{' del ' + dv.strftime('%d/%m/%Y') if hasattr(dv, 'strftime') else ''}"
+           f"{' · ' + v['terapista'] if v.get('terapista') else ''}"
+           f"{' · motivo: ' + v['motivo'] if v.get('motivo') else ''}"]
+    compilate = {k: x for k, x in ris.items() if x not in (None, "", "—")}
+    if not compilate:
+        out.append("- Valutazione aperta ma senza prove compilate.")
+        return out
+    for sez_id, info in (riepilogo_punteggi(ris) or {}).items():
+        if info.get("massimo"):
+            out.append(f"- {info['label']}: {info['ottenuto']}/{info['massimo']} ({info['perc']}%)")
+    rilevanti, descrittive = [], []
+    for sez in PROTOCOLLO_INPP:
+        for gr in sez["gruppi"]:
+            for pr in gr["prove"]:
+                val = compilate.get(pr["id"])
+                if val is None:
+                    continue
+                if pr.get("scoring", "0-4") == "0-4":
+                    try:
+                        n = int(val)
+                    except (TypeError, ValueError):
+                        continue
+                    if n >= 2:
+                        et = (SCORING_LABELS.get(n, "") or "").split("/")[0].strip()
+                        rilevanti.append(f"- {sez.get('label', '')} · {pr.get('label', pr['id'])}: {n}"
+                                         + (f" ({et})" if et else ""))
+                else:
+                    descrittive.append(f"- {pr.get('label', pr['id'])}: {val}")
+    out.append(f"Prove compilate: {len(compilate)}. Prove con punteggio 2 o più "
+               "(scala 0 nessuna anomalia – 4 anomalia completa):")
+    out.extend(rilevanti or ["- nessuna"])
+    if descrittive:
+        out.append("Prove descrittive:")
+        out.extend(descrittive[:40])
+    if v.get("note_finali"):
+        out.append("Note del terapista: " + " ".join(str(v["note_finali"]).split()))
+    return out
 
 
 def render_diagnosi(conn=None, paz_id=None, paziente=None):

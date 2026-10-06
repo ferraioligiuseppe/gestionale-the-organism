@@ -362,6 +362,13 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
     else:
         st.caption("I punteggi appaiono qui man mano che compili le sezioni.")
 
+    n_comp = sum(1 for x in valori.values() if x not in (None, "", "—"))
+    st.caption(f"Prove compilate: **{n_comp}**. Punteggio 0 = nessuna anomalia, 4 = anomalia completa: "
+               "un totale basso è un buon risultato, ma 0 su tutto con poche prove compilate vuol dire "
+               "che la valutazione è ancora da fare.")
+    if val_id is not None and dict(valori) != dict((val_caricata or {}).get("risultati") or {}):
+        st.warning("Ci sono modifiche non ancora salvate: premi «💾 Salva» prima di generare la diagnosi.")
+
     st.divider()
 
     # ----- Salvataggio -----
@@ -383,6 +390,7 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
                     username=_get_username(),
                 )
                 st.success(f"Valutazione salvata (id={new_id}).")
+                st.session_state.pop(f"diag_storico_{paziente_id}", None)
                 # se era nuova, passiamo all'edit dell'esistente
                 if val_id is None:
                     st.session_state[edit_key] = new_id
@@ -419,6 +427,17 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
             st.caption("PDF disponibile dopo aver caricato `pdf_inpp.py`.")
         else:
             st.caption("Salva prima per generare il PDF.")
+
+    if val_id is not None:
+        if st.button("📝 Genera la diagnosi con questa valutazione", use_container_width=True,
+                     key=f"diag_{val_id}"):
+            st.session_state.pop(f"diag_storico_{paziente_id}", None)
+            st.session_state["goto_area"] = "👥 Pazienti"
+            st.session_state["goto_sotto"] = "📝 Diagnosi assistita"
+            st.session_state["paziente_attivo_id"] = paziente_id
+            st.rerun()
+        st.caption("La diagnosi legge l'ultima valutazione INPP salvata, insieme ad anamnesi, "
+                   "valutazione visiva e uditiva, documenti e colloqui.")
 
     # ----- Storico modifiche (solo se la valutazione esiste già) -----
     if val_id is not None:

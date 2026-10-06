@@ -432,6 +432,56 @@ def _bottone_prossimo_passo(conn, paz_id, sotto_corrente):
         st.rerun()
 
 
+# Il percorso di valutazione in cinque passi, sempre visibile in cima a
+# ognuno: si vede dove si e', cosa e' gia' fatto, e si salta a un passo.
+_PERCORSO = [
+    ("Anamnesi", _AREA_PNEV_SEQ, "📋 Anamnesi PNEV"),
+    ("Riflessi (INPP)", _AREA_PNEV_SEQ, "🧬 INPP — Valutazione diagnostica"),
+    ("Visiva", _AREA_PNEV_SEQ, "👁️ Valutazione visuo-percettiva"),
+    ("Uditiva", _AREA_PNEV_SEQ, "📊 Audiometria funzionale"),
+    ("Diagnosi", "👥 Pazienti", "📝 Diagnosi assistita"),
+]
+
+
+def _passo_fatto(conn, paz_id, sotto):
+    sql = {
+        "📋 Anamnesi PNEV": "SELECT 1 FROM anamnesi_prima_infanzia WHERE paziente_id=%s LIMIT 1",
+        "🧬 INPP — Valutazione diagnostica": "SELECT 1 FROM inpp_valutazioni WHERE paziente_id=%s LIMIT 1",
+        "📝 Diagnosi assistita": "SELECT 1 FROM diagnosi_assistita WHERE paziente_id=%s LIMIT 1",
+    }.get(sotto)
+    if not sql:
+        return None   # per visiva e uditiva non c'e' un controllo affidabile
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, (int(paz_id),))
+        return cur.fetchone() is not None
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _barra_percorso(conn, sotto):
+    paz_id = st.session_state.get("paziente_attivo_id")
+    if not paz_id or sotto not in [p[2] for p in _PERCORSO]:
+        return
+    st.markdown("**Percorso di valutazione**")
+    cols = st.columns(len(_PERCORSO))
+    for i, (nome, area, voce) in enumerate(_PERCORSO):
+        fatto = _passo_fatto(conn, paz_id, voce)
+        etich = f"{i + 1} · {nome}" + (" ✓" if fatto else "")
+        with cols[i]:
+            if voce == sotto:
+                st.button(etich, key=f"perc_{i}", type="primary", disabled=True, use_container_width=True)
+            elif st.button(etich, key=f"perc_{i}", use_container_width=True):
+                st.session_state["goto_area"] = area
+                st.session_state["goto_sotto"] = voce
+                st.rerun()
+    st.caption("✓ = già salvato per questo paziente. L'ordine è un consiglio: ogni passo si può aprire quando serve.")
+
+
 def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     """Dispatch PIATTO: aggancia ogni voce SOLO al suo nome (sotto).
 
@@ -444,6 +494,10 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     # La finestra «Seleziona paziente» legge questa voce per proporre solo i
     # pazienti dell'età giusta (regole in filtro_eta.REGOLE_ETA).
     st.session_state["_voce_corrente"] = sotto
+    try:
+        _barra_percorso(conn, sotto)
+    except Exception:
+        pass
     from .app_menu import PLACEHOLDER_VOCI
     if sotto in PLACEHOLDER_VOCI:
         st.info(f"🚧 **{sotto}** — sezione in costruzione, arriva presto.")
