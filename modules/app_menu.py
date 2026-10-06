@@ -142,6 +142,7 @@ PAZIENTI_RAMI = {
         "🏠 Dashboard",
         "👤 Anagrafica pazienti",
         "🧩 Quadro storico",
+        "🕒 Cronologia",
         # Statistiche sull'efficacia dei trattamenti dello studio: stava
         # sotto "Apprendimenti", dove "apprendimento" indica quello del
         # bambino — due significati opposti sotto la stessa parola.

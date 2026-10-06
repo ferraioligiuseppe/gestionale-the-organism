@@ -189,6 +189,11 @@ def set_paziente_attivo(conn, paz_id: int) -> None:
         except Exception:
             pass
     _salva_ultimo_paziente_utente(conn, paz_id)
+    try:
+        from .registro_attivita import registra
+        registra(conn, paz_id, "Scheda aperta", st.session_state.get("_voce_corrente") or "", ogni_minuti=30)
+    except Exception:
+        pass
 
 
 def _salva_ultimo_paziente_utente(conn, paz_id: int) -> None:
@@ -280,6 +285,11 @@ def _crea_paziente_rapido(conn, cognome, nome, dn_str, sesso, telefono):
         conn.commit()
         try:
             _carica_lista_pazienti.clear()
+        except Exception:
+            pass
+        try:
+            from .registro_attivita import registra
+            registra(conn, pid, "Paziente creato", f"{cognome.strip().upper()} {nome.strip().upper()}")
         except Exception:
             pass
         return pid, None
@@ -618,6 +628,22 @@ def header_paziente_attivo(conn) -> int | None:
     # del bottone sempre unica per evitare "duplicate element key".
     _hpa_key = f"hpa_change_{_hpa_n}"
 
+    # Date sempre visibili: quando e' stato registrato e quando la scheda e'
+    # stata aperta l'ultima volta prima di adesso (da chi).
+    _date_scheda = ""
+    try:
+        from .registro_attivita import data_registrazione, _q as _rq, _fmt as _rfmt
+        _reg, _ok = data_registrazione(conn, rec)
+        _ap = _rq(conn, "SELECT quando, utente FROM registro_attivita WHERE paziente_id=%s "
+                        "AND azione='Scheda aperta' ORDER BY quando DESC LIMIT 2", (int(pid),))
+        _parti = [f"registrato il {_reg}" if _ok else "data di registrazione non disponibile"]
+        if len(_ap) > 1:
+            _parti.append(f"aperto in precedenza il {_rfmt(_ap[1]['quando'], ora=True)}"
+                          + (f" da {_ap[1]['utente']}" if _ap[1].get("utente") else ""))
+        _date_scheda = " · ".join(_parti)
+    except Exception:
+        _date_scheda = ""
+
     c1, c2 = st.columns([3, 2])
     with c1:
         st.markdown(
@@ -634,7 +660,7 @@ def header_paziente_attivo(conn) -> int | None:
                     {badge} {cog} {nom}
                 </div>
                 <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 2px;">
-                    ID {pid}{(" · " + info_str) if info_str else ""}
+                    ID {pid}{(" · " + info_str) if info_str else ""}{(" · " + _date_scheda) if _date_scheda else ""}
                 </div>
             </div>""",
             unsafe_allow_html=True,
@@ -697,6 +723,15 @@ def _salva_modifica_rapida(conn, pid, cognome, nome, dn_str, telefono, indirizzo
             (cognome, nome, data_iso, telefono.strip(), indirizzo.strip(),
              email.strip(), int(pid)))
         conn.commit()
+        try:
+            from .registro_attivita import registra
+            prima = st.session_state.get(KEY_REC) or {}
+            nuovi = {"cognome": cognome, "nome": nome, "telefono": telefono.strip(),
+                     "indirizzo": indirizzo.strip(), "email": email.strip()}
+            cambiati = [k for k, v in nuovi.items() if str(prima.get(k) or "").strip() != str(v or "").strip()]
+            registra(conn, pid, "Anagrafica modificata", ", ".join(cambiati))
+        except Exception:
+            pass
         return None
     except Exception as e:
         try:
