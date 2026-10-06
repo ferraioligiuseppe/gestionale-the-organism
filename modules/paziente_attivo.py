@@ -287,11 +287,6 @@ def _crea_paziente_rapido(conn, cognome, nome, dn_str, sesso, telefono):
             _carica_lista_pazienti.clear()
         except Exception:
             pass
-        try:
-            from .registro_attivita import registra
-            registra(conn, pid, "Paziente creato", f"{cognome.strip().upper()} {nome.strip().upper()}")
-        except Exception:
-            pass
         return pid, None
     except Exception as e:
         try:
@@ -723,15 +718,6 @@ def _salva_modifica_rapida(conn, pid, cognome, nome, dn_str, telefono, indirizzo
             (cognome, nome, data_iso, telefono.strip(), indirizzo.strip(),
              email.strip(), int(pid)))
         conn.commit()
-        try:
-            from .registro_attivita import registra
-            prima = st.session_state.get(KEY_REC) or {}
-            nuovi = {"cognome": cognome, "nome": nome, "telefono": telefono.strip(),
-                     "indirizzo": indirizzo.strip(), "email": email.strip()}
-            cambiati = [k for k, v in nuovi.items() if str(prima.get(k) or "").strip() != str(v or "").strip()]
-            registra(conn, pid, "Anagrafica modificata", ", ".join(cambiati))
-        except Exception:
-            pass
         return None
     except Exception as e:
         try:

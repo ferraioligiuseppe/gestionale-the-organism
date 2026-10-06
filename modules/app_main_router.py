@@ -498,6 +498,11 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         _barra_percorso(conn, sotto)
     except Exception:
         pass
+    try:
+        from .registro_attivita import assicura_tracciamento
+        assicura_tracciamento(conn)
+    except Exception:
+        pass
     from .app_menu import PLACEHOLDER_VOCI
     if sotto in PLACEHOLDER_VOCI:
         st.info(f"🚧 **{sotto}** — sezione in costruzione, arriva presto.")

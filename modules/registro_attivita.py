@@ -66,8 +66,97 @@ def _tabella(conn):
         " id BIGSERIAL PRIMARY KEY, paziente_id BIGINT, quando TIMESTAMPTZ DEFAULT NOW(),"
         " utente TEXT, azione TEXT, dettaglio TEXT);"
         "CREATE INDEX IF NOT EXISTS registro_attivita_paz ON registro_attivita (paziente_id, quando DESC);"
-        "CREATE INDEX IF NOT EXISTS registro_attivita_quando ON registro_attivita (quando DESC);"):
+        "CREATE INDEX IF NOT EXISTS registro_attivita_quando ON registro_attivita (quando DESC);"
+        "ALTER TABLE registro_attivita ADD COLUMN IF NOT EXISTS tabella TEXT;"
+        "ALTER TABLE registro_attivita ADD COLUMN IF NOT EXISTS operazione TEXT;"
+        "ALTER TABLE registro_attivita ADD COLUMN IF NOT EXISTS riga_id TEXT;"):
         st.session_state["_reg_att_ok"] = True
+
+
+# ── Tracciamento automatico di ogni modulo ─────────────────────────────
+# Su ogni tabella clinica (quelle con paziente_id) e su pazienti si mette un
+# trigger: ogni INSERT, UPDATE o DELETE scrive una riga in registro_attivita
+# con chi l'ha fatto (app.utente, impostato da app_core prima di ogni
+# scrittura), la tabella, la riga e — per le modifiche — i campi cambiati.
+# Il trigger non puo' mai bloccare un salvataggio: se il registro fallisce,
+# il salvataggio va avanti lo stesso.
+
+_NON_TRACCIARE = ("registro_attivita", "schede_aperte", "_storico", "storico_", "_log", "log_", "token",
+                  "otp", "cache", "portale_accessi", "magic_links", "registrazioni_ip", "samples",
+                  "_points", "captures", "presenza")
+_CAMPI_TECNICI = {"updated_at", "aggiornato_il", "updated_by", "aggiornato_da", "ultimo_accesso",
+                  "created_at", "creato_il", "created_by", "creato_da"}
+_ULTIMO_CONTROLLO = {"t": 0.0}
+
+
+def _tabelle_da_tracciare(conn):
+    righe = _q(conn,
+        "SELECT c.table_name, c.column_name, c.data_type FROM information_schema.columns c "
+        "JOIN information_schema.tables t ON t.table_name=c.table_name AND t.table_schema=c.table_schema "
+        "WHERE c.table_schema='public' AND t.table_type='BASE TABLE' AND c.table_name IN ("
+        " SELECT table_name FROM information_schema.columns WHERE table_schema='public' "
+        " AND column_name='paziente_id' UNION SELECT 'pazienti')")
+    out = {}
+    for x in righe:
+        out.setdefault(x["table_name"], []).append((x["column_name"], x["data_type"]))
+    return {t: c for t, c in out.items() if not any(p in t for p in _NON_TRACCIARE)}
+
+
+def _sql_trigger(t, colonne):
+    nomi = {c for c, _ in colonne}
+    pid = "id" if t == "pazienti" else "paziente_id"
+    rid = "r.id::text" if "id" in nomi else "NULL"
+    confronto = [c for c, ty in colonne if ty != "bytea" and c not in _CAMPI_TECNICI]
+    cambi = ", ".join(f"CASE WHEN NEW.\"{c}\" IS DISTINCT FROM OLD.\"{c}\" THEN '{c}' END" for c in confronto)
+    fn = ("pnev_traccia_" + t)[:60]
+    cambi_sql = cambi or "NULL"
+    return f"""
+CREATE OR REPLACE FUNCTION "{fn}"() RETURNS trigger LANGUAGE plpgsql AS $f$
+DECLARE r RECORD; campi TEXT := '';
+BEGIN
+  IF TG_OP = 'DELETE' THEN r := OLD; ELSE r := NEW; END IF;
+  IF TG_OP = 'UPDATE' THEN
+    campi := array_to_string(ARRAY[{cambi_sql}]::text[], ', ');
+    IF coalesce(campi, '') = '' THEN RETURN NULL; END IF;
+  END IF;
+  BEGIN
+    INSERT INTO registro_attivita (paziente_id, utente, azione, dettaglio, tabella, operazione, riga_id)
+    VALUES (NULLIF(r.{pid}::text, '')::bigint, NULLIF(current_setting('app.utente', true), ''),
+            TG_OP, coalesce(campi, ''), TG_TABLE_NAME, TG_OP, {rid});
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  RETURN NULL;
+END $f$;
+DROP TRIGGER IF EXISTS pnev_traccia ON "{t}";
+CREATE TRIGGER pnev_traccia AFTER INSERT OR UPDATE OR DELETE ON "{t}"
+  FOR EACH ROW EXECUTE PROCEDURE "{fn}"();
+"""
+
+
+def assicura_tracciamento(conn, forza=False):
+    """Mette il trigger sulle tabelle che non l'hanno ancora. Controlla al
+    massimo ogni 6 ore, cosi' un modulo nuovo viene coperto da solo."""
+    import time
+    if conn is None or (not forza and time.time() - _ULTIMO_CONTROLLO["t"] < 6 * 3600):
+        return []
+    _ULTIMO_CONTROLLO["t"] = time.time()
+    _tabella(conn)
+    gia = {x["t"] for x in _q(conn, "SELECT c.relname AS t FROM pg_trigger g JOIN pg_class c ON c.oid=g.tgrelid "
+                                     "WHERE g.tgname='pnev_traccia'")}
+    fatte = []
+    for t, cols in _tabelle_da_tracciare(conn).items():
+        if t in gia and not forza:
+            continue
+        if _esegui(conn, _sql_trigger(t, cols)):
+            fatte.append(t)
+    return fatte
+
+
+def stato_tracciamento(conn):
+    tutte = _tabelle_da_tracciare(conn)
+    gia = {x["t"] for x in _q(conn, "SELECT c.relname AS t FROM pg_trigger g JOIN pg_class c ON c.oid=g.tgrelid "
+                                     "WHERE g.tgname='pnev_traccia'")}
+    return sorted(tutte), gia
 
 
 def registra(conn, paz_id, azione, dettaglio="", ogni_minuti=None):
@@ -151,10 +240,12 @@ def cronologia(conn, paz_id, limite=300):
     """[{quando, chi, cosa, fonte}] dal piu' recente."""
     ev = []
     _tabella(conn)
-    for r in _q(conn, "SELECT quando, utente, azione, dettaglio FROM registro_attivita WHERE paziente_id=%s "
-                      "ORDER BY quando DESC LIMIT %s", (int(paz_id), limite)):
-        ev.append({"quando": r["quando"], "chi": r.get("utente") or "", "fonte": "registro",
-                   "cosa": r["azione"] + (f" — {r['dettaglio']}" if r.get("dettaglio") else "")})
+    for r in _q(conn, "SELECT quando, utente, azione, dettaglio, tabella, operazione, riga_id FROM registro_attivita "
+                      "WHERE paziente_id=%s ORDER BY quando DESC LIMIT %s", (int(paz_id), limite)):
+        ev.append({"quando": r["quando"], "chi": r.get("utente") or "", "fonte": r.get("tabella") or "registro",
+                   "cosa": descrivi(r), "riga": r.get("riga_id"), "op": r.get("operazione")})
+    inizio = _q(conn, "SELECT MIN(quando) AS t FROM registro_attivita WHERE tabella IS NOT NULL")
+    inizio = inizio[0]["t"] if inizio and inizio[0].get("t") else None
     p = _q(conn, "SELECT creato_il FROM pazienti WHERE id=%s", (int(paz_id),))
     if p and p[0].get("creato_il"):
         _t, ok = data_registrazione(conn, p[0])
@@ -181,6 +272,13 @@ def cronologia(conn, paz_id, limite=300):
                 q = x.get(d)
             if q is None:
                 continue
+            # Da quando c'e' il tracciamento, questi eventi sono gia' nel registro.
+            if inizio is not None and isinstance(q, dt.datetime) and ts:
+                try:
+                    if q >= inizio:
+                        continue
+                except TypeError:
+                    pass
             chi = x.get("updated_by") or x.get("created_by") or x.get("creato_da") or x.get("aggiornato_da") or ""
             cosa = m["nome"]
             if ts and d and x.get(d) and x.get(ts) and hasattr(x.get(d), "strftime"):
@@ -200,6 +298,48 @@ def cronologia(conn, paz_id, limite=300):
     return ev[:limite]
 
 
+_OP = {"INSERT": "nuovo", "UPDATE": "modificato", "DELETE": "eliminato"}
+
+
+def _nome_tabella(t):
+    try:
+        from .fascicolo_paziente import ETICHETTE
+        if t in ETICHETTE:
+            return ETICHETTE[t][0]
+    except Exception:
+        pass
+    if t == "pazienti":
+        return "Anagrafica"
+    return (t or "").replace("_", " ").capitalize()
+
+
+def descrivi(r):
+    t = r.get("tabella")
+    if not t:
+        return (r.get("azione") or "") + (f" — {r['dettaglio']}" if r.get("dettaglio") else "")
+    op = _OP.get(r.get("operazione"), (r.get("operazione") or "").lower())
+    testo = f"{_nome_tabella(t)} · {op}"
+    if r.get("operazione") == "UPDATE" and r.get("dettaglio"):
+        testo += f" ({r['dettaglio']})"
+    return testo
+
+
+def _compatta(ev):
+    """Salvataggi ripetuti dello stesso utente sulla stessa scheda entro 15
+    minuti diventano una riga sola, con il numero di volte."""
+    out = []
+    for e in ev:
+        p = out[-1] if out else None
+        if (p and e.get("op") == "UPDATE" and p.get("op") == "UPDATE" and e.get("fonte") == p.get("fonte")
+                and e.get("riga") == p.get("riga") and e.get("chi") == p.get("chi")
+                and isinstance(e["quando"], dt.datetime) and isinstance(p["quando"], dt.datetime)
+                and abs((p["quando"] - e["quando"]).total_seconds()) < 900):
+            p["n"] = p.get("n", 1) + 1
+            continue
+        out.append(dict(e))
+    return out
+
+
 def _ha_ora(q):
     return isinstance(q, dt.datetime)
 
@@ -214,16 +354,42 @@ def render_cronologia(conn, paz_id):
                      horizontal=True, key="cron_vista")
     if vista.startswith("Tutti"):
         _tabella(conn)
-        righe = _q(conn, "SELECT r.quando, r.utente, r.azione, r.dettaglio, p.cognome, p.nome, r.paziente_id "
-                         "FROM registro_attivita r LEFT JOIN pazienti p ON p.id = r.paziente_id "
-                         "ORDER BY r.quando DESC LIMIT 300")
+        utenti = [x["u"] for x in _q(conn, "SELECT DISTINCT utente AS u FROM registro_attivita "
+                                           "WHERE utente IS NOT NULL AND utente<>'' ORDER BY 1")]
+        f1, f2, f3 = st.columns(3)
+        chi = f1.selectbox("Chi", ["tutti"] + utenti, key="cron_chi")
+        giorni = f2.selectbox("Periodo", [1, 7, 30, 90], index=1, key="cron_gg",
+                              format_func=lambda g: "oggi" if g == 1 else f"ultimi {g} giorni")
+        cerca = f3.text_input("Modulo o paziente contiene", key="cron_cerca")
+        sql = ("SELECT r.quando, r.utente, r.azione, r.dettaglio, r.tabella, r.operazione, r.riga_id, "
+               "p.cognome, p.nome, r.paziente_id FROM registro_attivita r LEFT JOIN pazienti p ON p.id = r.paziente_id "
+               "WHERE r.quando > NOW() - (%s || ' days')::interval")
+        par = [str(giorni)]
+        if chi != "tutti":
+            sql += " AND r.utente=%s"
+            par.append(chi)
+        righe = _q(conn, sql + " ORDER BY r.quando DESC LIMIT 1000", tuple(par))
+        if cerca.strip():
+            c = cerca.strip().lower()
+            righe = [x for x in righe if c in (descrivi(x) + " " + (x.get("cognome") or "") + " " +
+                                               (x.get("nome") or "")).lower()]
+        st.caption(f"{len(righe)} attività.")
         if not righe:
-            st.info("Il registro è vuoto: si riempie da quando questo aggiornamento è attivo.")
-        for r in righe:
-            nome = f"{(r.get('cognome') or '').title()} {(r.get('nome') or '').title()}".strip() or f"ID {r.get('paziente_id')}"
-            st.markdown(f"`{_fmt(r['quando'], ora=True)}` · **{nome}** · {r['azione']}"
-                        + (f" — {r['dettaglio']}" if r.get("dettaglio") else "")
-                        + (f" · _{r['utente']}_" if r.get("utente") else ""))
+            st.info("Nessuna attività in questo periodo.")
+        for x in righe[:500]:
+            nome = f"{(x.get('cognome') or '').title()} {(x.get('nome') or '').title()}".strip() \
+                or (f"ID {x['paziente_id']}" if x.get("paziente_id") else "—")
+            st.markdown(f"`{_fmt(x['quando'], ora=True)}` · **{nome}** · {descrivi(x)}"
+                        + (f" · _{x['utente']}_" if x.get("utente") else " · _utente non registrato_"))
+        with st.expander("🛡️ Tracciamento dei moduli"):
+            tutte, gia = stato_tracciamento(conn)
+            mancano = [t for t in tutte if t not in gia]
+            st.caption(f"Moduli tracciati: {len(tutte) - len(mancano)} su {len(tutte)}.")
+            if mancano:
+                st.caption("Non ancora tracciati: " + ", ".join(mancano))
+            if st.button("Attiva su tutti i moduli adesso", key="cron_attiva"):
+                fatte = assicura_tracciamento(conn, forza=True)
+                st.success(f"Tracciamento attivo su {len(fatte)} tabelle.")
         return
     if not paz_id:
         st.info("Seleziona un paziente.")
@@ -244,7 +410,7 @@ def render_cronologia(conn, paz_id):
         c2.caption("da " + aperture[0]["utente"])
     c3.metric("Apertura precedente", _fmt(aperture[1]["quando"], ora=True) if len(aperture) > 1 else "—")
 
-    ev = cronologia(conn, paz_id)
+    ev = _compatta(cronologia(conn, paz_id))
     if not ev:
         st.info("Ancora nessun evento.")
         return
@@ -256,4 +422,5 @@ def render_cronologia(conn, paz_id):
             st.markdown(f"#### {g}")
             giorno = g
         ora = _fmt(q, ora=True)[11:] if _ha_ora(q) else "—"
-        st.markdown(f"`{ora}` · {e['cosa']}" + (f" · _{e['chi']}_" if e.get("chi") else ""))
+        st.markdown(f"`{ora}` · {e['cosa']}" + (f" ×{e['n']}" if e.get("n") else "")
+                    + (f" · _{e['chi']}_" if e.get("chi") else ""))

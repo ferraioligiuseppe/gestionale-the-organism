@@ -2276,6 +2276,36 @@ class _RowCI(dict):
         except Exception:
             return default
 
+_SCRITTURE = ("insert", "update", "delete")
+
+
+def _con_utente(sql2, params):
+    """Davanti a ogni scrittura (INSERT/UPDATE/DELETE) dice al database CHI la
+    sta facendo, valido solo per questa transazione. I trigger di
+    registro_attivita leggono questo valore: cosi' ogni modulo, anche quelli
+    che non sanno nulla del registro, lascia traccia di chi ha fatto cosa.
+    La connessione e' condivisa fra gli utenti: per questo il nome viaggia
+    nello stesso comando della scrittura, non in un comando separato."""
+    try:
+        testa = sql2.lstrip().lower()
+        if not testa.startswith(_SCRITTURE):
+            return sql2, params
+        utente = str(st.session_state.get("username") or st.session_state.get("user") or "")[:80]
+        if not utente:
+            return sql2, params
+        if isinstance(params, dict):
+            p = dict(params)
+            p["__pnev_utente"] = utente
+            return "SELECT set_config('app.utente', %(__pnev_utente)s, true); " + sql2, p
+        if isinstance(params, (list, tuple)):
+            return "SELECT set_config('app.utente', %s, true); " + sql2, (utente,) + tuple(params)
+        # Senza parametri il testo puo' contenere «%» letterali: niente prefisso
+        # nello stesso comando, si imposta prima.
+        return ("__SEPARATO__", utente), sql2
+    except Exception:
+        return sql2, params
+
+
 class _PgCursor:
 
     """Cursor wrapper to:
@@ -2304,9 +2334,16 @@ class _PgCursor:
             pass
 
     def _lancia(self, sql2, params):
-        if params is None:
-            return self._cur.execute(sql2)
-        return self._cur.execute(sql2, params)
+        sql3, params3 = _con_utente(sql2, params)
+        if isinstance(sql3, tuple) and sql3[0] == "__SEPARATO__":
+            try:
+                self._cur.execute("SELECT set_config('app.utente', %s, true)", (sql3[1],))
+            except Exception:
+                pass
+            return self._cur.execute(params3)
+        if params3 is None:
+            return self._cur.execute(sql3)
+        return self._cur.execute(sql3, params3)
 
     def execute(self, sql, params=None):
         sql2 = self._adapt_sql(str(sql))
