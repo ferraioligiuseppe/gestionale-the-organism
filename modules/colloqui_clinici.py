@@ -156,7 +156,15 @@ def _acquisisci(audio, key_testo, key_hash, nome):
         return
     st.session_state[key_hash] = firma
     with st.spinner("Trascrizione in corso…"):
-        testo, err = trascrivi(dati, getattr(audio, "name", None) or nome)
+        # WAV del browser → MP3 leggero: senza, oltre i ~4 minuti si superava
+        # il limite di 25 MB e la trascrizione falliva.
+        try:
+            from .audio_compatto import comprimi, nome_file
+            dati, _mime = comprimi(dati, getattr(audio, "type", None) or "audio/wav")
+            nome = nome_file(_mime)
+        except Exception:
+            nome = getattr(audio, "name", None) or nome
+        testo, err = trascrivi(dati, nome)
     if err:
         st.error(err)
         return

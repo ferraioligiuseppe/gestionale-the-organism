@@ -78,16 +78,19 @@ ALTER TABLE diario_clinico ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS pol_diario_tenant ON diario_clinico;
 CREATE POLICY pol_diario_tenant ON diario_clinico
-    USING (studio_id = current_setting('app.studio_id')::BIGINT)
-    WITH CHECK (studio_id = current_setting('app.studio_id')::BIGINT);
+    USING (studio_id = COALESCE(NULLIF(current_setting('app.studio_id', true), '')::BIGINT, studio_id))
+    WITH CHECK (studio_id = COALESCE(NULLIF(current_setting('app.studio_id', true), '')::BIGINT, studio_id));
 
 ALTER TABLE diario_clinico_audio ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS pol_diario_audio_tenant ON diario_clinico_audio;
 CREATE POLICY pol_diario_audio_tenant ON diario_clinico_audio
-    USING (studio_id = current_setting('app.studio_id')::BIGINT)
-    WITH CHECK (studio_id = current_setting('app.studio_id')::BIGINT);
+    USING (studio_id = COALESCE(NULLIF(current_setting('app.studio_id', true), '')::BIGINT, studio_id))
+    WITH CHECK (studio_id = COALESCE(NULLIF(current_setting('app.studio_id', true), '')::BIGINT, studio_id));
 """
+# Prima le policy usavano current_setting('app.studio_id') senza «true»: se la
+# variabile non era impostata ogni scrittura sul diario falliva con un errore.
+# Ora, se manca, la policy lascia passare (lo studio e' uno solo).
 
 
 def _adesso():
@@ -95,7 +98,9 @@ def _adesso():
 
 
 def crea_schema(conn):
-    """Idempotente: chiamata a ogni apertura del modulo."""
+    """Idempotente. Una volta per sessione: prima girava a ogni clic."""
+    if st.session_state.get("_diario_schema_v2"):
+        return
     try:
         conn.rollback()
     except Exception:
@@ -109,6 +114,7 @@ def crea_schema(conn):
         cur = conn.cursor()
         cur.execute(DDL)
     conn.commit()
+    st.session_state["_diario_schema_v2"] = True
 
 
 # ---------------------------------------------------------------------------
@@ -272,66 +278,141 @@ def conteggio_per_tipo(conn, studio_id, paziente_id):
 # ---------------------------------------------------------------------------
 # UI
 # ---------------------------------------------------------------------------
+BOZZA = "Seduta registrata (in corso)"
+_ET = {"professionista": "🧑‍⚕️ Professionista", "paziente": "🧒 Paziente"}
+
+
+def _q1(conn, sql, par=()):
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, par)
+        r = cur.fetchone()
+        conn.commit()
+        return r
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _bozza_aperta(conn, studio_id, paz_id):
+    r = _q1(conn, "SELECT id FROM diario_clinico WHERE studio_id=%s AND paziente_id=%s AND tipo_voce='seduta' "
+                  "AND titolo=%s AND NOT eliminato ORDER BY id DESC LIMIT 1", (studio_id, int(paz_id), BOZZA))
+    return (r["id"] if isinstance(r, dict) else r[0]) if r else None
+
+
+def _trascrizione_completa(clip):
+    return "\n\n".join(f"[{'Professionista' if c['speaker'] == 'professionista' else 'Paziente'}] {c['trascritto']}"
+                        for c in clip if c.get("trascritto") and not str(c["trascritto"]).startswith("⚠️"))
+
+
+def _aggiorna_testo(conn, studio_id, voce_id, titolo=None):
+    clip = lista_clip_audio(conn, studio_id, voce_id)
+    t = _trascrizione_completa(clip) or "(trascrizione non ancora disponibile)"
+    if titolo:
+        _q1(conn, "UPDATE diario_clinico SET testo=%s, riassunto=%s, titolo=%s, aggiornato_il=now() WHERE id=%s",
+            (t, t[:200], titolo, voce_id))
+    else:
+        _q1(conn, "UPDATE diario_clinico SET testo=%s, riassunto=%s, aggiornato_il=now() WHERE id=%s",
+            (t, t[:200], voce_id))
+
+
+def _trascrivi_clip(conn, clip_id, dati, mime):
+    if not trascrizione_disponibile():
+        return None
+    from .audio_compatto import nome_file
+    testo = trascrivi_audio(bytes(dati), mime)
+    _q1(conn, "UPDATE diario_clinico_audio SET trascritto=%s WHERE id=%s", (testo or "", clip_id))
+    return testo
+
+
 def _render_registratore_seduta(conn, studio_id, paz_id):
-    chiave_turni = f"diario_turni_{paz_id}"
-    if chiave_turni not in st.session_state:
-        st.session_state[chiave_turni] = []
-    turni = st.session_state[chiave_turni]
+    """Ogni turno viene compresso in MP3 e salvato SUBITO nel diario, poi
+    trascritto. Prima restava solo in memoria fino a «Salva seduta»: bastava
+    cambiare pagina o un riavvio e la registrazione spariva senza traccia."""
+    import hashlib
+    from .audio_compatto import comprimi, peso
+    kv, kh = f"diario_voce_{paz_id}", f"diario_hash_{paz_id}"
+    voce_id = st.session_state.get(kv) or _bozza_aperta(conn, studio_id, paz_id)
+    if voce_id:
+        st.session_state[kv] = voce_id
+    clip = lista_clip_audio(conn, studio_id, voce_id) if voce_id else []
 
-    with st.expander("🎙️ Registra la seduta (professionista / paziente)", expanded=bool(turni)):
+    with st.expander("🎙️ Registra la seduta (professionista / paziente)", expanded=bool(clip)):
         if not trascrizione_disponibile():
-            st.warning("Trascrizione automatica non configurata (manca chiave AI nei Secrets). "
-                       "Puoi comunque registrare: l'audio verrà salvato senza testo.")
-
-        speaker = st.radio("Chi sta parlando in questo turno?",
-                          ["professionista", "paziente"],
-                          format_func=lambda s: "🧑‍⚕️ Professionista" if s == "professionista" else "🧒 Paziente",
-                          horizontal=True, key=f"diario_speaker_{paz_id}")
-
-        audio_val = st.audio_input("Registra questo turno", key=f"diario_rec_{paz_id}_{len(turni)}")
+            st.warning("Trascrizione automatica non configurata (manca la chiave AI nei Secrets). "
+                       "L'audio viene comunque salvato; la trascrizione si può fare dopo.")
+        st.caption("Ogni turno si salva da solo appena fermi la registrazione (MP3 leggero, circa 240 KB "
+                   "al minuto) e viene trascritto. Alla fine premi «Concludi seduta».")
+        speaker = st.radio("Chi sta parlando in questo turno?", ["professionista", "paziente"],
+                           format_func=lambda s: _ET[s], horizontal=True, key=f"diario_speaker_{paz_id}")
+        audio_val = st.audio_input("Registra questo turno", key=f"diario_rec_{paz_id}_{len(clip)}")
         if audio_val is not None:
-            dati = audio_val.getvalue()
-            mime = audio_val.type or "audio/wav"
-            with st.spinner("Trascrizione in corso..."):
-                testo = trascrivi_audio(dati, mime) if trascrizione_disponibile() else ""
-            turni.append({"speaker": speaker, "mime": mime, "dati": dati, "testo": testo})
-            st.rerun()
+            raw = audio_val.getvalue()
+            firma = hashlib.md5(raw).hexdigest()
+            if st.session_state.get(kh) != firma:
+                st.session_state[kh] = firma
+                with st.spinner("Salvo la registrazione…"):
+                    dati, mime = comprimi(raw, audio_val.type or "audio/wav")
+                    autore = st.session_state.get("utente_nome") or st.session_state.get("username")
+                    try:
+                        if not voce_id:
+                            voce_id = aggiungi_nota(conn, studio_id, paz_id, "seduta",
+                                                    "(trascrizione in corso)", titolo=BOZZA, autore=autore)
+                            st.session_state[kv] = voce_id
+                        clip_id = salva_clip_audio(conn, studio_id, voce_id, len(clip), speaker, mime, dati)
+                    except Exception as e:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+                        st.error(f"⚠️ Registrazione NON salvata nel database: {e}")
+                        st.download_button("⬇️ Scarica comunque l'audio sul computer", data=dati,
+                                           file_name="turno_non_salvato." + ("mp3" if "mpeg" in mime else "wav"),
+                                           mime=mime, key=f"diario_rec_dl_{firma[:8]}")
+                        clip_id = None
+                if clip_id:
+                    st.toast(f"Turno salvato ({peso(len(dati))}, {'MP3' if 'mpeg' in mime else 'WAV'})")
+                    with st.spinner("Trascrizione in corso…"):
+                        _trascrivi_clip(conn, clip_id, dati, mime)
+                    _aggiorna_testo(conn, studio_id, voce_id)
+                    st.rerun()
 
-        if turni:
+        if clip:
             st.divider()
-            st.caption(f"{len(turni)} turno/i registrato/i in questa sessione:")
-            for i, t in enumerate(turni):
-                etichetta = "🧑‍⚕️ Professionista" if t["speaker"] == "professionista" else "🧒 Paziente"
-                st.markdown(f"**{i+1}. {etichetta}**")
-                st.audio(t["dati"], format=t["mime"])
-                if t["testo"].startswith("⚠️"):
-                    st.caption(t["testo"])
-                elif t["testo"]:
-                    st.write(t["testo"])
+            st.caption(f"Seduta in corso · {len(clip)} turni già salvati nel diario")
+            for c in clip:
+                st.markdown(f"**{c['ordine'] + 1}. {_ET.get(c['speaker'], c['speaker'])}** · "
+                            f"{peso(len(bytes(c['dati'])))}")
+                st.audio(bytes(c["dati"]), format=c["mime"])
+                t = c.get("trascritto")
+                if t and not str(t).startswith("⚠️"):
+                    st.write(t)
                 else:
-                    st.caption("(nessuna trascrizione)")
-
+                    st.caption(t or "(non ancora trascritto)")
+                    if trascrizione_disponibile() and st.button("🔁 Trascrivi", key=f"diario_rt_{c['id']}"):
+                        with st.spinner("Trascrizione in corso…"):
+                            _trascrivi_clip(conn, c["id"], c["dati"], c["mime"])
+                        _aggiorna_testo(conn, studio_id, voce_id)
+                        st.rerun()
             c1, c2, c3 = st.columns([1, 1, 2])
-            if c1.button("↩️ Rimuovi ultimo turno", key=f"diario_rec_undo_{paz_id}"):
-                turni.pop()
+            if c1.button("↩️ Elimina ultimo turno", key=f"diario_rec_undo_{paz_id}"):
+                _q1(conn, "DELETE FROM diario_clinico_audio WHERE id=%s", (clip[-1]["id"],))
+                _aggiorna_testo(conn, studio_id, voce_id)
+                st.session_state.pop(kh, None)
                 st.rerun()
-            if c2.button("🗑️ Scarta tutto", key=f"diario_rec_clear_{paz_id}"):
-                st.session_state[chiave_turni] = []
+            if c2.button("🗑️ Scarta seduta", key=f"diario_rec_clear_{paz_id}"):
+                elimina_voce(conn, studio_id, voce_id)
+                st.session_state.pop(kv, None)
+                st.session_state.pop(kh, None)
                 st.rerun()
-            if c3.button("✅ Salva seduta nel diario", type="primary", key=f"diario_rec_save_{paz_id}"):
-                transcript = "\n\n".join(
-                    f"[{'Professionista' if t['speaker']=='professionista' else 'Paziente'}] {t['testo']}"
-                    for t in turni if t["testo"] and not t["testo"].startswith("⚠️")
-                )
-                autore = st.session_state.get("utente_nome") or st.session_state.get("username")
-                nuovo_id = aggiungi_nota(conn, studio_id, paz_id, "seduta",
-                                        transcript or "(seduta registrata senza trascrizione)",
-                                        titolo="Seduta registrata", autore=autore)
-                for i, t in enumerate(turni):
-                    salva_clip_audio(conn, studio_id, nuovo_id, i, t["speaker"], t["mime"],
-                                    t["dati"], t["testo"] or None)
-                st.session_state[chiave_turni] = []
-                st.success("Seduta salvata nel diario.")
+            if c3.button("✅ Concludi seduta", type="primary", key=f"diario_rec_save_{paz_id}"):
+                _aggiorna_testo(conn, studio_id, voce_id, titolo="Seduta registrata")
+                st.session_state.pop(kv, None)
+                st.session_state.pop(kh, None)
+                st.success("Seduta conclusa: la trovi nel diario qui sotto.")
                 st.rerun()
 
 
