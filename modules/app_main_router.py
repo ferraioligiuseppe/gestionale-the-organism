@@ -608,6 +608,11 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         return True
     if sotto == "🧩 Quadro storico":
         try:
+            from .fascicolo_paziente import render_fascicolo
+            render_fascicolo(conn, paz_id, "qs_fasc", aperto=True)
+        except Exception as e:
+            st.caption(f"Fascicolo non disponibile: {e}")
+        try:
             from .quadro_storico import render_quadro
             render_quadro(conn, paz_id)
         except Exception as e:

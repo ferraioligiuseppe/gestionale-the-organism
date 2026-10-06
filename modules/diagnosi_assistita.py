@@ -271,6 +271,15 @@ def _riassunto_storico(conn, paz_id) -> str:
     except Exception:
         pass
 
+    try:
+        from .fascicolo_paziente import testo_altri_dati
+        altri = testo_altri_dati(conn, paz_id)
+        if altri:
+            parti.append("\nALTRI DATI DEL FASCICOLO (moduli senza un riassunto dedicato):")
+            parti.extend(altri)
+    except Exception:
+        pass
+
     return "\n".join(parti).strip()
 
 
@@ -370,6 +379,12 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
 
     _blocco_documenti_non_letti(conn, paz_id, key_storico)
 
+    try:
+        from .fascicolo_paziente import render_fascicolo
+        render_fascicolo(conn, paz_id, "diag_fasc")
+    except Exception as e:
+        st.caption(f"Fascicolo non disponibile: {e}")
+
     with st.expander("📚 Storico raccolto (quello che legge l'AI)",
                      expanded=not bool(storico)):
         if storico:
@@ -379,6 +394,7 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
                     "diagnosi a mano qui sotto.")
         if st.button("🔄 Rileggi lo storico", key=f"diag_refresh_{paz_id}"):
             st.session_state.pop(key_storico, None)
+            st.session_state.pop(f"_fascicolo_{paz_id}", None)
             st.rerun()
 
     st.markdown("---")
