@@ -69,7 +69,9 @@ ETICHETTE = {
     "photoref_sessions": ("Fotorefrazione", None),
     "questionari_pubblici": ("Questionari compilati", None),
     "diagnosi_assistita": ("Diagnosi salvate", "📝 Diagnosi assistita"),
-    "relazioni_cliniche": ("Relazioni cliniche", None),
+    "relazioni_cliniche": ("Relazioni cliniche (vecchie)", None),
+    "archivio_relazioni": ("Archivio relazioni", "📚 Archivio relazioni"),
+    "registro_attivita": ("Registro attività", "🕒 Cronologia"),
     "consensi_privacy": ("Consensi privacy", "🔒 Privacy & Consensi"),
 }
 
@@ -85,7 +87,8 @@ GIA_RIASSUNTE = {"documenti_clinici", "getman_risultati", "groffman_risultati", 
                  "anamnesi", "esiti_pnev", "logopedia_valutazioni", "logopedia_sedute",
                  "logopedia_obiettivi", "terapia_sedute", "terapia_obiettivi", "terapia_programma",
                  "anamnesi_prima_infanzia", "anamnesi_sviluppo", "inpp_valutazioni", "rilievi_pnev",
-                 "colloqui_clinici", "diagnosi_assistita", "consensi_privacy", "pnev_casa",
+                 "colloqui_clinici", "diagnosi_assistita", "consensi_privacy", "pnev_casa", "archivio_relazioni",
+                 "registro_attivita",
                  "relazioni_cliniche"}
 
 _DATE_PREFERITE = ("data", "data_valutazione", "data_seduta", "data_esame", "data_ora", "data_anamnesi",

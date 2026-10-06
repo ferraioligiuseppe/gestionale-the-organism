@@ -512,7 +512,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
 
     VOCI_CON_PAZIENTE = {
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
-        "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "🕒 Cronologia", "💡 Assistente PNEV",
+        "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "🕒 Cronologia", "📚 Archivio relazioni", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🧩 Rilievi PNEV", "🎙️ Colloqui clinici", "🥗 Alimentazione",
         "🎯 Piano di trattamento",
@@ -608,6 +608,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore documenti clinici: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+    if sotto == "📚 Archivio relazioni":
+        try:
+            from .archivio_relazioni import render_archivio
+            render_archivio(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore archivio relazioni: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True

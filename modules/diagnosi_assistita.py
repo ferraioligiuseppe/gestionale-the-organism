@@ -272,6 +272,15 @@ def _riassunto_storico(conn, paz_id) -> str:
         pass
 
     try:
+        from .archivio_relazioni import sintesi_archivio
+        arc = sintesi_archivio(conn, paz_id)
+        if arc:
+            parti.append("\nRELAZIONI IN ARCHIVIO (📌 = da tenere presenti, riportate per intero):")
+            parti.extend(arc)
+    except Exception:
+        pass
+
+    try:
         from .fascicolo_paziente import testo_altri_dati
         altri = testo_altri_dati(conn, paz_id)
         if altri:
@@ -435,7 +444,7 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
                          value=st.session_state.get(key_bozza, ""),
                          height=420, key=f"diag_txt_{paz_id}")
 
-    cc1, cc2 = st.columns(2)
+    cc1, cc3, cc2 = st.columns(3)
     with cc1:
         if st.button("💾 Salva in cartella", key=f"diag_save_{paz_id}"):
             if testo.strip() and _salva(conn, paz_id, testo):
@@ -443,6 +452,16 @@ def render_diagnosi(conn=None, paz_id=None, paziente=None):
                 st.session_state.pop(f"diag_storico_{paz_id}", None)
             else:
                 st.warning("Scrivi prima qualcosa (o salvataggio non riuscito).")
+    with cc3:
+        if st.button("📚 Salva nell'archivio relazioni", key=f"diag_arch_{paz_id}", disabled=not testo.strip()):
+            try:
+                from .archivio_relazioni import salva_relazione
+                err = salva_relazione(conn, paz_id, "Diagnosi assistita — " + __import__("datetime").date.today().strftime("%d/%m/%Y"), testo,
+                                      "Diagnosi", "Diagnosi assistita del gestionale", in_evidenza=False)
+                (st.error(f"Non salvata: {err}") if err else
+                 st.success("Salvata nell'archivio. Mettile 📌 da lì se vuoi che resti sempre presente."))
+            except Exception as e:
+                st.error(f"Archivio non disponibile: {e}")
     with cc2:
         st.download_button("⬇️ Scarica (.txt)", data=testo or "",
                            file_name=f"diagnosi_{nome or paz_id}.txt",

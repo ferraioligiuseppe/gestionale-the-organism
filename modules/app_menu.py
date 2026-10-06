@@ -162,6 +162,7 @@ PAZIENTI_RAMI = {
         "🥗 Alimentazione",
         "🗓️ Diario clinico",
         "📝 Diagnosi assistita",
+        "📚 Archivio relazioni",
         "📅 Sedute / Terapie",
         "📈 Esiti / Follow-up",
         "🔒 Privacy & Consensi",
