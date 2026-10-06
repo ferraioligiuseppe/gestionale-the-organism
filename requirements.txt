@@ -52,6 +52,9 @@ openai>=1.30.0
 # Audio
 soundfile==0.12.1
 pydub==0.25.1
+# Codifica MP3 delle registrazioni di seduta (32 kbps, mono 16 kHz), senza
+# bisogno di ffmpeg. Se manca, l'audio si salva in WAV 16 kHz.
+lameenc>=1.7.0
 # NB: streamlit-webrtc + aiortc RIMOSSI (non usati nel codice, trascinavano
 # PyAV/av e appesantivano l'avvio causando il loop "Connecting"). L'eye-tracking
 # gira su pnev.it nel browser, non serve webrtc lato app.
