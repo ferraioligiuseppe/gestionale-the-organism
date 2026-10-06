@@ -216,6 +216,7 @@ SOTTOSEZIONI = {
         # paziente: obiettivi, settimana corrente e aderenza di TUTTI i
         # percorsi insieme. Le voci sotto restano quelle di prima.
         "🎯 Piano di trattamento",
+        "🏠 Programma PNEV a casa",
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
         "🎵 TMR — Movimenti ritmici",
