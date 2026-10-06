@@ -171,6 +171,13 @@ def _scheda_clinica(e):
         st.markdown(f"**Errori tipici:** {e['errori_tipici']}")
     if e.get("aiuti_operatore"):
         st.markdown(f"**Aiuti dell'operatore:** {e['aiuti_operatore']}")
+    if e.get("riflesso"):
+        st.markdown(f"**Riflesso:** {e['riflesso']}")
+    if e.get("tenuta_secondi") or e.get("ripetizioni"):
+        st.markdown(f"**Dose:** pressione {e.get('tenuta_secondi') or '—'} s"
+                    + (f" al {e['forza']} della forza" if e.get("forza") else "")
+                    + f", {e.get('ripetizioni') or '—'} ripetizioni"
+                    + (f" · {e['frequenza']}" if e.get("frequenza") else ""))
     if e.get("testo_famiglia"):
         st.caption(f"Testo per la famiglia: «{e['testo_famiglia']}»")
     if e.get("da_validare"):
@@ -265,9 +272,13 @@ def _tab_seduta(conn, paz_id, lib):
     k = f"tmrs_{paz_id}"
     data = st.date_input("Data della seduta", dt.date.today(), key=f"{k}_d", format="DD/MM/YYYY")
     righe = []
-    for gruppo, filtro in (("Passivi · solo in studio", "passivo"), ("Attivi", "attivo")):
+    for gruppo, filtro in (("Passivi · solo in studio", "passivo"), ("Isometrici · in studio", "isometrico"),
+                           ("Attivi", "attivo")):
+        gruppo_es = [x for x in lib["esercizi"] if x.get("modalita") == filtro]
+        if not gruppo_es:
+            continue
         st.markdown(f"**{gruppo}**")
-        for e in [x for x in lib["esercizi"] if x.get("modalita") == filtro]:
+        for e in gruppo_es:
             c = e["codice"]
             cols = st.columns([3.4, 1.1, 2])
             on = cols[0].checkbox(f"{c} · {e['nome']}" + (" ⚠️" if e.get("da_validare") else ""),
@@ -342,9 +353,14 @@ def _tab_libreria(lib):
     if lib.get("note"):
         st.info(lib["note"])
     st.markdown(f"📖 [Le basi teoriche del TMR, per genitori e professionisti]({_cfg('PAGINA_TEORIA', PAGINA_TEORIA)})")
-    for gruppo, filtro in (("Passivi · eseguiti dall'operatore", "passivo"), ("Attivi · assegnabili a casa", "attivo")):
+    for gruppo, filtro in (("Passivi · eseguiti dall'operatore", "passivo"),
+                           ("Isometrici · pressioni nella posizione del riflesso", "isometrico"),
+                           ("Attivi · assegnabili a casa", "attivo")):
+        gruppo_es = [x for x in lib["esercizi"] if x.get("modalita") == filtro]
+        if not gruppo_es:
+            continue
         st.markdown(f"#### {gruppo}")
-        for e in [x for x in lib["esercizi"] if x.get("modalita") == filtro]:
+        for e in gruppo_es:
             with st.expander(f"{e['codice']} · {e['nome']}" + (" ⚠️ da validare" if e.get("da_validare") else "")):
                 _scheda_clinica(e)
 
