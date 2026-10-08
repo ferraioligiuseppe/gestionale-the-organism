@@ -133,6 +133,17 @@ CREATE TRIGGER pnev_traccia AFTER INSERT OR UPDATE OR DELETE ON "{t}"
 """
 
 
+# Mettere un trigger richiede un blocco esclusivo sulla tabella. Se un'altra
+# connessione la sta usando (un altro utente, l'app degli eventi, una
+# transazione rimasta aperta), il comando aspetta, e mentre aspetta blocca
+# tutte le letture successive di quella tabella: il gestionale si ferma per
+# tutti e Streamlit mostra «CONNECTING». Per questo ogni trigger ha al massimo
+# 1 secondo per ottenere il blocco: se non ci riesce rinuncia, e riprova al
+# controllo successivo. Il controllo automatico tocca solo le tabelle che non
+# hanno ancora il trigger, e al massimo 3 per volta.
+_LIMITI = "SET LOCAL lock_timeout = '1000ms'; SET LOCAL statement_timeout = '5000ms';"
+
+
 def assicura_tracciamento(conn, forza=False):
     """Mette il trigger sulle tabelle che non l'hanno ancora. Controlla al
     massimo ogni 6 ore, cosi' un modulo nuovo viene coperto da solo."""
@@ -143,11 +154,14 @@ def assicura_tracciamento(conn, forza=False):
     _tabella(conn)
     gia = {x["t"] for x in _q(conn, "SELECT c.relname AS t FROM pg_trigger g JOIN pg_class c ON c.oid=g.tgrelid "
                                      "WHERE g.tgname='pnev_traccia'")}
-    fatte = []
+    fatte, tentate = [], 0
     for t, cols in _tabelle_da_tracciare(conn).items():
         if t in gia and not forza:
             continue
-        if _esegui(conn, _sql_trigger(t, cols)):
+        if not forza and tentate >= 3:
+            break
+        tentate += 1
+        if _esegui(conn, _LIMITI + _sql_trigger(t, cols)):
             fatte.append(t)
     return fatte
 
