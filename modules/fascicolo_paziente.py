@@ -71,6 +71,7 @@ ETICHETTE = {
     "diagnosi_assistita": ("Diagnosi salvate", "📝 Diagnosi assistita"),
     "relazioni_cliniche": ("Relazioni cliniche (vecchie)", None),
     "archivio_relazioni": ("Archivio relazioni", "📚 Archivio relazioni"),
+    "grafo_sessioni": ("Giochiamo imparando — prove touch", "✍️ Giochiamo imparando (prove touch)"),
     "registro_attivita": ("Registro attività", "🕒 Cronologia"),
     "consensi_privacy": ("Consensi privacy", "🔒 Privacy & Consensi"),
 }
@@ -78,7 +79,7 @@ ETICHETTE = {
 # Tecniche, amministrative o figlie di un'altra tabella: non sono clinica.
 _ESCLUSE_PAROLE = ("storico", "_log", "log_", "token", "otp", "cache", "audit", "auth_",
                    "samples", "_points", "schede_aperte", "privacy_richieste", "portale_accessi",
-                   "magic", "registrazioni_ip", "lead_", "aerosal_", "crediti", "coupons",
+                   "magic", "registrazioni_ip", "grafo_token", "lead_", "aerosal_", "crediti", "coupons",
                    "ev_", "cf_", "studi", "abbonamenti", "utenti_meta", "pagamenti", "captures",
                    "pubblico_", "public_tokens", "presenza", "calibraz", "gc_")
 

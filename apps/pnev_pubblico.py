@@ -832,6 +832,12 @@ def main():
             azione_offerte_sale(conn)
             return
 
+        # Salvataggio delle prove touch di «Giochiamo imparando» (token proprio)
+        if azione == "touch":
+            from modules.grafomotricita.ui_grafomotricita import azione_touch
+            azione_touch(conn)
+            return
+
         # 1. Registrazione (non richiede token)
         if azione == "registra":
             azione_registra(conn)

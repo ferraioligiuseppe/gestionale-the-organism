@@ -222,6 +222,7 @@ SOTTOSEZIONI = {
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
         "🎵 TMR — Movimenti ritmici",
+        "✍️ Giochiamo imparando (prove touch)",
         "🎯 Piano Vision Therapy",
         "👁️ Stimolazione visiva a casa",
         "🎧 MAPS",

@@ -527,6 +527,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🎯 Segui la pallina",
         "🫁 Valutazione e programma Buteyko", "📈 Diario Pausa Controllo",
         "🎵 TMR — Movimenti ritmici",
+        "✍️ Giochiamo imparando (prove touch)",
         "👁️ Stimolazione visiva a casa",
         "🏠 Programma PNEV a casa",
         "👁️ Eye tracking",
@@ -1228,6 +1229,11 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🎵 TMR — Movimenti ritmici":
         from .tmr import render_tmr
         render_tmr(conn, paz_id); return True
+    if sotto == "✍️ Giochiamo imparando (prove touch)":
+        # Prove touch su pnev.it (lettura, corsivo, funzioni esecutive, calcolo):
+        # link personale col token, sedute e andamento nel fascicolo.
+        from .grafomotricita.ui_grafomotricita import render_grafomotricita
+        render_grafomotricita(conn, paz_id); return True
     if sotto == "🫁 Valutazione e programma Buteyko":
         from .buteyko import render_buteyko
         render_buteyko(conn, paz_id); return True
