@@ -223,6 +223,7 @@ SOTTOSEZIONI = {
         "🧩 Programma PNEV",
         "🎵 TMR — Movimenti ritmici",
         "✍️ Giochiamo imparando (prove touch)",
+        "🎧 MAPS-CLEAR Lab",
         "🎯 Piano Vision Therapy",
         "👁️ Stimolazione visiva a casa",
         "🎧 MAPS",

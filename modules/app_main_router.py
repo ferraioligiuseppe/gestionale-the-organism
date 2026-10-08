@@ -528,6 +528,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🫁 Valutazione e programma Buteyko", "📈 Diario Pausa Controllo",
         "🎵 TMR — Movimenti ritmici",
         "✍️ Giochiamo imparando (prove touch)",
+        "🎧 MAPS-CLEAR Lab",
         "👁️ Stimolazione visiva a casa",
         "🏠 Programma PNEV a casa",
         "👁️ Eye tracking",
@@ -1229,6 +1230,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🎵 TMR — Movimenti ritmici":
         from .tmr import render_tmr
         render_tmr(conn, paz_id); return True
+    if sotto == "🎧 MAPS-CLEAR Lab":
+        from .ui_maps_lab import render_maps_lab
+        render_maps_lab(conn, paz_id); return True
     if sotto == "✍️ Giochiamo imparando (prove touch)":
         # Prove touch su pnev.it (lettura, corsivo, funzioni esecutive, calcolo):
         # link personale col token, sedute e andamento nel fascicolo.

@@ -113,6 +113,16 @@ CATALOGO = {
             ("sintesi.errori", "Errori", "giu"),
         ],
     },
+    "maps_lab": {
+        "nome": "MAPS-CLEAR Lab (voce in ritardo: orecchio e filtro)", "area": "Ascolto", "file": "pnev-maps-lab.html",
+        "metriche": [
+            ("sintesi.guadagno_velocita_pct", "Guadagno di velocità con la condizione migliore (%)", "su"),
+            ("sintesi.sillabe_al_s_baseline", "Sillabe/s senza voce in cuffia", "su"),
+            ("sintesi.errori_baseline_100", "Errori /100 sillabe senza voce in cuffia", "giu"),
+            ("sintesi.comprensione_pct", "Comprensione (%)", "su"),
+            ("sintesi.sillabe_al_s", "Sillabe/s in allenamento", "su"),
+        ],
+    },
 }
 
 _schema_pronto = False

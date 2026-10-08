@@ -48,8 +48,8 @@ def render_grafomotricita(conn, paziente_id, paziente_nome=""):
         st.markdown("Scegli le prove e genera il link personale. Il bambino le svolge a casa o in studio; "
                     "ogni sessione arriva qui con il token.")
         scelte = st.multiselect(
-            "Prove", options=list(db.CATALOGO.keys()),
-            default=[k for k in db.CATALOGO if not k.startswith("lettura_")],
+            "Prove", options=[k for k in db.CATALOGO if k != "maps_lab"],
+            default=[k for k in db.CATALOGO if not k.startswith(("lettura_", "maps_"))],
             format_func=lambda k: "%s (%s)" % (db.CATALOGO[k]["nome"], db.CATALOGO[k]["area"]))
         giorni = st.select_slider("Validità del link", options=[7, 14, 30, 60, 90], value=30,
                                   format_func=lambda g: "%d giorni" % g)
@@ -62,7 +62,8 @@ def render_grafomotricita(conn, paziente_id, paziente_nome=""):
             st.success("Codice: %s" % tok)
             for k in sc:
                 st.markdown("**%s**, a casa" % db.CATALOGO[k]["nome"])
-                st.code(db.link_prova(k, tok, "casa"), language=None)
+                _l = db.link_prova(k, tok, "casa")
+                st.code(_l, language=None)
                 st.caption("In studio: " + db.link_prova(k, tok, "studio"))
         toks = db.token_paziente(conn, paziente_id)
         if toks:
@@ -93,7 +94,21 @@ def render_grafomotricita(conn, paziente_id, paziente_nome=""):
                                format_func=lambda i: "%s, %s" % (tab.iloc[i]["Data"], tab.iloc[i]["Prova"]))
             s = sessioni[idx]
             st.markdown("**Sintesi**")
-            _voce = (s["sintesi"] or {}).get("voce") or {}
+            _sz = s["sintesi"] or {}
+            if _sz.get("condizioni"):
+                st.markdown("**MAPS-CLEAR Lab — confronto delle condizioni**")
+                _m = _sz.get("migliore") or {}
+                _ch = {"chiara": "differenza chiara", "piccola": "differenza piccola: ripetere un altro giorno",
+                       "nessuna": "nessuna configurazione è risultata migliore della lettura senza voce in cuffia"}.get(_sz.get("chiarezza"), "")
+                st.markdown("Proposta: **%s** · %s" % (_m.get("nome", "—"), _ch))
+                st.dataframe([{"Condizione": c.get("nome"), "Sillabe/s": c.get("sill_s"), "Errori/100": c.get("err100"),
+                               "Pause %": c.get("pause_pct"), "Reazione ms": c.get("rt_ms"), "Mancati": c.get("mancati"),
+                               "Comprensione %": c.get("comprensione_pct"), "Comfort": c.get("comfort"), "Punti": c.get("punteggio")}
+                              for c in sorted(_sz["condizioni"], key=lambda c: c.get("punteggio") or 0)],
+                             use_container_width=True, hide_index=True)
+                if _sz.get("latenza_ms") and _sz["latenza_ms"] > 40:
+                    st.warning("Latenza audio %s ms: probabilmente cuffie Bluetooth, misure poco affidabili." % _sz["latenza_ms"])
+            _voce = _sz.get("voce") or {}
             if _voce.get("parole_maps_clear") or _voce.get("coppie_suoni"):
                 st.markdown("**Per MAPS**")
                 if _voce.get("parole_maps_clear"):

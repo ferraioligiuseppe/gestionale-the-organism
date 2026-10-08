@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MAPS-CLEAR Lab — ascolto, lettura e attenzione | PNEV</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--desk:#e6eef8;--ink:#232659;--indaco:#2e3192;--soft:#5b6290;--line:#d3deee;--ok:#12a07a;--err:#e5484d;--sun:#ffb400;
+  --font:"Atkinson Hyperlegible","Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{font-family:var(--font);color:var(--ink);background:var(--desk);font-size:18px;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--indaco);outline-offset:2px}
+.wrap{max-width:1200px;margin:0 auto;padding:14px clamp(10px,2vw,24px);display:flex;flex-direction:column;gap:12px;min-height:100%}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{margin:0;font-size:26px;margin-right:auto}
+.pill{min-height:48px;padding:0 16px;border-radius:24px;border:2px solid var(--line);background:#fff;font-weight:700}
+.card{background:#fff;border-radius:18px;padding:22px;box-shadow:0 2px 0 var(--line)}
+.card h2{margin:0 0 8px;font-size:22px}
+.card p{margin:0 0 12px;color:var(--soft)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 14px}
+.row b{min-width:140px}
+.seg button{min-height:50px;padding:0 18px;border-radius:12px;border:2px solid var(--line);background:#fff;font-weight:700}
+.seg button[aria-pressed="true"]{background:var(--indaco);border-color:var(--indaco);color:#fff}
+.btn{min-height:60px;padding:0 28px;border-radius:30px;border:2px solid var(--line);background:#fff;font-weight:700;font-size:19px}
+.btn.primary{background:var(--indaco);border-color:var(--indaco);color:#fff}
+.board{position:relative;background:#fff;border-radius:18px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:0 2px 0 var(--line)}
+.board canvas{display:block;width:100%;height:100%;touch-action:none}
+.boardbox{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.status{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:17px;color:var(--soft)}
+.status strong{color:var(--ink);font-size:20px}
+.msg{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 18px;border-radius:20px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+.msg.on{opacity:.92}
+.metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:10px 0 16px}
+.m{border:2px solid var(--line);border-radius:14px;padding:12px}
+.m span{display:block;font-size:14px;color:var(--soft)}
+.m strong{font-size:26px}
+table{border-collapse:collapse;width:100%;font-size:15px;margin-bottom:14px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--soft);font-weight:400}
+.note{font-size:14px;color:var(--soft)}
+
+.d{color:var(--soft)}.warn{color:var(--err);font-weight:700}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.chk{display:flex;flex-direction:column;gap:6px}.chk label{display:flex;gap:8px;align-items:center;font-size:16px}
+textarea{width:100%;min-height:110px;font:inherit;font-size:16px;border:2px solid var(--line);border-radius:12px;padding:10px}
+.brano{background:#fff;border-radius:18px;padding:28px;font-size:clamp(24px,3vw,34px);line-height:1.85;max-width:960px;margin:0 auto;min-height:180px}
+.brano.attesa{filter:blur(7px);user-select:none}
+.w{border:2px solid transparent;border-radius:6px;padding:0 2px;cursor:pointer}.w.err{border-color:var(--err);background:#fde8e8}
+.cond{font-size:14px;color:var(--soft);text-align:center;margin:8px 0}
+.ctrl{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+#probe{background:#2b2f6b;color:#ffd24a;border:2px solid #ffd24a;font-size:22px}#probe.hit{background:#ffd24a;color:#232659}
+.vf,.faces{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:12px 0}
+.vf button,.faces button{min-width:90px;font-size:20px}
+.vf button[aria-pressed="true"],.faces button[aria-pressed="true"]{background:var(--indaco);color:#fff;border-color:var(--indaco)}
+.qt{font-size:24px;text-align:center;margin:10px 0}
+table{width:100%;border-collapse:collapse;font-size:15px;margin-top:12px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}tr.best td{background:#e8f6ef;font-weight:700}
+input[type=range]{width:220px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>MAPS-CLEAR Lab</h1><span class="pill">Studio · uso clinico</span></header>
+
+  <section id="setup">
+    <div class="card">
+      <p class="d" style="margin-top:0">Mentre legge ad alta voce, la persona sente in cuffia la propria voce <b>sempre in ritardo</b>, come in MAPS-CLEAR. Il ritardo sfasa nel tempo l’informazione che arriva alle due orecchie, ed è questo sfasamento l’ingrediente del metodo. Il programma confronta <b>quale ritardo, su quale orecchio e con quale filtro</b> funziona meglio per quella persona, rispetto alla lettura senza voce in cuffia.</p>
+      <p class="note">In <b>valutazione</b> la condizione cambia a ogni brano e vengono misurati velocità, errori, pause, attenzione, comprensione e comfort. In <b>allenamento</b> si legge con la configurazione scelta.</p>
+      <div class="row"><b>Modalità</b><span class="seg" data-k="modo"><button data-v="valutazione">Valutazione</button><button data-v="allenamento">Allenamento</button></span></div>
+      <div class="row"><b>Lingua</b><span class="seg" data-k="lingua"><button data-v="it">Italiano</button><button data-v="en">Inglese</button><button data-v="fr">Francese</button><button data-v="es">Spagnolo</button><button data-v="de">Tedesco</button></span></div>
+      <div class="row" id="riga-livello"><b>Testo</b><span class="seg" data-k="livello"><button data-v="b">Bambini</button><button data-v="a">Ragazzi e adulti</button></span></div>
+      <p class="note" id="banda-lingua"></p>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin-top:0">1 · Cuffie e microfono</h3>
+        <p class="note">Usa <b>cuffie con il filo</b>: quelle Bluetooth aggiungono un ritardo che falsa le misure. Meglio un microfono vicino alla bocca o quello delle cuffie.</p>
+        <div class="ctrl" style="justify-content:flex-start"><button class="btn" id="prova-cuffie">🎧 Prova cuffie</button><button class="btn" id="calibra">🎙️ Prova microfono</button></div>
+        <p class="note" id="esito-cuffie"></p><p class="note" id="esito-cal"></p>
+        <div class="row"><b>Volume della voce</b><input type="range" id="vol" min="0.2" max="2" step="0.1" value="0.9"></div>
+        <div class="row"><b>Orecchio dominante</b><span class="seg" data-k="dom"><button data-v="dx">Destro</button><button data-v="sx">Sinistro</button></span></div>
+        <p class="note">Se l’hai già trovato in MAPS-CLEAR, usa quello.</p>
+      </div>
+
+      <div class="card" id="blocco-val">
+        <h3 style="margin-top:0">2 · Cosa confrontare</h3>
+        <div class="row"><span class="seg" data-k="confronto"><button data-v="filtri">Filtri</button><button data-v="orecchio">Orecchio</button><button data-v="ritardo">Ritardo</button></span></div>
+        <div class="row" id="riga-ritardo"><b>Ritardo</b><span class="seg" data-k="ritardo"><button data-v="40">40 ms</button><button data-v="60">60 ms</button><button data-v="90">90 ms</button><button data-v="120">120 ms</button></span></div>
+        <div class="row" id="riga-diretto"><b>Altro orecchio</b><span class="seg" data-k="diretto"><button data-v="0">Silenzio</button><button data-v="1">Voce senza ritardo</button></span></div>
+        <p class="note">Sempre incluso come riferimento: lettura senza voce in cuffia.</p>
+        <div id="opz-filtri" class="chk">
+          <p class="note" style="margin:0">Ritardo sull’orecchio dominante, con questi filtri (massimo 4):</p>
+          <div id="filtri-scelti" class="chk">
+            <label><input type="checkbox" value="nessuno" disabled> Senza filtro (come MAPS-CLEAR oggi, sempre incluso)</label>
+            <label><input type="checkbox" value="alto"> Passa alto 2000 Hz (accentua le consonanti)</label>
+            <label><input type="checkbox" value="basso"> Passa basso 1000 Hz</label>
+            <label><input type="checkbox" value="banda"> Passa banda 1000–4000 Hz (zona della parola)</label>
+            <label><input type="checkbox" value="lingua"> Banda della lingua secondo Tomatis</label>
+          </div>
+        </div>
+        <div id="opz-orecchio"><p class="note" style="margin:0">Confronta: ritardo sul dominante con l’altro orecchio in silenzio · ritardo sul dominante con voce diretta sull’altro · ritardo sull’altro con voce diretta sul dominante · ritardo su entrambe.</p><div class="row"><b>Con il filtro</b><span class="seg" data-k="filtroOrecchio"><button data-v="nessuno">Nessuno</button><button data-v="alto">Passa alto</button><button data-v="banda">Passa banda</button><button data-v="lingua">Lingua</button></span></div></div>
+        <div id="opz-ritardo"><p class="note" style="margin:0">Confronta 40, 60, 90 e 120 ms sull’orecchio dominante.</p></div>
+        <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="mostra-cond"> Mostra il nome della condizione durante la lettura (meglio di no)</label>
+        <p class="note" id="n-blocchi"></p>
+      </div>
+
+      <div class="card" id="blocco-all" hidden>
+        <h3 style="margin-top:0">2 · Allenamento</h3>
+        <p class="note" id="cfg-all"></p>
+        <div class="row"><b>Filtro</b><span class="seg" data-k="allFiltro"><button data-v="nessuno">Nessuno</button><button data-v="alto">Passa alto</button><button data-v="basso">Passa basso</button><button data-v="banda">Passa banda</button><button data-v="lingua">Lingua</button></span></div>
+        <div class="row"><b>Ritardo su</b><span class="seg" data-k="allOrecchio"><button data-v="dominante">Orecchio dominante</button><button data-v="altro">L’altro</button><button data-v="entrambi">Entrambe</button></span></div>
+        <div class="row"><b>Altro orecchio</b><span class="seg" data-k="allDiretto"><button data-v="0">Silenzio</button><button data-v="1">Voce senza ritardo</button></span></div>
+        <div class="row"><b>Ritardo</b><span class="seg" data-k="allRitardo"><button data-v="40">40 ms</button><button data-v="60">60 ms</button><button data-v="90">90 ms</button><button data-v="120">120 ms</button></span></div>
+        <p class="note" id="cfg-scelta"></p>
+        <div class="row"><b>Durata</b><span class="seg" data-k="minuti"><button data-v="5">5 min</button><button data-v="10">10 min</button><button data-v="15">15 min</button></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Testo (facoltativo)</h3>
+      <p class="note">Puoi incollare un testo tuo, per esempio un brano della scuola. Senza testo si usano quelli del programma, con una domanda vero/falso dopo ogni brano.</p>
+      <textarea id="testo-libero" placeholder="Incolla qui un testo, oppure lascia vuoto"></textarea>
+    </div>
+
+    <div class="ctrl"><button class="btn primary" id="avvia">▶ Inizia</button></div>
+    <p class="note">Il microfono serve solo a rimandare la voce in cuffia e a misurare pause e continuità: l’audio resta nel dispositivo e non viene registrato né inviato. Allo studio arrivano solo i numeri.</p>
+    <p class="note">Il ritardo della voce è studiato soprattutto per la balbuzie. L’uso per lettura, attenzione e lingue nasce dall’osservazione clinica dello studio: gli studi pubblicati sono pochi, e le bande delle lingue sono un modello di Tomatis non confermato da misure indipendenti. Per questo il programma confronta le condizioni sulla singola persona, e la proposta va letta dal terapista insieme alla valutazione clinica.</p>
+  </section>
+
+  <section id="play" hidden>
+    <div class="status"><button class="pill" id="esci">← Impostazioni</button><span id="stato"></span></div>
+    <div class="cond" id="cond"></div>
+    <div class="brano" id="brano"></div>
+    <p class="note" style="text-align:center">Se senti un <b>bip</b> mentre leggi, premi ⚡ (o la barra spaziatrice) e continua a leggere. L’adulto tocca le parole lette male.</p>
+    <div class="ctrl"><button class="btn primary" id="via">▶ Leggi</button><button class="btn" id="probe" hidden>⚡ Bip</button><button class="btn primary" id="fine" hidden>✓ Finito</button></div>
+    <div class="msg" id="msg"></div>
+  </section>
+
+  <section class="card" id="domanda" hidden>
+    <div id="q-sezione"><p class="qt" id="q-testo"></p><div class="vf" id="q-vf"><button class="btn" data-v="1">Vero</button><button class="btn" data-v="0">Falso</button></div></div>
+    <p class="qt" style="font-size:20px">Com’era leggere così?</p>
+    <div class="faces" id="comfort"><button class="btn" data-v="1">😣 1</button><button class="btn" data-v="2">🙁 2</button><button class="btn" data-v="3">😐 3</button><button class="btn" data-v="4">🙂 4</button><button class="btn" data-v="5">😄 5</button></div>
+    <p class="note" style="text-align:center">1 = molto faticoso o fastidioso · 5 = facile e piacevole</p>
+    <div class="ctrl"><button class="btn primary" id="avanti" disabled>Avanti</button></div>
+  </section>
+
+  <section class="card" id="results" hidden>
+    <h2 id="r-titolo"></h2>
+    <p id="r-testo"></p>
+    <div id="r-tab"></div>
+    <p class="note">Punteggio: somma delle posizioni in classifica di ogni misura (velocità ed errori contano doppio, comprensione una volta e mezza). Più basso è meglio. Le differenze piccole su una sola sessione possono essere casuali.</p>
+    <div class="ctrl"><button class="btn primary" id="send">Invia allo studio</button><button class="btn" id="again">Nuova sessione</button></div>
+  </section>
+</div>
+<script>
+var PNEVTouch = (function () {
+  'use strict';
+  var CFG = {
+    saveUrl: (typeof window !== 'undefined' && window.PNEV_TOUCH_SAVE_URL) ||
+      'https://pnev-eventi-prova.streamlit.app/',
+    calKey: 'pnevCalMmPx'
+  };
+  function qp(name) { try { return new URLSearchParams(location.search).get(name); } catch (e) { return null; } }
+  var TOKEN = qp('t') || (typeof window !== 'undefined' && window.PNEV_TOKEN) || null,
+      CONTESTO = qp('ctx') || (typeof window !== 'undefined' && window.PNEV_CTX) || (TOKEN ? 'casa' : 'libero');
+
+  /* ---------- calibrazione: mm per pixel CSS ---------- */
+  function mmPerPx() {
+    try { var v = parseFloat(localStorage.getItem(CFG.calKey)); if (v > 0.05 && v < 1) return { v: v, cal: true }; } catch (e) {}
+    return { v: 25.4 / 96, cal: false };
+  }
+  function calibrate(onDone) {
+    /* l'utente allarga il riquadro fino alla larghezza di una tessera (85,6 mm) */
+    var ov = document.createElement('div');
+    ov.setAttribute('style', 'position:fixed;inset:0;background:rgba(20,24,60,.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:#fff;font:18px system-ui,sans-serif;text-align:center;padding:20px');
+    var w = Math.round(85.6 / mmPerPx().v);
+    ov.innerHTML = '<div style="max-width:560px">Appoggia una tessera (bancomat, tessera sanitaria) sul riquadro e regola il cursore finché la larghezza coincide.</div>' +
+      '<div id="pnevCalBox" style="width:' + w + 'px;height:' + Math.round(w * 0.63) + 'px;border:3px solid #ffd54a;border-radius:10px;background:rgba(255,255,255,.08)"></div>' +
+      '<input id="pnevCalR" type="range" min="150" max="900" value="' + w + '" style="width:min(520px,90vw);height:40px">' +
+      '<div><button id="pnevCalOk" style="font:inherit;font-weight:700;padding:14px 28px;border-radius:28px;border:0;background:#ffd54a;color:#222">Fatto</button> ' +
+      '<button id="pnevCalNo" style="font:inherit;padding:14px 22px;border-radius:28px;border:2px solid #fff;background:none;color:#fff">Annulla</button></div>';
+    document.body.appendChild(ov);
+    var box = ov.querySelector('#pnevCalBox'), r = ov.querySelector('#pnevCalR');
+    r.oninput = function () { box.style.width = r.value + 'px'; box.style.height = Math.round(r.value * 0.63) + 'px'; };
+    ov.querySelector('#pnevCalOk').onclick = function () {
+      try { localStorage.setItem(CFG.calKey, String(85.6 / parseFloat(r.value))); } catch (e) {}
+      ov.remove(); onDone && onDone(true);
+    };
+    ov.querySelector('#pnevCalNo').onclick = function () { ov.remove(); onDone && onDone(false); };
+  }
+
+  /* ---------- registratore ---------- */
+  function Recorder(el, filter) {
+    this.el = el; this.filter = filter; this.strokes = []; this.cur = null; this.types = {}; this.t0 = null; this.enabled = true;
+    var self = this;
+    function pt(e) {
+      var r = el.getBoundingClientRect(), k = mmPerPx().v;
+      if (self.t0 === null) self.t0 = e.timeStamp;
+      return [Math.round((e.timeStamp - self.t0) * 10) / 10, +((e.clientX - r.left) * k).toFixed(2), +((e.clientY - r.top) * k).toFixed(2),
+        e.pointerType === 'pen' ? +(e.pressure || 0).toFixed(3) : -1];
+    }
+    el.addEventListener('pointerdown', function (e) {
+      if (!self.enabled || !e.isPrimary || (self.filter && !self.filter())) return;
+      self.types[e.pointerType || 'mouse'] = 1;
+      self.cur = [pt(e)]; self.strokes.push(self.cur);
+    });
+    el.addEventListener('pointermove', function (e) {
+      if (!self.cur) return;
+      var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+      (evs.length ? evs : [e]).forEach(function (ev) { var p = pt(ev); if (p[0] > self.cur[self.cur.length - 1][0]) self.cur.push(p); });
+    });
+    function up(e) { if (self.cur) { self.cur.push(pt(e)); self.cur = null; } }
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  }
+  Recorder.prototype.reset = function () { this.strokes = []; this.cur = null; this.t0 = null; };
+  Recorder.prototype.take = function () { var s = this.strokes; this.reset(); return s; };
+  Recorder.prototype.inputType = function () { var k = Object.keys(this.types); return k.length ? k.join('+') : 'n.d.'; };
+
+  /* ---------- metriche cinematiche ---------- */
+  function interp(st, dt) {
+    /* ricampiona a passo temporale costante (ms) */
+    var out = [], j = 0, T = st[st.length - 1][0];
+    for (var t = st[0][0]; t <= T; t += dt) {
+      while (j < st.length - 2 && st[j + 1][0] < t) j++;
+      var a = st[j], b = st[Math.min(j + 1, st.length - 1)], f = b[0] > a[0] ? (t - a[0]) / (b[0] - a[0]) : 0;
+      out.push([t, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]);
+    }
+    return out;
+  }
+  function smooth(arr, w) {
+    var o = [], h = Math.floor(w / 2);
+    for (var i = 0; i < arr.length; i++) { var s = 0, n = 0; for (var k = i - h; k <= i + h; k++) if (k >= 0 && k < arr.length) { s += arr[k]; n++; } o.push(s / n); }
+    return o;
+  }
+  function mean(a) { return a.length ? a.reduce(function (x, y) { return x + y; }, 0) / a.length : 0; }
+  function sd(a) { var m = mean(a); return a.length > 1 ? Math.sqrt(a.reduce(function (s, x) { return s + (x - m) * (x - m); }, 0) / (a.length - 1)) : 0; }
+  function median(a) { if (!a.length) return 0; var b = a.slice().sort(function (x, y) { return x - y; }), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }
+  function r2(x, n) { return n == null ? x : Math.round(x * Math.pow(10, n)) / Math.pow(10, n); }
+
+  function strokeMetrics(st) {
+    var T = st[st.length - 1][0] - st[0][0], L = 0;
+    for (var i = 1; i < st.length; i++) L += Math.hypot(st[i][1] - st[i - 1][1], st[i][2] - st[i - 1][2]);
+    var xs = st.map(function (p) { return p[1]; }), ys = st.map(function (p) { return p[2]; });
+    var m = { dur: T, len: L, w: Math.max.apply(null, xs) - Math.min.apply(null, xs), h: Math.max.apply(null, ys) - Math.min.apply(null, ys) };
+    if (T < 40 || L < 1) { m.tap = true; return m; }
+    var dt = 10, r = interp(st, dt);
+    var x = smooth(r.map(function (p) { return p[1]; }), 5), y = smooth(r.map(function (p) { return p[2]; }), 5);
+    var vx = [], vy = [], v = [];
+    for (i = 1; i < x.length; i++) { vx.push((x[i] - x[i - 1]) / dt * 1000); vy.push((y[i] - y[i - 1]) / dt * 1000); v.push(Math.hypot(vx[i - 1], vy[i - 1])); }
+    v = smooth(v, 3);
+    /* NIV: inversioni di velocità (picchi locali) */
+    var peaks = 0;
+    for (i = 1; i < v.length - 1; i++) if (v[i] > v[i - 1] && v[i] >= v[i + 1] && v[i] > 5) peaks++;
+    /* jerk normalizzato adimensionale */
+    var ax = [], ay = [], jx = [], jy = [];
+    for (i = 1; i < vx.length; i++) { ax.push((vx[i] - vx[i - 1]) / dt * 1000); ay.push((vy[i] - vy[i - 1]) / dt * 1000); }
+    for (i = 1; i < ax.length; i++) { jx.push((ax[i] - ax[i - 1]) / dt * 1000); jy.push((ay[i] - ay[i - 1]) / dt * 1000); }
+    var J = 0; for (i = 0; i < jx.length; i++) J += (jx[i] * jx[i] + jy[i] * jy[i]) * dt / 1000;
+    var Ts = T / 1000, NJ = Math.sqrt(0.5 * J * Math.pow(Ts, 5) / (L * L));
+    m.v = mean(v); m.vcv = m.v ? sd(v) / m.v : 0; m.niv = peaks; m.lnj = NJ > 0 ? Math.log10(NJ) : 0;
+    var pr = st.map(function (p) { return p[3]; }).filter(function (p) { return p > 0; });
+    if (pr.length > 3 && sd(pr) > 0.001) { m.p = mean(pr); m.pcv = sd(pr) / m.p; }
+    return m;
+  }
+  function profile(strokes) {
+    strokes = strokes.filter(function (s) { return s.length >= 1; });
+    if (!strokes.length) return null;
+    var per = strokes.map(strokeMetrics), mov = per.filter(function (m) { return !m.tap; });
+    var onT = per.reduce(function (s, m) { return s + m.dur; }, 0), air = 0;
+    for (var i = 1; i < strokes.length; i++) air += Math.max(0, strokes[i][0][0] - strokes[i - 1][strokes[i - 1].length - 1][0]);
+    var dts = []; strokes.forEach(function (s) { for (var k = 1; k < s.length; k++) dts.push(s[k][0] - s[k - 1][0]); });
+    var L = mov.reduce(function (s, m) { return s + m.len; }, 0);
+    var P = {
+      tratti: strokes.length, tocchi: per.length - mov.length,
+      durata_ms: Math.round(strokes[strokes.length - 1][strokes[strokes.length - 1].length - 1][0] - strokes[0][0][0]),
+      sul_foglio_ms: Math.round(onT), in_aria_ms: Math.round(air), rapporto_aria_foglio: onT ? r2(air / onT, 2) : 0,
+      lunghezza_mm: r2(L, 1), vel_media_mm_s: onT ? r2(L / (onT / 1000), 1) : 0,
+      vel_cv: r2(mean(mov.map(function (m) { return m.vcv; })), 2),
+      niv_per_tratto: r2(mean(mov.map(function (m) { return m.niv; })), 2),
+      niv_per_10mm: L ? r2(mov.reduce(function (s, m) { return s + m.niv; }, 0) / (L / 10), 2) : 0,
+      jerk_log_mediano: r2(median(mov.map(function (m) { return m.lnj; })), 2),
+      altezza_media_mm: r2(mean(mov.map(function (m) { return m.h; })), 1),
+      altezza_cv: (function () { var h = mov.map(function (m) { return m.h; }); var mm = mean(h); return mm ? r2(sd(h) / mm, 2) : 0; })(),
+      campionamento_hz: dts.length ? Math.round(1000 / (median(dts) || 1)) : 0
+    };
+    var pp = mov.filter(function (m) { return m.p; });
+    if (pp.length) { P.pressione_media = r2(mean(pp.map(function (m) { return m.p; })), 3); P.pressione_cv = r2(mean(pp.map(function (m) { return m.pcv; })), 2); }
+    return P;
+  }
+  function rhythm(times) {
+    /* regolarità di una serie di tocchi (ms) */
+    var iti = []; for (var i = 1; i < times.length; i++) iti.push(times[i] - times[i - 1]);
+    var m = mean(iti);
+    return { tocchi: times.length, iti_medio_ms: Math.round(m), iti_cv: m ? r2(sd(iti) / m, 3) : 0 };
+  }
+
+  /* ---------- sessione ---------- */
+  function Session(task, version, params) {
+    this.task = task; this.version = version; this.params = params || {}; this.trials = []; this.raw = [];
+    this.start = new Date().toISOString(); this.inputs = {};
+  }
+  Session.prototype.add = function (trial, strokes, inputType) {
+    if (strokes && strokes.length) { trial.cinematica = profile(strokes); this.raw.push({ prova: this.trials.length + 1, tratti: strokes }); }
+    if (inputType) this.inputs[inputType] = 1;
+    trial.n = this.trials.length + 1; this.trials.push(trial); return trial;
+  };
+  Session.prototype.payload = function (summary) {
+    var cal = mmPerPx();
+    return {
+      v: 1, task: this.task, versione: this.version, avvio: this.start, fine: new Date().toISOString(), contesto: CONTESTO,
+      dispositivo: {
+        schermo: [screen.width, screen.height], dpr: window.devicePixelRatio || 1, mm_px: r2(cal.v, 4), calibrato: cal.cal,
+        input: Object.keys(this.inputs).join('+') || 'n.d.', ua: navigator.userAgent.slice(0, 160)
+      },
+      parametri: this.params, sintesi: summary || {}, prove: this.trials
+    };
+  };
+  function b64url(str) {
+    var bytes = new TextEncoder().encode(str), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function download(name, obj) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(obj)], { type: 'application/json' }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  }
+  /* invio: con token → apre la pagina di salvataggio del gestionale; senza → file JSON da importare */
+  Session.prototype.send = function (summary) {
+    var p = this.payload(summary), stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    if (TOKEN) {
+      var url = CFG.saveUrl + '?azione=touch&t=' + encodeURIComponent(TOKEN) + '&d=' + b64url(JSON.stringify(p));
+      if (url.length > 60000) { p.prove = p.prove.map(function (t) { var c = Object.assign({}, t); delete c.dettaglio; return c; }); url = CFG.saveUrl + '?azione=touch&t=' + encodeURIComponent(TOKEN) + '&d=' + b64url(JSON.stringify(p)); }
+      window.open(url, '_blank');
+      return 'inviato';
+    }
+    download('pnev-' + this.task + '-' + stamp + '.json', p);
+    return 'scaricato';
+  };
+  Session.prototype.downloadRaw = function () {
+    download('pnev-' + this.task + '-tracciati.json', { task: this.task, avvio: this.start, mm_px: mmPerPx().v, tracciati: this.raw });
+  };
+
+  return {
+    Recorder: Recorder, Session: Session, profile: profile, rhythm: rhythm, calibrate: calibrate,
+    mmPerPx: function () { return mmPerPx().v; }, isCalibrated: function () { return mmPerPx().cal; },
+    token: function () { return TOKEN; }, context: function () { return CONTESTO; }, config: CFG,
+    stats: { mean: mean, sd: sd, median: median }
+  };
+})();
+</script>
+<script>
+(function () {
+'use strict';
+var $ = function (id) { return document.getElementById(id); };
+var QP = new URLSearchParams(location.search);
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function r1(x) { return Math.round(x * 10) / 10; }
+function now() { return performance.now(); }
+function med(a) { a = a.filter(function (x) { return x != null && !isNaN(x); }).sort(function (x, y) { return x - y; }); if (!a.length) return null; var m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
+function mean(a) { a = a.filter(function (x) { return x != null && !isNaN(x); }); return a.length ? a.reduce(function (s, x) { return s + x; }, 0) / a.length : null; }
+function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function sillabe(w) { var m = String(w).toLowerCase().match(/[aeiouyàèéìòùâêîôûäöüáíóúœ]+/g); return m ? m.length : 1; }
+function say(t) { var m = $('msg'); m.textContent = t; m.classList.add('on'); clearTimeout(say.t); say.t = setTimeout(function () { m.classList.remove('on'); }, 1500); }
+
+/* ---------- testi: [brano, affermazione, vera] ---------- */
+var TESTI = {
+  it_b: [
+    ['Ogni mattina Sara apre la finestra e guarda il cielo. Se c\u2019è il sole, prende la bicicletta per andare a scuola.', 'Sara va a scuola in bicicletta quando c\u2019è il sole.', 1],
+    ['Il nonno di Sara ha un orto dietro casa. Lì crescono pomodori, zucchine e grandi foglie di insalata.', 'Nell\u2019orto del nonno crescono le banane.', 0],
+    ['Un giorno, nell\u2019orto, Sara trova una piccola tartaruga nascosta sotto una foglia.', 'La tartaruga era nascosta sotto una foglia.', 1],
+    ['La tartaruga ha il guscio verde e marrone e si muove molto piano.', 'La tartaruga corre velocissima.', 0],
+    ['Sara chiama il nonno, che le spiega che le tartarughe amano il sole e l\u2019insalata fresca.', 'Il nonno dice che le tartarughe amano l\u2019insalata.', 1],
+    ['Insieme preparano un piccolo recinto con dei sassi e un po\u2019 di terra morbida.', 'Fanno il recinto con dei sassi.', 1],
+    ['Sara decide di chiamare la tartaruga Lenta, perché non ha mai fretta.', 'La tartaruga si chiama Veloce.', 0],
+    ['La sera, Lenta si nasconde nel guscio e dorme vicino a una pietra calda.', 'Di sera Lenta dorme vicino a una pietra.', 1],
+    ['La mattina dopo, Sara porta a Lenta una foglia di insalata prima di andare a scuola.', 'Sara porta a Lenta una carota.', 0],
+    ['In classe racconta tutto ai compagni, che vogliono subito conoscere la nuova amica.', 'I compagni vogliono conoscere la tartaruga.', 1]],
+  it_a: [
+    ['Le api vivono in colonie che possono contare decine di migliaia di individui, ognuno con un compito preciso.', 'In una colonia ogni ape ha un compito preciso.', 1],
+    ['Le operaie più giovani restano nell\u2019alveare: puliscono le celle, nutrono le larve e costruiscono la cera.', 'Le operaie giovani escono subito a raccogliere il polline.', 0],
+    ['Solo più avanti nella loro breve vita diventano bottinatrici e partono alla ricerca di nettare e polline.', 'Le bottinatrici cercano nettare e polline.', 1],
+    ['Quando un\u2019ape trova un prato ricco di fiori, torna all\u2019alveare e lo comunica alle compagne con una danza.', 'Le api comunicano dove sono i fiori con il canto.', 0],
+    ['L\u2019angolo della danza rispetto alla verticale indica la direzione del cibo rispetto al sole.', 'La danza indica la direzione del cibo.', 1],
+    ['La durata della parte centrale della danza, invece, dà un\u2019idea della distanza da percorrere.', 'La durata della danza non ha alcun significato.', 0],
+    ['Il nettare raccolto viene trasformato in miele e conservato nelle celle per superare l\u2019inverno.', 'Il miele serve come riserva per l\u2019inverno.', 1],
+    ['Volando di fiore in fiore, le api trasportano il polline e permettono a molte piante di produrre frutti.', 'Senza le api molte piante farebbero meno frutti.', 1],
+    ['Negli ultimi decenni il numero di api è diminuito a causa di pesticidi, malattie e perdita di habitat.', 'Il numero di api è aumentato molto negli ultimi decenni.', 0],
+    ['Piantare fiori locali e ridurre i pesticidi sono gesti semplici che aiutano a proteggerle.', 'Ridurre i pesticidi aiuta le api.', 1]],
+  en: [
+    ['Tom lives in a small house near the sea with his mother and his dog, Max.', 'Tom lives near the sea.', 1],
+    ['Every Saturday morning, Tom and Max walk along the beach before breakfast.', 'Tom walks on the beach every Monday.', 0],
+    ['One day, Max starts to dig in the sand and finds an old glass bottle.', 'Max finds a bottle in the sand.', 1],
+    ['Inside the bottle there is a piece of paper with a short message.', 'The bottle is empty.', 0],
+    ['The message says: \u201cHello! My name is Anna. I live on an island far away.\u201d', 'The message is from a girl called Anna.', 1],
+    ['Tom is very excited and runs home to show the letter to his mother.', 'Tom shows the letter to his father.', 0],
+    ['His mother finds the island on a map. It is very far, on the other side of the ocean.', 'The island is very close to Tom\u2019s house.', 0],
+    ['Tom decides to write a letter back and tells Anna about his town and his dog.', 'Tom writes a letter to Anna.', 1],
+    ['At the end of the letter he writes his address, so Anna can answer him.', 'Tom writes his address in the letter.', 1],
+    ['Then he puts the letter in the same bottle and throws it back into the sea.', 'Tom keeps the bottle in his room.', 0]],
+  fr: [
+    ['Léa habite à Lyon avec ses parents et son petit frère Hugo.', 'Léa habite à Lyon.', 1],
+    ['Le mercredi après-midi, elle va à la bibliothèque près de l\u2019école.', 'Léa va à la bibliothèque le dimanche.', 0],
+    ['Elle aime surtout les livres sur les animaux et les voyages.', 'Léa aime les livres sur les animaux.', 1],
+    ['Un jour, la bibliothécaire lui propose un livre sur les baleines.', 'La bibliothécaire propose un livre sur les chats.', 0],
+    ['Léa apprend que les baleines chantent pour communiquer entre elles.', 'Les baleines chantent pour communiquer.', 1],
+    ['Leur chant peut voyager très loin sous l\u2019eau, sur des centaines de kilomètres.', 'Le chant des baleines ne voyage pas sous l\u2019eau.', 0],
+    ['Le soir, à table, Léa raconte tout à sa famille.', 'Léa raconte l\u2019histoire à sa famille.', 1],
+    ['Hugo ne la croit pas et pense que les baleines ne savent pas chanter.', 'Hugo croit tout de suite Léa.', 0],
+    ['Alors papa cherche une vidéo et ils écoutent ensemble le chant des baleines.', 'Ils écoutent le chant des baleines ensemble.', 1],
+    ['Hugo est très surpris et demande à aller à la bibliothèque avec sa sœur.', 'Hugo veut aller à la bibliothèque.', 1]],
+  es: [
+    ['Pablo vive en Sevilla y tiene doce años.', 'Pablo tiene doce años.', 1],
+    ['Su deporte favorito es el fútbol y juega en el equipo de su barrio.', 'Pablo juega al baloncesto.', 0],
+    ['Los martes y los jueves entrena después de clase con sus amigos.', 'Pablo entrena los martes y los jueves.', 1],
+    ['El sábado su equipo juega un partido muy importante contra la escuela vecina.', 'El partido es el domingo.', 0],
+    ['Pablo está nervioso porque es la primera vez que juega como portero.', 'Pablo juega como portero por primera vez.', 1],
+    ['Durante el partido llueve mucho y el campo está lleno de barro.', 'Durante el partido hace mucho sol.', 0],
+    ['En el último minuto, un jugador del otro equipo lanza un penalti.', 'Hay un penalti en el último minuto.', 1],
+    ['Pablo salta hacia la izquierda y para el balón con las dos manos.', 'Pablo no puede parar el balón.', 0],
+    ['Todos sus compañeros corren a abrazarlo, llenos de alegría.', 'Los compañeros abrazan a Pablo.', 1],
+    ['Esa noche, Pablo cuenta el partido a sus abuelos por teléfono.', 'Pablo habla con sus abuelos por teléfono.', 1]],
+  de: [
+    ['Lena wohnt in Hamburg und geht in die fünfte Klasse.', 'Lena wohnt in Hamburg.', 1],
+    ['Jeden Morgen fährt sie mit dem Bus zur Schule.', 'Lena geht jeden Morgen zu Fuß zur Schule.', 0],
+    ['Ihr Lieblingsfach ist Biologie, weil sie Tiere sehr gern hat.', 'Lena hat Tiere gern.', 1],
+    ['Am Wochenende hilft sie ihrer Tante in einem kleinen Tierheim.', 'Lena hilft ihrer Tante in einem Restaurant.', 0],
+    ['Dort leben Hunde, Katzen und sogar zwei alte Kaninchen.', 'Im Tierheim gibt es auch Kaninchen.', 1],
+    ['Lena gibt den Tieren Wasser und geht mit den Hunden spazieren.', 'Lena geht mit den Katzen spazieren.', 0],
+    ['Ein kleiner brauner Hund folgt ihr immer und will nicht allein bleiben.', 'Ein kleiner Hund folgt Lena immer.', 1],
+    ['Er heißt Bruno und ist erst drei Monate alt.', 'Bruno ist drei Jahre alt.', 0],
+    ['Lena fragt ihre Eltern, ob Bruno bei ihnen wohnen darf.', 'Lena fragt ihre Eltern nach Bruno.', 1],
+    ['Nach einer Woche sagen die Eltern ja, und Bruno zieht zu Lena nach Hause.', 'Bruno darf zu Lena nach Hause.', 1]]
+};
+
+/* Bande secondo Tomatis (dal documento dello studio): un modello, non una misura condivisa. */
+var LINGUE = {
+  it: { nome: 'Italiano', banda: [[2000, 4000]], txt: '2000–4000 Hz', aff: 'confermato da Tomatis' },
+  en: { nome: 'Inglese', banda: [[2000, 12000]], txt: '2000–12000 Hz (britannico)', aff: 'concordante in più fonti' },
+  fr: { nome: 'Francese', banda: [[100, 300], [1000, 2000]], txt: '100–300 e 1000–2000 Hz', aff: 'in parte da verificare' },
+  es: { nome: 'Spagnolo', banda: [[100, 500]], txt: '100–500 Hz circa', aff: 'da verificare' },
+  de: { nome: 'Tedesco', banda: [[0, 3000]], txt: 'dai gravi fino a 3000 Hz', aff: 'confermato da Tomatis' }
+};
+var FILTRI = {
+  nessuno: { nome: 'Senza filtro', bande: null },
+  alto: { nome: 'Passa alto 2000 Hz', bande: [[2000, 0]] },
+  basso: { nome: 'Passa basso 1000 Hz', bande: [[0, 1000]] },
+  banda: { nome: 'Passa banda 1000–4000 Hz', bande: [[1000, 4000]] },
+  lingua: { nome: 'Banda della lingua (Tomatis)', bande: 'lingua' }
+};
+
+var CFG = {
+  modo: QP.get('m') === 'allenamento' ? 'allenamento' : 'valutazione',
+  lingua: QP.get('lang') || 'it', livello: QP.get('f') === '4-6' || QP.get('f') === '6-8' ? 'b' : 'a',
+  confronto: 'filtri', dom: localStorage.getItem('pnevLabDom') || 'dx', ritardo: 60, diretto: 0, vol: 0.9, minuti: 10,
+  filtriScelti: ['nessuno', 'alto', 'banda', 'lingua'], filtroOrecchio: 'nessuno', testoLibero: '',
+  allFiltro: 'nessuno', allOrecchio: 'dominante', allRitardo: 60, allDiretto: 0
+};
+/* Pagina fissa del sito (pnev-ascolto.html): nessuna regolazione. La configurazione
+   arriva dal gestionale nel parametro p (JSON in base64), altrimenti si usa il
+   percorso standard. Non è a prova di esperto: è solo non modificabile dalla pagina. */
+var FISSO = !!window.PNEV_FISSO, PF = {};
+var PRESET = { lettura: { filtro: 'nessuno', orecchio: 'dominante', ritardo: 60, diretto: 0, minuti: 10 },
+               lingua: { filtro: 'lingua', orecchio: 'dominante', ritardo: 60, diretto: 0, minuti: 10 } };
+if (FISSO) {
+  try { var _r = QP.get('p'); if (_r) PF = JSON.parse(decodeURIComponent(escape(atob(_r.replace(/-/g, '+').replace(/_/g, '/'))))) || {}; } catch (e) { PF = {}; }
+  CFG.modo = 'allenamento'; CFG.percorso = PF.percorso || null;
+  if (PF.dom === 'dx' || PF.dom === 'sx') CFG.dom = PF.dom;
+}
+function impostaPercorso(k) {
+  CFG.percorso = k; var P = Object.assign({}, PRESET[k], PF);
+  CFG.allFiltro = P.filtro; CFG.allOrecchio = P.orecchio; CFG.allRitardo = +P.ritardo || 60; CFG.allDiretto = +P.diretto ? 1 : 0; CFG.minuti = +P.minuti || 10;
+  if (k === 'lingua') CFG.lingua = PF.lingua && PF.lingua !== 'it' ? PF.lingua : (CFG.lingua !== 'it' ? CFG.lingua : 'en');
+  else { CFG.lingua = 'it'; CFG.livello = PF.livello || CFG.livello; }
+}
+/* Configurazione d'allenamento impostata dal terapista nel link: ?conf=banda&ear=dominante&delay=0 */
+if (QP.get('conf') || QP.get('ear') || QP.get('delay')) {
+  CFG.allFiltro = FILTRI[QP.get('conf')] ? QP.get('conf') : 'nessuno';
+  CFG.allOrecchio = ['entrambi', 'dominante', 'altro'].indexOf(QP.get('ear')) >= 0 ? QP.get('ear') : 'dominante';
+  CFG.allRitardo = Math.max(20, Math.min(300, +QP.get('delay') || 60));
+  CFG.allDiretto = QP.get('dir') === '1' ? 1 : 0;
+  CFG.daLink = true;
+}
+
+/* ---------- audio ---------- */
+var AC = null, STREAM = null, SRC = null, PRE = null, ANA = null, MERGER = null, CATENA = [], SOGLIA = 0.012, BUF = null;
+function latenzaMs() { return AC ? Math.round(((AC.baseLatency || 0) + (AC.outputLatency || 0)) * 1000) : null; }
+function avviaAudio() {
+  if (AC) return Promise.resolve();
+  AC = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 0 });
+  return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } })
+    .then(function (s) {
+      STREAM = s; SRC = AC.createMediaStreamSource(s);
+      ANA = AC.createAnalyser(); ANA.fftSize = 1024; BUF = new Float32Array(ANA.fftSize); SRC.connect(ANA);
+      PRE = AC.createGain(); SRC.connect(PRE);
+      MERGER = AC.createChannelMerger(2); MERGER.connect(AC.destination);
+      silenzio();
+    });
+}
+function rms() { if (!ANA) return 0; ANA.getFloatTimeDomainData(BUF); var s = 0; for (var i = 0; i < BUF.length; i++) s += BUF[i] * BUF[i]; return Math.sqrt(s / BUF.length); }
+function stacca() { try { PRE.disconnect(); } catch (e) {} CATENA.forEach(function (n) { try { n.disconnect(); } catch (e) {} }); CATENA = []; }
+function silenzio() { if (PRE) stacca(); }
+function bandeDi(c) { var f = FILTRI[c.filtro]; if (!f || !f.bande) return null; return f.bande === 'lingua' ? LINGUE[CFG.lingua].banda : f.bande; }
+function orecchie(c) {
+  var o = c.orecchio || 'entrambi', dx = CFG.dom === 'dx';
+  return { sx: o === 'entrambi' || (o === 'dominante' && !dx) || (o === 'altro' && dx), dx: o === 'entrambi' || (o === 'dominante' && dx) || (o === 'altro' && !dx) };
+}
+function filtro(tipo, f) { var b = AC.createBiquadFilter(); b.type = tipo; b.frequency.value = f; b.Q.value = 0.707; CATENA.push(b); return b; }
+function applica(c) {
+  if (!AC) return; stacca();
+  if (c.muto) return;   /* riferimento: lettura senza voce in cuffia */
+  var somma = AC.createGain(); somma.gain.value = CFG.vol; CATENA.push(somma);
+  var bande = bandeDi(c);
+  (bande || [[0, 0]]).forEach(function (b) {
+    var nodo = PRE;
+    /* due filtri in serie per lato: pendenza 24 dB/ottava, il taglio si sente */
+    if (b[0] > 0) { var h1 = filtro('highpass', b[0]), h2 = filtro('highpass', b[0]); nodo.connect(h1); h1.connect(h2); nodo = h2; }
+    if (b[1] > 0) { var l1 = filtro('lowpass', b[1]), l2 = filtro('lowpass', b[1]); nodo.connect(l1); l1.connect(l2); nodo = l2; }
+    if (nodo === PRE) { var g = AC.createGain(); CATENA.push(g); PRE.connect(g); nodo = g; }
+    nodo.connect(somma);
+  });
+  var del = AC.createDelay(1); del.delayTime.value = (c.ritardo || 0) / 1000; CATENA.push(del); somma.connect(del);
+  var o = orecchie(c), gL = AC.createGain(), gR = AC.createGain(); CATENA.push(gL, gR);
+  gL.gain.value = o.sx ? 1 : 0; gR.gain.value = o.dx ? 1 : 0;
+  del.connect(gL); del.connect(gR); gL.connect(MERGER, 0, 0); gR.connect(MERGER, 0, 1);
+  /* facoltativo: sull'orecchio che non riceve il ritardo, la voce senza ritardo
+     (differenza di tempo esplicita tra le due orecchie) */
+  if (c.diretto && (c.orecchio || 'entrambi') !== 'entrambi') {
+    var dL = AC.createGain(), dR = AC.createGain(); CATENA.push(dL, dR);
+    dL.gain.value = o.sx ? 0 : 1; dR.gain.value = o.dx ? 0 : 1;
+    somma.connect(dL); somma.connect(dR); dL.connect(MERGER, 0, 0); dR.connect(MERGER, 0, 1);
+  }
+}
+function tono(lato, ms, f) {
+  if (!AC) return; var o = AC.createOscillator(), g = AC.createGain(); o.frequency.value = f || 1000; g.gain.value = 0;
+  o.connect(g); if (lato !== 'dx') g.connect(MERGER, 0, 0); if (lato !== 'sx') g.connect(MERGER, 0, 1);
+  var t = AC.currentTime; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.18, t + 0.01); g.gain.setValueAtTime(0.18, t + ms / 1000 - 0.01); g.gain.linearRampToValueAtTime(0, t + ms / 1000);
+  o.start(t); o.stop(t + ms / 1000 + 0.02);
+}
+function spegniAudio() { silenzio(); try { STREAM && STREAM.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} try { AC && AC.close(); } catch (e) {} AC = null; }
+
+/* ---------- condizioni da confrontare ---------- */
+/* Principio MAPS-CLEAR: il ritardo c'è sempre. Si confronta QUALE ritardo, su
+   QUALE orecchio, con QUALE filtro. La lettura senza voce in cuffia resta come
+   riferimento, per sapere se la configurazione aiuta davvero. */
+var RIF = { chiave: 'riferimento', nome: 'Riferimento: senza voce in cuffia', muto: true, filtro: 'nessuno', orecchio: 'entrambi', ritardo: 0 };
+function cond(filtro, orecchio, ritardo, diretto) { var c = { filtro: filtro, orecchio: orecchio, ritardo: ritardo, diretto: diretto ? 1 : 0 }; c.nome = nomeCond(c); c.chiave = [filtro, orecchio, ritardo, c.diretto].join('_'); return c; }
+function condizioni() {
+  var L = [RIF], d = CFG.diretto;
+  if (CFG.confronto === 'filtri') CFG.filtriScelti.slice(0, 4).forEach(function (k) { L.push(cond(k, 'dominante', CFG.ritardo, d)); });
+  if (CFG.confronto === 'orecchio') {
+    var f = CFG.filtroOrecchio;
+    L.push(cond(f, 'dominante', CFG.ritardo, 0), cond(f, 'dominante', CFG.ritardo, 1), cond(f, 'altro', CFG.ritardo, 1), cond(f, 'entrambi', CFG.ritardo, 0));
+  }
+  if (CFG.confronto === 'ritardo') [40, 60, 90, 120].forEach(function (ms) { L.push(cond('nessuno', 'dominante', ms, d)); });
+  return L;
+}
+function brani() {
+  if (CFG.testoLibero.trim()) {
+    var fr = CFG.testoLibero.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+["\u201d\u00bb]?|[^.!?]+$/g) || [], out = [], cur = '';
+    fr.forEach(function (s) { cur += (cur ? ' ' : '') + s.trim(); if (cur.split(' ').length >= 18) { out.push([cur, null, null]); cur = ''; } });
+    if (cur) out.push([cur, null, null]);
+    return out;
+  }
+  return TESTI[CFG.lingua === 'it' ? 'it_' + CFG.livello : CFG.lingua];
+}
+
+/* ---------- impostazione ---------- */
+function show(id) { ['setup', 'play', 'domanda', 'results'].forEach(function (s) { $(s).hidden = s !== id; }); window.scrollTo(0, 0); }
+function seg(k) {
+  var s = document.querySelector('.seg[data-k="' + k + '"]'); if (!s) return; var bs = s.querySelectorAll('button');
+  function mark() { bs.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.v === String(CFG[k]) ? 'true' : 'false'); }); aggiorna(); }
+  bs.forEach(function (b) { b.onclick = function () { CFG[k] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; if (k === 'dom') localStorage.setItem('pnevLabDom', CFG.dom); mark(); }; }); mark();
+}
+function aggiornaFisso() {
+  var k = CFG.percorso; $('percorsi').hidden = !!PF.percorso; $('impostazione').hidden = !k;
+  document.querySelectorAll('#percorsi .percorso').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.p === k ? 'true' : 'false'); });
+  if (!k) return;
+  $('riga-lingua-f').hidden = k !== 'lingua' || !!PF.lingua; $('riga-livello-f').hidden = k !== 'lettura' || !!PF.livello;
+  $('riga-dom-f').hidden = (PF.dom === 'dx' || PF.dom === 'sx') || CFG.allOrecchio === 'entrambi';
+  $('titolo-percorso').textContent = k === 'lingua' ? 'Impara una lingua ascoltando la tua voce · ' + LINGUE[CFG.lingua].nome : 'Leggi meglio ascoltando la tua voce';
+  $('nota-percorso').textContent = (PF.percorso ? 'Impostato dallo studio. ' : '') + CFG.minuti + ' minuti al giorno, con le cuffie con il filo.';
+}
+function aggiorna() {
+  if (FISSO) { aggiornaFisso(); return; }
+  var L = LINGUE[CFG.lingua];
+  $('banda-lingua').textContent = 'Banda della lingua: ' + L.txt + ' (' + L.aff + ').';
+  $('riga-livello').hidden = CFG.lingua !== 'it';
+  ['filtri', 'orecchio', 'ritardo'].forEach(function (k) { $('opz-' + k).hidden = CFG.confronto !== k; });
+  $('riga-ritardo').hidden = CFG.confronto === 'ritardo'; $('riga-diretto').hidden = CFG.confronto === 'orecchio';
+  $('blocco-val').hidden = CFG.modo !== 'valutazione'; $('blocco-all').hidden = CFG.modo !== 'allenamento';
+  var best = migliore();
+  $('cfg-all').innerHTML = CFG.daLink ? 'Configurazione impostata dallo studio nel link.'
+    : best ? 'Proposta dall\u2019ultima valutazione su questo dispositivo (' + esc(best.data) + '): già selezionata qui sotto.'
+    : 'Nessuna valutazione su questo dispositivo: scegli la configurazione qui sotto.';
+  $('cfg-scelta').innerHTML = 'Si leggerà con: <b>' + esc(condAllenamento().nome) + '</b>';
+  var n = condizioni().length; $('n-blocchi').textContent = CFG.modo === 'valutazione' ? n + ' condizioni × ' + ripetizioni(n) + ' = ' + n * ripetizioni(n) + ' brani brevi, circa ' + Math.round(n * ripetizioni(n) * 0.6 + 2) + ' minuti.' : '';
+}
+function ripetizioni(n) { return Math.max(2, Math.min(3, Math.floor(10 / Math.max(1, n)))); }
+function nomeCond(c) {
+  if (c.muto) return RIF.nome;
+  var dom = CFG.dom === 'dx' ? 'destro' : 'sinistro', alt = CFG.dom === 'dx' ? 'sinistro' : 'destro';
+  var p = ['Ritardo ' + c.ritardo + ' ms ' + (c.orecchio === 'dominante' ? 'sull\u2019orecchio dominante (' + dom + ')' : c.orecchio === 'altro' ? 'sull\u2019altro orecchio (' + alt + ')' : 'su entrambe')];
+  if (c.orecchio === 'dominante') p.push(c.diretto ? 'voce diretta sull\u2019altro orecchio (' + alt + ')' : 'altro orecchio (' + alt + ') in silenzio');
+  if (c.orecchio === 'altro') p.push(c.diretto ? 'voce diretta sul dominante (' + dom + ')' : 'orecchio dominante (' + dom + ') in silenzio');
+  if (c.filtro && c.filtro !== 'nessuno') p.push(FILTRI[c.filtro].nome + (c.filtro === 'lingua' ? ' (' + LINGUE[CFG.lingua].txt + ')' : ''));
+  return p.join(' · ');
+}
+function condAllenamento() {
+  var c = cond(CFG.allFiltro || 'nessuno', CFG.allOrecchio || 'dominante', CFG.allRitardo || 60, CFG.allDiretto);
+  c.chiave = 'allenamento'; return c;
+}
+function migliore() { try { var b = JSON.parse(localStorage.getItem('pnevLabBest') || 'null'); return b && b.lingua === CFG.lingua ? b : (b || null); } catch (e) { return null; } }
+(function () { var b = migliore(); if (!CFG.daLink && b && b.cond && !b.cond.muto) { CFG.allFiltro = b.cond.filtro; CFG.allOrecchio = b.cond.orecchio; CFG.allRitardo = b.cond.ritardo || 60; CFG.allDiretto = b.cond.diretto || 0; } })();
+['modo', 'lingua', 'livello', 'confronto', 'dom', 'ritardo', 'diretto', 'minuti', 'filtroOrecchio', 'allFiltro', 'allOrecchio', 'allRitardo', 'allDiretto'].forEach(seg);
+if ($('filtri-scelti')) $('filtri-scelti').querySelectorAll('input').forEach(function (i) {
+  i.checked = CFG.filtriScelti.indexOf(i.value) >= 0;
+  i.onchange = function () { CFG.filtriScelti = [].slice.call($('filtri-scelti').querySelectorAll('input:checked')).map(function (x) { return x.value; }); if (CFG.filtriScelti.indexOf('nessuno') < 0) { CFG.filtriScelti.unshift('nessuno'); $('filtri-scelti').querySelector('[value="nessuno"]').checked = true; } aggiorna(); };
+});
+$('vol').oninput = function () { CFG.vol = +this.value; };
+if ($('testo-libero')) $('testo-libero').oninput = function () { CFG.testoLibero = this.value; };
+if (FISSO) {
+  document.querySelectorAll('#percorsi .percorso').forEach(function (b) { b.onclick = function () { impostaPercorso(b.dataset.p); aggiorna(); }; });
+  if (CFG.percorso) impostaPercorso(CFG.percorso);
+}
+$('prova-cuffie').onclick = function () {
+  avviaAudio().then(function () { tono('sx', 500, 700); setTimeout(function () { tono('dx', 500, 1100); }, 800);
+    var l = latenzaMs(); $('esito-cuffie').innerHTML = 'Hai sentito prima a <b>sinistra</b> (grave) e poi a <b>destra</b> (acuto)? Latenza del sistema: <b>' + (l == null ? '—' : l + ' ms') + '</b>' +
+      (l != null && l > 40 ? ' · <span class="warn">alta: probabilmente cuffie Bluetooth. Usa cuffie con il filo.</span>' : ''); })
+  .catch(function (e) { $('esito-cuffie').textContent = 'Microfono non disponibile: ' + e.message; });
+};
+$('calibra').onclick = function () {
+  avviaAudio().then(function () {
+    $('esito-cal').textContent = 'Silenzio per 2 secondi…'; var v = [], t = setInterval(function () { v.push(rms()); }, 50);
+    setTimeout(function () { clearInterval(t); var f = med(v) || 0.002; SOGLIA = Math.max(0.008, f * 3.5); $('esito-cal').textContent = 'Fatto. Ora di\u2019 qualcosa: devi sentire la tua voce in cuffia.'; applica({ filtro: 'nessuno', orecchio: 'entrambi', ritardo: 0 }); }, 2000);
+  }).catch(function (e) { $('esito-cal').textContent = 'Microfono non disponibile: ' + e.message; });
+};
+
+/* ---------- sessione ---------- */
+var SES, PIANO, B, BLOCCHI, MON, T0, PAUSE, PROBE;
+$('avvia').onclick = function () {
+  if (FISSO && !CFG.percorso) { say('Scegli prima il percorso'); return; }
+  if (!AC) { say('Prima prova le cuffie e il microfono'); return; }
+  if (CFG.modo === 'valutazione') {
+    var C = condizioni(), rep = ripetizioni(C.length), seq = [], primo = shuffle(C);
+    seq = seq.concat(primo, primo.slice().reverse()); if (rep > 2) seq = seq.concat(shuffle(C));
+    var T = brani(); seq = seq.slice(0, Math.min(seq.length, T.length));
+    PIANO = seq.map(function (c, i) { return { cond: c, brano: T[i] }; });
+  } else {
+    var c = condAllenamento();
+    var T2 = brani(); PIANO = []; for (var i = 0; i < 60; i++) PIANO.push({ cond: c, brano: T2[i % T2.length] });
+    PIANO.fine = now() + CFG.minuti * 60000;
+  }
+  SES = new PNEVTouch.Session('maps_lab', 1, { modo: CFG.modo, lingua: CFG.lingua, livello: CFG.livello, confronto: CFG.confronto, dom: CFG.dom, ritardo_ms: CFG.ritardo, latenza_ms: latenzaMs(), testo_libero: !!CFG.testoLibero.trim() });
+  BLOCCHI = []; B = 0; prossimo();
+};
+function prossimo() {
+  if (B >= PIANO.length || (PIANO.fine && now() > PIANO.fine)) return fine();
+  var p = PIANO[B]; applica(p.cond); show('play');
+  $('stato').innerHTML = CFG.modo === 'valutazione' ? 'Brano <b>' + (B + 1) + '</b> / ' + PIANO.length : 'Allenamento · ' + Math.max(0, Math.ceil((PIANO.fine - now()) / 60000)) + ' min';
+  $('cond').textContent = FISSO ? '' : ($('mostra-cond').checked || CFG.modo === 'allenamento' ? p.cond.nome : 'Condizione nascosta');
+  var parole = p.brano[0].split(/\s+/);
+  $('brano').innerHTML = parole.map(function (w, k) { return '<span class="w" data-k="' + k + '">' + esc(w) + '</span>'; }).join(' ');
+  $('brano').classList.add('attesa');
+  p.err = {}; $('brano').querySelectorAll('.w').forEach(function (s) { s.onclick = function () { if (T0 == null) return; var k = s.dataset.k; p.err[k] = !p.err[k]; s.classList.toggle('err', !!p.err[k]); }; });
+  $('via').hidden = false; $('fine').hidden = true; $('probe').hidden = true;
+}
+$('via').onclick = function () {
+  var p = PIANO[B]; $('brano').classList.remove('attesa'); $('via').hidden = true; $('fine').hidden = false; $('probe').hidden = false;
+  T0 = now(); PAUSE = { voce: 0, silenzio: 0, pause: 0, ultimaVoce: null, inizioVoce: null, corr: null };
+  var dt = 50;
+  MON = setInterval(function () {
+    var v = rms() > SOGLIA, t = now();
+    if (v) { if (PAUSE.inizioVoce == null) PAUSE.inizioVoce = t; if (PAUSE.corr != null && t - PAUSE.corr >= 400 && PAUSE.ultimaVoce != null) PAUSE.pause++; PAUSE.corr = null; PAUSE.ultimaVoce = t; PAUSE.voce += dt; }
+    else if (PAUSE.inizioVoce != null) { if (PAUSE.corr == null) PAUSE.corr = t; PAUSE.silenzio += dt; }
+  }, dt);
+  /* sonda di attenzione: un bip a un momento casuale; si risponde con ⚡ o spazio */
+  var stima = p.brano[0].split(/\s+/).reduce(function (s, w) { return s + sillabe(w); }, 0) / 2.5 * 1000;
+  PROBE = { t: null, rt: null };
+  PROBE.timer = setTimeout(function () { PROBE.t = now(); tono('entrambi', 90, 1500); PROBE.scad = setTimeout(function () { if (PROBE.rt == null) PROBE.mancato = true; }, 1500); }, stima * (0.25 + Math.random() * 0.45));
+};
+function risposta() { if (!PROBE || PROBE.t == null || PROBE.rt != null) { if (PROBE && T0 != null) PROBE.falsi = (PROBE.falsi || 0) + 1; return; } PROBE.rt = Math.round(now() - PROBE.t); $('probe').classList.add('hit'); setTimeout(function () { $('probe').classList.remove('hit'); }, 200); }
+$('probe').onclick = risposta;
+document.addEventListener('keydown', function (e) { if (e.code === 'Space' && !$('play').hidden) { e.preventDefault(); risposta(); } });
+$('fine').onclick = function () {
+  clearInterval(MON); clearTimeout(PROBE.timer); clearTimeout(PROBE.scad); silenzio();
+  var p = PIANO[B], tempo = (now() - T0) / 1000; T0 = null;
+  var parole = p.brano[0].split(/\s+/), sy = parole.reduce(function (s, w) { return s + sillabe(w); }, 0);
+  var e = Object.keys(p.err).filter(function (k) { return p.err[k]; }).length, attivo = PAUSE.voce + PAUSE.silenzio;
+  p.misura = { condizione: p.cond.chiave, sill_s: r1(sy / tempo), err100: r1(e / sy * 100), errori: e, tempo_s: r1(tempo),
+    pause: PAUSE.pause, pause_pct: attivo ? Math.round(PAUSE.silenzio / attivo * 100) : null,
+    rt_ms: PROBE.rt, mancato: PROBE.rt == null && PROBE.t != null ? 1 : 0, falsi: PROBE.falsi || 0 };
+  if (CFG.modo === 'valutazione') domanda(p); else { p.misura.comfort = null; registra(p); }
+};
+function domanda(p) {
+  show('domanda'); var q = p.brano[1];
+  $('q-testo').textContent = q || ''; $('q-vf').hidden = !q; $('q-sezione').hidden = !q;
+  p.risp = null; p.comfort = null; $('avanti').disabled = true;
+  document.querySelectorAll('#q-vf button,#comfort button').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+  function check() { $('avanti').disabled = (q && p.risp == null) || p.comfort == null; }
+  document.querySelectorAll('#q-vf button').forEach(function (b) { b.onclick = function () { p.risp = +b.dataset.v; document.querySelectorAll('#q-vf button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); check(); }; });
+  document.querySelectorAll('#comfort button').forEach(function (b) { b.onclick = function () { p.comfort = +b.dataset.v; document.querySelectorAll('#comfort button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); check(); }; });
+  $('avanti').onclick = function () { p.misura.comprensione = q ? (p.risp === p.brano[2] ? 1 : 0) : null; p.misura.comfort = p.comfort; registra(p); };
+}
+function registra(p) { SES.add(p.misura); BLOCCHI.push(p.misura); B++; prossimo(); }
+
+/* ---------- analisi e proposta ---------- */
+function analizza() {
+  var C = {}, ordine = [];
+  BLOCCHI.forEach(function (m) { if (!C[m.condizione]) { C[m.condizione] = []; ordine.push(m.condizione); } C[m.condizione].push(m); });
+  var nomi = {}; PIANO.forEach(function (p) { nomi[p.cond.chiave] = p.cond; });
+  var righe = ordine.map(function (k) {
+    var M = C[k];
+    return { chiave: k, nome: nomi[k].nome, cond: nomi[k], n: M.length,
+      sill_s: r1(mean(M.map(function (m) { return m.sill_s; }))), err100: r1(mean(M.map(function (m) { return m.err100; }))),
+      pause_pct: Math.round(mean(M.map(function (m) { return m.pause_pct; })) || 0), rt_ms: Math.round(med(M.map(function (m) { return m.rt_ms; })) || 0) || null,
+      mancati: M.reduce(function (s, m) { return s + m.mancato; }, 0),
+      comprensione_pct: M[0].comprensione == null ? null : Math.round(mean(M.map(function (m) { return m.comprensione; })) * 100),
+      comfort: r1(mean(M.map(function (m) { return m.comfort; }))) };
+  });
+  /* punteggio: somma dei ranghi pesati (1 = migliore). Pesi: velocità ed errori 2, comprensione 1,5, il resto 1 */
+  var crit = [['sill_s', -1, 2], ['err100', 1, 2], ['pause_pct', 1, 1], ['rt_ms', 1, 1], ['mancati', 1, 1], ['comprensione_pct', -1, 1.5], ['comfort', -1, 1]];
+  righe.forEach(function (r) { r.punteggio = 0; });
+  crit.forEach(function (c) {
+    var val = righe.filter(function (r) { return r[c[0]] != null; }); if (val.length < 2) return;
+    var ord = val.slice().sort(function (a, b) { return (a[c[0]] - b[c[0]]) * c[1]; });
+    val.forEach(function (r) { var rank = ord.findIndex(function (x) { return x[c[0]] === r[c[0]]; }) + 1; r.punteggio += rank * c[2]; });
+  });
+  righe.forEach(function (r) { r.punteggio = r1(r.punteggio); });
+  var best = righe.slice().sort(function (a, b) { return a.punteggio - b.punteggio; })[0];
+  var base = righe.filter(function (r) { return r.cond.muto; })[0] || righe[0];
+  var guad = base.sill_s ? Math.round((best.sill_s / base.sill_s - 1) * 100) : 0, derr = r1(base.err100 - best.err100);
+  var chiarezza = best === base ? 'nessuna' : (guad >= 8 || derr >= 2) && best.comfort >= (base.comfort || 0) - 0.5 ? 'chiara' : 'piccola';
+  return { righe: righe, best: best, base: base, guad: guad, derr: derr, chiarezza: chiarezza };
+}
+function fine() {
+  clearInterval(MON); silenzio(); show('results');
+  if (!BLOCCHI.length) { $('r-testo').textContent = 'Nessun brano completato.'; return; }
+  var sintesi;
+  if (CFG.modo === 'valutazione') {
+    var A = analizza();
+    $('r-titolo').textContent = 'Proposta per questa persona';
+    $('r-testo').innerHTML = A.chiarezza === 'nessuna' ? 'In questa sessione la lettura <b>senza voce in cuffia</b> è risultata la migliore: nessuna configurazione con ritardo ha dato un vantaggio. Ripeti in un altro giorno o prova un altro confronto.'
+      : '<b>' + esc(A.best.nome) + '</b>' + (A.chiarezza === 'chiara' ? ' è la condizione con i risultati migliori' : ' è risultata leggermente migliore, ma la differenza è piccola: ripeti la valutazione un altro giorno prima di decidere') +
+        '. Rispetto alla lettura senza voce in cuffia: velocità ' + (A.guad >= 0 ? '+' : '') + A.guad + '%, errori ' + (A.derr === 0 ? 'invariati' : (A.derr > 0 ? '−' + A.derr : '+' + (-A.derr)) + ' ogni 100 sillabe') + '.';
+    $('r-tab').innerHTML = '<table><tr><th>Condizione</th><th>Sillabe/s</th><th>Errori /100 sill.</th><th>Pause %</th><th>Reazione</th><th>Comprensione</th><th>Comfort</th><th>Punti</th></tr>' +
+      A.righe.slice().sort(function (a, b) { return a.punteggio - b.punteggio; }).map(function (r) {
+        return '<tr' + (r === A.best ? ' class="best"' : '') + '><td>' + esc(r.nome) + '</td><td>' + r.sill_s + '</td><td>' + r.err100 + '</td><td>' + r.pause_pct + '</td><td>' + (r.rt_ms ? r.rt_ms + ' ms' : '—') + (r.mancati ? ' (' + r.mancati + ' mancati)' : '') +
+          '</td><td>' + (r.comprensione_pct == null ? '—' : r.comprensione_pct + '%') + '</td><td>' + (r.comfort == null ? '—' : r.comfort + '/5') + '</td><td>' + r.punteggio + '</td></tr>';
+      }).join('') + '</table>';
+    localStorage.setItem('pnevLabBest', JSON.stringify({ chiave: A.best.chiave, nome: A.best.nome, cond: A.best.cond, lingua: CFG.lingua, data: new Date().toLocaleDateString('it-IT') }));
+    var compr = BLOCCHI.filter(function (m) { return m.comprensione != null; });
+    sintesi = { modo: 'valutazione', lingua: CFG.lingua, confronto: CFG.confronto, orecchio_dominante: CFG.dom,
+      condizioni: A.righe.map(function (r) { var o = Object.assign({}, r); delete o.cond; return o; }),
+      migliore: { chiave: A.best.chiave, nome: A.best.nome, filtro: A.best.cond.filtro, orecchio: A.best.cond.orecchio, ritardo_ms: A.best.cond.ritardo, voce_diretta_altro: A.best.cond.diretto || 0 },
+      chiarezza: A.chiarezza, guadagno_velocita_pct: A.guad, riduzione_errori_100: A.derr,
+      sillabe_al_s_baseline: A.base.sill_s, errori_baseline_100: A.base.err100,
+      comprensione_pct: compr.length ? Math.round(mean(compr.map(function (m) { return m.comprensione; })) * 100) : null, latenza_ms: latenzaMs() };
+  } else {
+    $('r-titolo').textContent = FISSO ? 'Bravo, sessione finita!' : 'Allenamento completato';
+    var v = mean(BLOCCHI.map(function (m) { return m.sill_s; }));
+    $('r-testo').innerHTML = FISSO ? BLOCCHI.length + ' brani letti. Velocità media: <b>' + r1(v) + '</b> sillabe al secondo.'
+      : BLOCCHI.length + ' brani letti con <b>' + esc(PIANO[0].cond.nome) + '</b>. Velocità media ' + r1(v) + ' sillabe al secondo.';
+    $('r-tab').innerHTML = '';
+    if (FISSO) {
+      var kS = 'pnevAscoltoStorico_' + CFG.percorso + '_' + CFG.lingua, st = [];
+      try { st = JSON.parse(localStorage.getItem(kS) || '[]'); } catch (e) {}
+      st.push({ d: new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }), v: r1(v) }); st = st.slice(-10);
+      localStorage.setItem(kS, JSON.stringify(st));
+      var mx = Math.max.apply(null, st.map(function (x) { return x.v; })) || 1;
+      $('r-tab').innerHTML = '<p class="note">Le tue ultime sessioni (sillabe al secondo):</p><div class="barre">' + st.map(function (x, i) {
+        return '<div class="c' + (i === st.length - 1 ? ' ora' : '') + '"><b>' + x.v + '</b><i style="height:' + Math.max(6, Math.round(x.v / mx * 90)) + 'px"></i><span>' + x.d + '</span></div>'; }).join('') + '</div>';
+    }
+    sintesi = { modo: 'allenamento', percorso: CFG.percorso || null, impostato_dallo_studio: !!PF.percorso, lingua: CFG.lingua, condizione: PIANO[0].cond.chiave, condizione_nome: PIANO[0].cond.nome, brani: BLOCCHI.length,
+      sillabe_al_s: r1(v), errori_100: r1(mean(BLOCCHI.map(function (m) { return m.err100; }))), pause_pct: Math.round(mean(BLOCCHI.map(function (m) { return m.pause_pct; })) || 0), minuti: CFG.minuti };
+  }
+  window._sintesi = sintesi;
+  $('send').textContent = PNEVTouch.token() ? 'Invia allo studio' : 'Salva file sessione';
+}
+$('send').onclick = function () { var r = SES.send(window._sintesi); $('send').textContent = r === 'inviato' ? 'Inviato' : 'File salvato'; };
+$('again').onclick = function () { show('setup'); aggiorna(); };
+$('esci').onclick = function () { clearInterval(MON); silenzio(); show('setup'); aggiorna(); };
+window.addEventListener('pagehide', spegniAudio);
+aggiorna();
+})();
+
+</script>
+</body>
+</html>
