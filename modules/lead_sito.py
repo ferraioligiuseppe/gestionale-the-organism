@@ -979,13 +979,23 @@ def render_contatti_sito(conn):
             if paz_id:
                 st.success(f"Anagrafica creata (paziente id {paz_id}).")
                 minore = "figlio" in (_g(r, "per_chi", "") or "").lower()
-                st.markdown("**Consenso privacy da firmare** (link valido 48 ore, "
-                           "firma col dito da telefono; torna qui firmato)")
+                # Invio automatico per email (stesso sistema di Privacy & Consensi):
+                # il link parte da solo, la richiesta compare in «Firme privacy in
+                # attesa» e quando firma arriva l'avviso con il PDF. I link da
+                # copiare a mano restano sotto, per WhatsApp o Telegram.
                 try:
-                    url = _link_firma_privacy(paz_id, minore=minore)
-                    _canali_invio(url, _g(r, "nome", "") or "")
+                    from modules.privacy.firma_remota import render_invio_link
+                    if not st.session_state.get(f"priv_mail_{paz_id}_{'minore' if minore else 'adulto'}"):
+                        st.session_state[f"priv_mail_{paz_id}_{'minore' if minore else 'adulto'}"] = _g(r, "email", "") or ""
+                    render_invio_link(conn, int(paz_id), "minore" if minore else "adulto")
                 except Exception as e:
-                    st.error(f"Impossibile generare il link firma: {e}")
+                    st.error(f"Invio automatico non disponibile: {e}")
+                with st.expander("Link da mandare a mano (WhatsApp, Telegram, email dal tuo programma)"):
+                    try:
+                        url = _link_firma_privacy(paz_id, minore=minore)
+                        _canali_invio(url, _g(r, "nome", "") or "")
+                    except Exception as e:
+                        st.error(f"Impossibile generare il link firma: {e}")
 
                 st.markdown("---")
                 st.markdown("**Altri questionari da inviare**")
