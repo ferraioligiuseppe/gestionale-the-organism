@@ -416,57 +416,47 @@ def _corpo_seleziona(conn, ns="default"):
         if ordina_recenti:
             pazienti = sorted(pazienti, key=lambda p: str(p.get("creato_il") or ""), reverse=True)
 
-    # Tabella nativa di Streamlit con selezione di riga. Prima era AgGrid:
-    # dentro la finestra il clic sulla riga a volte non arrivava al programma
-    # (componente esterno in un iframe, rieseguito a pezzi) e il paziente non
-    # veniva selezionato. st.dataframe con on_select è parte di Streamlit e
-    # funziona anche dentro le finestre di dialogo.
-    import pandas as pd
-    righe_tab = []
-    for p in pazienti:
-        righe_tab.append({
-            "_id": p.get("id"),
-            "": _badge_stato(p.get("stato_paziente")),
-            "Paziente": f"{(p.get('cognome') or '').strip()} {(p.get('nome') or '').strip()}".strip(),
-            "Nato il": _fmt_dn(p.get("data_nascita")),
-            "Età": _eta_anni(p.get("data_nascita")),
-            "Telefono": p.get("telefono", "") or "",
-            "Registrato il": _fmt_dn(p.get("creato_il")) if p.get("creato_il") else "",
-        })
-    df = pd.DataFrame(righe_tab)
-    if df.empty:
+    # Elenco a bottoni. La tabella (st.dataframe) dentro la finestra a volte
+    # restava vuota: e' disegnata su un canvas che, in una finestra appena
+    # aperta, non sempre riceve la sua larghezza. I bottoni sono testo
+    # normale e si vedono sempre. 30 per pagina; la ricerca restringe l'elenco.
+    PER_PAG = 30
+    if not pazienti:
         st.info("Nessun paziente corrisponde alla ricerca.")
     else:
-        if "Età" in df.columns:
-            df["Età"] = pd.to_numeric(df["Età"], errors="coerce").astype("Int64")
-        st.caption("Clicca la casella a sinistra del paziente per selezionarlo.")
-        ev = st.dataframe(
-            df.drop(columns=["_id"]),
-            hide_index=True, use_container_width=True, height=480,
-            on_select="rerun", selection_mode="single-row",
-            column_config={
-                "": st.column_config.TextColumn("", width="small"),
-                "Paziente": st.column_config.TextColumn("Paziente", width="large"),
-                "Età": st.column_config.NumberColumn("Età", format="%d", width="small"),
-            },
-            key=f"paz_df_{ns}_{st.session_state.get('_pa_grid_nonce', 0)}_{cerca}",
-        )
-        sel_rows = []
-        try:
-            sel_rows = list(ev.selection.rows)
-        except Exception:
-            try:
-                sel_rows = list((ev or {}).get("selection", {}).get("rows", []))
-            except Exception:
-                sel_rows = []
-        if sel_rows:
-            try:
-                pid = int(df.iloc[sel_rows[0]]["_id"])
-                set_paziente_attivo(conn, pid)
-                st.session_state["_pa_grid_nonce"] = st.session_state.get("_pa_grid_nonce", 0) + 1
+        kp = f"_pa_pag_{ns}"
+        if st.session_state.get(kp + "_q") != cerca:
+            st.session_state[kp] = 0
+            st.session_state[kp + "_q"] = cerca
+        pagine = max(1, (len(pazienti) + PER_PAG - 1) // PER_PAG)
+        pag = min(st.session_state.get(kp, 0), pagine - 1)
+        st.caption("Clicca sul paziente per selezionarlo.")
+        with st.container(height=480, border=True):
+            for p in pazienti[pag * PER_PAG:(pag + 1) * PER_PAG]:
+                nome = f"{(p.get('cognome') or '').strip()} {(p.get('nome') or '').strip()}".strip() or f"ID {p.get('id')}"
+                info = [x for x in (
+                    ("nato il " + _fmt_dn(p.get("data_nascita"))) if p.get("data_nascita") else "",
+                    (f"{_eta_anni(p.get('data_nascita'))} anni") if _eta_anni(p.get("data_nascita")) not in (None, "") else "",
+                    p.get("telefono") or "",
+                ) if x]
+                badge = _badge_stato(p.get("stato_paziente")) or ""
+                etichetta = f"{badge} {nome}".strip() + (f"  ·  {'  ·  '.join(info)}" if info else "")
+                if st.button(etichetta, key=f"pa_sel_{ns}_{p.get('id')}", use_container_width=True):
+                    try:
+                        set_paziente_attivo(conn, int(p.get("id")))
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Selezione non riuscita: {e}")
+        if pagine > 1:
+            c1, c2, c3 = st.columns([1, 2, 1])
+            if c1.button("◀ Precedenti", key=f"pa_prev_{ns}", disabled=pag == 0, use_container_width=True):
+                st.session_state[kp] = pag - 1
                 st.rerun()
-            except Exception as e:
-                st.error(f"Selezione non riuscita: {e}")
+            c2.markdown(f"<div style='text-align:center;padding-top:8px'>Pagina {pag + 1} di {pagine}</div>",
+                        unsafe_allow_html=True)
+            if c3.button("Successivi ▶", key=f"pa_next_{ns}", disabled=pag >= pagine - 1, use_container_width=True):
+                st.session_state[kp] = pag + 1
+                st.rerun()
 
     # Nuovo paziente: sotto l'elenco e chiuso. Si apre solo se serve; dopo
     # «Crea e seleziona» il paziente diventa attivo e la finestra si chiude.
