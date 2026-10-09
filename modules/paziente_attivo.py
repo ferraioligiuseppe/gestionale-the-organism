@@ -420,17 +420,85 @@ def _corpo_seleziona(conn, ns="default"):
     # restava vuota: e' disegnata su un canvas che, in una finestra appena
     # aperta, non sempre riceve la sua larghezza. I bottoni sono testo
     # normale e si vedono sempre. 30 per pagina; la ricerca restringe l'elenco.
+    # Lettere dell'alfabeto: un tocco e restano solo i cognomi con quell'iniziale,
+    # invece di sfogliare 29 pagine. Per un nome preciso resta piu' veloce
+    # scrivere le prime lettere del cognome nel campo di ricerca.
+    lettera = None
+    if not cerca.strip() and not ordina_recenti and pazienti:
+        iniziali = sorted({(p.get("cognome") or "").strip()[:1].upper() for p in pazienti
+                           if (p.get("cognome") or "").strip()[:1].isalpha()})
+        lettera = st.pills("Iniziale del cognome", iniziali, key=f"pa_lett_{ns}",
+                           label_visibility="collapsed")
+        if lettera:
+            pazienti = [p for p in pazienti if (p.get("cognome") or "").strip().upper().startswith(lettera)]
+            st.caption(f"{len(pazienti)} cognomi con la {lettera} · tocca di nuovo la lettera per tornare a tutti")
+        else:
+            st.caption("Tocca una lettera, oppure scrivi le prime lettere del cognome nel campo in alto.")
+
     PER_PAG = 30
+    # Elenco tipo foglio Excel: tutte le righe in un'unica lista che scorre,
+    # colonne ordinabili con un clic sull'intestazione. Se in qualche browser
+    # la griglia non compare, l'interruttore torna all'elenco a bottoni.
+    _griglia = None
+    try:
+        from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+        import pandas as _pd
+        _griglia = True
+    except Exception:
+        _griglia = False
+    if _griglia and pazienti:
+        _griglia = not st.toggle("Elenco a bottoni (se la tabella qui sotto non si vede)",
+                                 key=f"pa_bottoni_{ns}")
     if not pazienti:
         st.info("Nessun paziente corrisponde alla ricerca.")
+    elif _griglia:
+        df = _pd.DataFrame([{
+            "id": p.get("id"),
+            "Cognome": (p.get("cognome") or "").strip(),
+            "Nome": (p.get("nome") or "").strip(),
+            "Nato il": _fmt_dn(p.get("data_nascita")) if p.get("data_nascita") else "",
+            "Età": _eta_anni(p.get("data_nascita")),
+            "Telefono": p.get("telefono") or "",
+        } for p in pazienti])
+        gb = GridOptionsBuilder.from_dataframe(df)
+        gb.configure_default_column(sortable=True, resizable=True, filter=False)
+        gb.configure_column("id", hide=True)
+        gb.configure_column("Cognome", flex=2)
+        gb.configure_column("Nome", flex=2)
+        gb.configure_column("Nato il", flex=1)
+        gb.configure_column("Età", flex=0.6, type=["numericColumn"])
+        gb.configure_column("Telefono", flex=1.4)
+        gb.configure_selection("single")
+        gb.configure_grid_options(rowHeight=32, headerHeight=34, suppressCellFocus=True)
+        st.caption(f"{len(df)} righe · scorri con la rotellina · clic sull'intestazione per ordinare · "
+                   "clic su una riga per selezionare")
+        ris = AgGrid(df, gridOptions=gb.build(), height=500, fit_columns_on_grid_load=True,
+                     update_mode=GridUpdateMode.SELECTION_CHANGED, allow_unsafe_jscode=False,
+                     key=f"pa_grid_{ns}_{lettera or ''}_{len(df)}")
+        sel = getattr(ris, "selected_rows", None)
+        if sel is None and isinstance(ris, dict):
+            sel = ris.get("selected_rows")
+        scelto = None
+        if sel is not None and len(sel):
+            riga = sel.iloc[0] if hasattr(sel, "iloc") else sel[0]
+            try:
+                scelto = int(riga["id"])
+            except Exception:
+                scelto = None
+        if scelto and st.session_state.get(f"pa_grid_ultimo_{ns}") != scelto:
+            st.session_state[f"pa_grid_ultimo_{ns}"] = scelto
+            try:
+                set_paziente_attivo(conn, scelto)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Selezione non riuscita: {e}")
     else:
         kp = f"_pa_pag_{ns}"
-        if st.session_state.get(kp + "_q") != cerca:
+        if st.session_state.get(kp + "_q") != (cerca, lettera, ordina_recenti):
             st.session_state[kp] = 0
-            st.session_state[kp + "_q"] = cerca
+            st.session_state[kp + "_q"] = (cerca, lettera, ordina_recenti)
         pagine = max(1, (len(pazienti) + PER_PAG - 1) // PER_PAG)
         pag = min(st.session_state.get(kp, 0), pagine - 1)
-        st.caption("Clicca sul paziente per selezionarlo.")
         with st.container(height=480, border=True):
             for p in pazienti[pag * PER_PAG:(pag + 1) * PER_PAG]:
                 nome = f"{(p.get('cognome') or '').strip()} {(p.get('nome') or '').strip()}".strip() or f"ID {p.get('id')}"
