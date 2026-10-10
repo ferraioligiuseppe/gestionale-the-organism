@@ -133,6 +133,14 @@ CATALOGO = {
         "metriche": [("sintesi.span_massimo", "Span massimo", "su")]},
     "fe_cifre": {"nome": "Span di cifre", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=cifre",
         "metriche": [("sintesi.span_avanti", "Span in avanti", "su"), ("sintesi.span_indietro", "Span al contrario", "su")]},
+    "fe_regola": {"nome": "La regola cambia", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=regola",
+        "metriche": [("sintesi.costo_cambio_ms", "Costo del cambio (ms)", "giu"), ("sintesi.errori_cambio", "Errori dopo un cambio", "giu"), ("sintesi.accuratezza_pct", "Accuratezza (%)", "su")]},
+    "fe_simbolo": {"nome": "Trova il simbolo", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=simbolo",
+        "metriche": [("sintesi.omissioni", "Omissioni", "giu"), ("sintesi.falsi_allarmi", "Scambi", "giu"), ("sintesi.bersagli_al_minuto", "Bersagli al minuto", "su"), ("sintesi.omissioni_seconda_meta", "Omissioni seconda metà", "giu")]},
+    "fe_torre": {"nome": "La torre (pianificazione)", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=torre",
+        "metriche": [("sintesi.risolti_ottimali", "Risolti con il minimo", "su"), ("sintesi.mosse_in_eccesso", "Mosse in eccesso", "giu"), ("sintesi.tempo_pianificazione_mediano_ms", "Tempo prima di muovere (ms)", None)]},
+    "fe_tapping": {"nome": "Tieni il ritmo", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=tapping",
+        "metriche": [("sintesi.variabilita_cv_pct", "Variabilità (%)", "giu"), ("sintesi.asincronia_media_ms", "Asincronia (ms)", None), ("sintesi.deriva_pct", "Deriva (%)", None)]},
 }
 
 _schema_pronto = False
