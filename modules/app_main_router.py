@@ -535,6 +535,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🩶 Postura (Wii Balance Board)",
         "⚡ Protocollo Epilessia",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
+        "🔤 Impostazione fonemi",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
         "📋 Questionari remoti", "🖨️ Questionari cartacei", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
@@ -933,6 +934,37 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "🔤 Impostazione fonemi":
+        try:
+            from .fonemi.ui_fonemi import render as render_fonemi
+            _paz = {"id": paz_id, "nome_completo": "", "data_nascita": None}
+            try:
+                _c = conn.cursor()
+                _c.execute("SELECT cognome, nome, data_nascita FROM pazienti WHERE id=%s", (paz_id,))
+                _r = _c.fetchone()
+                if _r:
+                    _r = _r if isinstance(_r, dict) else dict(zip(("cognome", "nome", "data_nascita"), _r))
+                    _paz["nome_completo"] = f"{_r.get('cognome') or ''} {_r.get('nome') or ''}".strip().title()
+                    _paz["data_nascita"] = _r.get("data_nascita")
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            _carta = None
+            try:
+                from .pdf_templates import _carta_intestata_bytes
+                _carta = _carta_intestata_bytes()
+            except Exception:
+                pass
+            render_fonemi(conn, st.session_state.get("studio_id", 1), _paz, carta_intestata=_carta,
+                          operatore=str(st.session_state.get("username") or st.session_state.get("user") or ""))
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Impostazione fonemi: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
         return True
     if sotto == "🤸 Psicomotricità funzionale":
         try:

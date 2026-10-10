@@ -270,6 +270,9 @@ SOTTOSEZIONI = {
     ],
     AREA_TNPEE: [
         "🗣️ Logopedia / SMOF",
+        # Fonemi uno alla volta: obiettivi, sedute con prove e appoggi,
+        # passaggio di livello al criterio, report PDF su carta intestata.
+        "🔤 Impostazione fonemi",
         "🤸 Psicomotricità funzionale",
     ],
     AREA_PECS: [
