@@ -123,6 +123,16 @@ CATALOGO = {
             ("sintesi.sillabe_al_s", "Sillabe/s in allenamento", "su"),
         ],
     },
+    "fe_gonogo": {"nome": "Go / No-Go", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=gonogo",
+        "metriche": [("sintesi.commissioni", "Errori di impulsività", "giu"), ("sintesi.omissioni", "Omissioni", "giu"),
+                     ("sintesi.tr_mediano_ms", "Tempo mediano (ms)", "giu"), ("sintesi.tr_variabilita_ms", "Variabilità (ms)", "giu")]},
+    "fe_stroop": {"nome": "Stroop colori-parole", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=stroop",
+        "metriche": [("sintesi.effetto_interferenza_ms", "Interferenza (ms)", "giu"), ("sintesi.accuratezza_pct", "Accuratezza (%)", "su"),
+                     ("sintesi.errori_incongruenti", "Errori incongruenti", "giu")]},
+    "fe_corsi": {"nome": "Corsi (span visuo-spaziale)", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=corsi",
+        "metriche": [("sintesi.span_massimo", "Span massimo", "su")]},
+    "fe_cifre": {"nome": "Span di cifre", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=cifre",
+        "metriche": [("sintesi.span_avanti", "Span in avanti", "su"), ("sintesi.span_indietro", "Span al contrario", "su")]},
 }
 
 _schema_pronto = False
