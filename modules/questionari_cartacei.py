@@ -415,6 +415,7 @@ _GENERATORI = {
     "FISHER":          ("👂 Fisher Auditivo", _pdf_fisher),
     "VISIONE_BAMBINI": ("👁️ Visione Bambini", _pdf_visione_bambini),
     "VISIONE_ADULTI":  ("👁️ Visione Adulti", _pdf_visione_adulti),
+    "DIARIO_ALIM":     ("🍽️ Diario alimentare (7 giorni)", lambda: _pdf_diario_alimentare()),
 }
 try:
     from .questionari_cartacei_dati import QUESTIONARI_EXTRA as _QE
@@ -423,8 +424,16 @@ try:
 except Exception:
     pass
 
-_PER_BAMBINI = {"ANAMNESI_PNEV", "INPPS", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI"}
-_PER_ADULTI = {"MELILLO_ADULTI", "VISIONE_ADULTI", "INPPS_ADULTI"}
+_PER_BAMBINI = {"ANAMNESI_PNEV", "INPPS", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI", "DIARIO_ALIM"}
+_PER_ADULTI = {"MELILLO_ADULTI", "VISIONE_ADULTI", "INPPS_ADULTI", "DIARIO_ALIM"}
+
+
+def _pdf_diario_alimentare():
+    """La stessa scheda della sezione Alimentazione, in bianco, dal prossimo lunedì."""
+    import datetime as _dt
+    from .alimentazione import pdf_scheda_settimana
+    oggi = _dt.date.today()
+    return pdf_scheda_settimana(None, 0, oggi + _dt.timedelta(days=(7 - oggi.weekday()) % 7 or 7))
 
 
 def pdf_insieme(codici) -> bytes:

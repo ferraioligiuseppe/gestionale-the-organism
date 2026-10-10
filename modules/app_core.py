@@ -521,6 +521,7 @@ _QUESTIONARI_PUBBLICI = {
     "FISHER":          "Questionario Fisher – Problemi Uditivi (Bambini)",
     "VISIONE_BAMBINI": "Questionario Visione – Bambino/a",
     "VISIONE_ADULTI":  "Questionario Visione – Adulto",
+    "DIARIO_ALIM":     "Diario alimentare di 7 giorni",
 }
 
 def maybe_handle_public_questionario(get_conn) -> bool:
@@ -552,6 +553,57 @@ def maybe_handle_public_questionario(get_conn) -> bool:
 
     paziente_id = int(link.get("paziente_id") if hasattr(link, "get") else link["paziente_id"])
     titolo = _QUESTIONARI_PUBBLICI.get(q, "Questionario")
+
+    # Diario alimentare: non si compila in una volta sola. La famiglia salva
+    # un giorno alla volta per una settimana, sempre con lo stesso link, e
+    # alla fine preme «Ho finito»: solo allora il link si chiude.
+    if q == "DIARIO_ALIM":
+        try:
+            from modules import alimentazione as _al
+        except Exception as _e:
+            st.error(f"Diario non disponibile: {_e}")
+            return True
+        st.title("🍽️ Diario alimentare di 7 giorni")
+        st.markdown(
+            "**Come si fa**\n\n"
+            "1. Ogni sera scrivete cosa ha mangiato e bevuto durante la giornata, pasto per pasto. "
+            "Con parole vostre: «pasta al pomodoro, un piatto», «due biscotti».\n"
+            "2. Premete **Salva il giorno**. Il giorno compare nell'elenco qui sotto.\n"
+            "3. Il giorno dopo riaprite **questo stesso link** e fate lo stesso.\n"
+            "4. Dopo 7 giorni premete **Ho finito**: il diario arriva allo studio.\n\n"
+            "Avete dimenticato una sera? Scegliete la data del giorno giusto e scrivetelo lo stesso.")
+        _giorni = [g for g in _al._diario(conn, paziente_id)
+                   if g.get("data") and (date.today() - g["data"]).days <= 14]
+        st.progress(min(len(_giorni), 7) / 7, text=f"Giorni scritti: {len(_giorni)} su 7")
+        _g = _al.modulo_giorno(f"pub_diario_{t[:10]}", compatto=True)
+        if _g:
+            _err = _al.salva_giorno(conn, paziente_id, _g, "link famiglia")
+            if _err:
+                st.error(f"Giorno non salvato: {_err}")
+            else:
+                st.success(f"Salvato il {_g['data']:%d/%m}. Ci vediamo domani sera!")
+                st.rerun()
+        if _giorni:
+            st.markdown("**Giorni già scritti** (se riscrivete un giorno, si aggiorna)")
+            for g in sorted(_giorni, key=lambda x: x["data"]):
+                pasti = " · ".join(x for x in (g.get("colazione"), g.get("pranzo"), g.get("cena")) if x)
+                st.caption(f"{g['data']:%d/%m} — {pasti[:120] or 'solo note'}")
+        st.markdown("---")
+        if st.button("✅ Ho finito: invia il diario allo studio", type="primary",
+                     disabled=not _giorni, use_container_width=True):
+            try:
+                mark_token_used(cur, int(link.get("id") if hasattr(link, "get") else link["id"]))
+                conn.commit()
+                st.success("Grazie! Il diario è arrivato allo studio. Potete chiudere questa pagina.")
+                st.balloons()
+            except Exception as _e:
+                try: conn.rollback()
+                except Exception: pass
+                st.error(f"Invio non riuscito: {_e}")
+            st.stop()
+        if len(_giorni) < 7:
+            st.caption("Potete premere «Ho finito» anche prima dei 7 giorni, ma il quadro sarà meno completo.")
+        return True
 
     st.title(f"🏥 The Organism – {titolo}")
     st.caption("Compila il questionario e premi INVIA. I dati verranno registrati nel gestionale.")
@@ -5811,6 +5863,7 @@ def ui_anamnesi():
                 ("FISHER",          "👂 Fisher Auditivo (Genitori/Paziente)", "gen_link_fish"),
                 ("VISIONE_BAMBINI", "👁️ Visione Bambini (Genitori)",          "gen_link_visb"),
                 ("VISIONE_ADULTI",  "👁️ Visione Adulti (Paziente)",           "gen_link_visa"),
+                ("DIARIO_ALIM",     "🍽️ Diario alimentare (7 giorni)",        "gen_link_dial"),
             ]
 
             cols = st.columns(2)

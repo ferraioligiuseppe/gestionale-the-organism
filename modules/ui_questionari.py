@@ -70,6 +70,7 @@ _Q_LABELS = {
     "FISHER":          "👂 Fisher Auditivo",
     "VISIONE_BAMBINI": "👁️ Visione Bambini (Genitori)",
     "VISIONE_ADULTI":  "👁️ Visione Adulti (Paziente)",
+    "DIARIO_ALIM":     "🍽️ Diario alimentare (7 giorni)",
 }
 
 _CORPO_EMAIL = """\
@@ -215,7 +216,8 @@ def _genera_e_invia(conn, cur, paziente_id: int, q_code: str, q_label: str,
         token_hash = hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
 
         now     = datetime.datetime.now(ZoneInfo("Europe/Rome"))
-        expires = now + datetime.timedelta(days=7)
+        # Il diario si compila per una settimana: il link deve durare di più.
+        expires = now + datetime.timedelta(days=10 if q_code == "DIARIO_ALIM" else 7)
 
         cur.execute(
             "INSERT INTO questionari_links "
@@ -244,6 +246,11 @@ def _genera_e_invia(conn, cur, paziente_id: int, q_code: str, q_label: str,
                 titolo=q_label,
                 url=url,
             )
+            if q_code == "DIARIO_ALIM":
+                corpo = corpo.replace(
+                    "Il link è personale, monouso e valido per 7 giorni.\nDopo la compilazione può chiudere la pagina.",
+                    "Ogni sera aprite questo stesso link e scrivete cosa è stato mangiato e bevuto quel giorno.\n"
+                    "Dopo 7 giorni premete «Ho finito». Il link è personale e vale 10 giorni.")
             try:
                 _invia_email(
                     to=email_dest,
