@@ -141,6 +141,18 @@ CATALOGO = {
         "metriche": [("sintesi.risolti_ottimali", "Risolti con il minimo", "su"), ("sintesi.mosse_in_eccesso", "Mosse in eccesso", "giu"), ("sintesi.tempo_pianificazione_mediano_ms", "Tempo prima di muovere (ms)", None)]},
     "fe_tapping": {"nome": "Tieni il ritmo", "area": "Funzioni esecutive", "file": "pnev-funzioni.html?es=tapping",
         "metriche": [("sintesi.variabilita_cv_pct", "Variabilità (%)", "giu"), ("sintesi.asincronia_media_ms", "Asincronia (ms)", None), ("sintesi.deriva_pct", "Deriva (%)", None)]},
+    "calc_subitizing": {"nome": "Quanti sono? (subitizing)", "area": "Calcolo", "file": "pnev-calcolo.html?es=subitizing",
+        "metriche": [("sintesi.subitizing_span", "Riconosce a colpo d'occhio fino a", "su"), ("sintesi.accuratezza_pct", "Accuratezza (%)", "su")]},
+    "calc_confronto": {"nome": "Chi è più grande?", "area": "Calcolo", "file": "pnev-calcolo.html?es=confronto",
+        "metriche": [("sintesi.accuratezza_difficili_pct", "Quantità vicine (%)", "su"), ("sintesi.tr_mediano_ms", "Tempo mediano (ms)", "giu")]},
+    "calc_fatti": {"nome": "Fatti aritmetici", "area": "Calcolo", "file": "pnev-calcolo.html?es=fatti",
+        "metriche": [("sintesi.corrette_al_minuto", "Giuste al minuto", "su"), ("sintesi.recuperate_a_memoria", "Risposte a memoria (<3 s)", "su"), ("sintesi.accuratezza_pct", "Accuratezza (%)", "su")]},
+    "calc_sequenze": {"nome": "Conto avanti e indietro", "area": "Calcolo", "file": "pnev-calcolo.html?es=sequenze",
+        "metriche": [("sintesi.accuratezza_pct", "Accuratezza (%)", "su"), ("sintesi.indietro_pct", "All'indietro (%)", "su")]},
+    "calc_mente": {"nome": "Calcolo a mente", "area": "Calcolo", "file": "pnev-calcolo.html?es=mente",
+        "metriche": [("sintesi.accuratezza_pct", "Accuratezza (%)", "su"), ("sintesi.tr_mediano_ms", "Tempo mediano (ms)", "giu")]},
+    "calc_problemi": {"nome": "Problemi con le immagini", "area": "Calcolo", "file": "pnev-calcolo.html?es=problemi",
+        "metriche": [("sintesi.accuratezza_pct", "Accuratezza (%)", "su")]},
 }
 
 _schema_pronto = False

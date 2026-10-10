@@ -49,7 +49,7 @@ def render_grafomotricita(conn, paziente_id, paziente_nome=""):
                     "ogni sessione arriva qui con il token.")
         scelte = st.multiselect(
             "Prove", options=[k for k in db.CATALOGO if k != "maps_lab"],
-            default=[k for k in db.CATALOGO if not k.startswith(("lettura_", "maps_", "fe_"))],
+            default=[k for k in db.CATALOGO if not k.startswith(("lettura_", "maps_", "fe_", "calc_"))],
             format_func=lambda k: "%s (%s)" % (db.CATALOGO[k]["nome"], db.CATALOGO[k]["area"]))
         giorni = st.select_slider("Validità del link", options=[7, 14, 30, 60, 90], value=30,
                                   format_func=lambda g: "%d giorni" % g)
