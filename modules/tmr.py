@@ -61,12 +61,18 @@ def _secondi(t):
         return None
 
 
+# I video sono su YouTube (non in elenco). Il link parte dal pezzo dell'esercizio.
+VIDEO_YOUTUBE = {"TMR_attivi.mp4": "O9LpGADcdvc", "tmr_passivo_mariella_completo.mp4": "Cyto32mGCaE"}
+
+
 def url_video(e) -> str:
     f = e.get("video_file")
     if not f:
         return ""
-    u = _cfg("VIDEO_BASE_URL", CARTELLA_VIDEO).rstrip("/") + "/" + urllib.parse.quote(f)
     a, b = _secondi(e.get("video_inizio")), _secondi(e.get("video_fine"))
+    if f in VIDEO_YOUTUBE:
+        return f"https://youtu.be/{VIDEO_YOUTUBE[f]}" + (f"?t={a}" if a else "")
+    u = _cfg("VIDEO_BASE_URL", CARTELLA_VIDEO).rstrip("/") + "/" + urllib.parse.quote(f)
     if a is not None:
         u += f"#t={a}" + (f",{b}" if b is not None else "")
     return u
@@ -173,9 +179,6 @@ def _scheda_clinica(e):
         st.markdown(f"**Aiuti dell'operatore:** {e['aiuti_operatore']}")
     if e.get("riflesso"):
         st.markdown(f"**Riflesso:** {e['riflesso']}")
-    if e.get("animazione"):
-        st.markdown(f"[🎬 Animazione e approfondimento del riflesso]"
-                    f"(https://www.pnev.it/wp-content/uploads/riflessi/{e['animazione']})")
     if e.get("tenuta_secondi") or e.get("ripetizioni"):
         st.markdown(f"**Dose:** pressione {e.get('tenuta_secondi') or '—'} s"
                     + (f" al {e['forza']} della forza" if e.get("forza") else "")
@@ -276,6 +279,7 @@ def _tab_seduta(conn, paz_id, lib):
     data = st.date_input("Data della seduta", dt.date.today(), key=f"{k}_d", format="DD/MM/YYYY")
     righe = []
     for gruppo, filtro in (("Passivi · solo in studio", "passivo"), ("Isometrici · in studio", "isometrico"),
+                           ("MNRI · protocollo stress post-traumatico · solo in studio", "mnri"),
                            ("Attivi", "attivo")):
         gruppo_es = [x for x in lib["esercizi"] if x.get("modalita") == filtro]
         if not gruppo_es:
@@ -358,6 +362,7 @@ def _tab_libreria(lib):
     st.markdown(f"📖 [Le basi teoriche del TMR, per genitori e professionisti]({_cfg('PAGINA_TEORIA', PAGINA_TEORIA)})")
     for gruppo, filtro in (("Passivi · eseguiti dall'operatore", "passivo"),
                            ("Isometrici · pressioni nella posizione del riflesso", "isometrico"),
+                           ("MNRI · protocollo stress post-traumatico (Masgutova) · solo in studio", "mnri"),
                            ("Attivi · assegnabili a casa", "attivo")):
         gruppo_es = [x for x in lib["esercizi"] if x.get("modalita") == filtro]
         if not gruppo_es:
