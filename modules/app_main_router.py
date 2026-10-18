@@ -432,56 +432,6 @@ def _bottone_prossimo_passo(conn, paz_id, sotto_corrente):
         st.rerun()
 
 
-# Il percorso di valutazione in cinque passi, sempre visibile in cima a
-# ognuno: si vede dove si e', cosa e' gia' fatto, e si salta a un passo.
-_PERCORSO = [
-    ("Anamnesi", _AREA_PNEV_SEQ, "📋 Anamnesi PNEV"),
-    ("Riflessi (INPP)", _AREA_PNEV_SEQ, "🧬 INPP — Valutazione diagnostica"),
-    ("Visiva", _AREA_PNEV_SEQ, "👁️ Valutazione visuo-percettiva"),
-    ("Uditiva", _AREA_PNEV_SEQ, "📊 Audiometria funzionale"),
-    ("Diagnosi", "👥 Pazienti", "📝 Diagnosi assistita"),
-]
-
-
-def _passo_fatto(conn, paz_id, sotto):
-    sql = {
-        "📋 Anamnesi PNEV": "SELECT 1 FROM anamnesi_prima_infanzia WHERE paziente_id=%s LIMIT 1",
-        "🧬 INPP — Valutazione diagnostica": "SELECT 1 FROM inpp_valutazioni WHERE paziente_id=%s LIMIT 1",
-        "📝 Diagnosi assistita": "SELECT 1 FROM diagnosi_assistita WHERE paziente_id=%s LIMIT 1",
-    }.get(sotto)
-    if not sql:
-        return None   # per visiva e uditiva non c'e' un controllo affidabile
-    try:
-        cur = conn.cursor()
-        cur.execute(sql, (int(paz_id),))
-        return cur.fetchone() is not None
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        return None
-
-
-def _barra_percorso(conn, sotto):
-    paz_id = st.session_state.get("paziente_attivo_id")
-    if not paz_id or sotto not in [p[2] for p in _PERCORSO]:
-        return
-    st.markdown("**Percorso di valutazione**")
-    cols = st.columns(len(_PERCORSO))
-    for i, (nome, area, voce) in enumerate(_PERCORSO):
-        fatto = _passo_fatto(conn, paz_id, voce)
-        etich = f"{i + 1} · {nome}" + (" ✓" if fatto else "")
-        with cols[i]:
-            if voce == sotto:
-                st.button(etich, key=f"perc_{i}", type="primary", disabled=True, use_container_width=True)
-            elif st.button(etich, key=f"perc_{i}", use_container_width=True):
-                st.session_state["goto_area"] = area
-                st.session_state["goto_sotto"] = voce
-                st.rerun()
-    st.caption("✓ = già salvato per questo paziente. L'ordine è un consiglio: ogni passo si può aprire quando serve.")
-
-
 def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     """Dispatch PIATTO: aggancia ogni voce SOLO al suo nome (sotto).
 
@@ -494,15 +444,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     # La finestra «Seleziona paziente» legge questa voce per proporre solo i
     # pazienti dell'età giusta (regole in filtro_eta.REGOLE_ETA).
     st.session_state["_voce_corrente"] = sotto
-    try:
-        _barra_percorso(conn, sotto)
-    except Exception:
-        pass
-    try:
-        from .registro_attivita import assicura_tracciamento
-        assicura_tracciamento(conn)
-    except Exception:
-        pass
     from .app_menu import PLACEHOLDER_VOCI
     if sotto in PLACEHOLDER_VOCI:
         st.info(f"🚧 **{sotto}** — sezione in costruzione, arriva presto.")
@@ -512,9 +453,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
 
     VOCI_CON_PAZIENTE = {
         "📅 Sedute / Terapie", "🔒 Privacy & Consensi",
-        "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "🕒 Cronologia", "📚 Archivio relazioni", "💡 Assistente PNEV",
+        "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
-        "🧩 Rilievi PNEV", "🎙️ Colloqui clinici", "🥗 Alimentazione",
+        "🧩 Rilievi PNEV", "🎙️ Colloqui clinici", "🌳 Genosociogramma", "🥗 Alimentazione",
         "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
@@ -525,20 +466,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📐 PNEV-Chart (schede stampabili)",
         "🥁 PNEV Metronomo",
         "🎯 Segui la pallina",
-        "🫁 Valutazione e programma Buteyko", "📈 Diario Pausa Controllo",
-        "🎵 TMR — Movimenti ritmici",
-        "✍️ Giochiamo imparando (prove touch)",
-        "🎧 MAPS-CLEAR Lab",
-        "👁️ Stimolazione visiva a casa",
-        "🏠 Programma PNEV a casa",
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
         "⚡ Protocollo Epilessia",
         "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
-        "🔤 Impostazione fonemi",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
-        "📋 Questionari remoti", "🖨️ Questionari cartacei", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
+        "📋 Questionari remoti", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
         "🔉 Diagnostica uditiva completa",
         "🎧 MAPS", "🗂 Programmi MAPS", "🎧 MAPS-CLEAR in studio",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
@@ -614,32 +548,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
-    if sotto == "📚 Archivio relazioni":
-        try:
-            from .archivio_relazioni import render_archivio
-            render_archivio(conn, paz_id)
-        except Exception as e:
-            import traceback
-            st.error(f"Errore archivio relazioni: {e}")
-            with st.expander("Dettagli tecnici"):
-                st.code(traceback.format_exc())
-        return True
-    if sotto == "🕒 Cronologia":
-        try:
-            from .registro_attivita import render_cronologia
-            render_cronologia(conn, paz_id)
-        except Exception as e:
-            import traceback
-            st.error(f"Errore cronologia: {e}")
-            with st.expander("Dettagli tecnici"):
-                st.code(traceback.format_exc())
-        return True
     if sotto == "🧩 Quadro storico":
-        try:
-            from .fascicolo_paziente import render_fascicolo
-            render_fascicolo(conn, paz_id, "qs_fasc", aperto=True)
-        except Exception as e:
-            st.caption(f"Fascicolo non disponibile: {e}")
         try:
             from .quadro_storico import render_quadro
             render_quadro(conn, paz_id)
@@ -652,6 +561,8 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     # Rilievi e Colloqui erano nel menu ma non qui: aprivano una pagina vuota.
     for _voce, _mod, _fn in (("🧩 Rilievi PNEV", "rilievi_pnev", "render_rilievi"),
                              ("🎙️ Colloqui clinici", "colloqui_clinici", "render_pagina_colloqui"),
+                             ("🌳 Genosociogramma", "genosociogramma.ui_genosociogramma",
+                              "render_genosociogramma_router"),
                              ("🥗 Alimentazione", "alimentazione", "render_alimentazione")):
         if sotto == _voce:
             try:
@@ -789,10 +700,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         return True
 
     # ── INVII AL PAZIENTE ─────────────────────────────────────────────
-    if sotto == "🖨️ Questionari cartacei":
-        from .questionari_cartacei import render_questionari_cartacei
-        render_questionari_cartacei(conn, paz_id)
-        return True
     if sotto == "📋 Questionari remoti":
         try:
             from .ui_questionari import render_questionari_section
@@ -934,37 +841,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         _assistente_coda(conn, paz_id)
-        return True
-    if sotto == "🔤 Impostazione fonemi":
-        try:
-            from .fonemi.ui_fonemi import render as render_fonemi
-            _paz = {"id": paz_id, "nome_completo": "", "data_nascita": None}
-            try:
-                _c = conn.cursor()
-                _c.execute("SELECT cognome, nome, data_nascita FROM pazienti WHERE id=%s", (paz_id,))
-                _r = _c.fetchone()
-                if _r:
-                    _r = _r if isinstance(_r, dict) else dict(zip(("cognome", "nome", "data_nascita"), _r))
-                    _paz["nome_completo"] = f"{_r.get('cognome') or ''} {_r.get('nome') or ''}".strip().title()
-                    _paz["data_nascita"] = _r.get("data_nascita")
-            except Exception:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-            _carta = None
-            try:
-                from .pdf_templates import _carta_intestata_bytes
-                _carta = _carta_intestata_bytes()
-            except Exception:
-                pass
-            render_fonemi(conn, st.session_state.get("studio_id", 1), _paz, carta_intestata=_carta,
-                          operatore=str(st.session_state.get("username") or st.session_state.get("user") or ""))
-        except Exception as e:
-            import traceback
-            st.error(f"Errore modulo Impostazione fonemi: {e}")
-            with st.expander("Dettagli tecnici"):
-                st.code(traceback.format_exc())
         return True
     if sotto == "🤸 Psicomotricità funzionale":
         try:
@@ -1243,49 +1119,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             sottotitolo="Cinque fasce d'età, dalla nascita ai 16 anni: le prove cambiano con la fascia.",
             kp="sb")
         return True
-    if sotto == "👅 Valutazione del frenulo":
-        from .ui_protocollo_pdf_app import render_protocollo_pdf_app
-        render_protocollo_pdf_app(
-            conn, paz_id,
-            html_file="Frenulo_valutazione_clinica_MASTER.html",
-            pdf_file="Frenulo_perturbazione_manuale.pdf",
-            titolo="👅 Valutazione del frenulo",
-            sottotitolo="Mobilità linguale, funzioni orali e batteria sistemica: il frenulo come possibile perturbazione anche quando la lingua si muove bene.",
-            kp="frc")
-        return True
-    if sotto == "🏠 Programma PNEV a casa":
-        from .programma_casa import render_programma_casa
-        render_programma_casa(conn, paz_id); return True
-    if sotto == "👁️ Stimolazione visiva a casa":
-        from .visione_casa import render_visione_casa
-        render_visione_casa(conn, paz_id); return True
-    if sotto == "🎵 TMR — Movimenti ritmici":
-        from .tmr import render_tmr
-        render_tmr(conn, paz_id); return True
-    if sotto == "🎧 MAPS-CLEAR Lab":
-        from .ui_maps_lab import render_maps_lab
-        render_maps_lab(conn, paz_id); return True
-    if sotto == "✍️ Giochiamo imparando (prove touch)":
-        # Prove touch su pnev.it (lettura, corsivo, funzioni esecutive, calcolo):
-        # link personale col token, sedute e andamento nel fascicolo.
-        from .grafomotricita.ui_grafomotricita import render_grafomotricita
-        render_grafomotricita(conn, paz_id); return True
-    if sotto == "🫁 Valutazione e programma Buteyko":
-        from .buteyko import render_buteyko
-        render_buteyko(conn, paz_id); return True
-    if sotto == "📈 Diario Pausa Controllo":
-        from .buteyko import render_diario
-        render_diario(conn, paz_id); return True
-    if sotto == "🔬 Ricerca · Frenulo come perturbazione":
-        from .ui_protocollo_pdf_app import render_protocollo_pdf_app
-        render_protocollo_pdf_app(
-            conn, paz_id,
-            html_file="Frenulo_perturbazione_MASTER.html",
-            pdf_file="Frenulo_perturbazione_manuale.pdf",
-            titolo="🔬 Frenulo come perturbazione — protocollo di ricerca",
-            sottotitolo="Batteria pre/post anestesia topica del frenulo: pilota aperto o doppio cieco con placebo.",
-            kp="frn")
-        return True
     if sotto == "🩺 Screening completo":
         from .ui_protocollo_pdf_app import render_protocollo_pdf_app
         render_protocollo_pdf_app(conn, paz_id); return True
@@ -1318,27 +1151,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except Exception as e:
             import traceback
             st.error(f"Errore Aerosal: {e}")
-            with st.expander("Dettagli tecnici"):
-                st.code(traceback.format_exc())
-        return True
-
-    if sotto == "💳 Crediti e convenzioni":
-        try:
-            from .aerosal.db_aerosal import assicura_schema, impostazioni
-            from .crediti import render_crediti
-            _sid = str(st.session_state.get("studio_id", 1))
-            if not st.session_state.get(f"_aerosal_schema_v5_ok_{_sid}"):
-                _err = assicura_schema(conn, _sid)
-                if _err:
-                    st.error(f"Tabelle crediti non create: {_err}")
-                    return True
-                st.session_state[f"_aerosal_schema_v5_ok_{_sid}"] = True
-            render_crediti(conn, _sid,
-                           operatore=st.session_state.get("username") or st.session_state.get("user"),
-                           impostazioni=impostazioni(conn, _sid))
-        except Exception as e:
-            import traceback
-            st.error(f"Errore Crediti: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True
@@ -1607,26 +1419,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             from .valutazione_adulti import render_valutazione_adulti
             render_valutazione_adulti(conn, paz_id, "funzionale" if "funzionale" in sotto else "neurologica")
             return
-        if sotto == "👅 Valutazione del frenulo":
-            from .ui_protocollo_pdf_app import render_protocollo_pdf_app
-            render_protocollo_pdf_app(
-                conn, paz_id,
-                html_file="Frenulo_valutazione_clinica_MASTER.html",
-                pdf_file="Frenulo_perturbazione_manuale.pdf",
-                titolo="👅 Valutazione del frenulo",
-                sottotitolo="Mobilità linguale, funzioni orali e batteria sistemica: il frenulo come possibile perturbazione anche quando la lingua si muove bene.",
-                kp="frc")
-            return
-        if sotto == "🔬 Ricerca · Frenulo come perturbazione":
-            from .ui_protocollo_pdf_app import render_protocollo_pdf_app
-            render_protocollo_pdf_app(
-                conn, paz_id,
-                html_file="Frenulo_perturbazione_MASTER.html",
-                pdf_file="Frenulo_perturbazione_manuale.pdf",
-                titolo="🔬 Frenulo come perturbazione — protocollo di ricerca",
-                sottotitolo="Batteria pre/post anestesia topica del frenulo: pilota aperto o doppio cieco con placebo.",
-                kp="frn")
-            return
         if sotto in ("🧑 Screening adulti — funzionale", "🧠 Screening adulti — neurologico"):
             from .ui_protocollo_pdf_app import render_protocollo_pdf_app
             _funz = sotto.endswith("funzionale")
@@ -1725,11 +1517,6 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA QUESTIONARI ──────────────────────────────────────────────
     elif area == AREA_QUESTIONARI:
-        if sotto == "🖨️ Questionari cartacei":
-            from .paziente_attivo import header_paziente_attivo
-            from .questionari_cartacei import render_questionari_cartacei
-            render_questionari_cartacei(conn, header_paziente_attivo(conn))
-            return
         if sotto == "📋 Questionari remoti":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)

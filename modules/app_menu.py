@@ -49,7 +49,6 @@ AREA_SCREENING     = "🩺 Screening"
 AREA_TERAPIA       = "📄 Relazioni & studio clinico"
 AREA_STUDIO        = "⚙️ Studio"
 AREA_AEROSAL       = "🌬️ Aerosal"
-AREA_RESPIRAZIONE  = "🫁 Respirazione"
 
 # ── Alias legacy (mantengono validi gli import esistenti in
 #    app_main_router.py e app_main.py) — puntano all'area più coerente
@@ -71,7 +70,6 @@ AREE_ORDINE = [
     AREA_INVII,
     AREA_PNEV,
     AREA_TERAPIA_PNEV,
-    AREA_RESPIRAZIONE,
     AREA_OCULISTICA,
     AREA_TNPEE,
     AREA_PECS,
@@ -142,7 +140,6 @@ PAZIENTI_RAMI = {
         "🏠 Dashboard",
         "👤 Anagrafica pazienti",
         "🧩 Quadro storico",
-        "🕒 Cronologia",
         # Statistiche sull'efficacia dei trattamenti dello studio: stava
         # sotto "Apprendimenti", dove "apprendimento" indica quello del
         # bambino — due significati opposti sotto la stessa parola.
@@ -158,15 +155,16 @@ PAZIENTI_RAMI = {
         # rilievi da anamnesi, referti esterni, colloqui e test.
         "🧩 Rilievi PNEV",
         "🎙️ Colloqui clinici",
+        # Genosociogramma (Schützenberger): albero familiare su più
+        # generazioni, legami affettivi e ripetizioni da esplorare.
+        "🌳 Genosociogramma",
         # Metodo Kousmine: valutazione, esami, piano firmato, diario, esiti.
         "🥗 Alimentazione",
         "🗓️ Diario clinico",
         "📝 Diagnosi assistita",
-        "📚 Archivio relazioni",
         "📅 Sedute / Terapie",
         "📈 Esiti / Follow-up",
         "🔒 Privacy & Consensi",
-        "✍️ Firme privacy in attesa",
     ],
     "💡 Strumenti": [
         "💡 Assistente PNEV",
@@ -200,6 +198,7 @@ PLACEHOLDER_VOCI = [
     "🚧 Castagnini (in arrivo)",
     "🚧 Vojta (in arrivo)",
     "🚧 Masgutova / MNRI (in arrivo)",
+    "🚧 TMR — Movimenti ritmici (in arrivo)",
     "🚧 Melillo / NCHW (in arrivo)",
     "🚧 Oculistica (da importare dal gestionale esistente)",
     "🚧 Ortottica (in arrivo)",
@@ -218,14 +217,9 @@ SOTTOSEZIONI = {
         # paziente: obiettivi, settimana corrente e aderenza di TUTTI i
         # percorsi insieme. Le voci sotto restano quelle di prima.
         "🎯 Piano di trattamento",
-        "🏠 Programma PNEV a casa",
         "🧘 Percorsi terapeutici",
         "🧩 Programma PNEV",
-        "🎵 TMR — Movimenti ritmici",
-        "✍️ Giochiamo imparando (prove touch)",
-        "🎧 MAPS-CLEAR Lab",
         "🎯 Piano Vision Therapy",
-        "👁️ Stimolazione visiva a casa",
         "🎧 MAPS",
         "🗂 Programmi MAPS",
         "🧭 Percorsi MAPS",
@@ -235,7 +229,7 @@ SOTTOSEZIONI = {
     ],
     AREA_INVII: [
         "📋 Questionari remoti",
-        "🖨️ Questionari cartacei",
+        "🎧 Screening uditivo",
         "📋 Consenso screening scolastico",
     ],
     AREA_OCULISTICA: [
@@ -257,22 +251,20 @@ SOTTOSEZIONI = {
         "🧑 Valutazione adulti — funzionale completa",
         "🧠 Valutazione adulti — neurologica completa",
         "🔺 Prismi posturali",
-        "👅 Valutazione del frenulo",
         "🧸 Screening 0-4 anni",
-        "🎧 Screening uditivo",
         # Due strumenti per lo stesso protocollo, con punti di forza opposti:
-        # Lo strumento di valutazione e' l'app HTML («Screening completo»), che
-        # ora salva nel fascicolo con un clic. La replica Python («Protocollo
-        # di valutazione (scheda)») e' uscita dal menu il 4/10/2026: i dati gia'
-        # salvati restano nella tabella protocollo_valutazione e il router la
-        # apre ancora, se serve consultarli.
+        #  · "Screening completo" apre l'app HTML — impaginazione A4 fedele,
+        #    calcolatori automatici, stampa diretta, secondo monitor. Ma per
+        #    conservare i dati bisogna esportarli a mano.
+        #  · "Protocollo di valutazione (scheda)" e' la replica in Python —
+        #    stessi stimoli e stesso ordine, salva nel fascicolo del paziente
+        #    (tabella protocollo_valutazione) e genera la relazione.
+        # Il secondo esisteva gia' completo ma non era in nessun menu.
         "🩺 Screening completo",
+        "📋 Protocollo di valutazione (scheda)",
     ],
     AREA_TNPEE: [
         "🗣️ Logopedia / SMOF",
-        # Fonemi uno alla volta: obiettivi, sedute con prove e appoggi,
-        # passaggio di livello al criterio, report PDF su carta intestata.
-        "🔤 Impostazione fonemi",
         "🤸 Psicomotricità funzionale",
     ],
     AREA_PECS: [
@@ -289,7 +281,6 @@ SOTTOSEZIONI = {
     ],
     AREA_ACADEMY: [
         "📅 Eventi e iscrizioni",
-        "🔬 Ricerca · Frenulo come perturbazione",
     ],
     AREA_TEST_LIVE: [
         "🖥️ Somministrazione test",
@@ -301,15 +292,8 @@ SOTTOSEZIONI = {
         "📊 Export statistici",
         "🧪 Caso demo",
     ],
-    # Metodo Buteyko: valutazione, questionari, programma, dispense (app HTML)
-    # e diario della Pausa Controllo che il paziente compila da casa.
-    AREA_RESPIRAZIONE: [
-        "🫁 Valutazione e programma Buteyko",
-        "📈 Diario Pausa Controllo",
-    ],
     AREA_AEROSAL: [
         "🌬️ Aerosal · Haloterapia",
-        "💳 Crediti e convenzioni",
     ],
     AREA_STUDIO: [
         "📊 Dashboard incassi",
