@@ -207,3 +207,146 @@ def genera_pdf(g, paziente_label="", studio_label="", on_page=None):
     cb = on_page or _intestazione_studio
     doc.build(st, onFirstPage=cb, onLaterPages=cb)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------- scheda cartacea
+class _Legenda(Flowable):
+    """Simboli da usare nel disegno a mano."""
+    VOCI = [("M", "Maschio"), ("F", "Femmina"), ("X", "Deceduto (anno e causa accanto)"),
+            ("P", "Tu (doppio contorno)"), ("U", "Coppia sposata (anno sopra)"), ("S", "Separati: una barra; divorziati: due"),
+            ("C", "Figli, dal più grande a sinistra"), ("A", "Aborto o figlio nato morto: triangolo piccolo")]
+
+    def __init__(self, width):
+        super().__init__()
+        self.width, self.height = width, 4 * 13 * mm
+
+    def wrap(self, aw, ah):
+        return self.width, self.height
+
+    def draw(self):
+        c = self.canv
+        c.setStrokeColor(colors.HexColor(INK))
+        c.setLineWidth(1.2)
+        col_w = self.width / 2
+        for i, (k, t) in enumerate(self.VOCI):
+            x = (i % 2) * col_w + 6 * mm
+            y = self.height - (i // 2) * 13 * mm - 8 * mm
+            s = 3.2 * mm
+            if k in ("M", "X"):
+                c.rect(x - s, y - s, 2 * s, 2 * s)
+                if k == "X":
+                    c.line(x - s, y - s, x + s, y + s); c.line(x - s, y + s, x + s, y - s)
+            elif k == "F":
+                c.circle(x, y, s)
+            elif k == "P":
+                c.circle(x, y, s); c.circle(x, y, s - 1.2 * mm)
+            elif k in ("U", "S"):
+                c.line(x - 4 * mm, y + s, x - 4 * mm, y - s); c.line(x + 4 * mm, y + s, x + 4 * mm, y - s)
+                c.line(x - 4 * mm, y - s, x + 4 * mm, y - s)
+                if k == "S":
+                    c.line(x - 1 * mm, y - s - 2 * mm, x + 1 * mm, y - s + 2 * mm)
+            elif k == "C":
+                c.line(x, y + s, x, y); c.line(x - 4 * mm, y, x + 4 * mm, y)
+                c.line(x - 4 * mm, y, x - 4 * mm, y - s); c.line(x + 4 * mm, y, x + 4 * mm, y - s)
+            elif k == "A":
+                p = c.beginPath(); p.moveTo(x, y + 2 * mm); p.lineTo(x + 2 * mm, y - 1.5 * mm)
+                p.lineTo(x - 2 * mm, y - 1.5 * mm); p.close(); c.drawPath(p, stroke=1, fill=0)
+            c.setFont("Helvetica", 9)
+            c.setFillColor(colors.HexColor(INK))
+            c.drawString(x + 8 * mm, y - 1.2 * mm, t)
+
+
+class _AreaDisegno(Flowable):
+    """Riquadro per disegnare l'albero, con le righe delle generazioni."""
+    RIGHE = ["Nonni", "Genitori, zii", "Tu, fratelli e sorelle, cugini", "Figli, nipoti"]
+
+    def __init__(self, width, height):
+        super().__init__()
+        self.width, self.height = width, height
+
+    def wrap(self, aw, ah):
+        return self.width, self.height
+
+    def draw(self):
+        c = self.canv
+        c.setStrokeColor(colors.HexColor("#9AA8A6"))
+        c.setLineWidth(0.8)
+        c.roundRect(0, 0, self.width, self.height, 3 * mm)
+        step = self.height / len(self.RIGHE)
+        c.setFont("Helvetica", 8.5)
+        for i, t in enumerate(self.RIGHE):
+            y = self.height - step * (i + 0.5)
+            c.setDash(2, 3)
+            c.line(4 * mm, y, self.width - 4 * mm, y)
+            c.setDash()
+            c.setFillColor(colors.HexColor(MUTED))
+            c.drawString(4 * mm, y + 2 * mm, t)
+
+
+def genera_scheda_cartacea(paziente_label="", on_page=None, righe_persone=24):
+    """Scheda da stampare e compilare a mano. Restituisce i byte del PDF."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm,
+                            topMargin=48 * mm, bottomMargin=50 * mm, title="Genosociogramma — scheda da compilare")
+    ss = getSampleStyleSheet()
+    h1 = ParagraphStyle("h1", parent=ss["Heading1"], textColor=BRAND, fontSize=16, spaceAfter=4)
+    h2 = ParagraphStyle("h2", parent=ss["Heading2"], textColor=BRAND, fontSize=12, spaceBefore=8, spaceAfter=4)
+    body = ParagraphStyle("b", parent=ss["BodyText"], fontSize=10, leading=14)
+    small = ParagraphStyle("s", parent=body, fontSize=8.5, leading=11, textColor=colors.HexColor(MUTED))
+    aw = A4[0] - 36 * mm
+    st = [Paragraph("Il tuo albero di famiglia", h1)]
+    if paziente_label:
+        st.append(Paragraph(escape(paziente_label), small))
+    st += [
+        Spacer(1, 3 * mm),
+        Paragraph("Questa scheda serve a raccogliere la storia della tua famiglia su tre o quattro generazioni: "
+                  "nonni, genitori e zii, tu con fratelli e sorelle, i figli. La guarderemo insieme in seduta.", body),
+        Spacer(1, 2 * mm),
+        Paragraph("<b>Come procedere</b>", body),
+        Paragraph("1. Disegna prima l’albero a memoria, senza chiedere a nessuno: anche quello che non ricordi è utile.", body),
+        Paragraph("2. Poi compila la tabella delle persone, una riga per ciascuna.", body),
+        Paragraph("3. Nei giorni seguenti puoi verificare date e fatti con i familiari, documenti o fotografie. "
+                  "Scrivi le correzioni con un altro colore, senza cancellare la prima versione.", body),
+        Paragraph("4. Se non conosci una data o un fatto, metti un punto interrogativo.", body),
+        Paragraph("Simboli da usare", h2),
+        _Legenda(aw),
+        Paragraph("Domande che possono aiutarti", h2),
+    ]
+    for d in ("Chi porta il tuo nome, o un nome simile, prima di te?",
+              "Quali date della tua famiglia ti vengono in mente per prime?",
+              "C’è qualcuno di cui in famiglia non si parla, o che è stato dimenticato?",
+              "C’è un evento della tua vita che ti sembra ripetere qualcosa già successo ad altri?",
+              "Alla tua età di oggi, che cosa stava succedendo ai tuoi genitori e ai tuoi nonni?"):
+        st.append(Paragraph("• " + escape(d), body))
+    st += [PageBreak(), Paragraph("Disegna qui il tuo albero", h1),
+           Paragraph("Una figura per persona, sulla riga della sua generazione. Accanto a ciascuna scrivi nome, "
+                     "anno di nascita e, se è morta, anno e causa.", small),
+           Spacer(1, 3 * mm), _AreaDisegno(aw, A4[1] - 48 * mm - 50 * mm - 30 * mm), PageBreak(),
+           Paragraph("Le persone della famiglia", h1),
+           Paragraph("Una riga per persona. Date come gg/mm/aaaa quando le conosci, altrimenti solo l’anno.", small),
+           Spacer(1, 3 * mm)]
+    head = ["Nome e cognome", "Parentela con te", "Nascita", "Morte (data e causa)",
+            "Malattie, eventi, mestiere", "Note"]
+    hst = ParagraphStyle("hd", parent=body, fontName="Helvetica-Bold", fontSize=8, leading=9.5, textColor=BRAND)
+    rows = [[Paragraph(h, hst) for h in head]] + [[""] * 6 for _ in range(righe_persone)]
+    t = Table(rows, colWidths=[32 * mm, 24 * mm, 20 * mm, 28 * mm, 34 * mm, aw - 138 * mm],
+              rowHeights=[None] + [11 * mm] * righe_persone, repeatRows=1)
+    t.setStyle(TableStyle([
+        ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8.5),
+        ("TEXTCOLOR", (0, 0), (-1, 0), BRAND),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#9AA8A6")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EEF5F1")),
+    ]))
+    st += [t, PageBreak(), Paragraph("Altro che vuoi raccontare", h1),
+           Paragraph("Rapporti stretti o difficili, rotture, persone escluse, segreti, traslochi ed emigrazioni, "
+                     "guerre, lutti, eredità: tutto quello che senti importante.", small), Spacer(1, 4 * mm)]
+    righe = Table([[""] for _ in range(16)], colWidths=[aw], rowHeights=[9 * mm] * 16)
+    righe.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.HexColor("#9AA8A6"))]))
+    st.append(righe)
+    st += [Spacer(1, 6 * mm),
+           Paragraph("I dati che scrivi, anche quelli sulla salute dei tuoi familiari, restano nello studio e servono "
+                     "solo al tuo percorso clinico.", small)]
+    cb = on_page or _intestazione_studio
+    doc.build(st, onFirstPage=cb, onLaterPages=cb)
+    return buf.getvalue()
