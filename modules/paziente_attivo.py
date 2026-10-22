@@ -313,16 +313,52 @@ def _form_nuovo_paziente(conn, key_suffix=None):
         tel = st.text_input("Telefono", key=f"np_tel_{ks}")
         ok = st.form_submit_button("➕ Crea e seleziona", type="primary",
                                    use_container_width=True)
+    k_conf = f"np_doppioni_{ks}"
     if ok:
         if not cognome.strip() or not nome.strip():
             st.error("Cognome e Nome sono obbligatori.")
             return
-        pid, err = _crea_paziente_rapido(conn, cognome, nome, dn, sesso, tel)
-        if err:
-            st.error(err)
+        d_dn, _ = _parse_dn(dn)
+        try:
+            from .anagrafica_controlli import trova_doppioni
+            doppioni = trova_doppioni(conn, cognome, nome, d_dn)
+        except Exception:
+            doppioni = []
+        firma = (cognome.strip().lower(), nome.strip().lower(), dn.strip())
+        if doppioni and st.session_state.get(k_conf) != firma:
+            st.session_state[k_conf + "_lista"] = doppioni
+            st.session_state[k_conf + "_firma"] = firma
+        else:
+            st.session_state.pop(k_conf + "_lista", None)
+            _crea_e_seleziona(conn, cognome, nome, dn, sesso, tel)
             return
-        set_paziente_attivo(conn, pid)
-        st.rerun()
+
+    lista = st.session_state.get(k_conf + "_lista")
+    if lista:
+        for d in lista:
+            c1, c2 = st.columns([4, 1])
+            c1.warning(f"⚠️ **Esiste già {d['nome']}** (ID {d['id']}) — {d['motivo']}.")
+            if c2.button("Apri questo", key=f"{k_conf}_apri_{d['id']}", use_container_width=True):
+                st.session_state.pop(k_conf + "_lista", None)
+                set_paziente_attivo(conn, d["id"])
+                st.rerun()
+        if st.button("È un'altra persona: crea comunque", key=f"{k_conf}_forza"):
+            st.session_state[k_conf] = st.session_state.get(k_conf + "_firma")
+            st.session_state.pop(k_conf + "_lista", None)
+            _crea_e_seleziona(conn, st.session_state.get(f"np_cognome_{ks}", ""),
+                              st.session_state.get(f"np_nome_{ks}", ""),
+                              st.session_state.get(f"np_dn_{ks}", ""),
+                              st.session_state.get(f"np_sesso_{ks}", ""),
+                              st.session_state.get(f"np_tel_{ks}", ""))
+
+
+def _crea_e_seleziona(conn, cognome, nome, dn, sesso, tel):
+    pid, err = _crea_paziente_rapido(conn, cognome, nome, dn, sesso, tel)
+    if err:
+        st.error(err)
+        return
+    set_paziente_attivo(conn, pid)
+    st.rerun()
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -727,35 +763,92 @@ def header_paziente_attivo(conn) -> int | None:
     _mostra_moduli_pnev_attivi(conn, pid)
 
     with st.expander("✏️ Modifica rapida anagrafica (senza uscire da qui)"):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            n_cog = st.text_input("Cognome", value=cog, key=f"hpa_edit_cog_{pid}_{_hpa_n}")
-            n_nom = st.text_input("Nome", value=nom, key=f"hpa_edit_nom_{pid}_{_hpa_n}")
-        with c2:
-            n_dn = st.text_input("Data nascita (GG/MM/AAAA)",
-                                 value=_fmt_dn(dn) if dn else "",
-                                 key=f"hpa_edit_dn_{pid}_{_hpa_n}")
-            n_tel = st.text_input("Telefono", value=rec.get("telefono", "") or "",
-                                  key=f"hpa_edit_tel_{pid}_{_hpa_n}")
-        with c3:
-            n_ind = st.text_input("Indirizzo", value=rec.get("indirizzo", "") or "",
-                                  key=f"hpa_edit_ind_{pid}_{_hpa_n}")
-            n_email = st.text_input("Email", value=rec.get("email", "") or "",
-                                    key=f"hpa_edit_email_{pid}_{_hpa_n}")
-        if st.button("💾 Salva modifiche", key=f"hpa_edit_save_{pid}_{_hpa_n}", type="primary"):
-            errore = _salva_modifica_rapida(conn, pid, n_cog, n_nom, n_dn, n_tel,
-                                            n_ind, n_email)
-            if errore:
-                st.error(errore)
-            else:
-                st.session_state[KEY_REC] = _carica_paziente_record(conn, pid)
-                st.success("Anagrafica aggiornata.")
-                st.rerun()
+        _render_modifica_rapida(conn, pid, rec, cog, nom, dn, _hpa_n)
 
     return pid
 
 
-def _salva_modifica_rapida(conn, pid, cognome, nome, dn_str, telefono, indirizzo, email):
+def _render_modifica_rapida(conn, pid, rec, cog, nom, dn, _hpa_n):
+    from .anagrafica_controlli import (opzioni_comuni, cap_unico, separa_etichetta,
+                                       ricerca_indirizzo_ui, mostra_avvisi)
+    k = f"hpa_{pid}_{_hpa_n}"
+    opz = ["— seleziona —"] + opzioni_comuni()
+    # stato iniziale dei campi (una volta sola per paziente)
+    if f"{k}_cog" not in st.session_state:
+        _c0 = (rec.get("citta") or "").strip().upper()
+        _p0 = (rec.get("provincia") or "").strip().upper()
+        _lab = f"{_c0} ({_p0})"
+        st.session_state.update({
+            f"{k}_cog": cog, f"{k}_nom": nom,
+            f"{k}_dn": _fmt_dn(dn) if dn else "",
+            f"{k}_tel": rec.get("telefono", "") or "",
+            f"{k}_email": rec.get("email", "") or "",
+            f"{k}_ind": rec.get("indirizzo", "") or "",
+            f"{k}_cap": rec.get("cap", "") or "",
+            f"{k}_citta": _lab if _lab in opz else next(
+                (o for o in opz if _c0 and o.startswith(_c0 + " (")), opz[0]),
+        })
+        st.session_state[f"{k}_citta_prec"] = st.session_state[f"{k}_citta"]
+
+    # cambio città → CAP automatico se il comune ne ha uno solo
+    if st.session_state[f"{k}_citta"] != st.session_state.get(f"{k}_citta_prec"):
+        _c, _p = separa_etichetta(st.session_state[f"{k}_citta"])
+        _cap = cap_unico(_c, _p)
+        if _cap:
+            st.session_state[f"{k}_cap"] = _cap
+        st.session_state[f"{k}_citta_prec"] = st.session_state[f"{k}_citta"]
+
+    c1, c2, c3 = st.columns(3)
+    c1.text_input("Cognome", key=f"{k}_cog")
+    c2.text_input("Nome", key=f"{k}_nom")
+    c3.text_input("Data nascita (GG/MM/AAAA)", key=f"{k}_dn")
+    c4, c5 = st.columns(2)
+    c4.text_input("Telefono", key=f"{k}_tel")
+    c5.text_input("Email", key=f"{k}_email")
+    c6, c7 = st.columns([3, 1])
+    c6.selectbox("Città di residenza", opz, key=f"{k}_citta",
+                 help="Scrivi le prime lettere per filtrare i comuni")
+    c7.text_input("CAP", key=f"{k}_cap", max_chars=5)
+    st.text_input("Indirizzo (via, civico)", key=f"{k}_ind")
+
+    citta, prov = separa_etichetta(st.session_state[f"{k}_citta"])
+
+    def _scelto(d):
+        st.session_state[f"{k}_ind"] = d["indirizzo"]
+        if d.get("cap"):
+            st.session_state[f"{k}_cap"] = d["cap"]
+        _c, _p = (d.get("citta") or "").upper(), (d.get("prov") or "").upper()
+        _t = f"{_c} ({_p})" if _c and _p and f"{_c} ({_p})" in opz else None
+        if not _t and _c and not st.session_state[f"{k}_citta"].startswith(_c + " ("):
+            _cand = [o for o in opz if o.startswith(_c + " (")]
+            _t = _cand[0] if len(_cand) == 1 else None
+        if _t:
+            st.session_state[f"{k}_citta"] = _t
+            st.session_state[f"{k}_citta_prec"] = _t
+
+    ricerca_indirizzo_ui(k, citta, prov, _scelto)
+
+    d_dn, _ = _parse_dn(st.session_state[f"{k}_dn"])
+    mostra_avvisi(conn, cognome=st.session_state[f"{k}_cog"], nome=st.session_state[f"{k}_nom"],
+                  data_nascita=d_dn, cf=rec.get("codice_fiscale") or "",
+                  indirizzo=st.session_state[f"{k}_ind"], citta=citta, escludi_id=pid)
+
+    if st.button("💾 Salva modifiche", key=f"{k}_salva", type="primary"):
+        errore = _salva_modifica_rapida(
+            conn, pid, st.session_state[f"{k}_cog"], st.session_state[f"{k}_nom"],
+            st.session_state[f"{k}_dn"], st.session_state[f"{k}_tel"],
+            st.session_state[f"{k}_ind"], st.session_state[f"{k}_email"],
+            citta=citta.title(), provincia=prov, cap=st.session_state[f"{k}_cap"])
+        if errore:
+            st.error(errore)
+        else:
+            st.session_state[KEY_REC] = _carica_paziente_record(conn, pid)
+            st.success("Anagrafica aggiornata.")
+            st.rerun()
+
+
+def _salva_modifica_rapida(conn, pid, cognome, nome, dn_str, telefono, indirizzo, email,
+                           citta=None, provincia=None, cap=None):
     """Aggiorna i campi base dell'anagrafica dal riquadro rapido dell'header.
     Ritorna un messaggio d'errore, o None se tutto ok."""
     cognome = (cognome or "").strip()
@@ -775,6 +868,10 @@ def _salva_modifica_rapida(conn, pid, cognome, nome, dn_str, telefono, indirizzo
             "telefono=%s, indirizzo=%s, email=%s WHERE id=%s",
             (cognome, nome, data_iso, telefono.strip(), indirizzo.strip(),
              email.strip(), int(pid)))
+        if citta is not None:
+            cur.execute(
+                "UPDATE pazienti SET citta=%s, provincia=%s, cap=%s WHERE id=%s",
+                (citta or None, provincia or None, (cap or "").strip() or None, int(pid)))
         conn.commit()
         return None
     except Exception as e:

@@ -767,7 +767,7 @@ def _password_export() -> str:
 #  FORM ANAGRAFICI (riusabile in dialog nuovo + modifica)
 # ════════════════════════════════════════════════════════════════════
 
-def _form_anagrafici(key: str, r: dict | None = None) -> dict:
+def _form_anagrafici(key: str, r: dict | None = None, conn=None) -> dict:
     is_nuovo = r is None
     r = r or {}
 
@@ -792,17 +792,45 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
                               index=sesso_opts.index(sesso_val) if sesso_val in sesso_opts else 0,
                               key=f"{key}_sex")
 
-    c6b, c7b = st.columns(2)
+    # Comune di nascita scelto dall'elenco (serve anche al codice fiscale)
+    _ESTERO = "🌍 Nato/a all'estero"
+    _comuni_n = _comuni_italiani()
+    _opz_nasc = ["— seleziona —", _ESTERO] + [f"{c} ({p})" for c, p in _comuni_n]
+    _k_nasc = f"{key}_comune_nasc_sel"
+    if _k_nasc not in st.session_state:
+        _c0 = (r.get("comune_nascita") or "").strip().upper()
+        _p0 = (r.get("provincia_nascita") or "").strip().upper()
+        _lab = f"{_c0} ({_p0})"
+        if _p0 == "EE" and _c0:
+            st.session_state[_k_nasc] = _ESTERO
+        elif _lab in _opz_nasc:
+            st.session_state[_k_nasc] = _lab
+        else:
+            st.session_state[_k_nasc] = next(
+                (o for o in _opz_nasc if _c0 and o.startswith(_c0 + " (")), _opz_nasc[0])
+    c6b, c7b = st.columns([3, 1])
     with c6b:
-        comune_nascita = st.text_input("Comune di nascita *",
-                                       value=r.get("comune_nascita", "") or "",
-                                       key=f"{key}_comune_nasc",
-                                       placeholder="Es. Pagani")
-    with c7b:
-        prov_nascita = st.text_input("Prov. di nascita *",
-                                     value=r.get("provincia_nascita", "") or "",
-                                     key=f"{key}_prov_nasc",
-                                     max_chars=2, placeholder="Es. SA").upper()
+        _sel_nasc = st.selectbox("Comune di nascita *", _opz_nasc, key=_k_nasc,
+                                 help="Scrivi le prime lettere per filtrare i comuni")
+    if _sel_nasc == _ESTERO:
+        with c7b:
+            prov_nascita = "EE"
+            st.text_input("Prov.", value="EE", disabled=True, key=f"{key}_prov_nasc_ee")
+        comune_nascita = st.text_input(
+            "Stato di nascita *",
+            value=(r.get("comune_nascita", "") or "") if (r.get("provincia_nascita") or "").upper() == "EE" else "",
+            key=f"{key}_stato_nasc", placeholder="Es. Romania")
+        st.caption("Per i nati all'estero il codice fiscale va inserito a mano.")
+    elif " (" in _sel_nasc:
+        comune_nascita = _sel_nasc.rsplit(" (", 1)[0].title()
+        prov_nascita = _sel_nasc.rsplit(" (", 1)[1].rstrip(")")
+        with c7b:
+            st.text_input("Prov.", value=prov_nascita, disabled=True,
+                          key=f"{key}_prov_nasc_v_{prov_nascita}")
+    else:
+        comune_nascita, prov_nascita = "", ""
+        with c7b:
+            st.text_input("Prov.", value="", disabled=True, key=f"{key}_prov_nasc_vuota")
 
     # Auto-generazione CF: appena cognome/nome/data/sesso/comune/prov nascita
     # sono tutti compilati, calcolo il CF PRIMA di istanziare il suo widget
@@ -1028,6 +1056,32 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     with c10:
         st.text_input("Prov.", key=prov_view_key, disabled=True, max_chars=2)
 
+    # ── Ricerca dell'indirizzo (Google o OpenStreetMap) ──
+    def _indirizzo_scelto(d: dict) -> None:
+        st.session_state[f"{key}_ind"] = d["indirizzo"]
+        st.session_state[last_indirizzo_key] = d["indirizzo"]
+        if d.get("cap"):
+            st.session_state[f"{key}_cap"] = d["cap"]
+            st.session_state[last_cap_key] = d["cap"]
+        # se l'indirizzo è in un altro comune, aggiorno anche la città
+        _c, _p = (d.get("citta") or "").strip().upper(), (d.get("prov") or "").strip().upper()
+        _target = None
+        if _c and _p and f"{_c} ({_p})" in opzioni:
+            _target = f"{_c} ({_p})"
+        elif _c and not (st.session_state.get(citta_sel_key, "").startswith(_c + " (")):
+            _cand = [o for o in opzioni if o.startswith(_c + " (")]
+            _target = _cand[0] if len(_cand) == 1 else None
+        if _target:
+            st.session_state[citta_sel_key] = _target
+            st.session_state[last_citta_key] = _target
+        st.session_state[cap_status_key] = "✓ Indirizzo e CAP dalla ricerca"
+
+    try:
+        from .anagrafica_controlli import ricerca_indirizzo_ui
+        ricerca_indirizzo_ui(key, citta, prov, _indirizzo_scelto)
+    except Exception as _e:
+        st.caption(f"Ricerca indirizzo non disponibile: {_e}")
+
     if not is_nuovo:
         stati = ["ATTIVO", "SOSPESO", "ARCHIVIATO"]
         stato_val = r.get("stato_paziente", "ATTIVO") or "ATTIVO"
@@ -1037,12 +1091,25 @@ def _form_anagrafici(key: str, r: dict | None = None) -> dict:
     else:
         stato = "ATTIVO"
 
+    # ── Doppioni e stessa famiglia (avvisi in tempo reale) ──
+    doppioni = []
+    _conn = conn
+    if _conn is not None:
+        try:
+            from .anagrafica_controlli import mostra_avvisi
+            doppioni = mostra_avvisi(
+                _conn, cognome=cognome, nome=nome, data_nascita=_parse_data(data_str),
+                cf=cf, indirizzo=st.session_state.get(f"{key}_ind", indirizzo),
+                citta=citta, escludi_id=r.get("id"))
+        except Exception:
+            doppioni = []
+
     return {
         "cognome": cognome, "nome": nome, "data_str": data_str,
         "sesso": sesso, "cf": cf, "tel": tel, "tel_fisso": tel_fisso, "email": email,
         "comune_nascita": comune_nascita, "prov_nascita": prov_nascita,
         "indirizzo": indirizzo, "cap": cap, "citta": citta, "prov": prov,
-        "stato": stato, "_is_nuovo": is_nuovo,
+        "stato": stato, "_is_nuovo": is_nuovo, "_doppioni": doppioni,
     }
 
 
@@ -1371,9 +1438,8 @@ def _dialog_modifica(conn, paz_id: int):
         st.info(f"{emoji} **Percorso PNEV suggerito: {fascia}** — vai su "
                f"*🧠 Valutazione e Trattamento PNEV → {voce_menu}* per la valutazione di ingresso.")
 
-    _mostra_nucleo_familiare(conn, paz_id, rec.get("indirizzo", ""), rec.get("citta", ""))
 
-    dati = _form_anagrafici(f"mp_{paz_id}", rec)
+    dati = _form_anagrafici(f"mp_{paz_id}", rec, conn)
 
     try:
         from .stampa_helper import scheda_stampabile_html, bottone_stampa
@@ -1468,7 +1534,13 @@ def _dialog_modifica(conn, paz_id: int):
 @st.dialog("Nuovo paziente", width="large")
 def _dialog_nuovo(conn):
     st.markdown("Inserisci i dati del nuovo paziente.")
-    dati = _form_anagrafici("np")
+    dati = _form_anagrafici("np", None, conn)
+    _dop_certi = [d for d in dati.get("_doppioni", []) if d["certo"]]
+    _conferma_diverso = True
+    if _dop_certi:
+        _conferma_diverso = st.checkbox(
+            "Ho controllato: è una persona diversa, salva comunque",
+            key="np_conferma_doppione")
     st.markdown("##### Privacy e consensi")
     consenso_dati = _form_privacy("np_priv")
     st.markdown("---")
@@ -1499,6 +1571,9 @@ def _dialog_nuovo(conn):
             st.error("Campi obbligatori mancanti: " + ", ".join(_mancanti))
         elif not consenso_dati["consenso_tratt"]:
             st.error("Il consenso al trattamento dati è obbligatorio.")
+        elif not _conferma_diverso:
+            st.error("Questo paziente sembra già in archivio (vedi l'avviso sopra). "
+                     "Se è davvero una persona diversa, spunta la conferma.")
         else:
             dati["tipo_privacy"] = consenso_dati["tipo"]
             paz_id = _salva_nuovo(conn, dati)
