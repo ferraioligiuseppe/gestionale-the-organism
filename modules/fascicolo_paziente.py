@@ -25,7 +25,7 @@ ETICHETTE = {
     "anamnesi_prima_infanzia": ("Anamnesi (gravidanza, prima infanzia)", "📋 Anamnesi PNEV"),
     "anamnesi_sviluppo": ("Anamnesi (dopo i 2 anni)", "📋 Anamnesi PNEV"),
     "anamnesi": ("Anamnesi PNEV (vecchia)", "📋 Anamnesi PNEV"),
-    "inpp_valutazioni": ("INPP — riflessi e sviluppo neurologico", "🧬 INPP — Valutazione diagnostica"),
+    "inpp_valutazioni": ("Profilo neuro-evolutivo (neuro-psico-motorio)", "🧬 Profilo Neuro-Evolutivo"),
     "valutazioni_visive": ("Valutazione visuo-percettiva", "👁️ Valutazione visuo-percettiva"),
     "dem_risultati": ("DEM", "🔢 DEM interattivo"),
     "getman_risultati": ("Getman", None),
