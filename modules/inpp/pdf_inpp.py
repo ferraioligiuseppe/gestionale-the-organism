@@ -123,8 +123,8 @@ def _build_intestazione(stili, paziente_nome, data_valutazione, terapista, motiv
         "Dott. Giuseppe Ferraioli — Psicologo Optometrista Comportamentale",
         ParagraphStyle("stintest2", parent=stili["small"], alignment=TA_CENTER, spaceAfter=14),
     ))
-    out.append(Paragraph("Valutazione Diagnostica dello Sviluppo Neurologico", stili["title"]))
-    out.append(Paragraph("Metodo INPP — Formulario rev. 01/22", stili["subtitle"]))
+    out.append(Paragraph("Profilo Neuro-Evolutivo PNEV", stili["title"]))
+    out.append(Paragraph("Valutazione della maturità neuro-psico-motoria — prove in parte adattate dal protocollo INPP (rev. 01/22)", stili["subtitle"]))
 
     # Dati paziente
     rows = [
@@ -262,7 +262,7 @@ def genera_pdf_referto(
         buf, pagesize=A4,
         leftMargin=18 * mm, rightMargin=18 * mm,
         topMargin=18 * mm, bottomMargin=18 * mm,
-        title=f"Referto INPP — {paziente_nome}",
+        title=f"Profilo Neuro-Evolutivo PNEV — {paziente_nome}",
     )
     stili = _styles()
     story = []

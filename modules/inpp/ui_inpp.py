@@ -107,13 +107,12 @@ def render_inpp(conn, paziente_id: int, paziente_nome: str) -> None:
     """
     db_inpp.ensure_schema(conn)
 
+    st.markdown("## 🧬 Profilo Neuro-Evolutivo PNEV")
     st.markdown(
-        "## 🧬 INPP — Valutazione Diagnostica dello Sviluppo Neurologico"
+        "**Valutazione della maturità neuro-psico-motoria** — "
+        "segni neurologici minori e integrazione sensomotoria."
     )
-    st.caption(
-        "Formulario INPP rev. 01/22 — 10 sezioni, ~150 prove. "
-        "I totali per sezione vengono calcolati automaticamente solo sulle prove con scoring 0–4."
-    )
+    st.caption("Prove in parte adattate dal protocollo INPP (formulario rev. 01/22).")
 
     # Stato: stiamo editando una valutazione? (None = lista)
     edit_key = f"_inpp_edit_{paziente_id}"
@@ -138,23 +137,104 @@ def _render_lista(conn, paziente_id: int, paziente_nome: str, edit_key: str):
     """Mostra le valutazioni esistenti + bottone nuova."""
     st.divider()
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown(f"### Valutazioni di **{paziente_nome}**")
-    with col2:
-        if st.button("➕ Nuova valutazione", type="primary", use_container_width=True):
-            st.session_state[edit_key] = "new"
-            st.rerun()
-
     valutazioni = db_inpp.lista_valutazioni(conn, paziente_id)
+    ultima = None
+    if valutazioni:
+        ultima = db_inpp.carica_valutazione(conn, valutazioni[0]["id"]) or None
+
+    # ── Stato generale + azione principale (una sola) ────────────────
+    stati = _stato_sezioni((ultima or {}).get("risultati") or {})
+    n_complete = sum(1 for x in stati.values() if x["stato"] == "completa")
+
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        if ultima:
+            st.markdown(
+                f"### Profilo del {ultima['data_valutazione'].strftime('%d/%m/%Y')}"
+            )
+            st.caption(f"{n_complete} " + ("sezione completa" if n_complete == 1 else "sezioni complete") + f" su {len(PROTOCOLLO_INPP)}")
+            st.progress(n_complete / len(PROTOCOLLO_INPP))
+        else:
+            st.markdown("### Nessun profilo ancora")
+            st.caption(
+                "Il profilo si compila sezione per sezione, anche in più sedute: "
+                "puoi salvare e riprendere quando vuoi."
+            )
+    with col2:
+        if ultima:
+            if st.button("▶ Continua il profilo", type="primary",
+                         use_container_width=True, key="np_continua"):
+                st.session_state[edit_key] = ultima["id"]
+                st.rerun()
+            if st.button("➕ Nuovo profilo", use_container_width=True, key="np_nuovo"):
+                st.session_state[edit_key] = "new"
+                st.rerun()
+        else:
+            if st.button("▶ Inizia il profilo", type="primary",
+                         use_container_width=True, key="np_inizia"):
+                st.session_state[edit_key] = "new"
+                st.rerun()
+
+    # ── Mappa delle 10 sezioni ───────────────────────────────────────
+    st.markdown("#### Mappa delle sezioni")
+    _render_mappa(stati, (ultima or {}).get("riepilogo") or {})
 
     if not valutazioni:
-        st.info("Nessuna valutazione INPP registrata per questo paziente.")
         return
 
-    st.markdown(f"**{len(valutazioni)}** valutazione/i registrata/e.")
-    st.caption("")
+    # ── Storico profili ──────────────────────────────────────────────
+    st.markdown("")
+    with st.expander(f"🗂 Storico profili ({len(valutazioni)})",
+                     expanded=len(valutazioni) > 1):
+        _render_storico_profili(conn, valutazioni, edit_key)
 
+
+_ICONA_STATO = {"da_fare": "⚪", "in_corso": "🟡", "completa": "🟢"}
+_TESTO_STATO = {"da_fare": "da fare", "in_corso": "in corso", "completa": "completa"}
+
+
+def _valore_compilato(v) -> bool:
+    return v is not None and v != "" and v != "—"
+
+
+def _stato_sezioni(risultati: dict) -> dict[str, dict]:
+    """Per ogni sezione: prove compilate / totali e stato (da fare, in corso, completa)."""
+    out = {}
+    for sezione in PROTOCOLLO_INPP:
+        ids = [p["id"] for g in sezione["gruppi"] for p in g["prove"]]
+        fatte = sum(1 for pid in ids if _valore_compilato(risultati.get(pid)))
+        if fatte == 0:
+            stato = "da_fare"
+        elif fatte >= len(ids):
+            stato = "completa"
+        else:
+            stato = "in_corso"
+        out[sezione["id"]] = {"fatte": fatte, "totali": len(ids), "stato": stato}
+    return out
+
+
+def _render_mappa(stati: dict, riepilogo: dict) -> None:
+    """Griglia 5×2 di schede: una per sezione, con stato e indice di immaturità."""
+    sezioni = list(PROTOCOLLO_INPP)
+    for inizio in range(0, len(sezioni), 5):
+        cols = st.columns(5)
+        for col, sezione in zip(cols, sezioni[inizio:inizio + 5]):
+            info = stati[sezione["id"]]
+            with col, st.container(border=True):
+                st.markdown(f"{sezione.get('icon', '•')} **{_short_label(sezione['label'])}**")
+                st.caption(
+                    f"{_ICONA_STATO[info['stato']]} {_TESTO_STATO[info['stato']]} · "
+                    f"{info['fatte']}/{info['totali']}"
+                )
+                r = riepilogo.get(sezione["id"])
+                if r and info["fatte"]:
+                    st.caption(f"Immaturità: **{r.get('perc', 0)}%**")
+                elif sezione.get("no_total"):
+                    st.caption("osservazione qualitativa")
+
+
+def _render_storico_profili(conn, valutazioni: list, edit_key: str) -> None:
+    """Elenco dei profili salvati (apri / elimina)."""
     for v in valutazioni:
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([2, 2, 3, 2])
@@ -257,10 +337,10 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
     # Header con bottone indietro
     col_h1, col_h2 = st.columns([4, 1])
     with col_h1:
-        titolo = "Nuova valutazione" if val_id is None else f"Valutazione del {val_caricata['data_valutazione'].strftime('%d/%m/%Y')}"
+        titolo = "Nuovo profilo" if val_id is None else f"Profilo del {val_caricata['data_valutazione'].strftime('%d/%m/%Y')}"
         st.markdown(f"### {titolo} — {paziente_nome}")
     with col_h2:
-        if st.button("← Lista", use_container_width=True):
+        if st.button("← Panoramica", use_container_width=True):
             st.session_state[edit_key] = None
             st.rerun()
 
@@ -417,7 +497,7 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
                     st.download_button(
                         label="Scarica PDF",
                         data=pdf_bytes,
-                        file_name=f"INPP_{paziente_nome.replace(' ', '_')}_{data_val.strftime('%Y%m%d')}.pdf",
+                        file_name=f"Profilo_Neuro-Evolutivo_{paziente_nome.replace(' ', '_')}_{data_val.strftime('%Y%m%d')}.pdf",
                         mime="application/pdf",
                         key=f"dl_{val_id}",
                     )
@@ -429,14 +509,14 @@ def _render_editor(conn, paziente_id: int, paziente_nome: str,
             st.caption("Salva prima per generare il PDF.")
 
     if val_id is not None:
-        if st.button("📝 Genera la diagnosi con questa valutazione", use_container_width=True,
+        if st.button("📝 Genera la diagnosi con questo profilo", use_container_width=True,
                      key=f"diag_{val_id}"):
             st.session_state.pop(f"diag_storico_{paziente_id}", None)
             st.session_state["goto_area"] = "👥 Pazienti"
             st.session_state["goto_sotto"] = "📝 Diagnosi assistita"
             st.session_state["paziente_attivo_id"] = paziente_id
             st.rerun()
-        st.caption("La diagnosi legge l'ultima valutazione INPP salvata, insieme ad anamnesi, "
+        st.caption("La diagnosi legge l'ultimo profilo neuro-evolutivo salvato, insieme ad anamnesi, "
                    "valutazione visiva e uditiva, documenti e colloqui.")
 
     # ----- Storico modifiche (solo se la valutazione esiste già) -----
