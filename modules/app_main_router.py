@@ -403,7 +403,7 @@ def _assistente_coda(conn, paz_id):
 from .app_menu import AREA_PNEV as _AREA_PNEV_SEQ
 
 _PROSSIMO_PASSO = {
-    "🧬 INPP — Valutazione diagnostica": (
+    "🧬 Profilo Neuro-Evolutivo": (
         _AREA_PNEV_SEQ, "👁️ Valutazione visuo-percettiva",
         "▶ Passo successivo: Valutazione visiva"),
     "👁️ Valutazione visuo-percettiva": (
@@ -424,7 +424,7 @@ def _bottone_prossimo_passo(conn, paz_id, sotto_corrente):
         return
     area_dest, sotto_dest, etichetta = dest
     st.markdown("---")
-    if st.button(etichetta, key=f"prossimo_{sotto_corrente}", type="primary",
+    if st.button(etichetta, key=f"prossimo_{sotto_corrente}",
                 use_container_width=True):
         st.session_state["goto_area"] = area_dest
         st.session_state["goto_sotto"] = sotto_dest
@@ -436,7 +436,7 @@ def _bottone_prossimo_passo(conn, paz_id, sotto_corrente):
 # ognuno: si vede dove si e', cosa e' gia' fatto, e si salta a un passo.
 _PERCORSO = [
     ("Anamnesi", _AREA_PNEV_SEQ, "📋 Anamnesi PNEV"),
-    ("Riflessi (INPP)", _AREA_PNEV_SEQ, "🧬 INPP — Valutazione diagnostica"),
+    ("Neuro-evolutivo", _AREA_PNEV_SEQ, "🧬 Profilo Neuro-Evolutivo"),
     ("Visiva", _AREA_PNEV_SEQ, "👁️ Valutazione visuo-percettiva"),
     ("Uditiva", _AREA_PNEV_SEQ, "📊 Audiometria funzionale"),
     ("Diagnosi", "👥 Pazienti", "📝 Diagnosi assistita"),
@@ -446,7 +446,7 @@ _PERCORSO = [
 def _passo_fatto(conn, paz_id, sotto):
     sql = {
         "📋 Anamnesi PNEV": "SELECT 1 FROM anamnesi_prima_infanzia WHERE paziente_id=%s LIMIT 1",
-        "🧬 INPP — Valutazione diagnostica": "SELECT 1 FROM inpp_valutazioni WHERE paziente_id=%s LIMIT 1",
+        "🧬 Profilo Neuro-Evolutivo": "SELECT 1 FROM inpp_valutazioni WHERE paziente_id=%s LIMIT 1",
         "📝 Diagnosi assistita": "SELECT 1 FROM diagnosi_assistita WHERE paziente_id=%s LIMIT 1",
     }.get(sotto)
     if not sql:
@@ -534,7 +534,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "👁️ Eye tracking",
         "🩶 Postura (Wii Balance Board)",
         "⚡ Protocollo Epilessia",
-        "🧬 INPP — Valutazione diagnostica", "🗣️ Logopedia / SMOF",
+        "🧬 Profilo Neuro-Evolutivo", "🗣️ Logopedia / SMOF",
         "🔤 Impostazione fonemi",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
@@ -913,7 +913,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         except ImportError as e:
             st.error(f"Modulo FE non disponibile: {e}")
         return True
-    if sotto == "🧬 INPP — Valutazione diagnostica":
+    if sotto == "🧬 Profilo Neuro-Evolutivo":
         try:
             from .inpp import render_inpp
             cur2 = conn.cursor()
@@ -1678,7 +1678,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Errore valutazione visuo-percettiva: {e}")
                 import traceback; st.code(traceback.format_exc())
             return
-        if sotto == "🧬 INPP — Valutazione diagnostica":
+        if sotto == "🧬 Profilo Neuro-Evolutivo":
             try:
                 from .inpp import render_inpp
                 cur2 = conn.cursor()

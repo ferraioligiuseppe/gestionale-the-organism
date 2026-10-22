@@ -90,7 +90,7 @@ AREE_ORDINE = [
 PNEV_RAMI = {
     "🧬 Riflessi primitivi": [
         "📋 Anamnesi PNEV",
-        "🧬 INPP — Valutazione diagnostica",
+        "🧬 Profilo Neuro-Evolutivo",
     ],
     "👁️ Visiva": [
         "👁️ Anamnesi visiva",
