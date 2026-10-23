@@ -23,6 +23,11 @@ import streamlit as st
 # ════════════════════════════════════════════════════════════════════
 
 def _parse_data(s: str):
+    try:
+        from .anagrafica_controlli import normalizza_data
+        s = normalizza_data(s)
+    except Exception:
+        pass
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
         try:
             return datetime.datetime.strptime(s.strip(), fmt).date()
@@ -781,10 +786,14 @@ def _form_anagrafici(key: str, r: dict | None = None, conn=None) -> dict:
 
     c3, c4 = st.columns(2)
     with c3:
+        from .anagrafica_controlli import formatta_data_cb
         data_str = st.text_input("Data nascita",
                                    value=_fmt_dn(r.get("data_nascita", "")),
                                    key=f"{key}_dn",
-                                   placeholder="GG/MM/AAAA")
+                                   placeholder="Solo numeri, es. 10101960",
+                                   on_change=formatta_data_cb(f"{key}_dn"))
+        if data_str.strip() and not _parse_data(data_str):
+            st.caption("⚠️ Data non valida: scrivi giorno, mese e anno, es. 10101960")
     with c4:
         sesso_opts = ["M", "F", "Altro"]
         sesso_val = r.get("sesso", "M") or "M"

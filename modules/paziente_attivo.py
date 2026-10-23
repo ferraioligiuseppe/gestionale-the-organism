@@ -256,6 +256,11 @@ def _parse_dn(s):
     s = (s or "").strip()
     if not s:
         return None, None
+    try:
+        from .anagrafica_controlli import normalizza_data
+        s = normalizza_data(s)
+    except Exception:
+        pass
     for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d/%m/%y"):
         try:
             return datetime.datetime.strptime(s, fmt).date(), None
@@ -308,7 +313,8 @@ def _form_nuovo_paziente(conn, key_suffix=None):
         cognome = c1.text_input("Cognome *", key=f"np_cognome_{ks}")
         nome = c2.text_input("Nome *", key=f"np_nome_{ks}")
         c3, c4 = st.columns(2)
-        dn = c3.text_input("Data nascita (GG/MM/AAAA)", key=f"np_dn_{ks}")
+        dn = c3.text_input("Data nascita", key=f"np_dn_{ks}",
+                           placeholder="Solo numeri, es. 10101960")
         sesso = c4.selectbox("Sesso", ["", "M", "F"], key=f"np_sesso_{ks}")
         tel = st.text_input("Telefono", key=f"np_tel_{ks}")
         ok = st.form_submit_button("➕ Crea e seleziona", type="primary",
@@ -801,7 +807,9 @@ def _render_modifica_rapida(conn, pid, rec, cog, nom, dn, _hpa_n):
     c1, c2, c3 = st.columns(3)
     c1.text_input("Cognome", key=f"{k}_cog")
     c2.text_input("Nome", key=f"{k}_nom")
-    c3.text_input("Data nascita (GG/MM/AAAA)", key=f"{k}_dn")
+    from .anagrafica_controlli import formatta_data_cb
+    c3.text_input("Data nascita", key=f"{k}_dn", placeholder="Solo numeri, es. 10101960",
+                  on_change=formatta_data_cb(f"{k}_dn"))
     c4, c5 = st.columns(2)
     c4.text_input("Telefono", key=f"{k}_tel")
     c5.text_input("Email", key=f"{k}_email")
