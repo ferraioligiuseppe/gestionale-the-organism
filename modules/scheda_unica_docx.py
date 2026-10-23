@@ -129,6 +129,9 @@ class Scheda:
 
     # ── elementi ──
     def titolo_parte(self, numero, testo, nota=None, nuova_pagina=True):
+        if getattr(self, "_prima_parte", False):
+            nuova_pagina = False
+            self._prima_parte = False
         if nuova_pagina:
             self.doc.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
         p = self.doc.add_paragraph()
@@ -466,6 +469,32 @@ def _sintesi(s: Scheda):
     s.campi(["Data", "Firma del professionista", "Firma del paziente / genitore", "Prossimo appuntamento"])
 
 
+# Parti stampabili anche da sole (Modulistica → schede singole)
+PARTI = {
+    "anagrafica":     ("Scheda anagrafica paziente", _anagrafica),
+    "anamnesi":       ("Anamnesi PNEV", _anamnesi),
+    "profilo":        ("Profilo Neuro-Evolutivo PNEV", _profilo_neuro),
+    "visiva":         ("Valutazione visiva (acuità, refrazione, DEM, Getman, Groffman)", _visiva),
+    "uditiva":        ("Valutazione uditiva", _uditiva),
+    "apprendimenti":  ("Apprendimenti", _apprendimenti),
+    "sintesi":        ("Sintesi e percorso proposto", _sintesi),
+}
+
+
+def genera_parte(chiave: str) -> bytes:
+    """Una sola parte della scheda completa, con paziente e data in cima."""
+    titolo, funzione = PARTI[chiave]
+    s = Scheda()
+    p = s.doc.add_paragraph()
+    _testo(p, "Paziente: ", bold=True, size=9)
+    _testo(p, "_" * 42, size=9, color=GRIGIO)
+    _testo(p, "     Data: ", bold=True, size=9)
+    _testo(p, "_" * 16, size=9, color=GRIGIO)
+    s._prima_parte = True
+    funzione(s)
+    return s.salva()
+
+
 def genera_scheda_unica() -> bytes:
     s = Scheda()
     _copertina(s)
@@ -485,3 +514,94 @@ if __name__ == "__main__":
     with open(out, "wb") as f:
         f.write(genera_scheda_unica())
     print("scritto", out)
+
+
+
+# ════════════════════════════════════════════════════════════════════
+#  ANTEPRIMA: il Word mostrato come pagina web (senza programmi esterni)
+# ════════════════════════════════════════════════════════════════════
+
+def anteprima_html(docx_bytes: bytes) -> str:
+    """Converte il .docx in HTML semplice per vederlo prima di scaricarlo."""
+    import html as _h
+    from docx import Document as _D
+    from docx.table import Table as _T
+    from docx.text.paragraph import Paragraph as _P
+
+    doc = _D(io.BytesIO(docx_bytes))
+    W = qn("w:")
+
+    def run_html(r):
+        t = _h.escape(r.text or "").replace("\t", " ")
+        if not t.strip():
+            return t
+        stile = []
+        if r.font.color is not None and r.font.color.type is not None and r.font.color.rgb:
+            stile.append(f"color:#{r.font.color.rgb}")
+        if r.font.size:
+            stile.append(f"font-size:{r.font.size.pt:.1f}pt")
+        if r.bold:
+            t = f"<b>{t}</b>"
+        if r.italic:
+            t = f"<i>{t}</i>"
+        return f"<span style='{';'.join(stile)}'>{t}</span>" if stile else t
+
+    def par_html(p):
+        if any(br.get(qn("w:type")) == "page" for br in p._p.iter(qn("w:br"))):
+            return "<div class='salto'>— nuova pagina —</div>"
+        if any(r.text == "\t" and r.underline for r in p.runs):
+            return "<div class='riga'></div>"
+        corpo = "".join(run_html(r) for r in p.runs)
+        if not corpo.strip():
+            return "<div style='height:6px'></div>"
+        bordo = p._p.pPr is not None and p._p.pPr.find(qn("w:pBdr")) is not None
+        return f"<p class='{'tit' if bordo else ''}'>{corpo}</p>"
+
+    def tab_html(t):
+        righe = []
+        for tr in t._tbl.tr_lst:
+            celle = []
+            for tc in tr.tc_lst:
+                span = 1
+                tcPr = tc.tcPr
+                if tcPr is not None and tcPr.find(qn("w:gridSpan")) is not None:
+                    span = int(tcPr.find(qn("w:gridSpan")).get(qn("w:val")))
+                fill = ""
+                if tcPr is not None and tcPr.find(qn("w:shd")) is not None:
+                    f = tcPr.find(qn("w:shd")).get(qn("w:fill"))
+                    if f and f != "auto":
+                        fill = f" style='background:#{f}'"
+                testo = "".join(par_html(_P(p, t)) for p in tc.findall(qn("w:p")))
+                celle.append(f"<td colspan='{span}'{fill}>{testo}</td>")
+            righe.append("<tr>" + "".join(celle) + "</tr>")
+        bordi = " class='griglia'" if t.style is not None and "Grid" in (t.style.name or "") else ""
+        cols = ""
+        try:
+            larg = [int(g.get(qn("w:w"))) for g in t._tbl.tblGrid.findall(qn("w:gridCol"))]
+            tot = sum(larg) or 1
+            cols = "<colgroup>" + "".join(f"<col style='width:{100*x/tot:.1f}%'>" for x in larg) + "</colgroup>"
+        except Exception:
+            pass
+        return f"<table{bordi} style='table-layout:fixed'>" + cols + "".join(righe) + "</table>"
+
+    pezzi = []
+    for el in doc.element.body.iterchildren():
+        if el.tag == qn("w:p"):
+            pezzi.append(par_html(_P(el, doc)))
+        elif el.tag == qn("w:tbl"):
+            pezzi.append(tab_html(_T(el, doc)))
+    testa = "".join(par_html(p) for p in doc.sections[0].header.paragraphs)
+    piede = "".join(par_html(p) for p in doc.sections[0].footer.paragraphs)
+    css = ("<style>body{font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#222;margin:0}"
+           ".foglio{background:#fff;max-width:780px;margin:0 auto;padding:22px 30px;"
+           "box-shadow:0 1px 4px rgba(0,0,0,.15)}"
+           "p{margin:2px 0}p.tit{border-bottom:1.5px solid #1D6B44;padding-bottom:2px;margin-top:6px}"
+           "table{width:100%;border-collapse:collapse;margin:3px 0}"
+           "td{padding:2px 5px;vertical-align:top;font-size:9pt}"
+           "table.griglia td{border:1px solid #999}"
+           ".riga{border-bottom:1px solid #bbb;height:18px}"
+           ".salto{text-align:center;color:#999;font-size:8pt;border-top:2px dashed #ccc;"
+           "margin:14px 0 8px;padding-top:4px}"
+           ".piede{color:#888;font-size:7.5pt;text-align:center;margin-top:16px}</style>")
+    return (css + "<div class='foglio'>" + testa + "".join(pezzi)
+            + "<div class='piede'>" + piede + "</div></div>")
