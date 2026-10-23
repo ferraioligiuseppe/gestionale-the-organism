@@ -455,3 +455,38 @@ def separa_etichetta(lab: str) -> tuple[str, str]:
     if lab and " (" in lab and lab.endswith(")"):
         return lab.rsplit(" (", 1)[0], lab.rsplit(" (", 1)[1].rstrip(")")
     return "", ""
+
+
+# ════════════════════════════════════════════════════════════════════
+#  DATA DI NASCITA SENZA SBARRE
+# ════════════════════════════════════════════════════════════════════
+
+def normalizza_data(s) -> str:
+    """Accetta 10101960, 101060, 10.10.1960, 10-10-1960, 1/2/1960
+    e restituisce «GG/MM/AAAA». Se non riconosce il formato, la lascia com'è."""
+    s = (str(s or "")).strip()
+    if not s:
+        return ""
+    oggi = _dt.date.today()
+    cifre = re.sub(r"\D", "", s)
+    parti = [p for p in re.split(r"\D+", s) if p]
+    if len(parti) == 3:
+        g, m, a = parti
+    elif len(parti) == 1 and len(cifre) in (6, 8):
+        g, m, a = cifre[:2], cifre[2:4], cifre[4:]
+    else:
+        return s
+    if len(a) == 2:  # 60 → 1960, 15 → 2015
+        a = ("20" if int(a) <= oggi.year % 100 else "19") + a
+    try:
+        d = _dt.date(int(a), int(m), int(g))
+    except ValueError:
+        return s
+    return d.strftime("%d/%m/%Y")
+
+
+def formatta_data_cb(widget_key: str):
+    """Da usare come on_change di un campo data: mette le sbarre da solo."""
+    def _cb():
+        st.session_state[widget_key] = normalizza_data(st.session_state.get(widget_key, ""))
+    return _cb
