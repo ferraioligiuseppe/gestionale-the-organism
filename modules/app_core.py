@@ -1681,7 +1681,23 @@ def ensure_auth_schema(conn):
           last_login_at TIMESTAMPTZ
         );
         """)
-        cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1;")
+        # ALTER TABLE blocca la tabella e resta in coda se un'altra app (es. main)
+        # la sta leggendo: lo eseguo solo se la colonna manca davvero, e senza
+        # mai aspettare più di qualche secondo.
+        cur.execute(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name='auth_users' AND column_name='studio_id'")
+        if not cur.fetchone():
+            try:
+                cur.execute("SET lock_timeout = '5s'")
+                cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1;")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+            finally:
+                try: cur.execute("RESET lock_timeout")
+                except Exception: pass
         cur.execute("""
         CREATE TABLE IF NOT EXISTS auth_roles (
           id BIGSERIAL PRIMARY KEY,
@@ -1715,14 +1731,31 @@ def ensure_auth_schema(conn):
         # Se un setup precedente vi ha lasciato attivo il filtro (RLS), il login di
         # utenti di altri studi fallirebbe e la lista utenti risulterebbe parziale.
         # Qui lo disattiviamo in modo sicuro (idempotente).
-        for _t in ("auth_users", "auth_roles", "auth_user_roles", "auth_audit_log",
-                   "studi", "utenti_meta", "abbonamenti"):
+        # Solo dove l'RLS è davvero attivo (lettura del catalogo, nessun blocco).
+        conn.commit()
+        _tab_sistema = ("auth_users", "auth_roles", "auth_user_roles", "auth_audit_log",
+                        "studi", "utenti_meta", "abbonamenti")
+        try:
+            cur.execute(
+                "SELECT relname FROM pg_class WHERE relkind='r' "
+                "AND (relrowsecurity OR relforcerowsecurity) AND relname = ANY(%s)",
+                (list(_tab_sistema),))
+            _con_rls = [r["relname"] if isinstance(r, dict) else r[0] for r in cur.fetchall()]
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            _con_rls = []
+        for _t in _con_rls:
             try:
+                cur.execute("SET lock_timeout = '5s'")
                 cur.execute(f"ALTER TABLE {_t} NO FORCE ROW LEVEL SECURITY;")
                 cur.execute(f"ALTER TABLE {_t} DISABLE ROW LEVEL SECURITY;")
                 conn.commit()
             except Exception:
                 try: conn.rollback()
+                except Exception: pass
+            finally:
+                try: cur.execute("RESET lock_timeout")
                 except Exception: pass
         conn.commit()
         _AUTH_SCHEMA_READY = True
@@ -1776,7 +1809,12 @@ def _get_user_by_username(conn, username: str):
             FROM auth_users
             WHERE username = %s
         """, (username,))
-        return cur.fetchone()
+        _riga = cur.fetchone()
+        # chiudo subito la transazione: una lettura lasciata aperta tiene
+        # bloccata auth_users e fa andare in timeout le altre app (es. test)
+        try: conn.commit()
+        except Exception: pass
+        return _riga
     except Exception:
         try: conn.rollback()
         except Exception: pass
