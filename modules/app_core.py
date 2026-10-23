@@ -1798,46 +1798,40 @@ def _audit(conn, user_id: int | None, action: str, entity: str | None = None, en
         except Exception:
             pass
 
+class _LoginDBError(Exception):
+    """Il database non ha risposto durante il login (non è colpa della password)."""
+
+
 def _get_user_by_username(conn, username: str):
-    # Prima prova con studio_id (multi-tenant); se la colonna non esiste ancora,
-    # ripiega sulla query senza studio_id (studio 1 di default). Così il login
-    # funziona sempre, anche su DB non ancora migrati.
-    try:
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, username, email, password_hash, is_active, must_change_password, COALESCE(studio_id, 1)
-            FROM auth_users
-            WHERE username = %s
-        """, (username,))
-        _riga = cur.fetchone()
-        # chiudo subito la transazione: una lettura lasciata aperta tiene
-        # bloccata auth_users e fa andare in timeout le altre app (es. test)
-        try: conn.commit()
-        except Exception: pass
-        return _riga
-    except Exception:
-        try: conn.rollback()
-        except Exception: pass
-        # Auto-migrazione: prova ad aggiungere la colonna mancante, poi ripiega.
+    """Riga dell'utente o None se non esiste.
+    Se il database non risponde solleva _LoginDBError, così il login NON
+    dice «Credenziali errate» quando il problema è la connessione."""
+    sql_con = ("SELECT id, username, email, password_hash, is_active, must_change_password, "
+               "COALESCE(studio_id, 1) FROM auth_users WHERE username = %s")
+    sql_senza = ("SELECT id, username, email, password_hash, is_active, must_change_password, 1 "
+                 "FROM auth_users WHERE username = %s")
+    ultimo_errore = None
+    for tentativo in range(3):
         try:
             cur = conn.cursor()
-            cur.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS studio_id BIGINT NOT NULL DEFAULT 1")
-            conn.commit()
-        except Exception:
+            # la colonna studio_id c'è? (lettura del catalogo: nessun blocco)
+            cur.execute("SELECT 1 FROM information_schema.columns "
+                        "WHERE table_name='auth_users' AND column_name='studio_id'")
+            sql = sql_con if cur.fetchone() else sql_senza
+            cur.execute(sql, (username,))
+            riga = cur.fetchone()
+            # chiudo subito la transazione: una lettura lasciata aperta tiene
+            # bloccata auth_users e fa andare in timeout le altre app
+            try: conn.commit()
+            except Exception: pass
+            return riga
+        except Exception as e:
+            ultimo_errore = e
             try: conn.rollback()
             except Exception: pass
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT id, username, email, password_hash, is_active, must_change_password, 1
-                FROM auth_users
-                WHERE username = %s
-            """, (username,))
-            return cur.fetchone()
-        except Exception:
-            try: conn.rollback()
-            except Exception: pass
-            return None
+            import time as _t
+            _t.sleep(1.5 * (tentativo + 1))   # breve attesa e riprovo
+    raise _LoginDBError(str(ultimo_errore))
 
 def _get_roles_for_user(conn, user_id: int) -> list[str]:
     cur = conn.cursor()
@@ -2092,7 +2086,12 @@ def login(get_conn) -> bool:
                 pass
             st.rerun()
             return True  # breakglass: st.rerun() dovrebbe interrompere, ma per sicurezza
-        row = _get_user_by_username(conn, username.strip().lower())
+        try:
+            row = _get_user_by_username(conn, username.strip().lower())
+        except _LoginDBError:
+            st.warning("⏳ Il database in questo momento non risponde: la password non c'entra. "
+                       "Riprova tra qualche secondo.")
+            return False
         if not row:
             st.error("Credenziali errate.")
             _audit(conn, None, "LOGIN_FAIL", meta={"username": username.strip()})
