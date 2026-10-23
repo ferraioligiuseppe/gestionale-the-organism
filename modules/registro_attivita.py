@@ -54,8 +54,24 @@ def _esegui(conn, sql, par=()):
         return False
 
 
+def nome_utente(v) -> str:
+    """Nome leggibile dell'utente. In session_state «user» è un dizionario
+    (id, username, profilo…): prima veniva salvato tutto intero nel registro.
+    Qui si tiene solo il nome, e si ripuliscono anche le righe vecchie."""
+    if isinstance(v, dict):
+        return str(v.get("display_name") or v.get("username") or "")
+    s = str(v or "")
+    if s.startswith("{") and "username" in s:
+        import re
+        for campo in ("display_name", "username"):
+            m = re.search(r"'" + campo + r"':\s*'([^']*)'", s)
+            if m and m.group(1):
+                return m.group(1)
+    return s
+
+
 def _utente():
-    return str(st.session_state.get("username") or st.session_state.get("user") or "")
+    return nome_utente(st.session_state.get("username") or st.session_state.get("user") or "")
 
 
 def _tabella(conn):
@@ -284,7 +300,7 @@ def cronologia(conn, paz_id, limite=300):
     _tabella(conn)
     for r in _q(conn, "SELECT quando, utente, azione, dettaglio, tabella, operazione, riga_id FROM registro_attivita "
                       "WHERE paziente_id=%s ORDER BY quando DESC LIMIT %s", (int(paz_id), limite)):
-        ev.append({"quando": r["quando"], "chi": r.get("utente") or "", "fonte": r.get("tabella") or "registro",
+        ev.append({"quando": r["quando"], "chi": nome_utente(r.get("utente")), "fonte": r.get("tabella") or "registro",
                    "cosa": descrivi(r), "riga": r.get("riga_id"), "op": r.get("operazione")})
     inizio = _q(conn, "SELECT MIN(quando) AS t FROM registro_attivita WHERE tabella IS NOT NULL")
     inizio = inizio[0]["t"] if inizio and inizio[0].get("t") else None
@@ -422,7 +438,7 @@ def render_cronologia(conn, paz_id):
             nome = f"{(x.get('cognome') or '').title()} {(x.get('nome') or '').title()}".strip() \
                 or (f"ID {x['paziente_id']}" if x.get("paziente_id") else "—")
             st.markdown(f"`{_fmt(x['quando'], ora=True)}` · **{nome}** · {descrivi(x)}"
-                        + (f" · _{x['utente']}_" if x.get("utente") else " · _utente non registrato_"))
+                        + (f" · _{nome_utente(x['utente'])}_" if x.get("utente") else " · _utente non registrato_"))
         with st.expander("🛡️ Tracciamento dei moduli"):
             tutte, gia = stato_tracciamento(conn)
             mancano = [t for t in tutte if t not in gia]
@@ -449,7 +465,7 @@ def render_cronologia(conn, paz_id):
     c2.metric("Aperto l'ultima volta", _fmt(aperture[0]["quando"], ora=True) if aperture
               else _fmt(rec.get("ultimo_accesso"), ora=True))
     if aperture and aperture[0].get("utente"):
-        c2.caption("da " + aperture[0]["utente"])
+        c2.caption("da " + nome_utente(aperture[0]["utente"]))
     c3.metric("Apertura precedente", _fmt(aperture[1]["quando"], ora=True) if len(aperture) > 1 else "—")
 
     ev = _compatta(cronologia(conn, paz_id))

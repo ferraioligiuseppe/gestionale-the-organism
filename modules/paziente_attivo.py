@@ -731,7 +731,7 @@ def header_paziente_attivo(conn) -> int | None:
     # stata aperta l'ultima volta prima di adesso (da chi).
     _date_scheda = ""
     try:
-        from .registro_attivita import data_registrazione, _q as _rq, _fmt as _rfmt
+        from .registro_attivita import data_registrazione, _q as _rq, _fmt as _rfmt, nome_utente as _nu
         _reg, _ok = data_registrazione(conn, rec)
         _ap = _rq(conn, "SELECT quando, utente FROM registro_attivita WHERE paziente_id=%s "
                         "AND azione='Scheda aperta' ORDER BY quando DESC LIMIT 2", (int(pid),))
@@ -744,7 +744,7 @@ def header_paziente_attivo(conn) -> int | None:
                       if _pc else ["nessuna attività registrata"])
         if len(_ap) > 1:
             _parti.append(f"aperto in precedenza il {_rfmt(_ap[1]['quando'], ora=True)}"
-                          + (f" da {_ap[1]['utente']}" if _ap[1].get("utente") else ""))
+                          + (f" da {_nu(_ap[1]['utente'])}" if _ap[1].get("utente") else ""))
         _date_scheda = " · ".join(_parti)
     except Exception:
         _date_scheda = ""
