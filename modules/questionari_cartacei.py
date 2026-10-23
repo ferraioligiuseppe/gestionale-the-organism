@@ -461,7 +461,19 @@ def render_questionari_cartacei(conn=None, paz_id=None):
     st.caption("Stesse domande della versione online, su carta intestata, da stampare o inviare. "
                "Le risposte date su carta vanno poi trascritte nel questionario online per entrare "
                "nella relazione.")
-    per = st.radio("Per", ["Tutti", "Bambini (genitori)", "Adulti"], horizontal=True, key="qc_per")
+    _idx = 0
+    try:
+        from .filtro_eta import eta_paziente
+        _eta = eta_paziente(conn, paz_id) if conn is not None else None
+        if _eta is not None:
+            _idx = 2 if _eta >= 17 else 1
+    except Exception:
+        _eta = None
+    _k_per = f"qc_per_{paz_id or 0}"
+    per = st.radio("Per", ["Tutti", "Bambini (genitori)", "Adulti"], horizontal=True,
+                   index=_idx, key=_k_per)
+    if _eta is not None and _idx and per != "Tutti":
+        st.caption(f"Scelto in base all'età del paziente ({_eta} anni).")
 
     def _ok(k):
         if per == "Bambini (genitori)":

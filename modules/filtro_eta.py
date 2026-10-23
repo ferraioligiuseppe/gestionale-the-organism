@@ -26,10 +26,10 @@ REGOLE_ETA: dict[str, tuple[int | None, int | None]] = {
     # Screening: la fascia è nel nome, seguirla è il minimo
     "🧸 Screening 0-4 anni":            (None, 5),
     "🩺 Screening breve (20 min)":      (None, 16),   # cinque fasce, dalla nascita ai 16 anni
-    "🧑 Screening adulti — funzionale":  (17, 64),     # dai 65 anni: PNEV Argento
-    "🧠 Screening adulti — neurologico": (17, 64),
-    "🧑 Valutazione adulti — funzionale completa": (17, 64),
-    "🧠 Valutazione adulti — neurologica completa": (17, 64),
+    "🧑 Screening adulti — funzionale":  (17, None),   # anche over 65
+    "🧠 Screening adulti — neurologico": (17, None),
+    "🧑 Valutazione adulti — funzionale completa": (17, None),
+    "🧠 Valutazione adulti — neurologica completa": (17, None),
     "🩺 Screening completo":            (6, None),
 
     # Apprendimenti: richiedono che il bambino sia scolarizzato
@@ -47,7 +47,117 @@ REGOLE_ETA: dict[str, tuple[int | None, int | None]] = {
 
     # Sport Vision: serve capire la consegna e reggere il ritmo
     "🏃 PNEV Sport Vision":             (8, None),
+
+    # Visiva: test con norme per l'età evolutiva
+    "👁️ Getman (manipolazione visiva)":  (None, 14),
+    "👁️ Groffman (visual tracing)":      (7, None),
+
+    # Bambini scolarizzati / età evolutiva
+    "✍️ Giochiamo imparando (prove touch)": (None, 12),
+    "🔤 MAPS-Read":                     (6, None),
+    "📚 Strumenti open":                (6, None),
+    "🤸 Psicomotricità funzionale":      (None, 12),
+    "🔤 Impostazione fonemi":           (None, 12),
 }
+
+# ── Fasce d'età e percorso di valutazione consigliato ──────────────────
+# Il percorso compare in cima alle schermate di valutazione (pulsanti
+# 1 · … 2 · …) e guida il «Passo successivo» in fondo alla pagina.
+# Ogni passo: (nome breve, area del menu, voce del menu, età minima).
+
+def fascia_eta(eta: int | None) -> str | None:
+    if eta is None:
+        return None
+    if eta <= 4:
+        return "0-4"
+    if eta <= 16:
+        return "bambino"
+    if eta <= 64:
+        return "adulto"
+    return "over65"
+
+
+NOME_FASCIA = {"0-4": "0–4 anni", "bambino": "5–16 anni",
+               "adulto": "17–64 anni", "over65": "over 65"}
+
+
+def percorso_valutazione(eta: int | None) -> list[tuple[str, str, str]]:
+    """[(nome breve, area, voce)] del percorso consigliato per l'età."""
+    from .app_menu import AREA_PNEV, AREA_SCREENING
+    A = "👥 Pazienti"
+    diagnosi = ("Diagnosi", A, "📝 Diagnosi assistita")
+    neuro = ("Neuro-evolutivo", AREA_PNEV, "🧬 Profilo Neuro-Evolutivo")
+    visiva = ("Visiva", AREA_PNEV, "👁️ Valutazione visuo-percettiva")
+    uditiva = ("Uditiva", AREA_PNEV, "📊 Audiometria funzionale")
+    anamnesi = ("Anamnesi", AREA_PNEV, "📋 Anamnesi PNEV")
+    fascia = fascia_eta(eta)
+    if fascia == "0-4":
+        return [anamnesi, ("Screening 0-4", AREA_SCREENING, "🧸 Screening 0-4 anni"),
+                neuro, ("Screening uditivo", AREA_SCREENING, "🎧 Screening uditivo"), diagnosi]
+    if fascia == "bambino":
+        passi = [anamnesi, neuro, visiva, uditiva]
+        if eta >= 6:
+            passi.append(("Apprendimenti", AREA_PNEV, "📚 DSA — Apprendimento"))
+        return passi + [diagnosi]
+    if fascia in ("adulto", "over65"):
+        return [("Screening adulti", AREA_SCREENING, "🧑 Screening adulti — funzionale"),
+                neuro, visiva, uditiva, diagnosi]
+    # età sconosciuta: percorso classico
+    return [anamnesi, neuro, visiva, uditiva, diagnosi]
+
+
+# ── Questionari per età ────────────────────────────────────────────────
+# Codici dei questionari (link e cartacei). I cartacei aggiuntivi usano i
+# prefissi B_ (bambini) e A_ (adulti). Quelli non elencati valgono per tutti.
+QUESTIONARI_BAMBINI = {"INPPS", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI"}
+QUESTIONARI_ADULTI = {"INPPS_ADULTI", "MELILLO_ADULTI", "VISIONE_ADULTI"}
+
+
+def questionario_pertinente(codice: str, eta: int | None) -> bool:
+    if eta is None:
+        return True
+    adulto = eta >= 17
+    if codice in QUESTIONARI_BAMBINI or codice.startswith("B_"):
+        return not adulto
+    if codice in QUESTIONARI_ADULTI or codice.startswith("A_"):
+        return adulto
+    return True
+
+
+def eta_da_data(dn) -> int | None:
+    if dn is None or dn == "":
+        return None
+    if isinstance(dn, str):
+        try:
+            dn = datetime.date.fromisoformat(dn[:10])
+        except Exception:
+            return None
+    if isinstance(dn, datetime.datetime):
+        dn = dn.date()
+    if not isinstance(dn, datetime.date):
+        return None
+    oggi = datetime.date.today()
+    anni = oggi.year - dn.year - ((oggi.month, oggi.day) < (dn.month, dn.day))
+    return anni if 0 <= anni <= 120 else None
+
+
+def eta_paziente(conn, paz_id) -> int | None:
+    """Età di un paziente qualsiasi letta dal database."""
+    if not paz_id:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT data_nascita FROM pazienti WHERE id=%s", (int(paz_id),))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return eta_da_data(row["data_nascita"] if isinstance(row, dict) else row[0])
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
 
 CHIAVE_BYPASS = "menu_mostra_tutto"
 
