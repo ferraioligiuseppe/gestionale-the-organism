@@ -215,6 +215,34 @@ def data_registrazione(conn, rec):
     return _fmt(c, ora=True), True
 
 
+def primo_contatto(conn, paz_id):
+    """(data, cosa) della prima attività registrata per il paziente, oppure
+    (None, None). Serve quando la data di registrazione non è nota: per i
+    pazienti inseriti prima che il gestionale la annotasse. Le semplici
+    aperture della scheda non contano. Calcolata una volta per sessione."""
+    chiave = f"_primo_contatto_{paz_id}"
+    if chiave in st.session_state:
+        return st.session_state[chiave]
+    risultato = (None, None)
+    try:
+        eventi = [e for e in cronologia(conn, paz_id, limite=5000)
+                  if e.get("quando") and "aperta" not in (e.get("cosa") or "").lower()]
+        if eventi:
+            def _k(e):
+                q = e["quando"]
+                if isinstance(q, dt.datetime):
+                    return q.replace(tzinfo=None) if q.tzinfo is None else \
+                        q.astimezone(dt.timezone.utc).replace(tzinfo=None)
+                return dt.datetime(q.year, q.month, q.day)
+            primo = min(eventi, key=_k)
+            cosa = (primo.get("cosa") or "").split(" · ")[0].split(" (")[0]
+            risultato = (primo["quando"], cosa)
+    except Exception:
+        risultato = (None, None)
+    st.session_state[chiave] = risultato
+    return risultato
+
+
 def _fmt(v, ora=False):
     if v is None:
         return "—"

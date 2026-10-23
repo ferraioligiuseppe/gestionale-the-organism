@@ -731,7 +731,13 @@ def header_paziente_attivo(conn) -> int | None:
         _reg, _ok = data_registrazione(conn, rec)
         _ap = _rq(conn, "SELECT quando, utente FROM registro_attivita WHERE paziente_id=%s "
                         "AND azione='Scheda aperta' ORDER BY quando DESC LIMIT 2", (int(pid),))
-        _parti = [f"registrato il {_reg}" if _ok else "data di registrazione non disponibile"]
+        if _ok:
+            _parti = [f"registrato il {_reg}"]
+        else:
+            from .registro_attivita import primo_contatto
+            _pc, _pc_cosa = primo_contatto(conn, pid)
+            _parti = ([f"primo contatto il {_rfmt(_pc)}" + (f" ({_pc_cosa})" if _pc_cosa else "")]
+                      if _pc else ["nessuna attività registrata"])
         if len(_ap) > 1:
             _parti.append(f"aperto in precedenza il {_rfmt(_ap[1]['quando'], ora=True)}"
                           + (f" da {_ap[1]['utente']}" if _ap[1].get("utente") else ""))
