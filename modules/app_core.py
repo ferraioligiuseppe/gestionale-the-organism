@@ -2037,8 +2037,12 @@ def login(get_conn) -> bool:
     st.title("The Organism – Login")
     st.caption(f"Versione: {APP_VERSION}")
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    # Modulo vero e proprio: Invio nel campo password = Accedi, e i due campi
+    # arrivano all'app insieme al clic.
+    with st.form("login_form", clear_on_submit=False):
+        username = st.text_input("Username", autocomplete="username")
+        password = st.text_input("Password", type="password", autocomplete="current-password")
+        _accedi = st.form_submit_button("Accedi")
 
     conn = get_conn()
     # Clear any aborted transaction state from previous operations
@@ -2055,10 +2059,17 @@ def login(get_conn) -> bool:
     if not _ensure_first_admin(conn):
         return False
 
-    if st.button("Accedi"):
+    if _accedi:
 
         u_in = (username or "").strip()
         p_in = password or ""
+        # Il browser (Chrome) riempie da solo i campi ma passa i valori alla
+        # pagina solo dopo il primo clic: il primo «Accedi» arriva con i campi
+        # vuoti. In quel caso NON è una password sbagliata.
+        if not u_in or not p_in:
+            st.info("👉 Il browser ha compilato i campi ma non li ha ancora consegnati: "
+                    "clicca dentro il campo **Password** e premi **Invio**.")
+            return False
         if _breakglass_enabled() and _breakglass_check(u_in, p_in):
             st.session_state["logged_in"] = True
             st.session_state["studio_id"] = 1
