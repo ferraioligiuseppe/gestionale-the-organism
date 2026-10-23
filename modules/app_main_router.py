@@ -415,11 +415,29 @@ _PROSSIMO_PASSO = {
 }
 
 
+def _percorso_attuale():
+    """Percorso di valutazione per l'età del paziente attivo (filtro_eta)."""
+    try:
+        from .filtro_eta import eta_paziente_attivo, percorso_valutazione
+        return percorso_valutazione(eta_paziente_attivo())
+    except Exception:
+        return _PERCORSO
+
+
 def _bottone_prossimo_passo(conn, paz_id, sotto_corrente):
     """Bottone in fondo alla schermata che porta al passo successivo della
-    sequenza di visita (INPP → Visiva → Uditiva → Diagnosi), senza dover
+    sequenza di visita, scelta in base all'età del paziente, senza dover
     tornare al menu e ricercare l'area giusta."""
-    dest = _PROSSIMO_PASSO.get(sotto_corrente)
+    percorso = _percorso_attuale()
+    voci = [p[2] for p in percorso]
+    dest = None
+    if sotto_corrente in voci:
+        i = voci.index(sotto_corrente)
+        if i + 1 < len(percorso):
+            nome, area, voce = percorso[i + 1]
+            dest = (area, voce, f"▶ Passo successivo: {nome}")
+    else:
+        dest = _PROSSIMO_PASSO.get(sotto_corrente)
     if not dest or not paz_id:
         return
     area_dest, sotto_dest, etichetta = dest
@@ -465,11 +483,18 @@ def _passo_fatto(conn, paz_id, sotto):
 
 def _barra_percorso(conn, sotto):
     paz_id = st.session_state.get("paziente_attivo_id")
-    if not paz_id or sotto not in [p[2] for p in _PERCORSO]:
+    percorso = _percorso_attuale()
+    if not paz_id or sotto not in [p[2] for p in percorso]:
         return
-    st.markdown("**Percorso di valutazione**")
-    cols = st.columns(len(_PERCORSO))
-    for i, (nome, area, voce) in enumerate(_PERCORSO):
+    try:
+        from .filtro_eta import eta_paziente_attivo, fascia_eta, NOME_FASCIA
+        _f = fascia_eta(eta_paziente_attivo())
+        _tit = f"**Percorso di valutazione** · {NOME_FASCIA[_f]}" if _f else "**Percorso di valutazione**"
+    except Exception:
+        _tit = "**Percorso di valutazione**"
+    st.markdown(_tit)
+    cols = st.columns(len(percorso))
+    for i, (nome, area, voce) in enumerate(percorso):
         fatto = _passo_fatto(conn, paz_id, voce)
         etich = f"{i + 1} · {nome}" + (" ✓" if fatto else "")
         with cols[i]:

@@ -180,9 +180,23 @@ def render_genera_link_email(conn, paziente_id: int) -> None:
             "Aggiungi [smtp] nei Secrets per l'invio automatico."
         )
 
+    # Solo i questionari adatti all'età del paziente (regole in filtro_eta)
+    voci_q = list(_Q_LABELS.items())
+    try:
+        from .filtro_eta import eta_paziente, questionario_pertinente
+        _eta = eta_paziente(conn, paziente_id)
+    except Exception:
+        _eta = None
+    if _eta is not None:
+        tutti = st.checkbox("Mostra tutti i questionari", key=f"q_tutti_{paziente_id}")
+        if not tutti:
+            voci_q = [(c, l) for c, l in voci_q if questionario_pertinente(c, _eta)]
+            st.caption(f"Paziente di {_eta} anni: mostro solo i questionari "
+                       f"{'per adulti' if _eta >= 17 else 'per bambini (compilati dai genitori)'}.")
+
     # Bottoni per ogni questionario
     cols = st.columns(2)
-    for i, (q_code, q_label) in enumerate(_Q_LABELS.items()):
+    for i, (q_code, q_label) in enumerate(voci_q):
         with cols[i % 2]:
             if st.button(f"Genera + Invia — {q_label}",
                         key=f"q_btn_{q_code}_{paziente_id}",
