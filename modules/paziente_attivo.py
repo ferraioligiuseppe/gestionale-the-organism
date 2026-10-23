@@ -516,7 +516,10 @@ def _corpo_seleziona(conn, ns="default"):
                    "clic su una riga per selezionare")
         ris = AgGrid(df, gridOptions=gb.build(), height=500, fit_columns_on_grid_load=True,
                      update_mode=GridUpdateMode.SELECTION_CHANGED, allow_unsafe_jscode=False,
-                     key=f"pa_grid_{ns}_{lettera or ''}_{len(df)}")
+                     # l'id del paziente attivo nella chiave: quando cambia paziente
+                     # la tabella riparte senza la vecchia riga selezionata, così
+                     # si può sempre scegliere chiunque, anche uno scelto prima.
+                     key=f"pa_grid_{ns}_{lettera or ''}_{len(df)}_{st.session_state.get(KEY_ID) or 0}")
         sel = getattr(ris, "selected_rows", None)
         if sel is None and isinstance(ris, dict):
             sel = ris.get("selected_rows")
@@ -527,8 +530,9 @@ def _corpo_seleziona(conn, ns="default"):
                 scelto = int(riga["id"])
             except Exception:
                 scelto = None
-        if scelto and st.session_state.get(f"pa_grid_ultimo_{ns}") != scelto:
-            st.session_state[f"pa_grid_ultimo_{ns}"] = scelto
+        if scelto and scelto == st.session_state.get(KEY_ID):
+            st.caption("✓ Questo paziente è già quello in lavorazione.")
+        elif scelto:
             try:
                 set_paziente_attivo(conn, scelto)
                 st.rerun()
