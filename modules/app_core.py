@@ -2831,8 +2831,7 @@ def _mostra_errore_connessione(err: Exception) -> None:
     with st.expander("Dettaglio tecnico (la password non viene mai mostrata)"):
         st.code(f"Server: {host}:{porta}\nUtente: {utente}\n"
                 f"Errore: {type(err).__name__}\n{msg}", language="text")
-    if st.button("🔄 Riprova la connessione", key="riprova_connessione_db"):
-        st.rerun()
+    st.caption("🔄 Per riprovare, ricarica la pagina del browser.")
 
 
 @st.cache_resource
