@@ -86,7 +86,7 @@ SCHEDE = {
             ("Questionario", [], 6),
             ("Esito", ["Note:", "Invio specialistico:"], 0),
         ]),
-        ("INPP — riflessi primitivi", [
+        ("Profilo Neuro-Evolutivo — riflessi", [
             ("Riflessi (0-4)",
              ["Moro:", "TLR:", "ATNR:", "STNR:", "Galant:", "Plantare:"], 0),
             ("Note", [], 3),
@@ -143,11 +143,36 @@ def _build_docx(titolo, sezioni):
     return buf.getvalue()
 
 
+@st.cache_data(show_spinner="Preparo la scheda…")
+def _scheda_unica_cache() -> bytes:
+    from .scheda_unica_docx import genera_scheda_unica
+    return genera_scheda_unica()
+
+
 def render_modulistica(conn=None, paz_id=None, paziente=None):
     st.header("📄 Modulistica / Schede da stampare")
     st.caption("Tutte le schede cliniche in bianco, in Word, da stampare e "
                "compilare a mano. Stessi campi del gestionale. Apri in Word e, "
                "se vuoi il PDF, da Word: File → Salva come → PDF.")
+
+    # ── Scheda unica: tutta la visita in un solo documento ──
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.markdown("### 📘 Scheda clinica completa PNEV")
+            st.caption("Tutta la visita in un solo Word (13 pagine): anagrafica, anamnesi, "
+                       "Profilo Neuro-Evolutivo con tutte le prove (0–4), visiva, uditiva, "
+                       "apprendimenti, sintesi e percorso proposto.")
+        with c2:
+            try:
+                from .scheda_unica_docx import genera_scheda_unica, MIME_DOCX
+                st.download_button("⬇️ Word", data=_scheda_unica_cache(),
+                                   file_name="Scheda_clinica_completa_PNEV.docx",
+                                   mime=MIME_DOCX, key="mod_scheda_unica",
+                                   type="primary", use_container_width=True)
+            except Exception as e:
+                st.error(f"Scheda non disponibile: {e}")
+    st.markdown("#### Schede singole")
 
     for area, lista in SCHEDE.items():
         st.markdown(f"### {area}")
