@@ -2780,6 +2780,61 @@ DATABASE_URL = "postgresql://...sslmode=require"
 
 Poi premi Save e riavvia l'app (Reboot).""")
         st.stop()
+def _mostra_errore_connessione(err: Exception) -> None:
+    """Spiega PERCHÉ la connessione è fallita, senza mai mostrare la password."""
+    import urllib.parse
+    u = _DB_URL or ""
+    try:
+        parti = urllib.parse.urlsplit(u)
+        host, porta, utente, pwd = parti.hostname or "?", parti.port or 5432, parti.username or "?", parti.password or ""
+    except Exception:
+        host, porta, utente, pwd = "?", "?", "?", ""
+    msg = str(err) or type(err).__name__
+    for segreto in {u, pwd, urllib.parse.unquote(pwd)}:
+        if segreto:
+            msg = msg.replace(segreto, "•••")
+    m = msg.lower()
+
+    if "password authentication failed" in m or "no password supplied" in m:
+        causa = ("Utente o password del database non accettati.",
+                 "Controlla DATABASE_URL nei Secrets: la password potrebbe essere cambiata su OVH.")
+    elif "too many connections" in m or "remaining connection slots" in m:
+        causa = ("Il database ha raggiunto il numero massimo di connessioni aperte.",
+                 "Fai Reboot dell'app (Manage app → ⋮ → Reboot). Se succede spesso, chiudi le app "
+                 "Streamlit che non usi o aumenta il piano del database su OVH.")
+    elif "timeout" in m or "timed out" in m:
+        causa = ("Il server del database non risponde (tempo scaduto).",
+                 "Su OVH controlla che il database sia acceso e che tra gli IP autorizzati ci sia "
+                 "0.0.0.0/0 o gli IP di Streamlit Cloud: se l'app è stata spostata su un altro server, "
+                 "il suo IP può essere cambiato.")
+    elif "could not translate host name" in m or "name or service not known" in m:
+        causa = ("Il nome del server del database non esiste o è scritto male.",
+                 "Controlla l'host in DATABASE_URL nei Secrets.")
+    elif "connection refused" in m:
+        causa = ("Il server esiste ma rifiuta la connessione.",
+                 "Il database potrebbe essere spento o in manutenzione: controlla lo stato su OVH.")
+    elif "does not exist" in m and "database" in m:
+        causa = ("Il nome del database in DATABASE_URL non esiste.",
+                 "Controlla la parte finale dell'URL (/nome_database).")
+    elif "ssl" in m:
+        causa = ("Problema di connessione cifrata (SSL).",
+                 "Aggiungi ?sslmode=require in fondo a DATABASE_URL nei Secrets.")
+    elif "://" not in u:
+        causa = ("DATABASE_URL non è nel formato giusto.",
+                 "Deve iniziare con postgresql:// ed essere su una sola riga nei Secrets.")
+    else:
+        causa = ("Connessione non riuscita per un motivo non riconosciuto.",
+                 "Leggi il dettaglio tecnico qui sotto, oppure inoltralo a chi ti aiuta con il codice.")
+
+    st.error(f"❌ Database non raggiungibile — {causa[0]}")
+    st.info(f"👉 {causa[1]}")
+    with st.expander("Dettaglio tecnico (la password non viene mai mostrata)"):
+        st.code(f"Server: {host}:{porta}\nUtente: {utente}\n"
+                f"Errore: {type(err).__name__}\n{msg}", language="text")
+    if st.button("🔄 Riprova la connessione", key="riprova_connessione_db"):
+        st.rerun()
+
+
 @st.cache_resource
 def _connect_cached(studio_id: int = 1):
     """Connessione DB con cache — UNA per studio. Imposta app.current_studio
@@ -2806,18 +2861,8 @@ def _connect_cached(studio_id: int = 1):
                 connect_timeout=10,
                 options=_opts,
             )
-        except Exception:
-            # Non-leak diagnostics (does not print the URL)
-            u = _DB_URL or ""
-            st.error("❌ Errore connessione PostgreSQL (OVH). La DATABASE_URL non sembra in un formato valido per psycopg2.")
-            st.write({
-                "db_url_len": len(u),
-                "db_url_has_whitespace": any(ch.isspace() for ch in u),
-                "db_url_scheme": (u.split("://", 1)[0] if "://" in u else "<missing>"),
-                "hint_1": "Verifica che sia su UNA sola riga nei Secrets (nessun a capo).",
-                "hint_2": "Usa lo schema 'postgresql://'.",
-                "hint_3": "Se la password contiene caratteri speciali (@ : / ? # & %), deve essere URL-encoded (es. @ -> %40).",
-            })
+        except Exception as _err:
+            _mostra_errore_connessione(_err)
             st.stop()
 
         return _PgConn(conn, options=_opts)
