@@ -1588,6 +1588,14 @@ def _dialog_nuovo(conn):
             paz_id = _salva_nuovo(conn, dati)
             if paz_id:
                 _salva_consenso(conn, paz_id, consenso_dati)
+                # Arrivati da «Cambia paziente → nuova anagrafica»: il nuovo
+                # paziente diventa subito quello in lavorazione.
+                if st.session_state.pop("ana_nuovo_diventa_attivo", False):
+                    try:
+                        from .paziente_attivo import set_paziente_attivo
+                        set_paziente_attivo(conn, paz_id)
+                    except Exception:
+                        st.session_state["paziente_attivo_id"] = paz_id
                 st.session_state["ana_msg_success"] = (
                     f"✅ {dati['cognome']} {dati['nome']} salvato."
                 )

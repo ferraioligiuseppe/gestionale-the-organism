@@ -358,6 +358,17 @@ def _form_nuovo_paziente(conn, key_suffix=None):
                               st.session_state.get(f"np_tel_{ks}", ""))
 
 
+def _bottone_nuovo_completo(suffisso: str) -> None:
+    """Apre l'Anagrafica pazienti con la finestra «Nuovo paziente» completa."""
+    if st.button("➕ Il paziente non è in elenco: nuova anagrafica completa",
+                 key=f"nuovo_completo_{suffisso}", type="primary", use_container_width=True):
+        st.session_state["goto_area"] = "👥 Pazienti"
+        st.session_state["goto_sotto"] = "👤 Anagrafica pazienti"
+        st.session_state["ana_apri_nuovo"] = True
+        st.session_state["ana_nuovo_diventa_attivo"] = True
+        st.rerun()
+
+
 def _crea_e_seleziona(conn, cognome, nome, dn, sesso, tel):
     pid, err = _crea_paziente_rapido(conn, cognome, nome, dn, sesso, tel)
     if err:
@@ -390,9 +401,8 @@ def _corpo_seleziona(conn, ns="default"):
         st.warning("L'elenco dei pazienti non si è caricato. Se succede di nuovo, chiudi la finestra "
                    "e riprova tra qualche secondo: di solito è un'altra postazione che sta salvando.")
         _carica_lista_pazienti.clear()
-        st.info("Nessun paziente registrato. Puoi aggiungerne uno qui sotto.")
-        st.markdown("##### ➕ Nuovo paziente")
-        _form_nuovo_paziente(conn, key_suffix="empty")
+        st.info("Nessun paziente registrato.")
+        _bottone_nuovo_completo("empty")
         if st.button("Chiudi"):
             st.rerun()
         return
@@ -572,14 +582,11 @@ def _corpo_seleziona(conn, ns="default"):
                 st.session_state[kp] = pag + 1
                 st.rerun()
 
-    # Nuovo paziente: sotto l'elenco e chiuso. Si apre solo se serve; dopo
-    # «Crea e seleziona» il paziente diventa attivo e la finestra si chiude.
+    # Nuovo paziente: porta alla scheda anagrafica COMPLETA (comune dall'elenco,
+    # codice fiscale, indirizzo, doppioni, privacy). Dopo il salvataggio il
+    # paziente diventa subito quello in lavorazione.
     st.markdown("")
-    if st.toggle("➕ Il paziente non è in elenco: crea una nuova anagrafica",
-                 key=f"paz_attivo_nuovo_tgl_{ns}"):
-        st.caption("Compila Cognome e Nome (gli altri campi sono facoltativi): "
-                   "il paziente viene creato e selezionato subito.")
-        _form_nuovo_paziente(conn, key_suffix=f"inline_{ns}")
+    _bottone_nuovo_completo(f"sel_{ns}")
 
 
 # ════════════════════════════════════════════════════════════════════
