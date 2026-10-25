@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stabilometria PNEV — pedana Wii</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --verde:#1D6B44; --verde-chiaro:#E5F0EA; --inchiostro:#1E2A24; --grigio:#65716B;
+  --carta:#F6F8F7; --foglio:#FFFFFF; --linea:#D5DDD8;
+  --oa:#2D5BA8; --oc:#B5461F; --terzo:#7A4FA0; --ok:#2E8B57;
+  color-scheme: light; box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --verde:#5FBF8C; --verde-chiaro:#1C3328; --inchiostro:#E4ECE7; --grigio:#9AA8A0;
+    --carta:#111814; --foglio:#18211C; --linea:#2C3832; --oa:#7FA6EA; --oc:#F08A5D; --terzo:#C29BE6; --ok:#5FBF8C;
+    color-scheme: dark;
+  }
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--carta);color:var(--inchiostro);
+  font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;font-size:16px;line-height:1.45}
+.pagina{max-width:1240px;margin:0 auto;padding:18px 20px 40px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:1.6rem;margin:0;color:var(--verde);letter-spacing:-.01em}
+header p{margin:2px 0 0;color:var(--grigio)}
+.dati-paz{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input,select,textarea{font:inherit;padding:7px 10px;border:1px solid var(--linea);border-radius:6px;background:var(--foglio);color:var(--inchiostro)}
+.collegamento{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--foglio);border:1px solid var(--linea);border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.spia{width:12px;height:12px;border-radius:50%;background:var(--linea)}
+.spia.on{background:var(--ok)}
+nav{display:flex;gap:4px;margin:6px 0 14px;border-bottom:2px solid var(--linea)}
+nav button{border:none;border-radius:8px 8px 0 0;background:none;color:var(--grigio);padding:10px 18px;font-size:1.02rem}
+nav button[aria-selected="true"]{background:var(--foglio);color:var(--verde);box-shadow:inset 0 -3px 0 var(--verde)}
+.griglia{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px}
+@media (max-width:950px){.griglia{grid-template-columns:1fr}}
+.foglio{background:var(--foglio);border:1px solid var(--linea);border-radius:10px;padding:16px}
+h2{font-size:1.08rem;margin:0 0 10px}
+h3{font-size:.98rem;margin:14px 0 6px}
+canvas{display:block;width:100%;height:auto;border-radius:8px}
+button{font:inherit;font-weight:700;border-radius:7px;padding:8px 14px;cursor:pointer;border:1px solid var(--verde);background:var(--foglio);color:var(--verde)}
+button.primario{background:var(--verde);color:var(--foglio)}
+button.piccolo{padding:4px 9px;font-size:.88rem}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--oa);outline-offset:2px}
+.azioni{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.stato{padding:8px 12px;border-radius:7px;background:var(--verde-chiaro);font-size:.95rem;flex:1;min-width:240px}
+.stato.err{background:color-mix(in srgb,var(--oc) 16%,var(--foglio))}
+.vivo{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-variant-numeric:tabular-nums}
+.vivo span{display:block;color:var(--grigio);font-size:.8rem}
+.vivo strong{font-size:1.2rem}
+.protocollo{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:.93rem}
+@media (max-width:520px){.protocollo{grid-template-columns:1fr}}
+.protocollo label{display:flex;gap:7px;align-items:center;padding:3px 0}
+.prove-lista{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.prove-lista li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:7px;border:1px solid transparent;font-size:.94rem}
+.prove-lista li.corrente{border-color:var(--verde);background:var(--verde-chiaro)}
+.prove-lista .icona{width:20px;text-align:center}
+.prove-lista .esito{margin-left:auto;color:var(--grigio);font-variant-numeric:tabular-nums}
+.istruzioni{border-left:4px solid var(--verde);padding:8px 12px;background:var(--verde-chiaro);border-radius:0 7px 7px 0;margin:10px 0}
+.istruzioni b{display:block;font-size:1.05rem}
+.timer{font-size:2.4rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--verde);line-height:1}
+.tab-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:.92rem}
+th,td{padding:6px 9px;border-bottom:1px solid var(--linea);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{color:var(--grigio);font-weight:700;font-size:.86rem}
+td.peggio{color:var(--oc)} td.meglio{color:var(--ok)}
+.minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.mini figcaption{font-size:.86rem;color:var(--grigio);margin-top:4px}
+.mini{margin:0}
+.indici{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 12px}
+.indice{border:1px solid var(--linea);border-radius:8px;padding:8px 12px;min-width:160px}
+.indice span{display:block;color:var(--grigio);font-size:.82rem}
+.indice strong{font-size:1.35rem;font-variant-numeric:tabular-nums}
+.indice small{display:block;color:var(--grigio);font-size:.78rem}
+.nota{font-size:.84rem;color:var(--grigio);margin-top:12px}
+.gioco-barra{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.punteggio{display:flex;gap:22px;flex-wrap:wrap;font-variant-numeric:tabular-nums;margin-top:8px}
+.punteggio span{display:block;color:var(--grigio);font-size:.8rem}
+.punteggio strong{font-size:1.5rem}
+[hidden]{display:none!important}
+#schermo{position:fixed;inset:0;z-index:50;background:#000;display:flex;align-items:center;justify-content:center}
+#schermo canvas{width:100vw;height:100vh;border-radius:0}
+#schermo .esci{position:absolute;top:12px;right:16px;color:#888;font-size:.9rem}
+.commento textarea{width:100%;font-size:.95rem;line-height:1.5}
+.due{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:800px){.due{grid-template-columns:1fr}}
+@media print{
+  body{background:#fff;color:#000}
+  .no-stampa,nav,.collegamento{display:none!important}
+  .foglio{border:none;padding:0}
+  .pagina{padding:0}
+  .griglia{display:block}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="pagina">
+<header>
+  <div>
+    <h1>Stabilometria con pedana Wii</h1>
+    <p>Studio The Organism · Metodo PNEV</p>
+  </div>
+  <div class="dati-paz">
+    <input id="paziente" placeholder="Paziente (cognome e nome)" list="elencoPazienti" aria-label="Paziente" style="min-width:230px">
+    <datalist id="elencoPazienti"></datalist>
+    <input id="dataEsame" type="date" aria-label="Data">
+  </div>
+</header>
+
+<div class="collegamento no-stampa">
+  <span class="spia" id="spia" aria-hidden="true"></span>
+  <button class="primario" id="btnCollega">Collega la pedana</button>
+  <button id="btnSimula">Prova senza pedana</button>
+  <button id="btnTutti" hidden>Cerca tra tutti i dispositivi</button>
+  <button id="btnTara" disabled>Azzera a pedana vuota</button>
+  <div class="stato" id="stato" role="status">Accendi la pedana (pulsante davanti) e premi «Collega la pedana».</div>
+</div>
+
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-tab="esame">Esame</button>
+  <button role="tab" aria-selected="false" data-tab="archivio">Archivio</button>
+  <button role="tab" aria-selected="false" data-tab="bio">Biofeedback</button>
+</nav>
+
+<!-- ═════════════ ESAME ═════════════ -->
+<section id="tab-esame">
+<div class="griglia">
+  <section class="foglio" aria-label="Pedana dal vivo">
+    <h2>Pedana dal vivo</h2>
+    <canvas id="tela" width="640" height="400" aria-label="Pedana vista dall'alto con il centro di pressione"></canvas>
+    <div class="vivo" aria-live="polite">
+      <div><span>Peso</span><strong id="vPeso">— kg</strong></div>
+      <div><span>Sinistra / destra</span><strong id="vLR">— / —</strong></div>
+      <div><span>Avanti / dietro</span><strong id="vAP">— / —</strong></div>
+      <div><span>Campioni/s</span><strong id="vHz">—</strong></div>
+    </div>
+    <div class="azioni no-stampa" style="font-size:.9rem;color:var(--grigio)">
+      <label><input type="checkbox" id="invML"> Inverti destra/sinistra</label>
+      <label><input type="checkbox" id="invAP"> Inverti avanti/dietro</label>
+    </div>
+  </section>
+
+  <section class="foglio no-stampa" aria-label="Protocollo">
+    <h2>Protocollo</h2>
+    <div class="protocollo" id="sceltaProve"></div>
+    <div class="azioni">
+      <label style="font-size:.92rem">Durata
+        <select id="durata"><option value="30" selected>30 s</option><option value="51.2">51,2 s</option><option value="20">20 s</option><option value="10">10 s (prova veloce)</option></select>
+      </label>
+      <label style="font-size:.92rem">Limiti di stabilità
+        <select id="losScala"><option value="0.6">Bambino</option><option value="1" selected>Adulto</option><option value="0.75">Anziano</option></select>
+      </label>
+      <button class="primario" id="btnPrepara">Prepara la sequenza</button>
+    </div>
+    <ul class="prove-lista" id="listaProve"></ul>
+    <div id="pannelloProva" hidden>
+      <div class="istruzioni" id="istruzioni"></div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div class="timer" id="timer">0,0 s</div>
+        <button class="primario" id="btnAvvia">Avvia la prova</button>
+        <button id="btnStop" disabled>Interrompi</button>
+        <button id="btnSalta">Salta</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<section class="foglio" id="risultati" hidden style="margin-top:18px" aria-label="Risultati">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+    <h2>Risultati <span id="titoloRis" style="color:var(--grigio);font-weight:400"></span></h2>
+    <div class="azioni no-stampa" style="margin:0">
+      <button class="primario" id="btnSalva">Salva nell'archivio</button>
+      <button onclick="window.print()">Stampa referto</button>
+      <button id="btnCSV">Dati (CSV)</button>
+      <button id="btnGestionale">Esporta per il gestionale</button>
+      <button id="btnNuovo">Nuovo esame</button>
+    </div>
+  </div>
+  <div class="indici" id="indici"></div>
+  <div class="minis" id="minis"></div>
+  <div class="due">
+    <div id="boxProfilo" hidden><h3>Profilo sensoriale</h3>
+      <canvas id="profilo" width="560" height="260" aria-label="Profilo sensoriale"></canvas>
+      <p class="nota" style="margin-top:4px">Propriocezione: occhi chiusi · Vista: gommapiuma a occhi aperti · Vestibolo: gommapiuma a occhi chiusi · Movimento visivo: optocinetico. 100% = nessun peggioramento rispetto agli occhi aperti su base rigida. Più il valore è basso, meno il paziente sa usare quell'informazione per stare in equilibrio (calcolo sulla velocità media, come nei protocolli mCTSIB/SOT).</p></div>
+    <div id="boxLOS" hidden><h3>Limiti di stabilità</h3>
+      <canvas id="losCv" width="560" height="420" aria-label="Limiti di stabilità"></canvas></div>
+  </div>
+  <div id="boxLOStab" class="tab-wrap" hidden><table id="losTab"></table></div>
+  <h3>Parametri</h3>
+  <div class="tab-wrap"><table id="tabella"></table></div>
+  <h3>Analisi in frequenza</h3>
+  <p class="nota" style="margin-top:0">Quota di oscillazione per banda (destra/sinistra + avanti/dietro). Interpretazione orientativa in posturologia: bassa frequenza (0–0,5 Hz) legata soprattutto al controllo visivo e vestibolare, media (0,5–2 Hz) al controllo cerebellare e vestibolo-spinale, alta (&gt;2 Hz) alla componente propriocettiva e muscolare.</p>
+  <canvas id="freq" width="1100" height="230" aria-label="Distribuzione in frequenza per prova"></canvas>
+  <h3>Commento</h3>
+  <div class="commento"><textarea id="commento" rows="7" aria-label="Commento all'esame"></textarea>
+    <p class="nota no-stampa" style="margin-top:2px">Scritto in automatico dai risultati: è una bozza da rivedere, puoi modificarla. <button class="piccolo" id="btnRigenera">Riscrivi dai risultati</button></p></div>
+  <label class="no-stampa" style="display:block;margin-top:10px;font-size:.92rem">Note dell'esame<br>
+    <textarea id="noteEsame" rows="2" style="width:100%"></textarea></label>
+  <p class="nota">Pedana Wii Balance Board: strumento non certificato come dispositivo medico. Valori utili per confronti nello stesso paziente nel tempo, con la stessa procedura e la stessa durata; per il confronto con valori normativi usare una pedana clinica.</p>
+</section>
+</section>
+
+<!-- ═════════════ ARCHIVIO ═════════════ -->
+<section id="tab-archivio" hidden>
+  <div class="foglio">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+      <h2 style="margin:0">Archivio esami</h2>
+      <div class="azioni no-stampa" style="margin:0">
+        <button id="btnEsporta">Scarica copia di sicurezza</button>
+        <label class="no-stampa" style="display:inline-flex;align-items:center;gap:6px"><button type="button" onclick="document.getElementById('fileImporta').click()">Carica copia</button>
+          <input type="file" id="fileImporta" accept=".json" hidden></label>
+      </div>
+    </div>
+    <p class="nota" style="margin-top:6px">Gli esami restano salvati in questo browser, su questo computer. Scarica ogni tanto la copia di sicurezza: se cancelli i dati di Chrome, la recuperi con «Carica copia».</p>
+    <div class="azioni"><label>Paziente <select id="archPaz" style="min-width:240px"></select></label></div>
+    <div class="tab-wrap" style="margin-top:10px"><table id="archTab"></table></div>
+    <div id="archConfronto" hidden>
+      <h3>Andamento nel tempo</h3>
+      <canvas id="trend" width="1100" height="300" aria-label="Andamento dell'area nel tempo"></canvas>
+      <h3>Confronto tra i due esami selezionati</h3>
+      <div class="minis" id="confMinis"></div>
+      <div class="tab-wrap"><table id="confTab"></table></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ BIOFEEDBACK ═════════════ -->
+<section id="tab-bio" hidden>
+  <div class="foglio">
+    <div class="gioco-barra no-stampa">
+      <label>Esercizio
+        <select id="gioco">
+          <option value="centro">Resta al centro</option>
+          <option value="bersagli">Bersagli</option>
+          <option value="percorso">Segui il percorso</option>
+        </select></label>
+      <label>Difficoltà
+        <select id="difficolta"><option value="1">Facile</option><option value="2" selected>Media</option><option value="3">Difficile</option></select></label>
+      <label>Sensibilità
+        <select id="sensib"><option value="60">Bassa (60 mm)</option><option value="40" selected>Media (40 mm)</option><option value="25">Alta (25 mm)</option></select></label>
+      <label>Durata
+        <select id="durataBio"><option value="60">1 min</option><option value="120" selected>2 min</option><option value="180">3 min</option></select></label>
+      <label><input type="checkbox" id="suono"> Feedback sonoro</label>
+      <label><input type="checkbox" id="soloSuono"> Solo suono (schermo oscurato)</label>
+      <button class="primario" id="btnGioca">Inizia</button>
+      <button id="btnFermaGioco" disabled>Ferma</button>
+    </div>
+    <p class="nota" id="spiegaGioco" style="margin:0 0 8px"></p>
+    <canvas id="campo" width="1000" height="560" aria-label="Campo dell'esercizio di biofeedback"></canvas>
+    <div class="punteggio" id="punteggio"></div>
+    <div class="azioni" id="fineGioco" hidden><button class="primario" id="btnSalvaBio">Salva nell'archivio</button></div>
+    <p class="nota">Prima di ogni esercizio il paziente sta fermo 3 secondi: quella posizione diventa il centro. In modalità prova (senza pedana) muovi il punto con le frecce della tastiera.</p>
+  </div>
+</section>
+</div>
+
+<div id="schermo" hidden><canvas id="schermoCv" width="1600" height="900"></canvas><span class="esci">Esc o «Interrompi» per uscire</span></div>
+<script>
+"use strict";
+// ════════════ COSTANTI ════════════
+const LARGH = 433, PROF = 238;   // mm, distanza tra i sensori della pedana Wii
+const FS = 50;                   // ricampionamento a 50 Hz
+const CHI2_95 = 5.991;           // ellisse di confidenza 95%
+const ARCHIVIO_KEY = "pnev_stabilometria_v1";
+
+const PROVE = [
+  {id:"OA",  nome:"Occhi aperti", breve:"OA", def:true, istr:"Piedi uniti al centro, braccia lungo i fianchi, sguardo su un punto all'altezza degli occhi a 2 metri."},
+  {id:"OC",  nome:"Occhi chiusi", breve:"OC", def:true, rif:"OA", istr:"Stessa posizione, occhi chiusi. Resta accanto al paziente."},
+  {id:"TDX", nome:"Testa ruotata a destra (occhi chiusi)", breve:"Testa dx", rif:"OC", istr:"Occhi chiusi, testa girata a destra al massimo comodo, spalle ferme."},
+  {id:"TSX", nome:"Testa ruotata a sinistra (occhi chiusi)", breve:"Testa sx", rif:"OC", istr:"Occhi chiusi, testa girata a sinistra al massimo comodo, spalle ferme."},
+  {id:"TES", nome:"Testa estesa (occhi chiusi)", breve:"Testa estesa", rif:"OC", istr:"Occhi chiusi, testa inclinata indietro come a guardare il soffitto."},
+  {id:"DC",  nome:"Doppio compito (occhi aperti)", breve:"Doppio compito", rif:"OA", istr:"Occhi aperti. Il paziente conta all'indietro di 3 in 3 partendo da 100, ad alta voce."},
+  {id:"OPT", nome:"Stimolo optocinetico (schermo)", breve:"Optocinetico", rif:"OA", stimolo:"opto", istr:"Il paziente guarda lo schermo a circa 1,5 m: righe verticali che scorrono. Deve solo guardare, senza seguirle con la testa."},
+  {id:"INS", nome:"Inseguimento lento (schermo)", breve:"Inseguimento", rif:"OA", stimolo:"insegui", istr:"Il paziente segue con gli occhi il pallino che va lentamente da destra a sinistra, senza girare la testa."},
+  {id:"SAC", nome:"Saccadi (schermo)", breve:"Saccadi", rif:"OA", stimolo:"saccadi", istr:"Il paziente guarda il pallino che salta tra destra e sinistra, il più velocemente possibile, senza girare la testa."},
+  {id:"LEN", nome:"Con lenti / prismi (occhi aperti)", breve:"Lenti/prismi", rif:"OA", nota:true, istr:"Occhi aperti, con le lenti o i prismi da valutare. Scrivi quali nelle note."},
+  {id:"BIT", nome:"Con bite / cotoni (occhi chiusi)", breve:"Bite", rif:"OC", istr:"Occhi chiusi, con il bite o i rulli di cotone tra le arcate."},
+  {id:"LOS", nome:"Limiti di stabilità (8 direzioni)", breve:"Limiti", los:true, istr:"Piedi fermi alla larghezza del bacino. Guardando lo schermo, al «via» il paziente porta il punto verso il bersaglio inclinando tutto il corpo, senza staccare i piedi, poi torna al centro. 8 direzioni."},
+  {id:"MDX", nome:"Monopodalico destro", breve:"Mono dx", mono:true, istr:"In piedi sul solo piede destro, al centro della pedana, occhi aperti, mani sui fianchi. Se appoggia l'altro piede la prova si ferma e conta il tempo."},
+  {id:"MSX", nome:"Monopodalico sinistro", breve:"Mono sx", mono:true, istr:"In piedi sul solo piede sinistro, al centro della pedana, occhi aperti, mani sui fianchi."},
+  {id:"GOA", nome:"Gommapiuma, occhi aperti", breve:"Gomma OA", rif:"OA", gomma:true, istr:"Paziente sulla gommapiuma, piedi uniti, occhi aperti."},
+  {id:"GOC", nome:"Gommapiuma, occhi chiusi", breve:"Gomma OC", rif:"OC", gomma:true, istr:"Paziente sulla gommapiuma, piedi uniti, occhi chiusi. Resta molto vicino."},
+];
+const COLORE_PROVA = id => ({OA:"--oa",OC:"--oc"}[id] || "--terzo");
+
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const f1 = (v,d=1)=> (v==null||!isFinite(v)) ? "—" : v.toFixed(d).replace(".",",");
+const font = () => getComputedStyle(document.body).fontFamily;
+const stato = (t, err=false) => { const s=$("stato"); s.textContent=t; s.classList.toggle("err", err); };
+$("dataEsame").valueAsDate = new Date();
+
+// ════════════ PEDANA: lettura e conversione ════════════
+let dev=null, sim=null, simSopra=false, simBias={x:0,y:0};
+let cal=null, calBuf=new Uint8Array(32), calMask=0;
+let tara=[0,0,0,0], taraAcc=null, taraFatta=false;
+let ultimo=null, contaHz=0;
+const ascoltatori = new Set();       // chi riceve i campioni (registrazione, gioco)
+
+function kgSensore(raw,i){
+  const c0=cal[0][i], c17=cal[1][i], c34=cal[2][i];
+  return raw<c17 ? 17*(raw-c0)/(c17-c0) : 17+17*(raw-c17)/(c34-c17);
+}
+function nuovoCampione(kgRaw){
+  if (taraAcc){ taraAcc.n++; kgRaw.forEach((v,i)=>taraAcc.s[i]+=v); }
+  const k=kgRaw.map((v,i)=>v-tara[i]), [TR,BR,TL,BL]=k, tot=TR+BR+TL+BL;
+  let x=0,y=0;
+  if (tot>1){
+    x=(LARGH/2)*((TR+BR)-(TL+BL))/tot; y=(PROF/2)*((TR+TL)-(BR+BL))/tot;
+    if ($("invML").checked) x=-x;
+    if ($("invAP").checked) y=-y;
+  }
+  ultimo={t:performance.now()/1000,kg:k,tot,x,y}; contaHz++;
+  ascoltatori.forEach(f=>f(ultimo));
+}
+
+let tuttiIDispositivi=false;
+async function collega(){
+  if (!("hid" in navigator)){ stato("Apri la pagina con Google Chrome o Microsoft Edge per collegare la pedana.", true); return; }
+  try{
+    const filtri = tuttiIDispositivi ? [] : [{vendorId:0x057e,productId:0x0306},{vendorId:0x057e,productId:0x0330},{vendorId:0x057e}];
+    const scelti = await navigator.hid.requestDevice({filters:filtri});
+    if (!scelti.length){ stato("Nessuna pedana scelta. Accendila con il pulsante davanti (luce blu fissa) e riprova.", true); $("btnTutti").hidden=false; return; }
+    dev=scelti[0]; if (!dev.opened) await dev.open();
+    dev.addEventListener("inputreport", suReport);
+    stato("Pedana trovata, leggo la calibrazione…");
+    await scrivi(0xa400f0,0x55); await scrivi(0xa400fb,0x00);
+    calMask=0; await dev.sendReport(0x17, Uint8Array.from([0x04,0xa4,0x00,0x20,0x00,0x20]));
+    setTimeout(()=>{ if(!cal) stato("La pedana non ha mandato la calibrazione: spegnila, riaccendila e premi di nuovo «Collega».", true); },3000);
+  }catch(e){ stato("Collegamento non riuscito: "+e.message, true); }
+}
+async function scrivi(addr,val){
+  const d=new Uint8Array(21); d[0]=0x04; d[1]=(addr>>16)&255; d[2]=(addr>>8)&255; d[3]=addr&255; d[4]=1; d[5]=val;
+  await dev.sendReport(0x16,d); await new Promise(r=>setTimeout(r,60));
+}
+const modoContinuo = ()=> dev && dev.sendReport(0x12, Uint8Array.from([0x04,0x34]));
+function suReport(ev){
+  const d=ev.data, id=ev.reportId;
+  if (id===0x21){
+    const size=(d.getUint8(2)>>4)+1, err=d.getUint8(2)&15, off=d.getUint8(4);
+    if (err){ stato("Errore nella lettura della calibrazione ("+err+"). Riprova.", true); return; }
+    for (let i=0;i<size;i++){ const p=off-0x20+i; if(p>=0&&p<32) calBuf[p]=d.getUint8(5+i); }
+    calMask |= (off===0x20?1:2);
+    if (calMask===3){
+      const v=i=>(calBuf[i]<<8)|calBuf[i+1];
+      cal=[0,1,2].map(k=>[0,1,2,3].map(s=>v(4+k*8+s*2)));
+      modoContinuo(); collegata("Pedana collegata. Ora azzera con nessuno sopra.");
+    }
+  } else if (id===0x20){ modoContinuo(); }
+  else if ((id===0x34||id===0x32) && cal){
+    nuovoCampione([0,1,2,3].map(s=>kgSensore(d.getUint16(2+s*2,false),s)));
+  }
+}
+function avviaSimulazione(){
+  let x=0,y=0,t0=performance.now();
+  const tasti={};
+  addEventListener("keydown",e=>{ if(e.key.startsWith("Arrow")){ tasti[e.key]=true; if(document.activeElement.tagName!=="INPUT") e.preventDefault(); }});
+  addEventListener("keyup",e=>{ tasti[e.key]=false; });
+  sim=setInterval(()=>{
+    const r = registrazione && registrazione.prova;
+    const amp = !r ? .3 : ({OC:.55,GOC:1.1,GOA:.6,MDX:1.4,MSX:1.4,TDX:.62,TSX:.62,TES:.75,BIT:.5,OPT:.48,INS:.4,SAC:.42}[r.id] || .32);
+    if (losStato && losStato.simTarget){ const T=losStato.simTarget; simBias.x+=(T.x-simBias.x)*0.045; simBias.y+=(T.y-simBias.y)*0.045; }
+    x+=-0.035*x+amp*(Math.random()-.5)*1.6; y+=-0.03*y+amp*(Math.random()-.5)*2+.25*Math.sin((performance.now()-t0)/900);
+    const v=1.2; simBias.x+=((tasti.ArrowRight?v:0)-(tasti.ArrowLeft?v:0)); simBias.y+=((tasti.ArrowUp?v:0)-(tasti.ArrowDown?v:0));
+    if (!(losStato && losStato.simTarget)){ simBias.x*=.985; simBias.y*=.985; }
+    const peso = (r && r.mono) ? 68 : 68;
+    const fx=(x+6+simBias.x)/(LARGH/2), fy=(y-4+simBias.y)/(PROF/2);
+    const TR=peso/4*(1+fx+fy), BR=peso/4*(1+fx-fy), TL=peso/4*(1-fx+fy), BL=peso/4*(1-fx-fy);
+    nuovoCampione(simSopra?[TR+.4,BR+.3,TL+.5,BL+.2]:[.4,.3,.5,.2]);
+  },1000/90);
+  collegata("Modalità prova: dati simulati. Azzera, poi usa Esame o Biofeedback.");
+}
+function collegata(msg){
+  stato(msg); $("spia").classList.add("on");
+  $("btnTara").disabled=false; $("btnCollega").disabled=true; $("btnSimula").disabled=true; $("btnTutti").hidden=true;
+}
+function azzera(cb){
+  tara=[0,0,0,0]; taraAcc={n:0,s:[0,0,0,0]};
+  if (sim) simSopra=false;          // in prova: durante l'azzeramento la pedana è vuota
+  stato("Azzeramento: nessuno sulla pedana…");
+  setTimeout(()=>{
+    if(!taraAcc.n){ taraAcc=null; stato("Nessun dato dalla pedana durante l'azzeramento. Riprova.", true); return; }
+    tara=taraAcc.s.map(v=>v/taraAcc.n); taraAcc=null; taraFatta=true;
+    if (sim) simSopra=true;
+    stato("Pedana azzerata."); aggiornaPannello(); if (cb) cb();
+  },1500);
+}
+setInterval(()=>{ $("vHz").textContent = contaHz||"—"; contaHz=0; },1000);
+
+// ════════════ ANALISI ════════════
+function ricampiona(c){
+  const T=c[c.length-1].t, n=Math.floor(T*FS), out=[]; let j=0;
+  for (let i=0;i<n;i++){
+    const a=i/FS, b=(i+1)/FS; let sx=0,sy=0,k=0;
+    while (j<c.length && c[j].t<b){ if(c[j].t>=a){ sx+=c[j].x; sy+=c[j].y; k++; } j++; }
+    if (k) out.push({x:sx/k,y:sy/k}); else if (out.length) out.push({...out[out.length-1]});
+  }
+  return out;
+}
+function fft(re,im){
+  const n=re.length;
+  for (let i=1,j=0;i<n;i++){ let b=n>>1; for(;j&b;b>>=1) j^=b; j^=b; if(i<j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; } }
+  for (let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for (let i=0;i<n;i+=len){ let cr=1,ci=0;
+      for (let k=0;k<len/2;k++){
+        const ur=re[i+k],ui=im[i+k], vr=re[i+k+len/2]*cr-im[i+k+len/2]*ci, vi=re[i+k+len/2]*ci+im[i+k+len/2]*cr;
+        re[i+k]=ur+vr; im[i+k]=ui+vi; re[i+k+len/2]=ur-vr; im[i+k+len/2]=ui-vi;
+        const t=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=t; }}}
+}
+function spettro(v){
+  const n=v.length, m=v.reduce((a,b)=>a+b,0)/n;
+  let N=1; while(N<n) N<<=1;
+  const re=new Float64Array(N), im=new Float64Array(N);
+  for (let i=0;i<n;i++) re[i]=(v[i]-m)*(0.5-0.5*Math.cos(2*Math.PI*i/(n-1)));
+  fft(re,im);
+  const bande=[0,0,0]; let tot=0, mom=0;
+  for (let k=1;k<N/2;k++){
+    const f=k*FS/N; if (f<0.02||f>10) continue;
+    const p=re[k]*re[k]+im[k]*im[k]; tot+=p; mom+=p*f;
+    bande[f<0.5?0:f<2?1:2]+=p;
+  }
+  return {bande:bande.map(b=>tot?100*b/tot:0), fMedia: tot?mom/tot:0, pot:bande};
+}
+function analizza(c){
+  const s=ricampiona(c), n=s.length, T=n/FS;
+  const mx=s.reduce((a,p)=>a+p.x,0)/n, my=s.reduce((a,p)=>a+p.y,0)/n;
+  let L=0,LX=0,LY=0,vx=0,vy=0,cxy=0,minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+  for (let i=0;i<n;i++){
+    const dx=s[i].x-mx, dy=s[i].y-my; vx+=dx*dx; vy+=dy*dy; cxy+=dx*dy;
+    minx=Math.min(minx,s[i].x); maxx=Math.max(maxx,s[i].x); miny=Math.min(miny,s[i].y); maxy=Math.max(maxy,s[i].y);
+    if (i){ const ex=s[i].x-s[i-1].x, ey=s[i].y-s[i-1].y; L+=Math.hypot(ex,ey); LX+=Math.abs(ex); LY+=Math.abs(ey); }
+  }
+  vx/=n-1; vy/=n-1; cxy/=n-1;
+  const det=vx*vy-cxy*cxy, area=Math.PI*CHI2_95*Math.sqrt(Math.max(det,0));
+  const tr=(vx+vy)/2, dd=Math.sqrt(Math.max(tr*tr-det,0)), l1=tr+dd, l2=tr-dd;
+  const pesi=c.reduce((a,p)=>{p.kg.forEach((v,i)=>a[i]+=v); return a;},[0,0,0,0]), ptot=pesi.reduce((a,b)=>a+b,0);
+  let destra=100*(pesi[0]+pesi[1])/ptot, avanti=100*(pesi[0]+pesi[2])/ptot;
+  if ($("invML").checked) destra=100-destra; if ($("invAP").checked) avanti=100-avanti;
+  const sX=spettro(s.map(p=>p.x)), sY=spettro(s.map(p=>p.y));
+  const potTot=[0,1,2].map(i=>sX.pot[i]+sY.pot[i]), somma=potTot.reduce((a,b)=>a+b,0)||1;
+  const cx_=s.map(p=>p.x-mx), cy_=s.map(p=>p.y-my);
+  const diff=diffusione(cx_,cy_), dens=densita(cx_,cy_);
+  return {
+    sampEnX:sampEn(cx_), sampEnY:sampEn(cy_), Ds:diff.Ds, Dl:diff.Dl, Hs:diff.Hs, Hl:diff.Hl, tc:diff.tc,
+    densPicco:dens.durata, densDist:dens.dist,
+    serie:s.map(p=>({x:+(p.x-mx).toFixed(2), y:+(p.y-my).toFixed(2)})), T,
+    xMedio:mx, yMedio:my,
+    ellisse:{a:Math.sqrt(CHI2_95*l1), b:Math.sqrt(CHI2_95*Math.max(l2,0)), ang:0.5*Math.atan2(2*cxy,vx-vy)},
+    area, L, vel:L/T, velX:LX/T, velY:LY/T, rmsX:Math.sqrt(vx), rmsY:Math.sqrt(vy),
+    rangeX:maxx-minx, rangeY:maxy-miny, lfs: area>0 ? L/area : null,
+    peso:ptot/c.length, destra, avanti,
+    bande: potTot.map(p=>100*p/somma), fMediaX:sX.fMedia, fMediaY:sY.fMedia
+  };
+}
+// Entropia campionaria (m=2, r=0,2·DS): più è bassa, più il controllo è regolare/rigido
+function sampEn(v, m=2){
+  const n=Math.min(v.length,1500), x=v.slice(0,n), mu=x.reduce((a,b)=>a+b,0)/n;
+  const sd=Math.sqrt(x.reduce((a,b)=>a+(b-mu)*(b-mu),0)/n), r=0.2*sd; if(!r) return null;
+  let A=0,B=0;
+  for (let i=0;i<n-m;i++) for (let j=i+1;j<n-m;j++){
+    let ok=true; for (let k=0;k<m;k++) if (Math.abs(x[i+k]-x[j+k])>r){ ok=false; break; }
+    if (!ok) continue; B++; if (Math.abs(x[i+m]-x[j+m])<=r) A++;
+  }
+  return (A&&B) ? -Math.log(A/B) : null;
+}
+// Analisi di diffusione (Collins & De Luca): controllo a breve termine (aperto) e lungo termine (correttivo)
+function diffusione(x,y){
+  const n=x.length, lagMax=Math.min(Math.floor(10*FS), n-10), msd=[];
+  for (let L=1; L<=lagMax; L++){ let s=0,c=0; for (let i=0;i+L<n;i+=1){ const dx=x[i+L]-x[i], dy=y[i+L]-y[i]; s+=dx*dx+dy*dy; c++; } msd.push({t:L/FS, d:s/c}); }
+  const fit=(a)=>{ const k=a.length; if(k<3) return {m:null}; let sx=0,sy=0,sxx=0,sxy=0; a.forEach(p=>{sx+=p.X;sy+=p.Y;sxx+=p.X*p.X;sxy+=p.X*p.Y;}); const m=(k*sxy-sx*sy)/(k*sxx-sx*sx); return {m,q:(sy-m*sx)/k}; };
+  // breve termine 0–0,5 s, lungo termine 2–10 s (lineare per D, log-log per H)
+  const breve=msd.filter(p=>p.t<=0.5), lungo=msd.filter(p=>p.t>=2);
+  const lin=a=>fit(a.map(p=>({X:p.t,Y:p.d}))), lg=a=>fit(a.filter(p=>p.d>0).map(p=>({X:Math.log(p.t),Y:Math.log(p.d)})));
+  const fb=lin(breve), fl=lin(lungo);
+  const tc = (fb.m!=null && fl.m!=null && fb.m!==fl.m) ? (fl.q-fb.q)/(fb.m-fl.m) : null;
+  return {Ds:fb.m!=null?fb.m/4:null, Dl:fl.m!=null?fl.m/4:null, Hs:lg(breve).m!=null?lg(breve).m/2:null, Hl:lg(lungo).m!=null?lg(lungo).m/2:null, tc:(tc>0&&tc<10)?tc:null};
+}
+// Densità dell'oscillazione (Baratto): quanto a lungo il punto resta fermo in un'area di 2,5 mm
+function densita(x,y,raggio=2.5){
+  const n=x.length, d=new Array(n).fill(0);
+  for (let i=0;i<n;i++){ let k=0; for (let j=i;j<n && Math.hypot(x[j]-x[i],y[j]-y[i])<=raggio;j++) k++; for (let j=i-1;j>=0 && Math.hypot(x[j]-x[i],y[j]-y[i])<=raggio;j--) k++; d[i]=k/FS; }
+  const sm=d.map((_,i)=>{ let s=0,c=0; for(let j=Math.max(0,i-2);j<=Math.min(n-1,i+2);j++){s+=d[j];c++;} return s/c; });
+  const picchi=[]; for (let i=1;i<n-1;i++) if (sm[i]>sm[i-1]&&sm[i]>=sm[i+1]&&sm[i]>0.1) picchi.push(i);
+  if (picchi.length<2) return {durata:null,dist:null};
+  const durata=picchi.reduce((a,i)=>a+sm[i],0)/picchi.length;
+  let dist=0; for (let k=1;k<picchi.length;k++) dist+=Math.hypot(x[picchi[k]]-x[picchi[k-1]], y[picchi[k]]-y[picchi[k-1]]);
+  return {durata, dist:dist/(picchi.length-1)};
+}
+const PARAMETRI = [
+  ["Area dell'ellisse 95% (mm²)","area",0,true],
+  ["Lunghezza del percorso (mm)","L",0,true],
+  ["Velocità media (mm/s)","vel",1,true],
+  ["Velocità destra/sinistra (mm/s)","velX",1,true],
+  ["Velocità avanti/dietro (mm/s)","velY",1,true],
+  ["RMS destra/sinistra (mm)","rmsX",1,true],
+  ["RMS avanti/dietro (mm)","rmsY",1,true],
+  ["Escursione destra/sinistra (mm)","rangeX",1,true],
+  ["Escursione avanti/dietro (mm)","rangeY",1,true],
+  ["Lunghezza/superficie, LFS (1/mm)","lfs",2,false],
+  ["Frequenza media dx/sx (Hz)","fMediaX",2,false],
+  ["Frequenza media av/ind (Hz)","fMediaY",2,false],
+  ["Carico a destra (%)","destra",0,false],
+  ["Carico in avanti (%)","avanti",0,false],
+  ["Entropia campionaria dx/sx","sampEnX",2,false],
+  ["Entropia campionaria av/ind","sampEnY",2,false],
+  ["Diffusione breve termine Ds (mm²/s)","Ds",1,false],
+  ["Diffusione lungo termine Dl (mm²/s)","Dl",1,false],
+  ["Esponente breve termine Hs","Hs",2,false],
+  ["Esponente lungo termine Hl","Hl",2,false],
+  ["Tempo critico (s)","tc",2,false],
+  ["Densità: permanenza media (s)","densPicco",2,false],
+  ["Densità: distanza tra i picchi (mm)","densDist",1,false],
+  ["Durata registrata (s)","T",1,false],
+];
+
+// ════════════ ESAME ════════════
+let sequenza=[], indice=0, risultati={}, registrazione=null, tGommaFatta=false;
+function costruisciScelta(){
+  $("sceltaProve").innerHTML = PROVE.map(p=>
+    `<label><input type="checkbox" value="${p.id}" ${p.def?"checked":""} ${p.id==="OA"?"checked disabled":""}> ${p.nome}</label>`).join("");
+}
+function preparaSequenza(){
+  const scelte=[...$("sceltaProve").querySelectorAll("input:checked")].map(i=>i.value);
+  sequenza=PROVE.filter(p=>scelte.includes(p.id));    // l'ordine di PROVE mette la gommapiuma per ultima
+  indice=0; risultati={}; tGommaFatta=false; $("risultati").hidden=true;
+  aggiornaPannello();
+  if (!taraFatta) stato("Sequenza pronta. Prima collega la pedana e azzera.");
+  else stato("Sequenza pronta: "+sequenza.length+" prove.");
+}
+function aggiornaPannello(){
+  $("listaProve").innerHTML = sequenza.map((p,i)=>{
+    const r=risultati[p.id], icona = r ? "✓" : (i===indice ? "▶" : "·");
+    const es = r ? (p.los ? "escursione "+f1(r.medie.mxe,0)+"%" : p.mono ? f1(r.T,1)+" s" : f1(r.area,0)+" mm²") : "";
+    return `<li class="${i===indice?"corrente":""}"><span class="icona">${icona}</span>${p.nome}<span class="esito">${es}</span>
+      ${r?`<button class="piccolo" data-rifai="${i}">Ripeti</button>`:""}</li>`;
+  }).join("");
+  $("listaProve").querySelectorAll("[data-rifai]").forEach(b=>b.onclick=()=>{ indice=+b.dataset.rifai; aggiornaPannello(); });
+  const p=sequenza[indice];
+  $("pannelloProva").hidden = !p;
+  if (!p){ if (Object.keys(risultati).length) stato("Sequenza completata. Controlla i risultati e salva nell'archivio."); return; }
+  let extra="";
+  if (p.gomma && !tGommaFatta) extra="<br><em>Prima di questa prova: metti la gommapiuma sulla pedana, nessuno sopra, e premi «Azzera con la gommapiuma».</em>";
+  $("istruzioni").innerHTML = `<b>${indice+1}/${sequenza.length} · ${p.nome}</b>${p.istr}${extra}`;
+  const serveGomma = p.gomma && !tGommaFatta;
+  $("btnAvvia").textContent = serveGomma ? "Azzera con la gommapiuma" : "Avvia la prova";
+  $("btnAvvia").disabled = !taraFatta || !!registrazione;
+  $("btnSalta").disabled = !!registrazione;
+}
+function avviaProva(){
+  const p=sequenza[indice]; if(!p) return;
+  if (p.gomma && !tGommaFatta){ azzera(()=>{ tGommaFatta=true; aggiornaPannello(); stato("Azzerata con la gommapiuma: fai salire il paziente e avvia."); }); return; }
+  if (!ultimo || ultimo.tot<10){ stato("Sulla pedana risultano meno di 10 kg: fai salire il paziente.", true); return; }
+  if (p.los){ avviaLOS(); return; }
+  if (p.stimolo) apriSchermo(p.stimolo);
+  const durata = p.mono ? Math.min(parseFloat($("durata").value),30) : parseFloat($("durata").value);
+  registrazione={prova:p, durata, t0:null, campioni:[], peso0:null};
+  ascoltatori.add(registra);
+  $("btnAvvia").disabled=true; $("btnStop").disabled=false; $("btnSalta").disabled=true;
+  stato("Registrazione: "+p.nome+". Il primo secondo serve ad assestarsi.");
+}
+function registra(c){
+  const r=registrazione;
+  if (r.t0===null){ r.t0=c.t+1; }
+  if (c.t<r.t0) return;
+  if (r.peso0===null) r.peso0=c.tot;
+  if (c.tot<10 || (r.prova.mono && c.tot<0.6*r.peso0)){
+    if (r.prova.mono){ fermaProva("appoggio"); } else fermaProva("sceso");
+    return;
+  }
+  r.campioni.push({t:c.t-r.t0,x:c.x,y:c.y,kg:c.kg.slice(),tot:c.tot});
+  $("timer").textContent = f1(Math.max(r.durata-(c.t-r.t0),0),1)+" s";
+  if (c.t-r.t0>=r.durata) fermaProva("ok");
+}
+function fermaProva(motivo){
+  const r=registrazione; if(!r) return;
+  registrazione=null; ascoltatori.delete(registra);
+  $("btnStop").disabled=true; chiudiSchermo();
+  if (motivo==="interrotta" || motivo==="sceso" || r.campioni.length<FS*3){
+    stato(motivo==="sceso" ? "Il paziente è sceso dalla pedana: ripeti la prova." : "Prova interrotta o troppo breve: ripetila.", true);
+    aggiornaPannello(); return;
+  }
+  const a=analizza(r.campioni);
+  a.grezzi=r.campioni; a.appoggio = motivo==="appoggio";
+  risultati[r.prova.id]=a;
+  stato(r.prova.nome+": registrata"+(a.appoggio?" (ha appoggiato l'altro piede dopo "+f1(a.T,1)+" s)":"")+".");
+  do { indice++; } while (indice<sequenza.length && risultati[sequenza[indice].id]);
+  aggiornaPannello(); mostraRisultati();
+}
+
+function indiciSintesi(R){
+  const out=[];
+  if (R.OA && R.OC) out.push(["Quoziente di Romberg", f1(100*R.OC.area/R.OA.area,0), "area OC / OA × 100"]);
+  if (R.OC && R.GOC) out.push(["Quoziente plantare", f1(100*R.GOC.area/R.OC.area,0), "area gommapiuma OC / OC × 100"]);
+  if (R.OA && R.DC) out.push(["Costo del doppio compito", (R.DC.area>=R.OA.area?"+":"")+f1(100*(R.DC.area/R.OA.area-1),0)+" %", "area doppio compito rispetto a OA"]);
+  if (R.OA && R.LEN) out.push(["Effetto lenti/prismi", (R.LEN.area>=R.OA.area?"+":"")+f1(100*(R.LEN.area/R.OA.area-1),0)+" %", "area con lenti rispetto a OA"]);
+  if (R.MDX && R.MSX) out.push(["Monopodalico dx / sx", f1(R.MDX.T,1)+" / "+f1(R.MSX.T,1)+" s", "tempo mantenuto"]);
+  if (R.OA && R.OPT) out.push(["Effetto optocinetico", (R.OPT.vel>=R.OA.vel?"+":"")+f1(100*(R.OPT.vel/R.OA.vel-1),0)+" %", "velocità rispetto a OA"]);
+  if (R.LOS) out.push(["Limiti di stabilità", f1(R.LOS.medie.mxe,0)+" %", "escursione massima media"]);
+  return out;
+}
+function mostraRisultati(){
+  const R=risultati, tutte=sequenza.filter(p=>R[p.id]), fatte=tutte.filter(p=>!p.los);
+  if (!tutte.length) return;
+  $("risultati").hidden=false;
+  $("titoloRis").textContent = ($("paziente").value? "· "+$("paziente").value+" " : "")+"· "+new Date($("dataEsame").value).toLocaleDateString("it-IT");
+  $("indici").innerHTML = indiciSintesi(R).map(([n,v,s])=>`<div class="indice"><span>${n}</span><strong>${v}</strong><small>${s}</small></div>`).join("");
+  // tabella
+  let h="<thead><tr><th>Parametro</th>"+fatte.map(p=>`<th>${p.breve}</th>`).join("")+"</tr></thead><tbody>";
+  PARAMETRI.forEach(([nome,k,d,peggio])=>{
+    h+=`<tr><td>${nome}</td>`+fatte.map(p=>{
+      const v=R[p.id][k], rif=p.rif&&R[p.rif]?R[p.rif][k]:null;
+      let cls="", delta="";
+      if (rif && peggio && v!=null){ const pc=100*(v/rif-1); delta=` <small>(${pc>=0?"+":""}${f1(pc,0)}%)</small>`; cls = pc>15?"peggio":pc<-15?"meglio":""; }
+      return `<td class="${cls}">${f1(v,d)}${delta}</td>`;
+    }).join("")+"</tr>";
+  });
+  $("tabella").innerHTML=h+"</tbody>";
+  // statokinesigrammi
+  let Rm=10; fatte.forEach(p=>R[p.id].serie.forEach(q=>{ Rm=Math.max(Rm,Math.abs(q.x),Math.abs(q.y)); }));
+  Rm=Math.ceil(Rm*1.1/5)*5;
+  $("minis").hidden = !fatte.length;
+  $("minis").innerHTML = fatte.map(p=>`<figure class="mini"><canvas width="380" height="380" data-p="${p.id}"></canvas><figcaption>${p.nome} · ${f1(R[p.id].area,0)} mm²</figcaption></figure>`).join("");
+  $("minis").querySelectorAll("canvas").forEach(cv=>disegnaSTK(cv,[{a:R[cv.dataset.p],col:css(COLORE_PROVA(cv.dataset.p))}],Rm));
+  disegnaFrequenze(fatte,R);
+  const prof=profiloSensoriale(R);
+  $("boxProfilo").hidden = !(prof && prof.length);
+  if (prof && prof.length) disegnaProfilo($("profilo"), prof);
+  $("boxLOS").hidden = $("boxLOStab").hidden = !R.LOS;
+  if (R.LOS){
+    disegnaLOS($("losCv"), R.LOS);
+    let h="<thead><tr><th>Direzione</th><th>Tempo di reazione (s)</th><th>Velocità (mm/s)</th><th>Punto finale (%)</th><th>Escursione max (%)</th><th>Controllo direzionale (%)</th></tr></thead><tbody>";
+    R.LOS.dirs.forEach(d=>{ h+=`<tr><td>${LOS_NOMI[d.ang]}</td><td>${f1(d.rt,2)}</td><td>${f1(d.vel,0)}</td><td>${f1(d.epe,0)}</td><td class="${d.mxe<60?"peggio":""}">${f1(d.mxe,0)}</td><td>${f1(d.dcl,0)}</td></tr>`; });
+    const m=R.LOS.medie; h+=`<tr><td><b>Media</b></td><td><b>${f1(m.rt,2)}</b></td><td><b>${f1(m.vel,0)}</b></td><td><b>${f1(m.epe,0)}</b></td><td><b>${f1(m.mxe,0)}</b></td><td><b>${f1(m.dcl,0)}</b></td></tr>`;
+    $("losTab").innerHTML=h+"</tbody>";
+  }
+  if (!commentoModificato) $("commento").value = scriviCommento(R);
+}
+function disegnaSTK(cv,lista,Rm){
+  const g=cv.getContext("2d"), W=cv.width, H=cv.height, sc=(W/2-16)/Rm, cx=W/2, cy=H/2;
+  g.clearRect(0,0,W,H); g.fillStyle=css("--foglio"); g.fillRect(0,0,W,H);
+  g.strokeStyle=css("--linea"); g.lineWidth=1;
+  for (let v=-Rm; v<=Rm; v+=Rm/2){ g.beginPath(); g.moveTo(cx+v*sc,8); g.lineTo(cx+v*sc,H-8); g.moveTo(8,cy-v*sc); g.lineTo(W-8,cy-v*sc); g.stroke(); }
+  g.fillStyle=css("--grigio"); g.font="11px "+font(); g.textAlign="right"; g.fillText(Rm+" mm",W-10,cy-4);
+  lista.forEach(({a,col,tratteggio})=>{
+    g.strokeStyle=col; g.globalAlpha=.7; g.lineWidth=1; g.setLineDash(tratteggio?[4,3]:[]); g.beginPath();
+    a.serie.forEach((p,i)=>{ const X=cx+p.x*sc, Y=cy-p.y*sc; i?g.lineTo(X,Y):g.moveTo(X,Y); }); g.stroke();
+    g.globalAlpha=1; g.lineWidth=2; g.beginPath(); g.ellipse(cx,cy,a.ellisse.a*sc,a.ellisse.b*sc,-a.ellisse.ang,0,7); g.stroke();
+    g.setLineDash([]);
+  });
+}
+function disegnaFrequenze(fatte,R){
+  const cv=$("freq"), g=cv.getContext("2d"), W=cv.width, H=cv.height;
+  g.clearRect(0,0,W,H);
+  const colori=[css("--oa"),css("--terzo"),css("--oc")], nomi=["0–0,5 Hz","0,5–2 Hz",">2 Hz"];
+  const lab=170, bh=Math.min(26,(H-40)/fatte.length-6);
+  g.font="13px "+font();
+  fatte.forEach((p,i)=>{
+    const y=10+i*(bh+6); let x=lab;
+    g.fillStyle=css("--inchiostro"); g.textAlign="left"; g.fillText(p.breve,4,y+bh*0.7);
+    R[p.id].bande.forEach((b,k)=>{ const w=(W-lab-10)*b/100; g.fillStyle=colori[k]; g.fillRect(x,y,w,bh);
+      if (w>34){ g.fillStyle="#fff"; g.textAlign="center"; g.fillText(f1(b,0)+"%",x+w/2,y+bh*0.7); } x+=w; });
+  });
+  const y=H-14; let x=lab;
+  nomi.forEach((n,k)=>{ g.fillStyle=colori[k]; g.fillRect(x,y-10,12,12); g.fillStyle=css("--grigio"); g.textAlign="left"; g.fillText(n,x+16,y); x+=110; });
+}
+
+// ════════════ ARCHIVIO ════════════
+const leggiArchivio = ()=>{ try{ return JSON.parse(localStorage.getItem(ARCHIVIO_KEY)||"[]"); }catch(e){ return []; } };
+const scriviArchivio = a => localStorage.setItem(ARCHIVIO_KEY, JSON.stringify(a));
+const chiavePaz = n => (n||"").trim().toUpperCase().replace(/\s+/g," ");
+function salvaEsame(){
+  const paz=chiavePaz($("paziente").value);
+  if (!paz){ stato("Scrivi il nome del paziente in alto prima di salvare.", true); $("paziente").focus(); return; }
+  const arch=leggiArchivio();
+  arch.push(esameCorrente());
+  try{ scriviArchivio(arch); stato("Esame salvato nell'archivio di "+paz+"."); aggiornaElencoPazienti(); }
+  catch(e){ stato("Archivio pieno: scarica la copia di sicurezza e cancella qualche esame vecchio.", true); }
+}
+function aggiornaElencoPazienti(){
+  const nomi=[...new Set(leggiArchivio().map(e=>e.paziente))].sort();
+  $("elencoPazienti").innerHTML = nomi.map(n=>`<option value="${n}">`).join("");
+  const sel=$("archPaz"), prima=sel.value;
+  sel.innerHTML = nomi.length ? nomi.map(n=>`<option>${n}</option>`).join("") : "<option value=''>Nessun esame salvato</option>";
+  const att=chiavePaz($("paziente").value);
+  sel.value = nomi.includes(prima)?prima : nomi.includes(att)?att : (nomi[0]||"");
+}
+let selezionati=[];
+function mostraArchivio(){
+  aggiornaElencoPazienti();
+  const paz=$("archPaz").value;
+  const es=leggiArchivio().filter(e=>e.paziente===paz).sort((a,b)=>a.data.localeCompare(b.data)||a.id-b.id);
+  selezionati=selezionati.filter(id=>es.some(e=>e.id===id));
+  if (!es.length){ $("archTab").innerHTML="<tr><td>Nessun esame per questo paziente.</td></tr>"; $("archConfronto").hidden=true; return; }
+  let h="<thead><tr><th>Confronta</th><th>Data</th><th>Tipo</th><th>Prove</th><th>Area OA</th><th>Area OC</th><th>Romberg</th><th>Note</th><th></th></tr></thead><tbody>";
+  es.forEach(e=>{
+    const d=new Date(e.data).toLocaleDateString("it-IT");
+    if (e.tipo==="bio"){
+      h+=`<tr><td></td><td>${d}</td><td>Biofeedback</td><td>${e.gioco}</td><td colspan="3">${e.riassunto}</td><td>${e.note||""}</td><td><button class="piccolo" data-canc="${e.id}">Elimina</button></td></tr>`;
+    } else {
+      const P=e.prove, rom=P.OA&&P.OC?f1(100*P.OC.area/P.OA.area,0):"—";
+      h+=`<tr><td><input type="checkbox" data-sel="${e.id}" ${selezionati.includes(e.id)?"checked":""}></td><td>${d}</td><td>Esame</td>
+        <td>${Object.keys(P).map(k=>(PROVE.find(p=>p.id===k)||{breve:k}).breve).join(", ")}</td>
+        <td>${f1(P.OA&&P.OA.area,0)}</td><td>${f1(P.OC&&P.OC.area,0)}</td><td>${rom}</td><td>${e.note||""}</td>
+        <td><button class="piccolo" data-canc="${e.id}">Elimina</button></td></tr>`;
+    }
+  });
+  $("archTab").innerHTML=h+"</tbody>";
+  $("archTab").querySelectorAll("[data-sel]").forEach(c=>c.onchange=()=>{
+    const id=+c.dataset.sel; selezionati = c.checked ? [...selezionati.filter(x=>x!==id),id].slice(-2) : selezionati.filter(x=>x!==id); mostraArchivio(); });
+  $("archTab").querySelectorAll("[data-canc]").forEach(b=>b.onclick=()=>{
+    if (!confirm("Eliminare questo esame dall'archivio?")) return;
+    scriviArchivio(leggiArchivio().filter(e=>e.id!==+b.dataset.canc)); mostraArchivio(); });
+  const esami=es.filter(e=>e.tipo!=="bio");
+  $("archConfronto").hidden = esami.length<1;
+  disegnaTrend(esami);
+  const due=esami.filter(e=>selezionati.includes(e.id));
+  if (due.length===2) confronta(due[0],due[1]);
+  else { $("confMinis").innerHTML="<p class='nota'>Spunta due esami nella colonna «Confronta» per vederli uno sull'altro.</p>"; $("confTab").innerHTML=""; }
+}
+function disegnaTrend(esami){
+  const cv=$("trend"), g=cv.getContext("2d"), W=cv.width, H=cv.height;
+  g.clearRect(0,0,W,H);
+  const serie=[["OA","--oa"],["OC","--oc"]].map(([k,c])=>({k,col:css(c),pts:esami.map((e,i)=>({i,v:e.prove[k]?e.prove[k].area:null})).filter(p=>p.v!=null)}));
+  const max=Math.max(10,...serie.flatMap(s=>s.pts.map(p=>p.v)))*1.15;
+  const x0=80, x1=W-60, y0=H-40, y1=34, n=Math.max(esami.length-1,1);
+  const X=i=>esami.length===1?(x0+x1)/2:x0+(x1-x0)*i/n, Y=v=>y0-(y0-y1)*v/max;
+  g.strokeStyle=css("--linea"); g.fillStyle=css("--grigio"); g.font="12px "+font(); g.textAlign="right";
+  for (let k=0;k<=4;k++){ const v=max*k/4; g.beginPath(); g.moveTo(x0,Y(v)); g.lineTo(x1,Y(v)); g.stroke(); g.fillText(f1(v,0),x0-6,Y(v)+4); }
+  g.textAlign="center"; esami.forEach((e,i)=>g.fillText(new Date(e.data).toLocaleDateString("it-IT"),X(i),H-18));
+  g.save(); g.translate(14,(y0+y1)/2); g.rotate(-Math.PI/2); g.fillText("area ellisse (mm²)",0,0); g.restore();
+  serie.forEach(s=>{ g.strokeStyle=s.col; g.fillStyle=s.col; g.lineWidth=2.5; g.beginPath();
+    s.pts.forEach((p,j)=>{ j?g.lineTo(X(p.i),Y(p.v)):g.moveTo(X(p.i),Y(p.v)); }); g.stroke();
+    s.pts.forEach(p=>{ g.beginPath(); g.arc(X(p.i),Y(p.v),4.5,0,7); g.fill(); }); });
+  g.textAlign="left"; g.fillStyle=css("--oa"); g.fillText("● occhi aperti",x0,14); g.fillStyle=css("--oc"); g.fillText("● occhi chiusi",x0+120,14);
+}
+function confronta(A,B){
+  const ids=PROVE.filter(p=>!p.los).map(p=>p.id).filter(id=>A.prove[id]&&B.prove[id]&&A.prove[id].serie&&B.prove[id].serie);
+  let Rm=10; ids.forEach(id=>[A,B].forEach(e=>e.prove[id].serie.forEach(q=>{Rm=Math.max(Rm,Math.abs(q.x),Math.abs(q.y));}))); Rm=Math.ceil(Rm*1.1/5)*5;
+  const dA=new Date(A.data).toLocaleDateString("it-IT"), dB=new Date(B.data).toLocaleDateString("it-IT");
+  $("confMinis").innerHTML = ids.map(id=>`<figure class="mini"><canvas width="380" height="380" data-c="${id}"></canvas><figcaption>${(PROVE.find(p=>p.id===id)).nome}: tratteggio ${dA}, pieno ${dB}</figcaption></figure>`).join("")
+    || "<p class='nota'>I due esami non hanno prove in comune.</p>";
+  $("confMinis").querySelectorAll("canvas").forEach(cv=>{ const id=cv.dataset.c, col=css(COLORE_PROVA(id));
+    disegnaSTK(cv,[{a:A.prove[id],col:css("--grigio"),tratteggio:true},{a:B.prove[id],col}],Rm); });
+  let h=`<thead><tr><th>Parametro</th>`+ids.map(id=>`<th>${PROVE.find(p=>p.id===id).breve}<br><small>${dA} → ${dB}</small></th>`).join("")+"</tr></thead><tbody>";
+  PARAMETRI.filter(p=>p[3]).forEach(([nome,k,d])=>{
+    h+=`<tr><td>${nome}</td>`+ids.map(id=>{ const a=A.prove[id][k], b=B.prove[id][k], pc=100*(b/a-1);
+      return `<td class="${pc<-15?"meglio":pc>15?"peggio":""}">${f1(a,d)} → ${f1(b,d)} <small>(${pc>=0?"+":""}${f1(pc,0)}%)</small></td>`; }).join("")+"</tr>";
+  });
+  // indici di sintesi a confronto
+  const iA=indiciSintesi(A.prove), iB=indiciSintesi(B.prove);
+  const righeI=iA.filter(([n])=>iB.some(x=>x[0]===n));
+  if (righeI.length){ h+=`<tr><td colspan="${ids.length+1}"><b>Indici</b></td></tr>`;
+    righeI.forEach(([n,v])=>{ h+=`<tr><td>${n}</td><td colspan="${Math.max(ids.length,1)}" style="text-align:left">${v} → ${iB.find(x=>x[0]===n)[1]}</td></tr>`; }); }
+  $("confTab").innerHTML=h+"</tbody>";
+  const pA=profiloSensoriale(A.prove), pB=profiloSensoriale(B.prove);
+  if (pB && pB.length){ const cv=document.createElement("canvas"); cv.width=560; cv.height=260;
+    const fig=document.createElement("figure"); fig.className="mini"; fig.appendChild(cv);
+    fig.insertAdjacentHTML("beforeend",`<figcaption>Profilo sensoriale ${dB} (barre) e ${dA} (tratteggio)</figcaption>`);
+    $("confMinis").appendChild(fig); disegnaProfilo(cv,pB,pA); }
+  if (A.prove.LOS && B.prove.LOS){ const cv=document.createElement("canvas"); cv.width=420; cv.height=380;
+    const fig=document.createElement("figure"); fig.className="mini"; fig.appendChild(cv);
+    fig.insertAdjacentHTML("beforeend",`<figcaption>Limiti di stabilità: tratteggio ${dA}, pieno ${dB}</figcaption>`);
+    $("confMinis").appendChild(fig); disegnaLOS(cv,B.prove.LOS,A.prove.LOS); }
+}
+function esportaArchivio(){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(leggiArchivio())],{type:"application/json"}));
+  a.download="archivio_stabilometria_"+new Date().toISOString().slice(0,10)+".json"; a.click();
+}
+function importaArchivio(file){
+  const r=new FileReader();
+  r.onload=()=>{ try{
+      const nuovi=JSON.parse(r.result); if(!Array.isArray(nuovi)) throw new Error("formato non valido");
+      const arch=leggiArchivio(), ids=new Set(arch.map(e=>e.id)); let n=0;
+      nuovi.forEach(e=>{ if(e&&e.id&&!ids.has(e.id)){ arch.push(e); n++; } });
+      scriviArchivio(arch); stato(n+" esami aggiunti dall'archivio caricato."); mostraArchivio();
+    }catch(e){ stato("File non valido: "+e.message, true); } };
+  r.readAsText(file);
+}
+
+// ════════════ BIOFEEDBACK ════════════
+const SPIEGA = {
+  centro:"Tieni il punto dentro il cerchio centrale il più a lungo possibile. Conta la percentuale di tempo dentro e la permanenza più lunga.",
+  bersagli:"Porta il punto dentro ogni bersaglio e restaci 1 secondo: poi ne compare un altro. Conta i bersagli presi e il tempo medio.",
+  percorso:"Segui con il punto il pallino che si muove a forma di otto. Conta quanto resti vicino al pallino."
+};
+let partita=null;
+function iniziaGioco(){
+  if (!ultimo || ultimo.tot<10){ stato("Fai salire il paziente sulla pedana prima di iniziare.", true); return; }
+  const diff=+$("difficolta").value;
+  partita={tipo:$("gioco").value, diff, scala:+$("sensib").value, durata:+$("durataBio").value,
+           fase:"centra", t0:performance.now()/1000, centro:{x:0,y:0,n:0}, pos:{x:0,y:0},
+           dentro:0, campioni:0, serie:0, serieMax:0, presi:0, tempi:[], bersaglio:null, tB:0, tDentroB:0, errori:[]};
+  ascoltatori.add(passoGioco); suonoAvvia();
+  $("btnGioca").disabled=true; $("btnFermaGioco").disabled=false; $("fineGioco").hidden=true;
+  stato("Resta fermo 3 secondi: prendo il centro.");
+}
+function nuovoBersaglio(p){
+  const r=0.75; let a=Math.random()*2*Math.PI, d=0.35+Math.random()*(r-0.35);
+  p.bersaglio={x:Math.cos(a)*d, y:Math.sin(a)*d, r:[0,.2,.14,.1][p.diff]}; p.tB=performance.now()/1000; p.tDentroB=0;
+}
+function passoGioco(c){
+  const p=partita, t=c.t;
+  if (p.fase==="centra"){
+    p.centro.x+=c.x; p.centro.y+=c.y; p.centro.n++;
+    if (t-p.t0>=3){ p.centro.x/=p.centro.n; p.centro.y/=p.centro.n; p.fase="gioco"; p.t0=t; p.tPrec=t; if(p.tipo==="bersagli") nuovoBersaglio(p);
+      stato("Via! "+SPIEGA[p.tipo]); }
+    return;
+  }
+  const dt=Math.min(t-p.tPrec,0.1); p.tPrec=t;
+  // posizione normalizzata: 1 = bordo del campo
+  p.pos={x:(c.x-p.centro.x)/p.scala, y:(c.y-p.centro.y)/p.scala};
+  const tg=t-p.t0; p.campioni++;
+  suonoAggiorna(p.tipo==="percorso"&&p.target ? {x:p.pos.x-p.target.x,y:p.pos.y-p.target.y} : p.tipo==="bersagli"&&p.bersaglio ? {x:p.pos.x-p.bersaglio.x,y:p.pos.y-p.bersaglio.y} : p.pos,
+                p.tipo==="centro" ? [0,.35,.22,.14][p.diff] : p.tipo==="bersagli" ? p.bersaglio.r : 0.15);
+  if (p.tipo==="centro"){
+    const r=[0,.35,.22,.14][p.diff], dentro=Math.hypot(p.pos.x,p.pos.y)<=r;
+    if (dentro){ p.dentro+=dt; p.serie+=dt; p.serieMax=Math.max(p.serieMax,p.serie); } else p.serie=0;
+  } else if (p.tipo==="bersagli"){
+    const b=p.bersaglio, dentro=Math.hypot(p.pos.x-b.x,p.pos.y-b.y)<=b.r;
+    p.tDentroB = dentro ? p.tDentroB+dt : 0;
+    if (p.tDentroB>=1){ p.presi++; p.tempi.push(t-p.tB); nuovoBersaglio(p); }
+  } else {
+    const T=[0,16,12,9][p.diff], w=2*Math.PI*tg/T;
+    p.target={x:0.6*Math.sin(w), y:0.45*Math.sin(2*w)};
+    const e=Math.hypot(p.pos.x-p.target.x,p.pos.y-p.target.y)*p.scala; p.errori.push(e);
+    if (e<=p.scala*0.15) p.dentro+=dt;
+  }
+  if (tg>=p.durata) fineGioco();
+}
+function riassuntoGioco(p){
+  const tg=Math.min((performance.now()/1000)-p.t0,p.durata);
+  if (p.tipo==="centro") return {righe:[["Tempo al centro",f1(100*p.dentro/Math.max(tg,1e-6),0)+" %"],["Permanenza più lunga",f1(p.serieMax,1)+" s"],["Durata",f1(tg,0)+" s"]],
+    breve:`al centro ${f1(100*p.dentro/Math.max(tg,1e-6),0)}%, max ${f1(p.serieMax,1)} s`};
+  if (p.tipo==="bersagli"){ const m=p.tempi.length?p.tempi.reduce((a,b)=>a+b,0)/p.tempi.length:null;
+    return {righe:[["Bersagli presi",String(p.presi)],["Tempo medio per bersaglio",m==null?"—":f1(m,1)+" s"],["Durata",f1(tg,0)+" s"]],
+      breve:`${p.presi} bersagli, ${m==null?"—":f1(m,1)+" s"} ciascuno`}; }
+  const e=p.errori.length?Math.sqrt(p.errori.reduce((a,b)=>a+b*b,0)/p.errori.length):null;
+  return {righe:[["Errore medio",e==null?"—":f1(e,1)+" mm"],["Tempo vicino al pallino",f1(100*p.dentro/Math.max(tg,1e-6),0)+" %"],["Durata",f1(tg,0)+" s"]],
+    breve:`errore ${e==null?"—":f1(e,1)} mm, vicino ${f1(100*p.dentro/Math.max(tg,1e-6),0)}%`};
+}
+function fineGioco(){
+  const p=partita; if(!p) return;
+  ascoltatori.delete(passoGioco); suonoFerma(); p.fase="fine"; p.ris=riassuntoGioco(p);
+  $("btnGioca").disabled=false; $("btnFermaGioco").disabled=true; $("fineGioco").hidden=false;
+  stato("Esercizio finito: "+p.ris.breve+".");
+}
+function salvaGioco(){
+  const p=partita, paz=chiavePaz($("paziente").value);
+  if (!p||!p.ris) return;
+  if (!paz){ stato("Scrivi il nome del paziente in alto prima di salvare.", true); return; }
+  const nomi={centro:"Resta al centro",bersagli:"Bersagli",percorso:"Segui il percorso"};
+  const arch=leggiArchivio();
+  arch.push({id:Date.now(), tipo:"bio", paziente:paz, data:$("dataEsame").value,
+    gioco:`${nomi[p.tipo]} · ${$("difficolta").selectedOptions[0].text}`, riassunto:p.ris.breve, note:""});
+  scriviArchivio(arch); aggiornaElencoPazienti(); $("fineGioco").hidden=true; stato("Esercizio salvato nell'archivio di "+paz+".");
+}
+function disegnaCampo(){
+  const cv=$("campo"), g=cv.getContext("2d"), W=cv.width, H=cv.height, R=Math.min(W,H)/2-20, cx=W/2, cy=H/2;
+  g.fillStyle=css("--foglio"); g.fillRect(0,0,W,H);
+  g.strokeStyle=css("--linea"); g.lineWidth=1;
+  [1,.66,.33].forEach(k=>{ g.beginPath(); g.arc(cx,cy,R*k,0,7); g.stroke(); });
+  g.beginPath(); g.moveTo(cx-R,cy); g.lineTo(cx+R,cy); g.moveTo(cx,cy-R); g.lineTo(cx,cy+R); g.stroke();
+  const p=partita;
+  if (!p){ g.fillStyle=css("--grigio"); g.font="18px "+font(); g.textAlign="center"; g.fillText("Scegli l'esercizio e premi «Inizia»",cx,cy-R-0+R*0.0+4); $("punteggio").innerHTML=""; return; }
+  const P=q=>({X:cx+q.x*R, Y:cy-q.y*R});
+  if ($("soloSuono").checked && p.fase==="gioco"){ g.fillStyle="#000"; g.fillRect(0,0,W,H); g.fillStyle="#666"; g.font="20px "+font(); g.textAlign="center";
+    g.fillText("Solo suono: silenzio = posizione giusta",cx,cy); const ris=riassuntoGioco(p), tg=Math.min((performance.now()/1000)-p.t0,p.durata);
+    $("punteggio").innerHTML=`<div><span>Tempo rimasto</span><strong>${f1(Math.max(p.durata-tg,0),0)} s</strong></div>`+ris.righe.slice(0,2).map(([n,v])=>`<div><span>${n}</span><strong>${v}</strong></div>`).join(""); return; }
+  if (p.fase==="centra"){
+    const rest=Math.max(0,3-((performance.now()/1000)-p.t0));
+    g.fillStyle=css("--verde"); g.font="bold 54px "+font(); g.textAlign="center"; g.fillText(Math.ceil(rest)||"",cx,cy+18);
+    g.font="18px "+font(); g.fillStyle=css("--grigio"); g.fillText("Resta fermo: prendo il centro",cx,cy+56); return;
+  }
+  if (p.tipo==="centro"){ const r=[0,.35,.22,.14][p.diff]; const dentro=Math.hypot(p.pos.x,p.pos.y)<=r;
+    g.fillStyle=dentro?css("--verde-chiaro"):"transparent"; g.strokeStyle=css("--verde"); g.lineWidth=4; g.beginPath(); g.arc(cx,cy,R*r,0,7); g.fill(); g.stroke(); }
+  if (p.tipo==="bersagli" && p.bersaglio){ const b=p.bersaglio, q=P(b);
+    g.strokeStyle=css("--oc"); g.lineWidth=4; g.beginPath(); g.arc(q.X,q.Y,R*b.r,0,7); g.stroke();
+    g.fillStyle=css("--oc"); g.globalAlpha=.25; g.beginPath(); g.moveTo(q.X,q.Y); g.arc(q.X,q.Y,R*b.r,-Math.PI/2,-Math.PI/2+2*Math.PI*Math.min(p.tDentroB,1)); g.fill(); g.globalAlpha=1; }
+  if (p.tipo==="percorso" && p.target){
+    g.strokeStyle=css("--linea"); g.lineWidth=2; g.beginPath();
+    for (let k=0;k<=200;k++){ const w=2*Math.PI*k/200, q=P({x:.6*Math.sin(w),y:.45*Math.sin(2*w)}); k?g.lineTo(q.X,q.Y):g.moveTo(q.X,q.Y); } g.stroke();
+    const q=P(p.target); g.fillStyle=css("--oc"); g.globalAlpha=.3; g.beginPath(); g.arc(q.X,q.Y,R*0.15,0,7); g.fill(); g.globalAlpha=1;
+    g.beginPath(); g.arc(q.X,q.Y,9,0,7); g.fill(); }
+  // il punto del paziente
+  const cl={x:Math.max(-1.05,Math.min(1.05,p.pos.x)), y:Math.max(-1.05,Math.min(1.05,p.pos.y))}, q=P(cl);
+  g.fillStyle=css("--oa"); g.beginPath(); g.arc(q.X,q.Y,14,0,7); g.fill();
+  const tg=Math.min((performance.now()/1000)-p.t0,p.durata), ris=riassuntoGioco(p);
+  $("punteggio").innerHTML = `<div><span>Tempo rimasto</span><strong>${f1(Math.max(p.durata-tg,0),0)} s</strong></div>`+
+    ris.righe.slice(0,2).map(([n,v])=>`<div><span>${n}</span><strong>${v}</strong></div>`).join("");
+}
+
+// ════════════ SCHERMO PAZIENTE (stimoli e limiti di stabilità) ════════════
+let schermoTipo=null, schermoT0=0;
+function apriSchermo(tipo){
+  schermoTipo=tipo; schermoT0=performance.now()/1000; $("schermo").hidden=false;
+  const el=$("schermo"); if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(()=>{});
+}
+function chiudiSchermo(){
+  schermoTipo=null; $("schermo").hidden=true;
+  if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+}
+function disegnaSchermo(){
+  const cv=$("schermoCv");
+  if (cv.width!==innerWidth || cv.height!==innerHeight){ cv.width=innerWidth; cv.height=innerHeight; }   // niente deformazioni
+  const g=cv.getContext("2d"), W=cv.width, H=cv.height, t=performance.now()/1000-schermoT0;
+  g.fillStyle="#000"; g.fillRect(0,0,W,H);
+  if (schermoTipo==="opto"){
+    const passo=120, v=180, off=(t*v)%passo, dir = (Math.floor(t/10)%2) ? -1 : 1;   // cambia verso ogni 10 s
+    g.fillStyle="#fff";
+    for (let x=-passo; x<W+passo; x+=passo){ g.fillRect(x+dir*off, 0, passo/2, H); }
+  } else if (schermoTipo==="insegui"){
+    const x=W/2+W*0.38*Math.sin(2*Math.PI*t/5);
+    g.fillStyle="#fff"; g.beginPath(); g.arc(x,H/2,18,0,7); g.fill();
+  } else if (schermoTipo==="saccadi"){
+    const lato=(Math.floor(t/1.2)%2)?1:-1;
+    g.fillStyle="#fff"; g.beginPath(); g.arc(W/2+lato*W*0.38,H/2,18,0,7); g.fill();
+  } else if (schermoTipo==="los" && losStato){
+    disegnaLOSSchermo(g,W,H);
+  }
+}
+
+// ════════════ LIMITI DI STABILITÀ ════════════
+let losStato=null;
+const LOS_ANG=[90,45,0,315,270,225,180,135];    // avanti, avanti-dx, dx, dietro-dx, dietro, dietro-sx, sx, avanti-sx
+const LOS_NOMI={90:"Avanti",45:"Avanti dx",0:"Destra",315:"Dietro dx",270:"Dietro",225:"Dietro sx",180:"Sinistra",135:"Avanti sx"};
+function losDistanza(ang){                          // mm del bersaglio (ellisse: avanti 70, dietro 45, lati 80)
+  const k=+$("losScala").value, a=ang*Math.PI/180, c=Math.cos(a), s=Math.sin(a);
+  const ry = s>=0 ? 70 : 45, rx = 80;
+  return k/Math.sqrt((c*c)/(rx*rx)+(s*s)/(ry*ry));
+}
+function avviaLOS(){
+  losStato={fase:"centra", t0:null, centro:{x:0,y:0,n:0}, k:0, dirs:[], tracce:[], pos:{x:0,y:0}};
+  ascoltatori.add(passoLOS); apriSchermo("los");
+  $("btnAvvia").disabled=true; $("btnStop").disabled=false; $("btnSalta").disabled=true;
+  stato("Limiti di stabilità: il paziente sta fermo 3 secondi, poi segue i bersagli sullo schermo.");
+}
+function passoLOS(c){
+  const L=losStato; if(!L) return;
+  if (L.t0===null) L.t0=c.t;
+  const t=c.t-L.t0;
+  if (c.tot<10){ fermaLOS(true,"Il paziente è sceso dalla pedana: ripeti la prova."); return; }
+  if (L.fase==="centra"){
+    L.centro.x+=c.x; L.centro.y+=c.y; L.centro.n++;
+    if (t>=3){ L.centro.x/=L.centro.n; L.centro.y/=L.centro.n; L.fase="pronti"; L.t0=c.t; }
+    return;
+  }
+  L.pos={x:c.x-L.centro.x, y:c.y-L.centro.y};
+  const ang=LOS_ANG[L.k], a=ang*Math.PI/180, D=losDistanza(ang);
+  if (L.fase==="pronti"){ if (sim) L.simTarget={x:0,y:0}; if (t>=1.2){ L.fase="via"; L.t0=c.t; L.traccia=[]; if (sim) L.simTarget={x:Math.cos(a)*D*0.9, y:Math.sin(a)*D*0.9}; } return; }
+  if (L.fase==="via"){
+    L.traccia.push({t, x:L.pos.x, y:L.pos.y});
+    if (t>=8){ L.dirs.push(analizzaDirezione(L.traccia, ang, D)); L.tracce.push(L.traccia); L.fase="ritorno"; L.t0=c.t; if (sim) L.simTarget={x:0,y:0}; }
+    return;
+  }
+  if (L.fase==="ritorno" && t>=3){
+    L.k++;
+    if (L.k>=LOS_ANG.length){ fermaLOS(false); return; }
+    L.fase="pronti"; L.t0=c.t;
+  }
+}
+function analizzaDirezione(tr, ang, D){
+  const a=ang*Math.PI/180, ux=Math.cos(a), uy=Math.sin(a);
+  const p=tr.map(q=>({t:q.t, on:q.x*ux+q.y*uy, off:-q.x*uy+q.y*ux}));
+  const onset=p.find(q=>q.on>0.1*D);
+  if (!onset) return {ang, D, rt:null, mxe:0, epe:0, vel:null, dcl:null};
+  let iMax=0; p.forEach((q,i)=>{ if(q.on>p[iMax].on) iMax=i; });
+  // punto finale: primo massimo locale dopo aver superato metà della massima escursione
+  let iEnd=iMax; for (let i=p.indexOf(onset)+1;i<p.length-5;i++){ if(p[i].on>=0.5*p[iMax].on && p[i+5].on<p[i].on){ iEnd=i; break; } }
+  const epe=p[iEnd].on, i5=p.findIndex(q=>q.on>=0.05*epe), i95=p.findIndex(q=>q.on>=0.95*epe);
+  const vel = (i95>i5) ? (p[i95].on-p[i5].on)/(p[i95].t-p[i5].t) : null;
+  let sOn=0,sOff=0; for (let i=p.indexOf(onset)+1;i<=iEnd;i++){ sOn+=Math.abs(p[i].on-p[i-1].on); sOff+=Math.abs(p[i].off-p[i-1].off); }
+  return {ang, D, rt:onset.t, mxe:100*p[iMax].on/D, epe:100*epe/D, vel, dcl: sOn? Math.max(0,100*(sOn-sOff)/sOn) : null};
+}
+function fermaLOS(interrotta, msg){
+  const L=losStato; if(!L) return;
+  losStato=null; ascoltatori.delete(passoLOS); chiudiSchermo();
+  $("btnStop").disabled=true;
+  if (interrotta || L.dirs.length<LOS_ANG.length){ stato(msg||"Limiti di stabilità interrotti: ripeti la prova.", true); aggiornaPannello(); return; }
+  const m=k=>{ const v=L.dirs.map(d=>d[k]).filter(v=>v!=null); return v.length? v.reduce((a,b)=>a+b,0)/v.length : null; };
+  risultati.LOS={tipo:"los", dirs:L.dirs, tracce:L.tracce.map(tr=>tr.filter((_,i)=>i%3===0).map(q=>({x:+q.x.toFixed(1),y:+q.y.toFixed(1)}))),
+                 medie:{rt:m("rt"), mxe:m("mxe"), epe:m("epe"), vel:m("vel"), dcl:m("dcl")}};
+  stato("Limiti di stabilità registrati.");
+  do { indice++; } while (indice<sequenza.length && risultati[sequenza[indice].id]);
+  aggiornaPannello(); mostraRisultati();
+}
+function disegnaLOSSchermo(g,W,H){
+  const L=losStato, cx=W/2, cy=H/2, sc=(H*0.42)/80;
+  g.strokeStyle="#333"; g.lineWidth=2; g.beginPath(); g.arc(cx,cy,10,0,7); g.stroke();
+  LOS_ANG.forEach((ang,i)=>{ const a=ang*Math.PI/180, D=losDistanza(ang), X=cx+Math.cos(a)*D*sc, Y=cy-Math.sin(a)*D*sc;
+    const attivo = i===L.k && (L.fase==="via"||L.fase==="pronti");
+    g.fillStyle = attivo ? (L.fase==="via"?"#2ECC71":"#F1C40F") : (i<L.k?"#1D6B44":"#444");
+    g.beginPath(); g.arc(X,Y,attivo?34:22,0,7); g.fill(); });
+  g.fillStyle="#fff"; g.font="bold 46px sans-serif"; g.textAlign="center";
+  const testo = L.fase==="centra" ? "Resta fermo" : L.fase==="pronti" ? "Pronti…" : L.fase==="via" ? "VIA!" : "Torna al centro";
+  g.fillText(testo, cx, 70);
+  if (L.fase!=="centra"){ g.fillStyle="#5DADE2"; g.beginPath(); g.arc(cx+L.pos.x*sc, cy-L.pos.y*sc, 16, 0, 7); g.fill(); }
+}
+function disegnaLOS(cv, los, confronto){
+  const g=cv.getContext("2d"), W=cv.width, H=cv.height, cx=W/2, cy=H/2, sc=(Math.min(W,H)/2-40)/100;
+  g.clearRect(0,0,W,H); g.fillStyle=css("--foglio"); g.fillRect(0,0,W,H);
+  g.strokeStyle=css("--linea"); g.lineWidth=1;
+  [50,100].forEach(r=>{ g.beginPath(); LOS_ANG.forEach((ang,i)=>{ const a=ang*Math.PI/180, X=cx+Math.cos(a)*r*sc, Y=cy-Math.sin(a)*r*sc; i?g.lineTo(X,Y):g.moveTo(X,Y); }); g.closePath(); g.stroke(); });
+  g.fillStyle=css("--grigio"); g.font="12px "+font(); g.textAlign="center";
+  LOS_ANG.forEach(ang=>{ const a=ang*Math.PI/180; g.fillText(LOS_NOMI[ang], cx+Math.cos(a)*112*sc, cy-Math.sin(a)*112*sc+4); });
+  const poli=(L,col,tr)=>{ g.strokeStyle=col; g.lineWidth=2.5; g.setLineDash(tr?[5,4]:[]); g.beginPath();
+    L.dirs.forEach((d,i)=>{ const a=d.ang*Math.PI/180, r=Math.min(d.mxe,130), X=cx+Math.cos(a)*r*sc, Y=cy-Math.sin(a)*r*sc; i?g.lineTo(X,Y):g.moveTo(X,Y); }); g.closePath(); g.stroke(); g.setLineDash([]); };
+  if (confronto) poli(confronto, css("--grigio"), true);
+  poli(los, css("--oa"), false);
+  g.fillStyle=css("--grigio"); g.textAlign="left"; g.fillText("escursione massima, % del bersaglio (anelli: 50% e 100%)", 8, 14);
+}
+
+// ════════════ PROFILO SENSORIALE ════════════
+function profiloSensoriale(R){
+  if (!R.OA) return null;
+  const r=(id)=> R[id] ? Math.min(100, 100*R.OA.vel/R[id].vel) : null;
+  return [
+    ["Propriocezione", r("OC")],
+    ["Vista", r("GOA")],
+    ["Vestibolo", r("GOC")],
+    ["Movimento visivo", r("OPT")],
+  ].filter(x=>x[1]!=null);
+}
+function disegnaProfilo(cv, prof, prof2){
+  const g=cv.getContext("2d"), W=cv.width, H=cv.height; g.clearRect(0,0,W,H);
+  const lab=150, bh=Math.min(34,(H-20)/prof.length-10);
+  g.font="13px "+font();
+  prof.forEach(([n,v],i)=>{ const y=10+i*(bh+10);
+    g.fillStyle=css("--inchiostro"); g.textAlign="left"; g.fillText(n,4,y+bh*0.65);
+    g.fillStyle=css("--verde-chiaro"); g.fillRect(lab,y,W-lab-50,bh);
+    g.fillStyle = v<60?css("--oc"):v<80?css("--terzo"):css("--verde"); g.fillRect(lab,y,(W-lab-50)*v/100,bh);
+    g.fillStyle=css("--inchiostro"); g.textAlign="right"; g.fillText(f1(v,0)+"%",W-4,y+bh*0.65);
+    if (prof2){ const o=prof2.find(q=>q[0]===n); if(o){ const X=lab+(W-lab-50)*o[1]/100; g.strokeStyle=css("--inchiostro"); g.lineWidth=2; g.setLineDash([3,3]); g.beginPath(); g.moveTo(X,y-3); g.lineTo(X,y+bh+3); g.stroke(); g.setLineDash([]); } }
+  });
+}
+
+// ════════════ COMMENTO AUTOMATICO ════════════
+let commentoModificato=false;
+function scriviCommento(R){
+  const fr=[], pc=(a,b)=>100*(a/b-1);
+  if (R.OA){
+    const d=R.OA.destra, a=R.OA.avanti;
+    if (Math.abs(d-50)>=5) fr.push(`Il carico è spostato verso ${d>50?"destra":"sinistra"} (${f1(Math.max(d,100-d),0)}%).`);
+    else fr.push("Il carico è distribuito in modo simmetrico tra destra e sinistra.");
+    if (Math.abs(a-50)>=8) fr.push(`Prevale l'appoggio ${a>50?"anteriore":"posteriore"} (${f1(Math.max(a,100-a),0)}%).`);
+  }
+  if (R.OA && R.OC){
+    const q=100*R.OC.area/R.OA.area;
+    if (q<100) fr.push(`Quoziente di Romberg ${f1(q,0)}: a occhi chiusi l'oscillazione non aumenta, la vista non sembra aiutare l'equilibrio; da approfondire sul piano visivo e oculomotorio.`);
+    else if (q>300) fr.push(`Quoziente di Romberg ${f1(q,0)}: chiudendo gli occhi l'oscillazione aumenta molto, l'equilibrio si appoggia in modo marcato sulla vista.`);
+    else fr.push(`Quoziente di Romberg ${f1(q,0)}: la vista contribuisce all'equilibrio come atteso.`);
+  }
+  if (R.OC && R.GOC){
+    const q=100*R.GOC.area/R.OC.area;
+    fr.push(q<100 ? `Quoziente plantare ${f1(q,0)}: sulla gommapiuma l'oscillazione non aumenta, possibile scarso utilizzo dell'informazione plantare.`
+                  : `Quoziente plantare ${f1(q,0)}: l'informazione plantare viene utilizzata.`);
+  }
+  const prof=profiloSensoriale(R);
+  if (prof && prof.length>1){
+    const peggiore=prof.reduce((a,b)=>a[1]<b[1]?a:b);
+    if (peggiore[1]<70) fr.push(`Nel profilo sensoriale il valore più basso è «${peggiore[0].toLowerCase()}» (${f1(peggiore[1],0)}%): è l'informazione che il paziente usa meno per stare in equilibrio.`);
+  }
+  [["TDX","rotazione della testa a destra"],["TSX","rotazione della testa a sinistra"],["TES","estensione del capo"]].forEach(([id,n])=>{
+    if (R[id]&&R.OC){ const v=pc(R[id].area,R.OC.area); if (v>30) fr.push(`Con la ${n} l'oscillazione aumenta del ${f1(v,0)}% rispetto agli occhi chiusi: possibile componente cervicale.`); }});
+  if (R.TDX&&R.TSX){ const r=R.TDX.area/R.TSX.area; if (r>1.4||r<0.7) fr.push(`Asimmetria tra rotazione a destra e a sinistra (${r>1?"peggiore a destra":"peggiore a sinistra"}).`); }
+  if (R.DC&&R.OA){ const v=pc(R.DC.area,R.OA.area); if (Math.abs(v)>20) fr.push(v>0?`Il doppio compito cognitivo aumenta l'oscillazione del ${f1(v,0)}%: il controllo posturale richiede risorse attentive.`:`Durante il doppio compito l'oscillazione diminuisce del ${f1(-v,0)}%: la postura migliora quando l'attenzione è spostata altrove.`); }
+  [["OPT","lo stimolo optocinetico"],["INS","l'inseguimento lento"],["SAC","le saccadi"]].forEach(([id,n])=>{
+    if (R[id]&&R.OA){ const v=pc(R[id].vel,R.OA.vel); if (v>20) fr.push(`Con ${n} la velocità di oscillazione aumenta del ${f1(v,0)}%: la postura risente dell'attività visiva/oculomotoria.`); }});
+  if (R.LEN&&R.OA){ const v=pc(R.LEN.area,R.OA.area); if (Math.abs(v)>15) fr.push(`Con lenti/prismi l'area di oscillazione ${v<0?"si riduce":"aumenta"} del ${f1(Math.abs(v),0)}%.`); }
+  if (R.BIT&&R.OC){ const v=pc(R.BIT.area,R.OC.area); if (Math.abs(v)>15) fr.push(`Con bite/cotoni l'area ${v<0?"si riduce":"aumenta"} del ${f1(Math.abs(v),0)}% rispetto agli occhi chiusi.`); }
+  if (R.MDX&&R.MSX){ const a=R.MDX.T, b=R.MSX.T; if (Math.abs(a-b)/Math.max(a,b)>0.3) fr.push(`Appoggio monopodalico asimmetrico: ${f1(a,1)} s a destra, ${f1(b,1)} s a sinistra.`); }
+  if (R.LOS){ const dd=R.LOS.dirs, m=R.LOS.medie;
+    fr.push(`Limiti di stabilità: escursione massima media ${f1(m.mxe,0)}%, controllo direzionale ${f1(m.dcl,0)}%, tempo di reazione ${f1(m.rt,2)} s.`);
+    const ridotte=dd.filter(d=>d.mxe<60).map(d=>LOS_NOMI[d.ang].toLowerCase());
+    if (ridotte.length) fr.push(`Escursione ridotta verso: ${ridotte.join(", ")}.`); }
+  fr.push("Valutazione con pedana Wii Balance Board (non dispositivo medico): dati da integrare con l'esame clinico.");
+  return fr.join(" ");
+}
+
+// ════════════ ESPORTAZIONE PER IL GESTIONALE ════════════
+function esameCorrente(){
+  const prove={};
+  Object.entries(risultati).forEach(([id,a])=>{ const {grezzi,...resto}=a; prove[id]=resto; });
+  return {formato:"pnev-stabilometria", versione:3, id:Date.now(), tipo:"esame",
+    paziente:chiavePaz($("paziente").value), data:$("dataEsame").value, durata:$("durata").value,
+    note:$("noteEsame").value, commento:$("commento").value, prove,
+    indici:Object.fromEntries(indiciSintesi(risultati).map(([n,v])=>[n,v])),
+    profilo:profiloSensoriale(risultati)};
+}
+function esportaGestionale(){
+  if (!Object.keys(risultati).length) return;
+  const e=esameCorrente();
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(e)],{type:"application/json"}));
+  a.download=`stabilometria_${(e.paziente||"paziente").replace(/ /g,"_")}_${e.data}.json`; a.click();
+  stato("File per il gestionale scaricato: lo caricherai nel modulo Stabilometria della scheda paziente.");
+}
+
+// ════════════ BIOFEEDBACK SONORO ════════════
+let audio=null;
+function suonoAvvia(){
+  if (!$("suono").checked && !$("soloSuono").checked) return;
+  const ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const osc=ctx.createOscillator(), gain=ctx.createGain(), pan=ctx.createStereoPanner();
+  osc.type="sine"; osc.frequency.value=440; gain.gain.value=0;
+  osc.connect(gain).connect(pan).connect(ctx.destination); osc.start();
+  audio={ctx,osc,gain,pan};
+}
+function suonoAggiorna(pos, zonaQuieta){
+  if (!audio) return;
+  const d=Math.hypot(pos.x,pos.y), t=audio.ctx.currentTime;
+  const vol = d<=zonaQuieta ? 0 : Math.min(0.35, (d-zonaQuieta)*0.6);
+  audio.gain.gain.setTargetAtTime(vol, t, 0.05);
+  audio.osc.frequency.setTargetAtTime(440*Math.pow(2, Math.max(-1,Math.min(1,pos.y))), t, 0.05);   // avanti = più acuto
+  audio.pan.pan.setTargetAtTime(Math.max(-1,Math.min(1,pos.x)), t, 0.05);                          // destra = orecchio destro
+}
+function suonoFerma(){ if (audio){ try{ audio.osc.stop(); audio.ctx.close(); }catch(e){} audio=null; } }
+
+// ════════════ VISTA DAL VIVO ════════════
+function disegnaPedana(){
+  const cv=$("tela"), g=cv.getContext("2d"), W=cv.width, H=cv.height;
+  g.clearRect(0,0,W,H);
+  const sc=Math.min((W-80)/(LARGH+90),(H-60)/(PROF+90)), cx=W/2, cy=H/2, bw=(LARGH+90)*sc, bh=(PROF+90)*sc;
+  g.fillStyle=css("--verde-chiaro"); g.strokeStyle=css("--linea"); g.lineWidth=2;
+  g.beginPath(); g.roundRect(cx-bw/2,cy-bh/2,bw,bh,26); g.fill(); g.stroke();
+  g.fillStyle=css("--foglio"); [-1,1].forEach(s=>{ g.beginPath(); g.ellipse(cx+s*LARGH*sc*0.22,cy,34*sc,95*sc,0,0,7); g.fill(); });
+  g.strokeStyle=css("--linea"); g.lineWidth=1; g.beginPath(); g.moveTo(cx-bw/2+12,cy); g.lineTo(cx+bw/2-12,cy); g.moveTo(cx,cy-bh/2+12); g.lineTo(cx,cy+bh/2-12); g.stroke();
+  g.fillStyle=css("--grigio"); g.font="13px "+font(); g.textAlign="center"; g.fillText("avanti",cx,cy-bh/2-8); g.fillText("dietro",cx,cy+bh/2+18);
+  g.textAlign="left"; g.fillText("sx",cx-bw/2-24,cy+4); g.fillText("dx",cx+bw/2+8,cy+4);
+  if (!ultimo) return;
+  [[1,-1],[1,1],[-1,-1],[-1,1]].forEach((p,i)=>{ const kg=Math.max(ultimo.kg[i],0), r=6+Math.min(kg,60)*.7, px=cx+p[0]*LARGH/2*sc, py=cy+p[1]*PROF/2*sc;
+    g.fillStyle=css("--linea"); g.beginPath(); g.arc(px,py,r,0,7); g.fill(); g.fillStyle=css("--inchiostro"); g.textAlign="center"; g.fillText(kg.toFixed(1),px,py+r+15); });
+  if (registrazione && registrazione.campioni.length>1){
+    g.strokeStyle=css(COLORE_PROVA(registrazione.prova.id)); g.lineWidth=1.4; g.beginPath();
+    registrazione.campioni.forEach((c,i)=>{ const X=cx+c.x*sc, Y=cy-c.y*sc; i?g.lineTo(X,Y):g.moveTo(X,Y); }); g.stroke(); }
+  if (ultimo.tot>10){ g.fillStyle=css("--verde"); g.beginPath(); g.arc(cx+ultimo.x*sc,cy-ultimo.y*sc,8,0,7); g.fill(); }
+}
+function ciclo(){
+  if (ultimo){
+    $("vPeso").textContent=ultimo.tot.toFixed(1)+" kg";
+    if (ultimo.tot>5){ const k=ultimo.kg; let d=100*(k[0]+k[1])/ultimo.tot, a=100*(k[0]+k[2])/ultimo.tot;
+      if ($("invML").checked) d=100-d; if ($("invAP").checked) a=100-a;
+      $("vLR").textContent=(100-d).toFixed(0)+" / "+d.toFixed(0)+" %"; $("vAP").textContent=a.toFixed(0)+" / "+(100-a).toFixed(0)+" %"; }
+  }
+  if (!$("tab-esame").hidden) disegnaPedana();
+  if (!$("tab-bio").hidden) disegnaCampo();
+  if (!$("schermo").hidden) disegnaSchermo();
+  requestAnimationFrame(ciclo);
+}
+
+// ════════════ COLLEGAMENTI ════════════
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected", x===b));
+  ["esame","archivio","bio"].forEach(t=>$("tab-"+t).hidden = t!==b.dataset.tab);
+  if (b.dataset.tab==="archivio") mostraArchivio();
+});
+$("btnCollega").onclick=collega;
+$("btnTutti").onclick=()=>{ tuttiIDispositivi=true; collega(); };
+$("btnSimula").onclick=avviaSimulazione;
+$("btnTara").onclick=()=>{ tGommaFatta=false; azzera(); };
+$("btnPrepara").onclick=preparaSequenza;
+$("btnAvvia").onclick=avviaProva;
+$("btnStop").onclick=()=>{ if (losStato) fermaLOS(true); else fermaProva("interrotta"); };
+addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(losStato) fermaLOS(true); else if(registrazione) fermaProva("interrotta"); }});
+$("btnSalta").onclick=()=>{ indice++; aggiornaPannello(); };
+$("btnSalva").onclick=salvaEsame;
+$("btnGestionale").onclick=esportaGestionale;
+$("btnRigenera").onclick=()=>{ commentoModificato=false; $("commento").value=scriviCommento(risultati); };
+$("commento").addEventListener("input",()=>{ commentoModificato=true; });
+$("btnNuovo").onclick=()=>{ risultati={}; $("risultati").hidden=true; $("noteEsame").value=""; $("commento").value=""; commentoModificato=false; preparaSequenza(); };
+$("btnCSV").onclick=()=>{
+  let out="prova;tempo_s;cop_x_mm;cop_y_mm;TR_kg;BR_kg;TL_kg;BL_kg;totale_kg\n";
+  sequenza.forEach(p=>{ const a=risultati[p.id]; if(!a||!a.grezzi) return;
+    a.grezzi.forEach(c=>{ out+=[p.id,c.t.toFixed(3),c.x.toFixed(2),c.y.toFixed(2),...c.kg.map(v=>v.toFixed(2)),c.tot.toFixed(2)].join(";").replace(/\./g,",")+"\n"; }); });
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\ufeff"+out],{type:"text/csv"}));
+  a.download=`stabilometria_${chiavePaz($("paziente").value).replace(/ /g,"_")||"paziente"}_${$("dataEsame").value}.csv`; a.click(); };
+$("archPaz").onchange=()=>{ selezionati=[]; mostraArchivio(); };
+$("btnEsporta").onclick=esportaArchivio;
+$("fileImporta").onchange=e=>{ if(e.target.files[0]) importaArchivio(e.target.files[0]); e.target.value=""; };
+$("gioco").onchange=()=>{ $("spiegaGioco").textContent=SPIEGA[$("gioco").value]; };
+$("btnGioca").onclick=iniziaGioco;
+$("btnFermaGioco").onclick=fineGioco;
+$("btnSalvaBio").onclick=salvaGioco;
+$("spiegaGioco").textContent=SPIEGA.centro;
+costruisciScelta(); preparaSequenza(); aggiornaElencoPazienti(); requestAnimationFrame(ciclo);
+if (!("hid" in navigator)) stato("Apri questa pagina con Google Chrome o Microsoft Edge per collegare la pedana. Puoi comunque usare «Prova senza pedana».", true);
+</script>
+</body>
+</html>
