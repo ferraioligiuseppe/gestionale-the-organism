@@ -75,6 +75,10 @@ td.peggio{color:var(--oc)} td.meglio{color:var(--ok)}
 .minis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
 .mini figcaption{font-size:.86rem;color:var(--grigio);margin-top:4px}
 .mini{margin:0}
+button.grande{display:flex;flex-direction:column;align-items:flex-start;padding:12px 18px;font-size:1.08rem;flex:1;min-width:220px}
+button.grande small{font-weight:400;font-size:.82rem;opacity:.85}
+details summary{cursor:pointer;color:var(--grigio);margin:8px 0;font-size:.95rem}
+.guida{font-size:.95rem;font-weight:700;color:var(--verde);text-decoration:none;border:1px solid var(--verde);border-radius:7px;padding:6px 12px}
 .indici{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 12px}
 .indice{border:1px solid var(--linea);border-radius:8px;padding:8px 12px;min-width:160px}
 .indice span{display:block;color:var(--grigio);font-size:.82rem}
@@ -113,6 +117,8 @@ td.peggio{color:var(--oc)} td.meglio{color:var(--ok)}
     <input id="paziente" placeholder="Paziente (cognome e nome)" list="elencoPazienti" aria-label="Paziente" style="min-width:230px">
     <datalist id="elencoPazienti"></datalist>
     <input id="dataEsame" type="date" aria-label="Data">
+    <a class="guida no-stampa" href="guida_pedana.pdf" target="_blank" rel="noopener">📘 Guida</a>
+    <a class="guida no-stampa" href="video_guida_pedana.mp4" target="_blank" rel="noopener">🎬 Video</a>
   </div>
 </header>
 
@@ -150,7 +156,12 @@ td.peggio{color:var(--oc)} td.meglio{color:var(--ok)}
   </section>
 
   <section class="foglio no-stampa" aria-label="Protocollo">
-    <h2>Protocollo</h2>
+    <h2>Quale esame?</h2>
+    <div class="azioni" style="margin:0 0 6px">
+      <button class="primario grande" id="btnBase">▶ Esame base<small>occhi aperti + occhi chiusi · 1 minuto</small></button>
+      <button class="grande" id="btnCompleto">▶ Esame completo<small>+ gommapiuma e limiti di stabilità · 5 minuti</small></button>
+    </div>
+    <details id="avanzata"><summary>Scelta avanzata: le prove una per una</summary>
     <div class="protocollo" id="sceltaProve"></div>
     <div class="azioni">
       <label style="font-size:.92rem">Durata
@@ -161,6 +172,7 @@ td.peggio{color:var(--oc)} td.meglio{color:var(--ok)}
       </label>
       <button class="primario" id="btnPrepara">Prepara la sequenza</button>
     </div>
+    </details>
     <ul class="prove-lista" id="listaProve"></ul>
     <div id="pannelloProva" hidden>
       <div class="istruzioni" id="istruzioni"></div>
@@ -298,6 +310,10 @@ const f1 = (v,d=1)=> (v==null||!isFinite(v)) ? "—" : v.toFixed(d).replace(".",
 const font = () => getComputedStyle(document.body).fontFamily;
 const stato = (t, err=false) => { const s=$("stato"); s.textContent=t; s.classList.toggle("err", err); };
 $("dataEsame").valueAsDate = new Date();
+// Aperta dal gestionale: paziente e data arrivano nell'indirizzo (?paziente=…&data=…)
+(()=>{ const q=new URLSearchParams(location.search);
+  if (q.get("paziente")) $("paziente").value=q.get("paziente");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(q.get("data")||"")) $("dataEsame").value=q.get("data"); })();
 
 // ════════════ PEDANA: lettura e conversione ════════════
 let dev=null, sim=null, simSopra=false, simBias={x:0,y:0};
@@ -1169,6 +1185,13 @@ $("btnTutti").onclick=()=>{ tuttiIDispositivi=true; collega(); };
 $("btnSimula").onclick=avviaSimulazione;
 $("btnTara").onclick=()=>{ tGommaFatta=false; azzera(); };
 $("btnPrepara").onclick=preparaSequenza;
+function scegliProve(ids){
+  $("sceltaProve").querySelectorAll("input").forEach(i=>{ if(!i.disabled) i.checked = ids.includes(i.value); });
+  preparaSequenza();
+  stato(taraFatta ? "Pronto: fai salire il paziente e premi «Avvia la prova»." : "Ora collega la pedana e azzera (pulsanti in alto).");
+}
+$("btnBase").onclick=()=>scegliProve(["OA","OC"]);
+$("btnCompleto").onclick=()=>scegliProve(["OA","OC","LOS","GOA","GOC"]);
 $("btnAvvia").onclick=avviaProva;
 $("btnStop").onclick=()=>{ if (losStato) fermaLOS(true); else fermaProva("interrotta"); };
 addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(losStato) fermaLOS(true); else if(registrazione) fermaProva("interrotta"); }});
@@ -1193,7 +1216,18 @@ $("btnFermaGioco").onclick=fineGioco;
 $("btnSalvaBio").onclick=salvaGioco;
 $("spiegaGioco").textContent=SPIEGA.centro;
 costruisciScelta(); preparaSequenza(); aggiornaElencoPazienti(); requestAnimationFrame(ciclo);
-if (!("hid" in navigator)) stato("Apri questa pagina con Google Chrome o Microsoft Edge per collegare la pedana. Puoi comunque usare «Prova senza pedana».", true);
+if (!("hid" in navigator)){
+  stato("Questo browser non può collegare la pedana: serve Google Chrome o Microsoft Edge. Puoi comunque usare «Prova senza pedana».", true);
+  const barra=document.createElement("div");
+  barra.className="collegamento no-stampa";
+  barra.style.background="color-mix(in srgb,var(--oc) 14%,var(--foglio))";
+  const url=location.href.split("#")[0];
+  barra.innerHTML=`<strong>Per usare la pedana apri questa pagina in Chrome o Edge.</strong>
+    <a href="microsoft-edge:${url}"><button class="primario" type="button">Apri in Microsoft Edge</button></a>
+    <button type="button" id="btnCopiaLink">Copia il link (da incollare in Chrome)</button>`;
+  document.querySelector(".pagina").insertBefore(barra, document.querySelector(".collegamento"));
+  $("btnCopiaLink").onclick=()=>{ navigator.clipboard.writeText(url).then(()=>{ $("btnCopiaLink").textContent="Link copiato: incollalo in Chrome"; }); };
+}
 </script>
 </body>
 </html>
