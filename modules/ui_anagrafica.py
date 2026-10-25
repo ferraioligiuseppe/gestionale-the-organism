@@ -412,9 +412,14 @@ def _carica_pazienti_full(_conn, filtro_stato: str = "Attivi", ordine: str = "Al
             where.append("stato_paziente = 'SOSPESO'")
         elif filtro_stato == "Archiviati":
             where.append("stato_paziente = 'ARCHIVIATO'")
+        # «origine» la crea il sync di pnev.it: se non c'è ancora, vale NULL
+        cur.execute("SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name='pazienti' AND column_name='origine'")
+        _col_origine = "origine" if cur.fetchone() else "NULL AS origine"
         sql = (
             "SELECT id, cognome, nome, data_nascita, telefono, email, "
-            "stato_paziente, codice_fiscale, citta, creato_il, ultimo_accesso "
+            "stato_paziente, codice_fiscale, citta, creato_il, ultimo_accesso, "
+            f"{_col_origine} "
             "FROM pazienti"
         )
         if where:
@@ -1761,6 +1766,27 @@ def render_anagrafica(conn) -> None:
 
     # Stato visite (🟢 gia' visitato / ⚪ mai visitato)
     visite = _carica_visite(conn)
+
+    # Iscritti gratis dal sito con dati incompleti e mai visitati: non sono
+    # ancora pazienti dello studio, stanno in un elenco a parte.
+    def _da_completare(p):
+        return ((p.get("origine") or "").lower() == "pnev.it"
+                and p.get("id") not in visite
+                and (not (p.get("cognome") or "").strip() or not p.get("data_nascita")))
+    _sito = [p for p in pazienti if _da_completare(p)]
+    elenco = st.radio(
+        "Elenco",
+        ["Pazienti dello studio", f"🌐 Iscritti dal sito da completare ({len(_sito)})"],
+        horizontal=True, key="ana_elenco", label_visibility="collapsed",
+    )
+    if elenco.startswith("🌐"):
+        pazienti = _sito
+        st.caption("Si sono iscritti gratis su pnev.it lasciando dati incompleti e non sono "
+                   "mai venuti in studio. Aprili per completare i dati: appena hanno cognome e "
+                   "data di nascita, o una visita, passano tra i pazienti dello studio.")
+    else:
+        _ids_sito = {p.get("id") for p in _sito}
+        pazienti = [p for p in pazienti if p.get("id") not in _ids_sito]
 
     # Filtro per stato visita
     filtro_visita = st.radio(

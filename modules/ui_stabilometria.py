@@ -24,7 +24,6 @@ import datetime as dt
 
 import streamlit as st
 
-PAGINA_PEDANA = "static_protocollo/Stabilometria_PNEV.html"
 
 PROVE = {
     "OA": "Occhi aperti", "OC": "Occhi chiusi",
@@ -614,25 +613,101 @@ def _scheda_confronto(conn, paz_id, esami):
     st.dataframe(tabella_confronto(A, B), use_container_width=True)
 
 
-def _scheda_pagina():
+URL_PEDANA = "https://ferraioligiuseppe.github.io/pnev-pedana/"
+CARTELLA_PEDANA = "static_protocollo/pedana"
+
+
+def _url_pedana(nome_paz: str) -> str:
+    import urllib.parse
+    return URL_PEDANA + "?" + urllib.parse.urlencode({"paziente": nome_paz, "data": dt.date.today().isoformat()})
+
+
+def _file_pedana(nome: str) -> bytes | None:
     import os
-    st.markdown("La pagina **Stabilometria PNEV** si apre in **Google Chrome** sul computer collegata alla "
-                "pedana (Bluetooth). Lì si fanno gli esami e il biofeedback; poi con «Esporta per il "
-                "gestionale» il file si carica qui.")
-    percorsi = [PAGINA_PEDANA, os.path.join(os.path.dirname(__file__), "..", PAGINA_PEDANA)]
-    for p in percorsi:
+    for base in (CARTELLA_PEDANA, os.path.join(os.path.dirname(__file__), "..", CARTELLA_PEDANA)):
+        p = os.path.join(base, nome)
         if os.path.exists(p):
             with open(p, "rb") as f:
-                st.download_button("⬇️ Scarica la pagina della pedana", f.read(),
-                                   file_name="Stabilometria_PNEV.html", mime="text/html", type="primary")
-            break
-    else:
-        st.info(f"Per scaricarla da qui, carica il file della pagina nel repository come `{PAGINA_PEDANA}`.")
+                return f.read()
+    return None
+
+
+def _scheda_pagina(nome_paz: str):
+    st.markdown("La pagina della pedana si apre in **una scheda a parte di Chrome** (o Edge): dentro il "
+                "gestionale il browser non permette di collegare dispositivi. Il pulsante **«🩶 Apri la pedana»** "
+                "in alto la apre con paziente e data già compilati.")
+    st.markdown("**Per un computer nuovo**")
+    c1, c2 = st.columns(2)
+    with c1:
+        ps1, bat = _file_pedana("abbina_pedana.ps1"), _file_pedana("Abbina pedana Wii.bat")
+        if ps1 and bat:
+            import zipfile
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                z.writestr("Abbina pedana Wii/abbina_pedana.ps1", ps1)
+                z.writestr("Abbina pedana Wii/Abbina pedana Wii.bat", bat)
+            st.download_button("⬇️ Programma di abbinamento", buf.getvalue(),
+                               file_name="Abbina pedana Wii.zip", mime="application/zip")
+            st.caption("Una volta per computer: estrai lo zip, doppio clic su «Abbina pedana Wii», "
+                       "poi tastino rosso della pedana e Invio.")
+        else:
+            st.caption(f"Programma di abbinamento non trovato in `{CARTELLA_PEDANA}`.")
+    with c2:
+        icona = _file_pedana("Pedana PNEV.bat")
+        if icona:
+            st.download_button("⬇️ Icona per il desktop", icona, file_name="Pedana PNEV.bat",
+                               mime="application/octet-stream")
+            st.caption("Mettila sul desktop: doppio clic e la pagina si apre in Chrome.")
+    st.markdown("**Guida e video**")
+    g1, g2 = st.columns(2)
+    guida, video = _file_pedana("guida_pedana.pdf"), _file_pedana("video_guida_pedana.mp4")
+    if guida:
+        g1.download_button("📘 Scarica la guida (PDF)", guida, file_name="Guida pedana PNEV.pdf", mime="application/pdf")
+    if video:
+        g2.download_button("🎬 Scarica il video", video, file_name="Video guida pedana PNEV.mp4", mime="video/mp4")
+        with st.expander("▶ Guarda il video qui (2 minuti)"):
+            st.video(video)
     st.markdown("""
-**Prima volta sul computer**
-1. Abbina la pedana a Windows con Dolphin (una volta sola): Controller → Balance Board reale → Scansione continua → tastino rosso.
-2. Apri la pagina in Chrome, accendi la pedana dal pulsante davanti, premi «Collega la pedana».
+**Ogni volta**
+1. Accendi la pedana con il pulsante davanti (luce blu fissa).
+2. Premi **«Apri la pedana»** qui sopra, poi nella pagina **«Collega la pedana»** e **«Azzera»**.
+3. Finito l'esame: **«Esporta per il gestionale»** e carica il file nella scheda **📥 Carica esami**.
 """)
+    pagina = _file_pedana("../Stabilometria_PNEV.html")
+    if pagina:
+        with st.expander("Versione da usare senza internet"):
+            st.download_button("⬇️ Pagina della pedana (file)", pagina, file_name="Stabilometria_PNEV.html",
+                               mime="text/html")
+
+
+_PROVA_HID = """
+<div style="font-family:system-ui,sans-serif;padding:10px;border:1px dashed #1D6B44;border-radius:10px">
+  <button id="b" style="background:#1D6B44;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer">
+    Prova a collegare la pedana qui dentro</button>
+  <div id="r" style="margin-top:10px;font-size:15px"></div>
+</div>
+<script>
+const r=document.getElementById('r');
+function scrivi(t,ok){ r.innerHTML=t; r.style.color= ok? '#1D6B44' : '#B5461F'; }
+if (!('hid' in navigator)) scrivi('❌ Questo browser non ha il collegamento ai dispositivi (usa Chrome o Edge).', false);
+document.getElementById('b').onclick = async () => {
+  try {
+    const d = await navigator.hid.requestDevice({filters:[{vendorId:0x057e}]});
+    if (d.length) { await d[0].open(); scrivi('✅ FUNZIONA: la pedana «'+d[0].productName+'» si collega dentro il gestionale. Scrivilo a Claude: «funziona dentro».', true); await d[0].close(); }
+    else scrivi('⚠️ La finestra si è aperta ma non hai scelto la pedana (era accesa?). Riprova: se la finestra si apre, vuol dire che FUNZIONA.', true);
+  } catch(e) {
+    scrivi('❌ Bloccato dal browser dentro il gestionale: «'+e.message+'». Scrivilo a Claude: «bloccato».', false);
+  }
+};
+</script>"""
+
+
+def _prova_dentro():
+    import streamlit.components.v1 as components
+    with st.expander("🧪 Prova: la pedana si collega anche dentro il gestionale?"):
+        st.caption("Accendi la pedana (luce blu fissa) e premi il pulsante. Se compare la finestra di Chrome "
+                   "con la pedana, si può portare tutto dentro il gestionale.")
+        components.html(_PROVA_HID, height=150)
 
 
 def _sessioni_vecchie(conn, paz_id):
@@ -659,8 +734,9 @@ def render_stabilometria(conn=None, paz_id=None, paziente=None) -> None:
     nome_paz = _nome_paziente(conn, paz_id) or f"Paziente {paz_id}"
     esami = _esami(conn, paz_id)
     n_es = sum(1 for e in esami if e["tipo"] == "esame")
+    st.link_button("🩶 Apri la pedana", _url_pedana(nome_paz), type="primary")
     t1, t2, t3, t4 = st.tabs([f"📋 Esami ({n_es})", "📈 Confronto e andamento", "📥 Carica esami",
-                              "⬇️ Pagina della pedana"])
+                              "🩶 Pedana e installazione"])
     with t1:
         _scheda_dettaglio(conn, paz_id, nome_paz, esami)
         _sessioni_vecchie(conn, paz_id)
@@ -669,4 +745,5 @@ def render_stabilometria(conn=None, paz_id=None, paziente=None) -> None:
     with t3:
         _scheda_carica(conn, paz_id, nome_paz)
     with t4:
-        _scheda_pagina()
+        _scheda_pagina(nome_paz)
+        _prova_dentro()
