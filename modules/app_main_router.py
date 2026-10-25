@@ -1059,8 +1059,15 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         from .sections.ui_cliniche import render_gaze_section
         render_gaze_section(); return True
     if sotto == "🩶 Postura (Wii Balance Board)":
-        from .ui_postura_wiifit import render_postura_wiifit
-        render_postura_wiifit(conn, paz_id); return True
+        try:
+            from .ui_stabilometria import render_stabilometria
+            render_stabilometria(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Stabilometria: {e}")
+            with st.expander("Dettagli"):
+                st.code(traceback.format_exc())
+        return True
     if sotto in ("📋 Protocollo di valutazione (scheda)", "📋 Protocollo di valutazione"):
         # La seconda etichetta e' quella storica: il dispatch esisteva ma non
         # era in nessun menu, e puntava all'app HTML gia' raggiungibile da
