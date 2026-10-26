@@ -990,7 +990,10 @@ def render_contatti_sito(conn):
                     render_invio_link(conn, int(paz_id), "minore" if minore else "adulto")
                 except Exception as e:
                     st.error(f"Invio automatico non disponibile: {e}")
-                with st.expander("Link da mandare a mano (WhatsApp, Telegram, email dal tuo programma)"):
+                # niente riquadro apribile qui: siamo già dentro il riquadro del contatto
+                # (Streamlit non permette un riquadro dentro l'altro)
+                if st.checkbox("🔗 Link da mandare a mano (WhatsApp, Telegram, email dal tuo programma)",
+                               key=f"lead_linkmano_{lid}"):
                     try:
                         url = _link_firma_privacy(paz_id, minore=minore)
                         _canali_invio(url, _g(r, "nome", "") or "")

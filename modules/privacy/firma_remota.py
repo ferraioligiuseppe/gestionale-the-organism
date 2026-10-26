@@ -343,7 +343,14 @@ def render_invio_link(conn, paziente_id, doc_type):
             if url:
                 st.session_state[f"priv_url_{k}"] = url
     url = st.session_state.get(f"priv_url_{k}")
-    with st.expander("Altro: copia il link o mandalo su WhatsApp"):
+    # questa parte viene usata anche dentro il riquadro di un contatto (Contatti dal sito):
+    # lì un riquadro apribile dentro l'altro non è permesso, quindi uso un contenitore semplice
+    try:
+        _riquadro = st.expander("Altro: copia il link o mandalo su WhatsApp")
+    except Exception:
+        st.markdown("**Altro: copia il link o mandalo su WhatsApp**")
+        _riquadro = st.container()
+    with _riquadro:
         if st.button("Genera solo il link (senza email)", key=f"priv_solo_{k}"):
             ok, motivo, url = crea_e_invia(conn, paziente_id, doc_type, (mail or "").strip(), "studio", invia=False)
             if ok:
