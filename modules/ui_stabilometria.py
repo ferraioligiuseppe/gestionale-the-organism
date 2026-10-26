@@ -634,7 +634,7 @@ def _file_pedana(nome: str) -> bytes | None:
 
 def _scheda_pagina(nome_paz: str):
     st.markdown("La pagina della pedana si apre in **una scheda a parte di Chrome** (o Edge): dentro il "
-                "gestionale il browser non permette di collegare dispositivi. Il pulsante **«🩶 Apri la pedana»** "
+                "gestionale il browser non permette di collegare dispositivi. Il pulsante **«🩶 Apri in una scheda nuova»** "
                 "in alto la apre con paziente e data già compilati.")
     st.markdown("**Per un computer nuovo**")
     c1, c2 = st.columns(2)
@@ -710,6 +710,54 @@ def _prova_dentro():
         components.html(_PROVA_HID, height=150)
 
 
+_componente = None
+
+
+def _pedana_integrata():
+    """Componente con la pagina della pedana dentro il gestionale (modules/pedana_component)."""
+    global _componente
+    if _componente is None:
+        import os
+        import streamlit.components.v1 as components
+        cartella = os.path.join(os.path.dirname(__file__), "pedana_component")
+        _componente = components.declare_component("pedana_pnev", path=cartella)
+    return _componente
+
+
+def _salva_record(conn, paz_id, v: dict) -> str | None:
+    return _esegui(conn, "INSERT INTO stabilometria_esami (paziente_id, data_esame, tipo, origine_id, "
+                         "nome_su_file, payload, commento) VALUES (%s,%s,%s,%s,%s,%s,%s) "
+                         "ON CONFLICT (paziente_id, origine_id) DO NOTHING",
+                   (int(paz_id), v.get("data") or None, v.get("tipo"), v.get("id"), v.get("paziente"),
+                    json.dumps(v), v.get("commento") or v.get("riassunto") or ""))
+
+
+def _scheda_esegui(conn, paz_id, nome_paz):
+    st.caption("Accendi la pedana (luce blu fissa), premi «Collega la pedana» e «Azzera». A fine esame premi "
+               "**«💾 Salva nella scheda del paziente»**: l'esame finisce direttamente qui. "
+               "Per optocinetico e limiti di stabilità su un grande schermo usa «Apri in una scheda nuova».")
+    k_ult = f"stab_ult_{paz_id}"
+    msg = st.session_state.pop(f"stab_msg_{paz_id}", None)
+    if msg:
+        st.success(msg)
+    try:
+        val = _pedana_integrata()(paziente=nome_paz, data=dt.date.today().isoformat(),
+                                  salvato=st.session_state.get(k_ult), key=f"pedana_{paz_id}", default=None)
+    except Exception as e:
+        st.error(f"La pedana integrata non si è caricata: {e}. Usa «Apri in una scheda nuova».")
+        return
+    if isinstance(val, dict) and val.get("azione") == "salva" and val.get("t") != st.session_state.get(k_ult):
+        rec = val.get("record") or {}
+        err = _salva_record(conn, paz_id, rec)
+        st.session_state[k_ult] = val.get("t")
+        if err:
+            st.error(f"Salvataggio non riuscito: {err}")
+        else:
+            st.session_state[f"stab_msg_{paz_id}"] = (("✓ Esame" if rec.get("tipo") == "esame" else "✓ Esercizio di biofeedback")
+                       + f" del {_data(rec.get('data'))} salvato nella scheda di {nome_paz}. Lo trovi in «📋 Esami».")
+            st.rerun()          # la pagina della pedana riceve la conferma e l'elenco esami si aggiorna
+
+
 def _sessioni_vecchie(conn, paz_id):
     righe = _righe(conn, "SELECT data_sessione, condizione, peso_sx_pct, peso_dx_pct, oscillazione_mm, note "
                          "FROM postura_wiifit_sessioni WHERE paziente_id=%s ORDER BY creato_il DESC LIMIT 30",
@@ -732,11 +780,12 @@ def render_stabilometria(conn=None, paz_id=None, paziente=None) -> None:
         return
     _assicura_tabella(conn)
     nome_paz = _nome_paziente(conn, paz_id) or f"Paziente {paz_id}"
-    esami = _esami(conn, paz_id)
-    n_es = sum(1 for e in esami if e["tipo"] == "esame")
-    st.link_button("🩶 Apri la pedana", _url_pedana(nome_paz), type="primary")
-    t1, t2, t3, t4 = st.tabs([f"📋 Esami ({n_es})", "📈 Confronto e andamento", "📥 Carica esami",
-                              "🩶 Pedana e installazione"])
+    st.link_button("🩶 Apri in una scheda nuova", _url_pedana(nome_paz))
+    t0, t1, t2, t3, t4 = st.tabs(["🩶 Esegui l'esame", "📋 Esami", "📈 Confronto e andamento",
+                                  "📥 Carica esami", "⚙️ Installazione e guide"])
+    with t0:
+        _scheda_esegui(conn, paz_id, nome_paz)
+    esami = _esami(conn, paz_id)          # dopo un eventuale salvataggio, così l'esame compare subito
     with t1:
         _scheda_dettaglio(conn, paz_id, nome_paz, esami)
         _sessioni_vecchie(conn, paz_id)
@@ -746,4 +795,3 @@ def render_stabilometria(conn=None, paz_id=None, paziente=None) -> None:
         _scheda_carica(conn, paz_id, nome_paz)
     with t4:
         _scheda_pagina(nome_paz)
-        _prova_dentro()

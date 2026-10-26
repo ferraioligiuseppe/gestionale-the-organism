@@ -183,6 +183,7 @@ PAZIENTI_RAMI = {
         "📝 Consensi ascolti MAPS",
         "🔗 Sincronizza pnev.it",
         "🚀 Trasferisci a pnev.it",
+        "🩺 Stato del sito pnev.it",
     ],
     "📥 Dati": [
         "📥 Import pazienti",

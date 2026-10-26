@@ -774,6 +774,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🚀 Trasferisci a pnev.it":
         from .ui_trasferimento_pnev import render_trasferimento_pnev
         render_trasferimento_pnev(conn); return True
+    if sotto == "🩺 Stato del sito pnev.it":
+        from .ui_stato_sito import render_stato_sito
+        render_stato_sito(conn); return True
     if sotto == "🎧 Screening uditivo":
         from .ui_screening_link import render_screening_link
         render_screening_link(conn); return True
@@ -1494,6 +1497,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🚀 Trasferisci a pnev.it":
             from .ui_trasferimento_pnev import render_trasferimento_pnev
             render_trasferimento_pnev(conn); return
+        if sotto == "🩺 Stato del sito pnev.it":
+            from .ui_stato_sito import render_stato_sito
+            render_stato_sito(conn); return
         if sotto == "🎧 Screening uditivo":
             from .ui_screening_link import render_screening_link
             render_screening_link(conn); return
