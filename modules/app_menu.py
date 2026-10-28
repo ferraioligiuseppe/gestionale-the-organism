@@ -239,6 +239,7 @@ SOTTOSEZIONI = {
     ],
     AREA_INVII: [
         "📋 Questionari remoti",
+        "🔗 Link aperti e arrivi",
         "🖨️ Questionari cartacei",
         "📋 Consenso screening scolastico",
     ],

@@ -823,6 +823,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         from .questionari_cartacei import render_questionari_cartacei
         render_questionari_cartacei(conn, paz_id)
         return True
+    if sotto == "🔗 Link aperti e arrivi":
+        from .questionari_aperti import render_link_aperti
+        render_link_aperti(conn); return True
     if sotto == "📋 Questionari remoti":
         try:
             from .ui_questionari import render_questionari_section
@@ -1059,8 +1062,8 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Modulo somministrazione non disponibile: {e}")
         return True
     if sotto == "👁️ Eye tracking":
-        from .sections.ui_cliniche import render_gaze_section
-        render_gaze_section(); return True
+        from .ui_eyetracking import render_eyetracking
+        render_eyetracking(conn, st.session_state.get("paziente_attivo_id")); return True
     if sotto == "🩶 Postura (Wii Balance Board)":
         try:
             from .ui_stabilometria import render_stabilometria
@@ -1631,8 +1634,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Modulo K-D non disponibile: {e}")
             return
         if sotto == "👁️ Eye tracking":
-            from .sections.ui_cliniche import render_gaze_section
-            render_gaze_section(); return
+            from .ui_eyetracking import render_eyetracking
+            render_eyetracking(conn, st.session_state.get("paziente_attivo_id")); return
         if sotto == "🩶 Postura (Wii Balance Board)":
             from .ui_postura_wiifit import render_postura_wiifit
             render_postura_wiifit(conn, paz_id); return
@@ -1760,8 +1763,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 st.error(f"Modulo somministrazione non disponibile: {e}")
             return
         if sotto == "👁️ Eye tracking":
-            from .sections.ui_cliniche import render_gaze_section
-            render_gaze_section(); return
+            from .ui_eyetracking import render_eyetracking
+            render_eyetracking(conn, st.session_state.get("paziente_attivo_id")); return
 
     # ── AREA QUESTIONARI ──────────────────────────────────────────────
     elif area == AREA_QUESTIONARI:
@@ -1770,6 +1773,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             from .questionari_cartacei import render_questionari_cartacei
             render_questionari_cartacei(conn, header_paziente_attivo(conn))
             return
+        if sotto == "🔗 Link aperti e arrivi":
+            from .questionari_aperti import render_link_aperti
+            render_link_aperti(conn); return
         if sotto == "📋 Questionari remoti":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)

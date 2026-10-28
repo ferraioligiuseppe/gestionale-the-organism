@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><title>PNEV Eye Tracking</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--verde:#1D6B44;--verdec:#E5F0EA;--sfondo:#F4F6F5;--foglio:#fff;--testo:#1e2a24;--grigio:#65716B;--rosso:#B5461F;--bordo:#d9dfdb}
+@media (prefers-color-scheme:dark){:root{--sfondo:#121815;--foglio:#1b231f;--verdec:#1f3329;--testo:#e6ece8;--grigio:#9aa59f;--bordo:#2c3832}}
+*{box-sizing:border-box} body{margin:0;background:var(--sfondo);color:var(--testo);font-family:system-ui,Arial,sans-serif}
+button{font:inherit;padding:7px 13px;border-radius:8px;border:1px solid var(--verde);background:var(--foglio);color:var(--verde);cursor:pointer;font-weight:600}
+button.primario{background:var(--verde);color:#fff} button:disabled{opacity:.45;cursor:default}
+select,input{font:inherit;padding:4px 6px;border-radius:6px;border:1px solid var(--bordo);background:var(--foglio);color:var(--testo)}
+/* ── console ── */
+#console{max-width:1280px;margin:0 auto;padding:14px 18px 40px}
+header{display:flex;align-items:center;gap:16px;flex-wrap:wrap} h1{color:var(--verde);font-size:22px;margin:0}
+.pallino{width:11px;height:11px;border-radius:50%;background:var(--rosso);display:inline-block;margin-right:6px}
+.riquadro{background:var(--foglio);border:1px solid var(--bordo);border-radius:12px;padding:12px 16px;margin-top:12px}
+.riquadro h2{font-size:16px;margin:0 0 8px;color:var(--verde)}
+.riga{display:flex;gap:10px 16px;flex-wrap:wrap;align-items:center}
+.passo{display:inline-block;background:var(--verde);color:#fff;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-size:13px;margin-right:4px}
+#anteprima{width:100%;aspect-ratio:16/9;background:#fafaf7;border-radius:10px;border:1px solid var(--bordo);display:block}
+#msg{color:var(--grigio);font-size:14px;min-height:20px;margin-top:6px}
+.cifre{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.cifre div{background:var(--verdec);border-radius:10px;padding:8px 12px;font-size:13px}.cifre b{display:block;font-size:20px}
+.grafici{display:grid;grid-template-columns:1fr 1fr;gap:12px} .grafici canvas{width:100%;background:#fafaf7;border-radius:8px;border:1px solid var(--bordo)}
+.grafici h3{font-size:14px;margin:6px 0} @media (max-width:900px){.grafici{grid-template-columns:1fr}}
+#vistaTesto{width:100%;background:#fafaf7;border-radius:8px;border:1px solid var(--bordo)}
+@media print{button,select,input,#riqComandi,#riqAnteprima{display:none!important} .riquadro{break-inside:avoid}}
+/* ── schermo paziente ── */
+#paziente{position:fixed;inset:0;background:#fafaf7;color:#111;display:none;cursor:none}
+#pzInvito{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-size:24px;color:#333;cursor:pointer}
+#pzTesto{position:absolute;left:8%;right:8%;top:12%;font-family:Arial,Helvetica,sans-serif;color:#111;display:none}
+.bersaglio{position:fixed;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;z-index:6;
+  background:radial-gradient(circle,#fff 0 3px,#B5461F 4px 8px,#fff 9px 13px,#1D6B44 14px 100%);animation:stringi 1.2s ease-in forwards}
+@keyframes stringi{from{transform:scale(1.9)}to{transform:scale(.55)}}
+</style></head><body>
+
+<!-- ═════════════ CONSOLE (schermo del clinico) ═════════════ -->
+<div id="console">
+<header><h1>PNEV Eye Tracking</h1><span><span class="pallino" id="pal"></span><span id="stato">Schermo paziente non aperto</span></span>
+<span style="color:var(--grigio)">Campioni/s: <b id="hz">0</b></span>
+<span id="infoPaz" style="color:var(--grigio);font-size:13px"></span>
+<label>Paziente <input id="nomePaz" placeholder="Cognome e nome" style="width:210px"></label></header>
+
+<div class="riquadro" id="riqComandi"><h2>Postazione</h2>
+<div class="riga"><span><span class="passo">1</span><button id="btnApri" class="primario">Apri lo schermo paziente</button></span>
+<span><span class="passo">2</span><button id="btnCal">Calibrazione fine (9 punti)</button></span>
+<button id="btnPrec">Controlla la precisione</button>
+<span style="color:var(--grigio)">Schermo paziente <input id="pollici" type="number" value="24" style="width:56px">″ · distanza <input id="distanza" type="number" value="60" style="width:56px"> cm</span></div>
+<div class="riga" style="margin-top:10px"><span class="passo">3</span><b>Lettura</b>
+<select id="selTesto"></select>
+<label>Carattere <input id="carattere" type="number" value="28" min="14" max="60" style="width:58px"> px</label>
+<label>Interlinea <input id="interlinea" type="number" value="2.0" step="0.1" min="1.2" max="3" style="width:58px"></label>
+<button id="btnLeggi" class="primario">▶ Avvia la lettura</button><button id="btnStop">■ Fine</button></div>
+<div class="riga" style="margin-top:10px"><span class="passo">4</span><b>Saccadi</b>
+<select id="sacDir"><option value="orizz">orizzontali</option><option value="vert">verticali</option></select>
+<label>Ampiezza <input id="sacAmp" type="number" value="10" min="4" max="30" style="width:52px">°</label>
+<label>Prove <input id="sacProve" type="number" value="20" min="6" max="60" style="width:52px"></label>
+<button id="btnSac" class="primario">▶ Saccadi</button></div>
+<div class="riga" style="margin-top:8px"><span class="passo">5</span><b>Lettere (saccadi su lettere)</b>
+<label>Righe <input id="letRighe" type="number" value="10" min="5" max="16" style="width:52px"></label>
+<label>Distanza colonne <input id="letDist" type="number" value="20" min="8" max="35" style="width:52px">°</label>
+<button id="btnLet" class="primario">▶ Lettere</button><span style="color:var(--grigio);font-size:13px">il paziente legge a voce alternando sinistra–destra; fine con ■ o barra spaziatrice</span></div>
+<div class="riga" style="margin-top:8px"><span class="passo">6</span><b>Inseguimento</b>
+<select id="insDir"><option value="orizz">orizzontale</option><option value="vert">verticale</option></select>
+<label>Ampiezza <input id="insAmp" type="number" value="20" min="6" max="40" style="width:52px">°</label>
+<select id="insFreq"><option value="0.2,0.4">0,2 e 0,4 Hz</option><option value="0.2,0.4,0.6" selected>0,2 · 0,4 · 0,6 Hz</option><option value="0.3">0,3 Hz</option></select>
+<label>Secondi per velocità <input id="insDur" type="number" value="8" min="4" max="30" style="width:52px"></label>
+<button id="btnIns" class="primario">▶ Inseguimento</button></div>
+<div class="riga" style="margin-top:8px"><span class="passo">7</span><b>Allenamento in tempo reale</b>
+<select id="allModo"><option value="cerchi">Cerchi da scoppiare</option><option value="casuali">Punti casuali (veloce)</option><option value="insegui">Segui la palla</option><option value="live">Sguardo dal vivo</option></select>
+<label>Durata <input id="allDur" type="number" value="60" min="15" max="600" style="width:58px"> s</label>
+<button id="btnAll" class="primario">▶ Allenamento</button><b id="allPunti" style="color:var(--verde)"></b></div>
+<div id="msg"></div></div>
+
+<div class="riquadro" id="riqAnteprima"><h2>Schermo paziente dal vivo</h2><canvas id="anteprima" width="1280" height="720"></canvas></div>
+
+<div id="risAltro" style="display:none">
+<div class="riquadro"><h2 id="titoloAltro"></h2><div class="cifre" id="cifreAltro"></div><p id="commentoAltro" style="font-size:14px;line-height:1.5"></p>
+<div class="riga"><button class="btnSalva primario">💾 Salva</button><button id="btnEspAltro">Esporta (JSON)</button><button onclick="print()">Stampa / PDF</button></div></div>
+<div class="riquadro grafici"><div><h3 id="tA"></h3><canvas id="gA" width="640" height="260"></canvas></div><div><h3 id="tB"></h3><canvas id="gB" width="640" height="260"></canvas></div>
+<div><h3 id="tC"></h3><canvas id="gC" width="640" height="260"></canvas></div></div></div>
+<div id="risultati" style="display:none">
+<div class="riquadro"><h2 id="titoloRis">Analisi della lettura</h2><div class="cifre" id="cifre"></div>
+<p id="commento" style="font-size:14px;line-height:1.5"></p>
+<div class="riga"><button id="btnPlay">▶ Riproduci</button><label>Velocità <select id="velPlay"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+<label><input type="checkbox" id="mostraCalore"> mappa di calore</label>
+<button class="btnSalva primario">💾 Salva</button><button id="btnEsporta">Esporta (JSON)</button><button id="btnStampa">Stampa / PDF</button></div></div>
+<div class="riquadro"><h2>Percorso dello sguardo sul testo</h2><canvas id="vistaTesto" width="1280" height="720"></canvas>
+<p style="color:var(--grigio);font-size:13px;margin:6px 0 0">Cerchi = fissazioni (più grandi = più lunghe) · linee verdi = saccadi in avanti · linee rosse = regressioni.</p></div>
+<div class="riquadro grafici">
+<div><h3>Posizione orizzontale nel tempo</h3><canvas id="gPosX" width="640" height="260"></canvas></div>
+<div><h3>Ampiezza delle saccadi in sequenza (°)</h3><canvas id="gSeq" width="640" height="260"></canvas></div>
+<div><h3>Distribuzione dell'ampiezza delle saccadi</h3><canvas id="gDist" width="640" height="260"></canvas></div>
+<div><h3>Durata delle fissazioni</h3><canvas id="gDur" width="640" height="260"></canvas></div></div>
+</div></div>
+
+<!-- ═════════════ SCHERMO PAZIENTE ═════════════ -->
+<div id="paziente"><div id="pzInvito"><div style="font-size:30px;color:#1D6B44"><b>Schermo paziente</b></div>
+<div>Clicca qui per lo schermo intero</div><div style="font-size:16px;color:#777">(questa finestra va sul monitor con la barra Tobii)</div></div>
+<div id="pzTesto"></div><canvas id="pzCanvas" style="position:absolute;inset:0;display:none"></canvas>
+<div id="pzPunti" style="position:absolute;top:18px;right:28px;font:700 34px system-ui;color:#1D6B44;display:none"></div></div>
+
+<script>
+// Testi originali dello Studio The Organism per la prova di lettura (non tratti da test standardizzati)
+const TESTI = {
+  "liv1": { nome: "Livello 1 · classi 1ª–2ª", testo:
+"Lia ha un gatto rosso. Il gatto si chiama Pepe. Pepe dorme sul letto e sogna i pesci. La mattina Lia apre la porta e Pepe corre nel prato. Nel prato ci sono fiori gialli e una palla blu. Pepe salta sulla palla e cade nell'erba. Lia ride forte. Poi arriva la nonna con il latte. Pepe beve il latte e torna a dormire. Lia prende un libro e legge una storia al suo gatto. Pepe apre un occhio, ascolta un po' e poi fa le fusa." },
+  "liv2": { nome: "Livello 2 · classi 3ª–4ª", testo:
+"Ogni estate Marco va dai nonni, in un paese vicino al mare. La casa dei nonni ha un giardino pieno di alberi di limoni e una vecchia altalena di legno. Il nonno si alza presto e porta Marco al porto, dove i pescatori sistemano le reti colorate. Un giorno un pescatore gli regala una conchiglia grande come una mano. Marco la appoggia all'orecchio e sente un suono lontano, come il respiro delle onde. Da quel momento la porta sempre con sé. La sera, prima di dormire, la mette sul comodino e ascolta il mare anche quando la finestra è chiusa. La nonna dice che le conchiglie custodiscono i ricordi delle vacanze." },
+  "liv3": { nome: "Livello 3 · classe 5ª – scuola media", testo:
+"Le api vivono in grandi famiglie organizzate, dove ognuna svolge un compito preciso. La regina depone le uova, mentre le operaie si occupano di tutto il resto: puliscono le celle, nutrono le larve, difendono l'alveare e raccolgono il nettare dai fiori. Quando un'ape trova un prato ricco di fiori, torna a casa e compie una danza particolare. Muovendosi in cerchio e scuotendo l'addome, indica alle compagne la direzione e la distanza del cibo. Gli studiosi hanno impiegato molti anni per comprendere questo linguaggio. Oggi sappiamo che senza le api molte piante non riuscirebbero a produrre frutti, perché sono proprio questi insetti a trasportare il polline da un fiore all'altro." },
+  "liv4": { nome: "Livello 4 · ragazzi e adulti", testo:
+"Quando leggiamo, i nostri occhi non scorrono sulla riga in modo continuo, come potrebbe sembrare. Al contrario, compiono una serie di piccoli salti, chiamati saccadi, separati da brevi pause durante le quali lo sguardo resta fermo su una parola. È proprio in queste pause, le fissazioni, che il cervello raccoglie le informazioni visive e le collega al significato. Un lettore esperto riconosce rapidamente le parole familiari e talvolta salta quelle più brevi e prevedibili. Quando invece incontra un termine difficile o una frase ambigua, torna indietro con lo sguardo per verificare ciò che ha letto. Questi ritorni, detti regressioni, sono del tutto normali, ma la loro frequenza e la durata delle fissazioni offrono indicazioni preziose sull'efficienza della lettura." },
+  "nonparole": { nome: "Parole senza senso (decodifica)", testo:
+"brena tufo malpi scorta vendile gapo rimbo stelde fiano copra lusti bramo neltra persi dugo mafre sinco trolle bavi lenco prusta mige folta sbacco riente gotta vemo plisa cartuno bende sfogi limpre tasco druna pelfi mosco renta gliva bostre caffo nume strilda pegno vulso tiara benzo flaco ruspi dolme tacco grimpo sela nufo prandi colpe vitro mansa" },
+};
+
+const $=id=>document.getElementById(id);
+const PAZIENTE = new URLSearchParams(location.search).get("schermo")==="paziente";
+const attesa=ms=>new Promise(r=>setTimeout(r,ms));
+const mediana=a=>{ const s=[...a].sort((p,q)=>p-q); const n=s.length; return n? (n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):NaN; };
+const media=a=>a.length? a.reduce((p,q)=>p+q,0)/a.length : NaN;
+const ds=a=>{ if(a.length<2) return 0; const m=media(a); return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1)); };
+function leggiImp(k,def){ try{ return localStorage.getItem("pnev_et_"+k) ?? def; }catch(e){ return def; } }
+function scriviImp(k,v){ try{ localStorage.setItem("pnev_et_"+k,v); }catch(e){} }
+
+/* ════════════════════════ SCHERMO PAZIENTE ════════════════════════ */
+if (PAZIENTE){
+  document.title="PNEV · schermo paziente"; $("console").style.display="none"; $("paziente").style.display="block";
+  const verso=m=>{ try{ window.opener && window.opener.postMessage(m,"*"); }catch(e){} };
+  let correzione=null; try{ correzione=JSON.parse(localStorage.getItem("pnev_gaze_correzione")||"null"); }catch(e){}
+  const applica=(x,y)=>correzione? [correzione.cx[0]*x+correzione.cx[1]*y+correzione.cx[2], correzione.cy[0]*x+correzione.cy[1]*y+correzione.cy[2]] : [x,y];
+  let raccolta=null, ultimoSg=null;
+  $("pzInvito").onclick=async()=>{ try{ await document.documentElement.requestFullscreen(); }catch(e){} $("pzInvito").style.display="none"; inviaDim(); };
+  function inviaDim(){ verso({tipo:"dim",w:innerWidth,h:innerHeight,corr:!!correzione,corrGradi:correzione?correzione.dopoGradi:null}); }
+  addEventListener("resize",inviaDim);
+  // collegamento al ponte
+  function collega(){
+    const ws=new WebSocket("ws://127.0.0.1:8765");
+    ws.onmessage=e=>{ const m=JSON.parse(e.data);
+      if(m.tipo==="stato") verso({tipo:"stato",connesso:m.connesso,fonte:m.fonte});
+      else if(m.tipo==="sguardo" && m.valido){
+        const gx=m.x/devicePixelRatio-window.screenX-(window.outerWidth-window.innerWidth)/2;
+        const gy=m.y/devicePixelRatio-window.screenY-(window.outerHeight-window.innerHeight);
+        if(raccolta) raccolta.push([gx,gy]);
+        const [x,y]=applica(gx,gy); const t=performance.now(); ultimoSg={t,x,y}; verso({tipo:"g",t,x,y}); } };
+    ws.onclose=()=>{ verso({tipo:"stato",connesso:false,fonte:""}); setTimeout(collega,1500); };
+  }
+  collega(); setTimeout(inviaDim,300);
+  async function bersaglio(x,y,ms){ const b=document.createElement("div"); b.className="bersaglio"; b.style.left=x+"px"; b.style.top=y+"px"; document.body.appendChild(b); await attesa(ms); return b; }
+  function risolvi3(A,b){ const M=A.map((r,i)=>[...r,b[i]]);
+    for(let c=0;c<3;c++){ let p=c; for(let r=c+1;r<3;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r; [M[c],M[p]]=[M[p],M[c]];
+      if(Math.abs(M[c][c])<1e-9) return null; for(let r=0;r<3;r++) if(r!==c){ const f=M[r][c]/M[c][c]; for(let k=c;k<4;k++) M[r][k]-=f*M[c][k]; } }
+    return [M[0][3]/M[0][0],M[1][3]/M[1][1],M[2][3]/M[2][2]]; }
+  function adatta(cs){ const A=[[0,0,0],[0,0,0],[0,0,0]], bx=[0,0,0], by=[0,0,0];
+    for(const s of cs){ const r=[s.gx,s.gy,1]; for(let i=0;i<3;i++){ bx[i]+=r[i]*s.tx; by[i]+=r[i]*s.ty; for(let j=0;j<3;j++) A[i][j]+=r[i]*r[j]; } }
+    const cx=risolvi3(A,bx), cy=risolvi3(A,by); return cx&&cy?{cx,cy}:null; }
+  async function calibra(ppd){
+    $("pzTesto").style.display="none"; const W=innerWidth,H=innerHeight, gr=[];
+    for(const fy of [.1,.5,.9]) for(const fx of [.1,.5,.9]) gr.push([fx*W,fy*H]); gr.sort(()=>Math.random()-.5); const cs=[];
+    for(const [tx,ty] of gr){ const b=await bersaglio(tx,ty,700); raccolta=[]; await attesa(900); const c=raccolta; raccolta=null; b.remove(); await attesa(150);
+      if(c.length>=8) cs.push({tx,ty,gx:mediana(c.map(p=>p[0])),gy:mediana(c.map(p=>p[1]))}); }
+    if(cs.length<6){ verso({tipo:"cal",ok:false,punti:cs.length}); return; }
+    const corr=adatta(cs); const ePrima=cs.map(s=>Math.hypot(s.gx-s.tx,s.gy-s.ty));
+    const eDopo=corr?cs.map(s=>Math.hypot(corr.cx[0]*s.gx+corr.cx[1]*s.gy+corr.cx[2]-s.tx,corr.cy[0]*s.gx+corr.cy[1]*s.gy+corr.cy[2]-s.ty)):ePrima;
+    correzione={data:new Date().toISOString(),...corr,primaGradi:media(ePrima)/ppd,dopoGradi:media(eDopo)/ppd};
+    try{ localStorage.setItem("pnev_gaze_correzione",JSON.stringify(correzione)); }catch(e){}
+    verso({tipo:"cal",ok:true,punti:cs.length,prima:correzione.primaGradi,dopo:correzione.dopoGradi}); inviaDim();
+  }
+  async function precisione(ppd){
+    $("pzTesto").style.display="none"; const W=innerWidth,H=innerHeight, err=[];
+    for(const [fx,fy] of [[.5,.5],[.2,.25],[.8,.25],[.2,.75],[.8,.75]]){ const b=await bersaglio(fx*W,fy*H,700); raccolta=[]; await attesa(900); const c=raccolta; raccolta=null; b.remove(); await attesa(150);
+      if(c.length>=8){ const [x,y]=applica(mediana(c.map(p=>p[0])),mediana(c.map(p=>p[1]))); err.push(Math.hypot(x-fx*W,y-fy*H)); } }
+    verso({tipo:"prec",gradi:err.length?media(err)/ppd:null});
+  }
+  function mostraTesto(p){
+    const el=$("pzTesto"); el.style.fontSize=p.carattere+"px"; el.style.lineHeight=p.interlinea;
+    el.innerHTML=TESTI[p.testo].testo.split(/\s+/).map(w=>`<span class="parola">${w}</span>`).join(" ");
+    el.style.display="block";
+    // impaginazione: riquadro di ogni parola e numero di riga
+    const parole=[...el.querySelectorAll(".parola")].map(s=>{ const r=s.getBoundingClientRect(); return {p:s.textContent,x:r.left,y:r.top,w:r.width,h:r.height}; });
+    const righe=[]; for(const w of parole){ let r=righe.find(r=>Math.abs(r.y-w.y)<w.h/2); if(!r){ r={y:w.y,h:w.h,parole:[]}; righe.push(r); } r.parole.push(w); }
+    righe.sort((a,b)=>a.y-b.y);
+    verso({tipo:"layout",parole,righe:righe.map(r=>({yc:r.y+r.h/2,h:r.h,x0:Math.min(...r.parole.map(w=>w.x)),x1:Math.max(...r.parole.map(w=>w.x+w.w)),n:r.parole.length})),
+           carattere:p.carattere,interlinea:p.interlinea,w:innerWidth,h:innerHeight,t0:performance.now()});
+  }
+  /* ── stimoli su canvas: saccadi, lettere, inseguimento, allenamento ── */
+  const cv=$("pzCanvas"), g=cv.getContext("2d"); let prova=null;
+  function preparaCanvas(){ cv.width=innerWidth; cv.height=innerHeight; cv.style.display="block"; $("pzTesto").style.display="none"; g.fillStyle="#fafaf7"; g.fillRect(0,0,cv.width,cv.height); }
+  function pulisci(){ cv.style.display="none"; $("pzPunti").style.display="none"; prova=null; }
+  function punto(x,y,r,col){ window.__bers={x,y,t:performance.now()}; g.fillStyle=col||"#1D6B44"; g.beginPath(); g.arc(x,y,r,0,7); g.fill(); g.fillStyle="#fff"; g.beginPath(); g.arc(x,y,Math.max(2,r*.28),0,7); g.fill(); }
+  function fine(extra){ const p=prova; pulisci(); verso({tipo:"fine",t:performance.now(),...(extra||{})}); return p; }
+  // SACCADI: il punto salta a destra/sinistra (o su/giù) del centro, a intervalli casuali
+  async function saccadi(m){ preparaCanvas(); const W=innerWidth,H=innerHeight, A=m.ampiezza*m.ppd/2, cx=W/2, cy=H/2; const id={};
+    prova={tipo:"saccadi",id}; verso({tipo:"inizio",t0:performance.now(),prova:"saccadi",w:W,h:H,ppd:m.ppd,ampiezza:m.ampiezza,direzione:m.direzione});
+    const disegna=(x,y)=>{ g.fillStyle="#fafaf7"; g.fillRect(0,0,W,H); punto(x,y,12); };
+    disegna(cx,cy); verso({tipo:"stim",t:performance.now(),x:cx,y:cy}); await attesa(1200);
+    for(let i=0;i<m.prove;i++){ if(prova?.id!==id) return;
+      const lato=Math.random()<.5?-1:1; const x=m.direzione==="vert"?cx:cx+lato*A, y=m.direzione==="vert"?cy+lato*A:cy;
+      disegna(x,y); verso({tipo:"stim",t:performance.now(),x,y}); await attesa(1000+Math.random()*700);
+      if(prova?.id!==id) return; disegna(cx,cy); verso({tipo:"stim",t:performance.now(),x:cx,y:cy}); await attesa(700+Math.random()*500); }
+    if(prova?.id===id) fine(); }
+  // LETTERE: due colonne di lettere ai lati; il paziente le legge a voce alternando sinistra e destra
+  function lettere(m){ preparaCanvas(); const W=innerWidth,H=innerHeight, righe=m.righe, alf="ABCDEFHKLMNOPRSTUVZ";
+    const xs=[W/2-m.distanza*m.ppd/2, W/2+m.distanza*m.ppd/2], y0=H*.12, dy=(H*.76)/(righe-1), font=Math.round(m.ppd*1.1);
+    g.fillStyle="#fafaf7"; g.fillRect(0,0,W,H); g.fillStyle="#111"; g.font=`700 ${font}px Arial`; g.textAlign="center"; g.textBaseline="middle"; const celle=[];
+    for(let r=0;r<righe;r++) for(let c=0;c<2;c++){ const L=alf[Math.floor(Math.random()*alf.length)]; g.fillText(L,xs[c],y0+r*dy); celle.push({r,c,x:xs[c],y:y0+r*dy,L}); }
+    prova={tipo:"lettere"}; window.__celle=celle; verso({tipo:"inizio",t0:performance.now(),prova:"lettere",w:W,h:H,ppd:m.ppd,celle,righe,xs,y0,dy}); }
+  // INSEGUIMENTO: il punto si muove a sinusoide; più frequenze in sequenza
+  function insegui(m){ preparaCanvas(); const W=innerWidth,H=innerHeight, A=m.ampiezza*m.ppd/2, id={}; prova={tipo:"inseguimento",id};
+    const t0=performance.now(), fasi=m.frequenze.map((f,i)=>({f,da:i*m.durata*1000,a:(i+1)*m.durata*1000})), tot=fasi.length*m.durata*1000;
+    verso({tipo:"inizio",t0,prova:"inseguimento",w:W,h:H,ppd:m.ppd,ampiezza:m.ampiezza,fasi,direzione:m.direzione,cx:W/2,cy:H/2,A});
+    (function anima(){ if(prova?.id!==id) return; const dt=performance.now()-t0; if(dt>=tot){ fine(); return; }
+      const fs=fasi.find(q=>dt>=q.da&&dt<q.a); const off=A*Math.sin(2*Math.PI*fs.f*(dt-fs.da)/1000);
+      g.fillStyle="#fafaf7"; g.fillRect(0,0,W,H); punto(m.direzione==="vert"?W/2:W/2+off, m.direzione==="vert"?H/2+off:H/2, 13); requestAnimationFrame(anima); })(); }
+  // ALLENAMENTO in tempo reale: sguardo dal vivo, cerchi da «scoppiare», punti casuali, inseguimento con punteggio
+  function allena(m){ preparaCanvas(); const W=innerWidth,H=innerHeight, id={}, t0=performance.now(), dur=m.durata*1000; prova={tipo:"allenamento",id};
+    let punti=0, mancati=0, bers=null, dentroDa=null, sulBers=0, tot=0, ultimo=t0; const R0=m.modo==="casuali"?28:60, sosta=m.modo==="casuali"?350:600, limite=m.modo==="casuali"?2500:4000;
+    const nuovo=()=>({x:W*(.12+.76*Math.random()),y:H*(.15+.7*Math.random()),t:performance.now()});
+    $("pzPunti").style.display="block"; verso({tipo:"inizio",t0,prova:"allenamento",modo:m.modo,w:W,h:H,ppd:m.ppd});
+    (function giro(){ if(prova?.id!==id) return; const ora=performance.now(), dt=ora-t0; if(dt>=dur){ fine({sintesi:{modo:m.modo,punti,mancati,tempo_sul_bersaglio:tot?sulBers/tot*100:null}}); return; }
+      g.fillStyle="#fafaf7"; g.fillRect(0,0,W,H); const sg=ultimoSg && ora-ultimoSg.t<200 ? ultimoSg : null;
+      if(m.modo==="live"){ if(sg) punto(sg.x,sg.y,16,"rgba(181,70,31,.75)"); }
+      else if(m.modo==="insegui"){ const bx=W/2+W*.32*Math.sin(dt/1700)*Math.cos(dt/2900), by=H/2+H*.28*Math.sin(dt/2300);
+        const dentro=sg && Math.hypot(sg.x-bx,sg.y-by)<R0*1.4; tot+=ora-ultimo; if(dentro) sulBers+=ora-ultimo;
+        g.fillStyle=dentro?"rgba(29,107,68,.18)":"rgba(181,70,31,.12)"; g.beginPath(); g.arc(bx,by,R0*1.4,0,7); g.fill(); punto(bx,by,22,dentro?"#1D6B44":"#B5461F");
+        $("pzPunti").textContent=Math.round(tot?sulBers/tot*100:0)+"%"; }
+      else { if(!bers) bers=nuovo();
+        const dentro=sg && Math.hypot(sg.x-bers.x,sg.y-bers.y)<R0; if(dentro){ dentroDa=dentroDa??ora; } else dentroDa=null;
+        const pieno=dentroDa? Math.min(1,(ora-dentroDa)/sosta) : 0;
+        g.fillStyle="#e9efe9"; g.beginPath(); g.arc(bers.x,bers.y,R0,0,7); g.fill();
+        g.strokeStyle="#1D6B44"; g.lineWidth=6; g.beginPath(); g.arc(bers.x,bers.y,R0,-Math.PI/2,-Math.PI/2+pieno*2*Math.PI); g.stroke(); punto(bers.x,bers.y,R0*.32,"#C98A1B");
+        if(pieno>=1){ punti++; bers=nuovo(); dentroDa=null; verso({tipo:"punto",punti,mancati}); }
+        else if(ora-bers.t>limite){ mancati++; bers=nuovo(); dentroDa=null; verso({tipo:"punto",punti,mancati}); }
+        $("pzPunti").textContent="⭐ "+punti; }
+      ultimo=ora; requestAnimationFrame(giro); })(); }
+  addEventListener("message",e=>{ const m=e.data||{};
+    if(m.cmd==="cal") calibra(m.ppd); else if(m.cmd==="prec") precisione(m.ppd);
+    else if(m.cmd==="leggi") mostraTesto(m);
+    else if(m.cmd==="saccadi") saccadi(m); else if(m.cmd==="lettere") lettere(m); else if(m.cmd==="insegui") insegui(m); else if(m.cmd==="allena") allena(m);
+    else if(m.cmd==="stop"){ if(prova) fine(); else { $("pzTesto").style.display="none"; verso({tipo:"fine",t:performance.now()}); } } });
+  addEventListener("keydown",e=>{ if(e.code==="Space" && prova && prova.tipo==="lettere"){ e.preventDefault(); fine({daPaziente:true}); return; }
+    if(e.code==="Space" && $("pzTesto").style.display==="block"){ e.preventDefault(); $("pzTesto").style.display="none"; verso({tipo:"fine",t:performance.now(),daPaziente:true}); } });
+}
+
+/* ════════════════════════ CONSOLE ════════════════════════ */
+else {
+  // ── dentro il gestionale: protocollo dei componenti Streamlit ──
+  window.IN_GESTIONALE = new URLSearchParams(location.search).has("streamlitUrl");
+  if (window.IN_GESTIONALE){
+    const versoSt=(type,extra={})=>window.parent.postMessage(Object.assign({isStreamlitMessage:true,type},extra),"*"); let ultimoOk=null;
+    addEventListener("message",ev=>{ const d=ev.data; if(!d||d.type!=="streamlit:render") return; const a=d.args||{};
+      if(a.paziente){ $("nomePaz").value=a.paziente; $("nomePaz").readOnly=true; }
+      if(a.salvato && a.salvato!==ultimoOk){ ultimoOk=a.salvato; $("msg").textContent="✓ Esame salvato nella scheda del paziente."; } });
+    versoSt("streamlit:componentReady",{apiVersion:1});
+    const alt=()=>versoSt("streamlit:setFrameHeight",{height:Math.ceil(document.documentElement.scrollHeight)+30});
+    new ResizeObserver(alt).observe(document.body); setTimeout(alt,300);
+    window.salvaNelGestionale=rec=>{ versoSt("streamlit:setComponentValue",{value:{azione:"salva",t:Date.now(),record:rec},dataType:"json"}); $("msg").textContent="Salvataggio nel gestionale…"; };
+  }
+  let paz=null, dimPaz={w:1920,h:1080}, n=0, layout=null, registrazione=null, ultimoG=null, analisi=null;
+  for(const [k,t] of Object.entries(TESTI)) $("selTesto").insertAdjacentHTML("beforeend",`<option value="${k}">${t.nome}</option>`);
+  for(const k of ["pollici","distanza","carattere","interlinea","selTesto","nomePaz"]){ const v=leggiImp(k,null); if(v!==null) $(k).value=v; $(k).addEventListener("change",()=>scriviImp(k,$(k).value)); }
+  const msg=t=>$("msg").textContent=t;
+  function pxPerGrado(){ const diag=+$("pollici").value||24, D=+$("distanza").value||60;
+    // lo schermo paziente può avere risoluzione diversa: uso le sue dimensioni in pixel CSS
+    const ppi=Math.hypot(dimPaz.w,dimPaz.h)/diag; return (ppi/2.54)*(2*D*Math.tan(Math.PI/360)); }
+  const pronto=()=>paz && !paz.closed;
+  $("btnApri").onclick=async()=>{
+    let opz="popup,width=1000,height=640";
+    try{ if("getScreenDetails" in window){ const d=await window.getScreenDetails(); const altro=d.screens.find(s=>s!==d.currentScreen);
+      if(altro) opz=`popup,left=${altro.availLeft},top=${altro.availTop},width=${altro.availWidth},height=${altro.availHeight}`; } }catch(e){}
+    paz=window.open(location.href.split("?")[0]+"?schermo=paziente","pnev_paziente",opz);
+    msg(paz? "Sullo schermo paziente clicca «Clicca qui per lo schermo intero». Se si è aperta su questo monitor, trascinala sull'altro prima di cliccare." : "Il browser ha bloccato la finestra: consenti i popup per questa pagina.");
+  };
+  const manda=m=>{ if(!pronto()){ msg("Prima apri lo schermo paziente (passo 1)."); return false; } paz.postMessage(m,"*"); return true; };
+  $("btnCal").onclick=()=>{ if(manda({cmd:"cal",ppd:pxPerGrado()})) msg("Calibrazione in corso: il paziente guarda il centro dei 9 cerchi…"); };
+  $("btnPrec").onclick=()=>{ if(manda({cmd:"prec",ppd:pxPerGrado()})) msg("Controllo della precisione: 5 cerchi…"); };
+  $("btnLeggi").onclick=()=>{ if(manda({cmd:"leggi",testo:$("selTesto").value,carattere:+$("carattere").value,interlinea:+$("interlinea").value}))
+      msg("Lettura in corso. Finisce quando premi «■ Fine» o quando il paziente preme la barra spaziatrice."); };
+  $("btnStop").onclick=()=>manda({cmd:"stop"});
+  for(const k of ["sacDir","sacAmp","sacProve","letRighe","letDist","insDir","insAmp","insFreq","insDur","allModo","allDur"]){ const v=leggiImp(k,null); if(v!==null) $(k).value=v; $(k).addEventListener("change",()=>scriviImp(k,$(k).value)); }
+  $("btnSac").onclick=()=>{ if(manda({cmd:"saccadi",ppd:pxPerGrado(),direzione:$("sacDir").value,ampiezza:+$("sacAmp").value,prove:+$("sacProve").value})) msg("Saccadi in corso: il paziente segue il punto che salta."); };
+  $("btnLet").onclick=()=>{ if(manda({cmd:"lettere",ppd:pxPerGrado(),righe:+$("letRighe").value,distanza:+$("letDist").value})) msg("Lettere: il paziente legge a voce, alternando sinistra e destra, riga per riga."); };
+  $("btnIns").onclick=()=>{ if(manda({cmd:"insegui",ppd:pxPerGrado(),direzione:$("insDir").value,ampiezza:+$("insAmp").value,frequenze:$("insFreq").value.split(",").map(Number),durata:+$("insDur").value})) msg("Inseguimento in corso: il paziente segue il punto con lo sguardo, senza muovere la testa."); };
+  $("btnAll").onclick=()=>{ $("allPunti").textContent=""; if(manda({cmd:"allena",ppd:pxPerGrado(),modo:$("allModo").value,durata:+$("allDur").value})) msg("Allenamento in corso."); };
+  addEventListener("message",e=>{ if(!paz || e.source!==paz) return; const m=e.data||{};
+    if(m.tipo==="g"){ n++; ultimoG=m; if(registrazione) registrazione.campioni.push([m.t,m.x,m.y]); }
+    else if(m.tipo==="stato"){ $("stato").textContent=m.connesso?("Collegato · "+(m.fonte==="prova"?"PROVA (dati simulati)":"Tobii EyeX")):"Ponte non collegato: avvia «Avvia ponte.bat»"; $("pal").style.background=m.connesso?"var(--verde)":"var(--rosso)"; }
+    else if(m.tipo==="dim"){ dimPaz={w:m.w,h:m.h}; $("infoPaz").textContent=`Schermo paziente ${m.w}×${m.h}`+(m.corr?` · correzione ${m.corrGradi.toFixed(2)}°`:" · senza calibrazione fine"); }
+    else if(m.tipo==="cal"){ msg(m.ok? `Calibrazione fine: errore da ${m.prima.toFixed(2)}° a ${m.dopo.toFixed(2)}° (${m.punti}/9 punti). ${m.dopo<1?"Ottima.":m.dopo<1.5?"Buona.":"Conviene ripeterla."}` : `Calibrazione non riuscita (${m.punti}/9 punti): controlla la posizione davanti alla barra.`); }
+    else if(m.tipo==="prec"){ msg(m.gradi==null? "Nessun dato ricevuto dal ponte." : `Precisione: errore medio ${m.gradi.toFixed(2)}° — ${m.gradi<1?"ottima":m.gradi<1.5?"buona":m.gradi<2?"discreta":"da migliorare"}.`); }
+    else if(m.tipo==="layout"){ layout=m; registrazione={prova:"lettura",inizio:m.t0,campioni:[],testo:$("selTesto").value}; }
+    else if(m.tipo==="inizio"){ registrazione={prova:m.prova,meta:m,inizio:m.t0,campioni:[],stim:[]}; }
+    else if(m.tipo==="stim" && registrazione){ registrazione.stim.push(m); }
+    else if(m.tipo==="punto"){ $("allPunti").textContent=`⭐ ${m.punti} · mancati ${m.mancati}`; }
+    else if(m.tipo==="fine" && registrazione){ registrazione.fine=m.t; registrazione.sintesi=m.sintesi; const r=registrazione; registrazione=null;
+      msg(m.daPaziente?"Il paziente ha finito.":"Prova terminata.");
+      if(r.prova==="lettura") analizza(r); else if(r.prova==="saccadi") anSaccadi(r); else if(r.prova==="lettere") anLettere(r);
+      else if(r.prova==="inseguimento") anInseguimento(r); else if(r.prova==="allenamento") anAllenamento(r); }
+  });
+  setInterval(()=>{ $("hz").textContent=n; n=0; },1000);
+  // anteprima dal vivo
+  (function disegna(){ const cv=$("anteprima"), g=cv.getContext("2d"); const k=Math.min(cv.width/dimPaz.w,cv.height/dimPaz.h);
+    g.fillStyle="#fafaf7"; g.fillRect(0,0,cv.width,cv.height);
+    if(layout && registrazione){ g.fillStyle="#222"; g.font=`${layout.carattere*k}px Arial`; g.textBaseline="top"; for(const w of layout.parole) g.fillText(w.p,w.x*k,w.y*k+layout.carattere*k*.15); }
+    if(ultimoG){ g.fillStyle="rgba(181,70,31,.6)"; g.beginPath(); g.arc(ultimoG.x*k,ultimoG.y*k,9,0,7); g.fill(); }
+    requestAnimationFrame(disegna); })();
+
+  /* ── strumenti comuni di analisi ── */
+  function velocita(S,ppd){ const v=new Array(S.length).fill(0);
+    for(let i=1;i<S.length-1;i++){ const dt=(S[i+1][0]-S[i-1][0])/1000; if(dt>0) v[i]=Math.hypot(S[i+1][1]-S[i-1][1],S[i+1][2]-S[i-1][2])/ppd/dt; } return v; }
+  function fissazioni(S,ppd){ const v=velocita(S,ppd); let fx=[], cur=null;
+    for(let i=0;i<S.length;i++){ if(v[i]<40){ if(!cur) cur=[]; cur.push(S[i]); } else if(cur){ fx.push(cur); cur=null; } } if(cur) fx.push(cur);
+    fx=fx.filter(c=>c.length>1).map(c=>({t0:c[0][0],t1:c[c.length-1][0],x:media(c.map(p=>p[1])),y:media(c.map(p=>p[2]))}));
+    const u=[]; for(const f of fx){ const l=u[u.length-1]; if(l && f.t0-l.t1<75 && Math.hypot(f.x-l.x,f.y-l.y)/ppd<0.5){ l.t1=f.t1; l.x=(l.x+f.x)/2; l.y=(l.y+f.y)/2; } else u.push({...f}); }
+    return u.map(f=>({...f,dur:f.t1-f.t0})).filter(f=>f.dur>=80); }
+  const fmt=(v,d=1)=>isFinite(v)? v.toFixed(d).replace(".",",") : "—";
+  function serieTempo(id,serie,etY,t0){ const cv=$(id), g=scala(cv), W=cv.width, H=cv.height, m=44; assi(g,W,H,m,"tempo (s)",etY);
+    const tutti=serie.flatMap(s=>s.pts); if(!tutti.length) return; const tmin=t0??Math.min(...tutti.map(p=>p[0])), tmax=Math.max(...tutti.map(p=>p[0]));
+    let vmin=Math.min(...tutti.map(p=>p[1])), vmax=Math.max(...tutti.map(p=>p[1])); if(vmax-vmin<1){ vmax+=1; vmin-=1; }
+    const X=t=>m+(t-tmin)/(tmax-tmin||1)*(W-m-10), Y=v=>10+(1-(v-vmin)/(vmax-vmin))*(H-m-10);
+    for(const s of serie){ g.strokeStyle=s.col; g.lineWidth=s.w||1.3; g.beginPath(); s.pts.forEach((p,i)=>i?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1]))); g.stroke(); }
+    g.fillStyle="#65716B"; g.font="11px system-ui"; const sec=(tmax-tmin)/1000, passo=Math.max(1,Math.round(sec/10)); for(let q=0;q<=sec;q+=passo) g.fillText(q,X(tmin+q*1000)-3,H-m+14);
+    g.fillText(fmt(vmax),4,16); g.fillText(fmt(vmin),4,H-m); }
+  function barre(id,valori,etX,etY,col,banda){ const cv=$(id), g=scala(cv), W=cv.width, H=cv.height, m=44; assi(g,W,H,m,etX,etY);
+    const vals=valori.map(v=>v.v), max=Math.max(...vals.filter(isFinite),banda?banda[1]*1.2:0,0.001), bw=(W-m-10)/Math.max(valori.length,1);
+    if(banda){ g.fillStyle="rgba(29,107,68,.10)"; const y1=10+(1-banda[1]/max)*(H-m-20), y0=10+(1-banda[0]/max)*(H-m-20); g.fillRect(m,y1,W-m-10,y0-y1); }
+    g.fillStyle="#65716B"; g.font="11px system-ui"; g.fillText(fmt(max,max<10?2:0),4,22); g.fillText("0",30,H-m);
+    valori.forEach((q,i)=>{ if(!isFinite(q.v)) return; const h=q.v/max*(H-m-20); g.fillStyle=typeof col==="function"?col(q.v):col; g.fillRect(m+i*bw+2,H-m-h,Math.max(bw-4,1),h);
+      if(q.et && valori.length<=12){ g.fillStyle="#65716B"; g.font="11px system-ui"; g.fillText(q.et,m+i*bw+bw/2-14,H-m+14); } }); }
+  let ultimoRecord=null;
+  function mostraAltro(titolo,cifre,commento,record,grafici){ $("risultati").style.display="none"; $("risAltro").style.display="block";
+    $("titoloAltro").textContent=titolo; $("cifreAltro").innerHTML=cifre.map(([t,v,u])=>`<div>${t}<b>${v}${u||""}</b></div>`).join("");
+    $("commentoAltro").textContent=commento; ["A","B","C"].forEach((k,i)=>{ const gr=grafici[i]; $("t"+k).textContent=gr?gr.titolo:""; $("g"+k).style.display=gr?"block":"none"; if(gr) gr.disegna("g"+k); });
+    ultimoRecord=record; window.__ultimoRecord=record; $("risAltro").scrollIntoView({behavior:"smooth"}); }
+  function record(tipo,sintesi,dati){ return {formato:"pnev-esame",versione:1,strumento:"eyetracking",tipo,id:Date.now(),data:new Date().toISOString().slice(0,10),
+    paziente:$("nomePaz").value,sintesi,dati}; }
+  function scarica(rec){ const b=new Blob([JSON.stringify(rec)],{type:"application/json"}); const l=document.createElement("a"); l.href=URL.createObjectURL(b);
+    l.download=`EyeTracking_${rec.tipo}_${(rec.paziente||"paziente").replace(/\s+/g,"_")}_${rec.data}.json`; l.click(); }
+  $("btnEspAltro").onclick=()=>ultimoRecord&&scarica(ultimoRecord);
+  document.querySelectorAll(".btnSalva").forEach(b=>b.onclick=()=>{ if(!ultimoRecord) return;
+    if(window.IN_GESTIONALE) window.salvaNelGestionale(ultimoRecord); else { scarica(ultimoRecord); msg("Esame scaricato come file: caricalo nel gestionale."); } });
+
+  /* ── SACCADI: latenza, guadagno, correttive, errore finale ── */
+  function anSaccadi(r){ const M=r.meta, ppd=M.ppd, S=r.campioni, v=velocita(S,ppd), st=r.stim, prove=[];
+    for(let j=1;j<st.length;j++){ const a=st[j-1], b=st[j], tFine=j+1<st.length?st[j+1].t:r.fine; const req=Math.hypot(b.x-a.x,b.y-a.y)/ppd; if(req<1) continue;
+      const ux=(b.x-a.x)/(req*ppd), uy=(b.y-a.y)/(req*ppd); const idx=S.map((p,i)=>i).filter(i=>S[i][0]>=b.t&&S[i][0]<tFine); if(idx.length<6) continue;
+      const on=idx.find(i=>v[i]>30 && ((S[Math.min(i+1,S.length-1)][1]-S[i-1][1])*ux+(S[Math.min(i+1,S.length-1)][2]-S[i-1][2])*uy)>0);
+      if(on===undefined){ prove.push({req,mancata:true}); continue; }
+      let fineS=idx.find(i=>i>on && v[i]<30) ?? idx[idx.length-1]; const p0=S[Math.max(on-1,0)], p1=S[fineS];
+      const amp=((p1[1]-p0[1])*ux+(p1[2]-p0[2])*uy)/ppd; const lat=S[on][0]-b.t;
+      // correttive: piccoli salti dopo la saccade primaria (soglia più bassa: a 60 Hz sono lenti da misurare)
+      let corr=0, ini=null; for(const i of idx.filter(i=>i>fineS)){ if(v[i]>18){ if(ini===null) ini=i; }
+        else if(ini!==null){ if(Math.hypot(S[i][1]-S[ini-1][1],S[i][2]-S[ini-1][2])/ppd>0.3) corr++; ini=null; } }
+      const ult=idx.filter(i=>S[i][0]>tFine-150), err=ult.length? Math.hypot(media(ult.map(i=>S[i][1]))-b.x,media(ult.map(i=>S[i][2]))-b.y)/ppd : NaN;
+      prove.push({req,lat,gain:amp/req,corr,err,anticipata:lat<80,t:b.t}); }
+    const val=prove.filter(p=>!p.mancata&&!p.anticipata), lat=val.map(p=>p.lat), gain=val.map(p=>p.gain);
+    const sint={prove:prove.length,valide:val.length,latenza_media:media(lat),latenza_mediana:mediana(lat),latenza_ds:ds(lat),guadagno_medio:media(gain),
+      ipometrie_pct:val.length?val.filter(p=>p.gain<0.85).length/val.length*100:0, ipermetrie_pct:val.length?val.filter(p=>p.gain>1.15).length/val.length*100:0,
+      correttive_medie:media(val.map(p=>p.corr)), errore_finale:media(val.map(p=>p.err).filter(isFinite)), anticipate:prove.filter(p=>p.anticipata).length, mancate:prove.filter(p=>p.mancata).length};
+    const asse=M.direzione==="vert"?2:1, cen=M.direzione==="vert"?M.h/2:M.w/2, t0=S.length?S[0][0]:0;
+    const occhio=S.map(p=>[p[0],(p[asse]-cen)/ppd]); const bers=[]; st.forEach((q,i)=>{ const val=((asse===1?q.x:q.y)-cen)/ppd; bers.push([q.t,i?bers[bers.length-1][1]:val]); bers.push([q.t,val]); }); if(bers.length) bers.push([r.fine,bers[bers.length-1][1]]);
+    const comm=[`${sint.valide} saccadi valide su ${sint.prove}: latenza media ${Math.round(sint.latenza_media)} ms, guadagno medio ${fmt(sint.guadagno_medio,2)}.`,
+      sint.ipometrie_pct>30?"Frequenti saccadi ipometriche (non arrivano al bersaglio al primo salto).":"", sint.correttive_medie>1?"Molte saccadi correttive dopo il primo salto.":"",
+      sint.latenza_media>300?"Latenze allungate.":"", "Bozza automatica da rivedere."].filter(Boolean).join(" ");
+    mostraAltro(`Saccadi ${M.direzione==="vert"?"verticali":"orizzontali"} ${M.ampiezza}° — ${$("nomePaz").value||"paziente"}`,
+      [["Prove valide",`${sint.valide}/${sint.prove}`],["Latenza media",Math.round(sint.latenza_media)," ms"],["Latenza mediana",Math.round(sint.latenza_mediana)," ms"],["Deviazione standard",Math.round(sint.latenza_ds)," ms"],
+       ["Guadagno medio",fmt(sint.guadagno_medio,2)],["Ipometrie",fmt(sint.ipometrie_pct,0)," %"],["Ipermetrie",fmt(sint.ipermetrie_pct,0)," %"],["Correttive per prova",fmt(sint.correttive_medie)],
+       ["Errore finale",fmt(sint.errore_finale),"°"],["Anticipate",sint.anticipate],["Mancate",sint.mancate]], comm,
+      record("saccadi",sint,{meta:M,prove,campioni:S,stim:st}),
+      [{titolo:"Posizione dell'occhio (verde) e del bersaglio (rosso), in gradi",disegna:id=>serieTempo(id,[{pts:bers,col:"#B5461F",w:2},{pts:occhio,col:"#1D6B44"}],"posizione (°)",t0)},
+       {titolo:"Latenza di ogni saccade (ms)",disegna:id=>barre(id,val.map(p=>({v:p.lat})),"prova","ms",q=>q>300?"#B5461F":"#1D6B44")},
+       {titolo:"Guadagno di ogni saccade (fascia verde = 0,85–1,15)",disegna:id=>barre(id,val.map(p=>({v:p.gain})),"prova","guadagno",q=>q<0.85||q>1.15?"#B5461F":"#1D6B44",[0.85,1.15])}]); }
+
+  /* ── LETTERE: tempo, rifissazioni, errori di sequenza ── */
+  function anLettere(r){ const M=r.meta, ppd=M.ppd, S=r.campioni, F=fissazioni(S,ppd), seq=[];
+    for(const f of F){ const c=Math.abs(f.x-M.xs[0])<Math.abs(f.x-M.xs[1])?0:1; if(Math.abs(f.x-M.xs[c])/ppd>4) continue;
+      const rg=Math.round((f.y-M.y0)/M.dy); if(rg<0||rg>=M.righe||Math.abs(f.y-(M.y0+rg*M.dy))>M.dy*.6) continue; seq.push({...f,c,r:rg}); }
+    let rifiss=0, salti=0, errori=0, prev=null; const visitate=new Set();
+    for(const f of seq){ visitate.add(f.r+"-"+f.c); if(prev){ if(prev.r===f.r&&prev.c===f.c) rifiss++; else { salti++;
+        const atteso = prev.c===0 ? {r:prev.r,c:1} : {r:prev.r+1,c:0}; if(f.r!==atteso.r||f.c!==atteso.c) errori++; } } prev=f; }
+    const tempo= seq.length? (r.fine-seq[0].t0)/1000 : 0;
+    const sint={righe:M.righe,lettere:M.righe*2,lettere_guardate:visitate.size,tempo_s:tempo,lettere_al_secondo:tempo?visitate.size/tempo:0,fissazioni:seq.length,
+      rifissazioni:rifiss,salti:salti,errori_sequenza:errori,dur_media:media(seq.map(f=>f.dur))};
+    const comm=`${sint.lettere_guardate} lettere su ${sint.lettere} in ${fmt(tempo)} s (${fmt(sint.lettere_al_secondo,2)} al secondo). ${rifiss} rifissazioni e ${errori} salti fuori sequenza. ${errori>2?"Diversi errori di sequenza: possibile difficoltà nel controllo delle saccadi orizzontali o di orientamento sulla riga. ":""}Bozza automatica da rivedere.`;
+    mostraAltro(`Saccadi su lettere (${M.righe} righe) — ${$("nomePaz").value||"paziente"}`,
+      [["Tempo",fmt(tempo)," s"],["Lettere al secondo",fmt(sint.lettere_al_secondo,2)],["Lettere guardate",`${sint.lettere_guardate}/${sint.lettere}`],["Fissazioni",sint.fissazioni],
+       ["Rifissazioni",rifiss],["Errori di sequenza",errori],["Durata media fissazioni",Math.round(sint.dur_media)," ms"]], comm,
+      record("lettere",sint,{meta:M,sequenza:seq,campioni:S}),
+      [{titolo:"Posizione orizzontale nel tempo (px)",disegna:id=>serieTempo(id,[{pts:S.map(p=>[p[0],p[1]]),col:"#1D6B44"}],"x (px)")},
+       {titolo:"Posizione verticale nel tempo (px)",disegna:id=>serieTempo(id,[{pts:S.map(p=>[p[0],-p[2]]),col:"#C98A1B"}],"− y (px)")},
+       {titolo:"Durata delle fissazioni sulle lettere (ms)",disegna:id=>barre(id,seq.map(f=>({v:f.dur})),"fissazione","ms","#1D6B44")}]); }
+
+  /* ── INSEGUIMENTO: guadagno, saccadi di recupero, errore ── */
+  function anInseguimento(r){ const M=r.meta, ppd=M.ppd, S=r.campioni, asse=M.direzione==="vert"?2:1, cen=asse===1?M.cx:M.cy;
+    const bers=t=>{ const dt=t-M.t0, f=M.fasi.find(q=>dt>=q.da&&dt<q.a); return f? {pos:M.A*Math.sin(2*Math.PI*f.f*(dt-f.da)/1000)/ppd, vel:M.A/ppd*2*Math.PI*f.f*Math.cos(2*Math.PI*f.f*(dt-f.da)/1000), f:f.f} : null; };
+    const fasi=M.fasi.map(f=>({f:f.f,ge:[],gt:[],err:[],sacc:0,inS:false,dur:(f.a-f.da)/1000}));
+    for(let i=1;i<S.length-1;i++){ const b=bers(S[i][0]); if(!b) continue; const F=fasi.find(q=>q.f===b.f); const dt=(S[i+1][0]-S[i-1][0])/1000; if(dt<=0) continue;
+      const ve=((S[i+1][asse]-S[i-1][asse])/ppd)/dt, picco=M.A/ppd*2*Math.PI*b.f, soglia=Math.max(40,2.2*picco);
+      F.err.push(((S[i][asse]-cen)/ppd)-b.pos);
+      if(Math.abs(ve)>soglia){ if(!F.inS){ F.sacc++; F.inS=true; } continue; } F.inS=false;
+      if(Math.abs(b.vel)>0.3*picco){ F.ge.push(ve*Math.sign(b.vel)); F.gt.push(Math.abs(b.vel)); } }
+    const ris=fasi.map(F=>({freq:F.f,guadagno:F.gt.length?media(F.ge)/media(F.gt):NaN,saccadi_al_s:F.sacc/F.dur,errore_rms:Math.sqrt(media(F.err.map(e=>e*e)))}));
+    const sint={ampiezza:M.ampiezza,direzione:M.direzione,per_frequenza:ris,guadagno_medio:media(ris.map(q=>q.guadagno).filter(isFinite)),saccadi_al_s:media(ris.map(q=>q.saccadi_al_s)),errore_rms:media(ris.map(q=>q.errore_rms))};
+    const comm=`Guadagno medio dell'inseguimento ${fmt(sint.guadagno_medio,2)} (1 = l'occhio va alla stessa velocità del bersaglio), ${fmt(sint.saccadi_al_s,2)} saccadi di recupero al secondo. ${sint.guadagno_medio<0.75?"Inseguimento poco fluido, con molte saccadi di recupero. ":""}Bozza automatica da rivedere.`;
+    const cifre=[["Guadagno medio",fmt(sint.guadagno_medio,2)],["Saccadi di recupero",fmt(sint.saccadi_al_s,2),"/s"],["Errore medio (RMS)",fmt(sint.errore_rms),"°"]];
+    ris.forEach(q=>cifre.push([`${fmt(q.freq)} Hz · guadagno`,fmt(q.guadagno,2)],[`${fmt(q.freq)} Hz · saccadi/s`,fmt(q.saccadi_al_s,2)]));
+    const occhio=S.map(p=>[p[0],(p[asse]-cen)/ppd]), tb=S.map(p=>{ const b=bers(p[0]); return b?[p[0],b.pos]:null; }).filter(Boolean);
+    mostraAltro(`Inseguimento ${M.direzione==="vert"?"verticale":"orizzontale"} ±${M.ampiezza/2}° — ${$("nomePaz").value||"paziente"}`, cifre, comm,
+      record("inseguimento",sint,{meta:M,campioni:S}),
+      [{titolo:"Occhio (verde) e bersaglio (rosso), in gradi",disegna:id=>serieTempo(id,[{pts:tb,col:"#B5461F",w:2},{pts:occhio,col:"#1D6B44"}],"posizione (°)")},
+       {titolo:"Guadagno per velocità (fascia verde = 0,85–1,15)",disegna:id=>barre(id,ris.map(q=>({v:q.guadagno,et:fmt(q.freq)+" Hz"})),"frequenza","guadagno",q=>q<0.85?"#B5461F":"#1D6B44",[0.85,1.15])},
+       {titolo:"Saccadi di recupero al secondo",disegna:id=>barre(id,ris.map(q=>({v:q.saccadi_al_s,et:fmt(q.freq)+" Hz"})),"frequenza","al secondo","#C98A1B")}]); }
+
+  /* ── ALLENAMENTO ── */
+  function anAllenamento(r){ const s=r.sintesi||{}, nomi={cerchi:"Cerchi da scoppiare",casuali:"Punti casuali",insegui:"Segui la palla",live:"Sguardo dal vivo"};
+    const dur=(r.fine-r.inizio)/1000, cifre=[["Durata",fmt(dur,0)," s"]];
+    if(s.modo==="insegui") cifre.push(["Tempo sul bersaglio",fmt(s.tempo_sul_bersaglio,0)," %"]);
+    else if(s.modo!=="live") cifre.push(["Punti",s.punti],["Mancati",s.mancati],["Riuscita",fmt(s.punti+s.mancati?s.punti/(s.punti+s.mancati)*100:0,0)," %"]);
+    mostraAltro(`Allenamento · ${nomi[s.modo]||""} — ${$("nomePaz").value||"paziente"}`, cifre, "Esercizio di allenamento visivo con lo sguardo: confronta i risultati da una seduta all'altra.",
+      record("allenamento",{...s,durata_s:dur},{}), []); }
+
+  /* ── analisi della lettura ── */
+  function analizza(r){
+    const ppd=pxPerGrado(), L=layout, S=r.campioni.filter(s=>isFinite(s[1])&&isFinite(s[2]));
+    if(S.length<20){ msg("Troppo pochi dati per l'analisi: il ponte riceveva lo sguardo?"); return; }
+    // 1) fissazioni con soglia di velocità (I-VT), poi unione delle fissazioni vicine
+    const SOGLIA=40; let fix=[], cur=null;
+    for(let i=1;i<S.length;i++){ const dt=(S[i][0]-S[i-1][0])/1000; if(dt<=0) continue;
+      const v=Math.hypot(S[i][1]-S[i-1][1],S[i][2]-S[i-1][2])/ppd/dt;
+      if(v<SOGLIA){ if(!cur) cur={t0:S[i-1][0],pts:[S[i-1]]}; cur.pts.push(S[i]); }
+      else if(cur){ fix.push(cur); cur=null; } }
+    if(cur) fix.push(cur);
+    fix=fix.map(f=>({t0:f.t0,t1:f.pts[f.pts.length-1][0],x:media(f.pts.map(p=>p[1])),y:media(f.pts.map(p=>p[2]))}));
+    const unite=[]; for(const f of fix){ const u=unite[unite.length-1];
+      if(u && f.t0-u.t1<75 && Math.hypot(f.x-u.x,f.y-u.y)/ppd<0.5){ const du=u.t1-u.t0, df=f.t1-f.t0; u.x=(u.x*du+f.x*df)/(du+df||1); u.y=(u.y*du+f.y*df)/(du+df||1); u.t1=f.t1; }
+      else unite.push({...f}); }
+    fix=unite.map(f=>({...f,dur:f.t1-f.t0})).filter(f=>f.dur>=80);
+    // 2) riga di ogni fissazione
+    for(const f of fix){ let best=null,dist=1e9; L.righe.forEach((rg,i)=>{ const d=Math.abs(f.y-rg.yc); if(d<dist){ dist=d; best=i; } });
+      f.riga = dist<=L.righe[0].h*L.interlinea*0.6 ? best : null; }
+    const sulTesto=fix.filter(f=>f.riga!==null);
+    // 3) saccadi tra fissazioni consecutive
+    const sacc=[]; for(let i=1;i<fix.length;i++){ const a=fix[i-1], b=fix[i]; const dx=b.x-a.x, amp=Math.hypot(dx,b.y-a.y)/ppd*Math.sign(dx||1);
+      let tipo="altro"; if(a.riga!==null && a.riga===b.riga) tipo = dx>=0 ? "avanti" : (Math.abs(dx)/ppd>0.3 ? "regressione" : "avanti");
+      else if(a.riga!==null && b.riga!==null && b.riga>a.riga) tipo="a_capo";
+      sacc.push({amp,tipo,t:b.t0}); }
+    const avanti=sacc.filter(s=>s.tipo==="avanti"), regr=sacc.filter(s=>s.tipo==="regressione");
+    const righeLette=new Set(sulTesto.map(f=>f.riga)).size || 1;
+    const tInizio=sulTesto.length?sulTesto[0].t0:r.inizio, tFine=sulTesto.length?sulTesto[sulTesto.length-1].t1:r.fine;
+    const durata=(tFine-tInizio)/1000; const paroleTot=L.righe.reduce((s,rg)=>s+rg.n,0);
+    const paroleLette=L.righe.filter((rg,i)=>sulTesto.some(f=>f.riga===i)).reduce((s,rg)=>s+rg.n,0);
+    const dur=sulTesto.map(f=>f.dur);
+    analisi={paziente:$("nomePaz").value,data:new Date().toISOString(),testo:TESTI[r.testo].nome,ppd,distanza_cm:+$("distanza").value,
+      registrazione_s:(r.fine-r.inizio)/1000,durata_lettura_s:durata,righe:L.righe.length,righe_lette:righeLette,parole:paroleTot,parole_lette:paroleLette,
+      parole_min: durata>0? paroleLette/durata*60 : 0, fissazioni:sulTesto.length, fissazioni_riga:sulTesto.length/righeLette,
+      fissazioni_min: durata>0? sulTesto.length/durata*60:0, dur_media:media(dur), dur_ds:ds(dur), dur_mediana:mediana(dur),
+      saccadi_avanti:avanti.length, regressioni:regr.length, regressioni_riga:regr.length/righeLette, regr_su_fiss: sulTesto.length? regr.length/sulTesto.length*100:0,
+      ampiezza_media_avanti:media(avanti.map(s=>s.amp)), fix, sacc, campioni:S, layout:L};
+    mostraRisultati();
+    { const {fix:aF,sacc:aS,campioni:aC,layout:aL,...sintesi}=analisi; ultimoRecord=record("lettura",sintesi,{fix:aF,sacc:aS,campioni:aC,layout:aL}); }
+  }
+  function mostraRisultati(){ const a=analisi; calore=null; $("risAltro").style.display="none"; $("risultati").style.display="block";
+    $("titoloRis").textContent=`Analisi della lettura — ${a.paziente||"paziente"} · ${a.testo}`;
+    const c=(t,v,u="")=>`<div>${t}<b>${v}${u}</b></div>`, f1=v=>isFinite(v)?v.toFixed(1).replace(".",","):"—", f0=v=>isFinite(v)?Math.round(v):"—";
+    $("cifre").innerHTML= c("Tempo di lettura",f1(a.durata_lettura_s)," s")+c("Parole al minuto",f0(a.parole_min))+c("Righe lette",`${a.righe_lette}/${a.righe}`)
+      +c("Fissazioni",a.fissazioni)+c("Fissazioni per riga",f1(a.fissazioni_riga))+c("Fissazioni al minuto",f0(a.fissazioni_min))
+      +c("Durata media fissazioni",f0(a.dur_media)," ms")+c("Deviazione standard",f0(a.dur_ds)," ms")+c("Durata mediana",f0(a.dur_mediana)," ms")
+      +c("Saccadi in avanti",a.saccadi_avanti)+c("Regressioni",a.regressioni)+c("Regressioni per riga",f1(a.regressioni_riga))
+      +c("Regressioni / fissazioni",f1(a.regr_su_fiss)," %")+c("Ampiezza media saccadi",f1(a.ampiezza_media_avanti),"°");
+    $("commento").textContent=commento(a);
+    disegnaTesto(); graficoPosX(); graficoSeq(); graficoDist(); graficoDur(); $("risultati").scrollIntoView({behavior:"smooth"}); }
+  function commento(a){
+    const p=[]; p.push(`Lettura di ${a.parole_lette} parole in ${f(a.durata_lettura_s)} secondi (${Math.round(a.parole_min)} parole al minuto), con ${a.fissazioni} fissazioni (${f(a.fissazioni_riga)} per riga) di durata media ${Math.round(a.dur_media)} ms.`);
+    p.push(`Si osservano ${a.regressioni} regressioni (${f(a.regr_su_fiss)}% delle fissazioni).`);
+    if(a.regr_su_fiss>25) p.push("La quota di regressioni è elevata: può indicare difficoltà di decodifica, di controllo oculomotorio o di comprensione, da integrare con le altre prove.");
+    if(a.dur_media>350) p.push("Le fissazioni sono lunghe, segno di un'elaborazione lenta delle parole.");
+    p.push("Valori da confrontare con lo stesso paziente nel tempo e con l'età; bozza automatica da rivedere."); return p.join(" ");
+    function f(v){ return isFinite(v)? v.toFixed(1).replace(".",","):"—"; } }
+  // ── grafici ──
+  function scala(cv){ const g=cv.getContext("2d"); g.clearRect(0,0,cv.width,cv.height); g.fillStyle="#fafaf7"; g.fillRect(0,0,cv.width,cv.height); return g; }
+  function assi(g,W,H,m,etX,etY){ g.strokeStyle="#c9d0cb"; g.lineWidth=1; g.strokeRect(m,10,W-m-10,H-m-10); g.fillStyle="#65716B"; g.font="12px system-ui";
+    g.fillText(etX,W/2-20,H-6); g.save(); g.translate(12,H/2+30); g.rotate(-Math.PI/2); g.fillText(etY,0,0); g.restore(); }
+  let calore=null;
+  function disegnaTesto(tPlay){ const a=analisi, cv=$("vistaTesto"), g=scala(cv), L=a.layout, k=Math.min(cv.width/L.w,cv.height/L.h);
+    g.fillStyle="#222"; g.font=`${L.carattere*k}px Arial`; g.textBaseline="top"; for(const w of L.parole) g.fillText(w.p,w.x*k,w.y*k+L.carattere*k*.15);
+    if($("mostraCalore").checked){ if(!calore) calore=mappaCalore(a,cv.width,cv.height,k); g.drawImage(calore,0,0); }
+    const F=tPlay==null? a.fix : a.fix.filter(f=>f.t0<=tPlay);
+    for(let i=1;i<F.length;i++){ const s=a.sacc[i-1]; g.strokeStyle= s.tipo==="regressione"?"rgba(181,70,31,.85)": s.tipo==="avanti"?"rgba(29,107,68,.7)":"rgba(120,120,120,.35)";
+      g.lineWidth=2; g.beginPath(); g.moveTo(F[i-1].x*k,F[i-1].y*k); g.lineTo(F[i].x*k,F[i].y*k); g.stroke(); }
+    for(const f of F){ g.fillStyle="rgba(29,107,68,.16)"; g.strokeStyle="rgba(29,107,68,.75)"; g.lineWidth=1.2; g.beginPath(); g.arc(f.x*k,f.y*k,Math.max(3,Math.sqrt(f.dur)*0.55*k),0,7); g.fill(); g.stroke(); }
+    if(tPlay!=null){ const s=a.campioni.find(p=>p[0]>=tPlay); if(s){ g.fillStyle="#B5461F"; g.beginPath(); g.arc(s[1]*k,s[2]*k,8,0,7); g.fill(); } } }
+  function mappaCalore(a,W,H,k){ const c=document.createElement("canvas"); c.width=W; c.height=H; const g=c.getContext("2d"); const R=40;
+    for(const f of a.fix){ const gr=g.createRadialGradient(f.x*k,f.y*k,0,f.x*k,f.y*k,R); const al=Math.min(.5,f.dur/1200); gr.addColorStop(0,`rgba(255,80,0,${al})`); gr.addColorStop(1,"rgba(255,80,0,0)"); g.fillStyle=gr; g.fillRect(f.x*k-R,f.y*k-R,2*R,2*R); }
+    return c; }
+  function graficoPosX(){ const a=analisi, cv=$("gPosX"), g=scala(cv), W=cv.width, H=cv.height, m=44, S=a.campioni; if(!S.length) return;
+    const t0=S[0][0], t1=S[S.length-1][0], xmax=a.layout.w; assi(g,W,H,m,"tempo (s)","posizione x (px)");
+    g.strokeStyle="#1D6B44"; g.lineWidth=1.3; g.beginPath(); S.forEach((p,i)=>{ const X=m+(p[0]-t0)/(t1-t0||1)*(W-m-10), Y=10+(1-p[1]/xmax)*(H-m-10); i?g.lineTo(X,Y):g.moveTo(X,Y); }); g.stroke();
+    g.fillStyle="#65716B"; g.font="11px system-ui"; for(let s=0;s<=(t1-t0)/1000;s+=Math.max(1,Math.round((t1-t0)/10000))) g.fillText(s,m+s*1000/(t1-t0)*(W-m-10)-3,H-m+14); }
+  function graficoSeq(){ const a=analisi, cv=$("gSeq"), g=scala(cv), W=cv.width, H=cv.height, m=44; const S=a.sacc.filter(s=>s.tipo==="avanti"||s.tipo==="regressione"); assi(g,W,H,m,"saccadi","ampiezza (°)");
+    const max=Math.max(2,...S.map(s=>Math.abs(s.amp))), y0=10+(H-m-10)/2, bw=(W-m-10)/Math.max(S.length,1);
+    g.strokeStyle="#c9d0cb"; g.beginPath(); g.moveTo(m,y0); g.lineTo(W-10,y0); g.stroke();
+    S.forEach((s,i)=>{ const h=s.amp/max*(H-m-10)/2; g.fillStyle=s.amp>=0?"#7fb069":"#B5461F"; g.fillRect(m+i*bw+1,y0-Math.max(h,0),Math.max(bw-2,1),Math.abs(h)); }); }
+  function graficoDist(){ const a=analisi, cv=$("gDist"), g=scala(cv), W=cv.width, H=cv.height, m=44; assi(g,W,H,m,"ampiezza (°)","numero");
+    const S=a.sacc.filter(s=>s.tipo==="avanti"||s.tipo==="regressione"), passo=0.5, min=-6, max=10, nb=(max-min)/passo, cont=new Array(nb).fill(0), tipo=new Array(nb).fill(0);
+    for(const s of S){ const b=Math.min(nb-1,Math.max(0,Math.floor((s.amp-min)/passo))); cont[b]++; if(s.amp<0) tipo[b]=1; }
+    const top=Math.max(1,...cont), bw=(W-m-10)/nb;
+    cont.forEach((c,i)=>{ const h=c/top*(H-m-20); g.fillStyle=tipo[i]?"#B5461F":"#7fb069"; g.fillRect(m+i*bw+1,H-m-h,bw-2,h); });
+    g.fillStyle="#65716B"; g.font="11px system-ui"; for(let v=min;v<=max;v+=2) g.fillText(v,m+(v-min)/passo*bw-4,H-m+14); }
+  function graficoDur(){ const a=analisi, cv=$("gDur"), g=scala(cv), W=cv.width, H=cv.height, m=44; assi(g,W,H,m,"durata (ms)","numero");
+    const D=a.fix.filter(f=>f.riga!==null).map(f=>f.dur), passo=50, nb=16, cont=new Array(nb).fill(0); for(const d of D) cont[Math.min(nb-1,Math.floor(d/passo))]++;
+    const top=Math.max(1,...cont), bw=(W-m-10)/nb; cont.forEach((c,i)=>{ const h=c/top*(H-m-20); g.fillStyle="#1D6B44"; g.fillRect(m+i*bw+1,H-m-h,bw-2,h); });
+    g.fillStyle="#65716B"; g.font="11px system-ui"; for(let i=0;i<=nb;i+=2) g.fillText(i*passo,m+i*bw-6,H-m+14); }
+  // ── riproduzione, mappa di calore, esportazione ──
+  let anim=null;
+  $("btnPlay").onclick=()=>{ if(anim){ cancelAnimationFrame(anim); anim=null; $("btnPlay").textContent="▶ Riproduci"; disegnaTesto(); return; }
+    const S=analisi.campioni, t0=S[0][0], t1=S[S.length-1][0], v=+$("velPlay").value, start=performance.now(); $("btnPlay").textContent="■ Ferma";
+    const passo=()=>{ const t=t0+(performance.now()-start)*v; disegnaTesto(t); if(t<t1) anim=requestAnimationFrame(passo); else { anim=null; $("btnPlay").textContent="▶ Riproduci"; } }; passo(); };
+  $("mostraCalore").onchange=()=>disegnaTesto();
+  $("btnEsporta").onclick=()=>{ const a={...analisi}; const blob=new Blob([JSON.stringify({formato:"pnev-eyetracking",versione:1,tipo:"lettura",...a})],{type:"application/json"});
+    const l=document.createElement("a"); l.href=URL.createObjectURL(blob); l.download=`Lettura_${(a.paziente||"paziente").replace(/\s+/g,"_")}_${a.data.slice(0,10)}.json`; l.click(); };
+  $("btnStampa").onclick=()=>print();
+}
+</script></body></html>

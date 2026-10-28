@@ -534,24 +534,38 @@ def maybe_handle_public_questionario(get_conn) -> bool:
         qp = st.experimental_get_query_params()
         q = (qp.get("q", [""])[0] or "").upper()
         t = (qp.get("t", [""])[0] or "")
+        qa = (qp.get("qa", [""])[0] or "")
     else:
         q = (qp.get("q", "") or "").upper()
         t = (qp.get("t", "") or "")
+        qa = (qp.get("qa", "") or "")
 
-    if q not in _QUESTIONARI_PUBBLICI or not t:
+    if q not in _QUESTIONARI_PUBBLICI or not (t or qa):
         return False
 
     conn = get_conn()
     cur = conn.cursor()
 
-    link = validate_token(cur, t, q)
-    if not link:
-        st.error("Link non valido, scaduto o già utilizzato.")
-        try: conn.close()
-        except Exception: pass
-        return True
+    # Link APERTO (senza paziente): anagrafica + questionario, poi riconoscimento della persona
+    aperto = bool(qa) and not t
+    if aperto:
+        from modules import questionari_aperti as _qa
+        _qa.assicura_tabelle(conn)
+        link = None if q in _qa.ESCLUSI else _qa.valida(conn, qa, q)
+        if not link:
+            st.error("Link non valido, scaduto o chiuso.")
+            return True
+        paziente_id = None
+    else:
+        link = validate_token(cur, t, q)
+        if not link:
+            st.error("Link non valido, scaduto o già utilizzato.")
+            try: conn.close()
+            except Exception: pass
+            return True
 
-    paziente_id = int(link.get("paziente_id") if hasattr(link, "get") else link["paziente_id"])
+    if not aperto:
+        paziente_id = int(link.get("paziente_id") if hasattr(link, "get") else link["paziente_id"])
     titolo = _QUESTIONARI_PUBBLICI.get(q, "Questionario")
 
     # Diario alimentare: non si compila in una volta sola. La famiglia salva
@@ -608,6 +622,8 @@ def maybe_handle_public_questionario(get_conn) -> bool:
     st.title(f"🏥 The Organism – {titolo}")
     st.caption("Compila il questionario e premi INVIA. I dati verranno registrati nel gestionale.")
     st.markdown("---")
+    if aperto:
+        _ana = _qa.scheda_anagrafica(prefisso=f"qa_{q.lower()}")
 
     # ── Render del questionario corretto in base a q ──────────────────────────
     q_data = None
@@ -690,6 +706,19 @@ def maybe_handle_public_questionario(get_conn) -> bool:
         return True
 
     # ── Salvataggio comune ────────────────────────────────────────────────────
+    if aperto and submitted and q_data is not None:
+        _manca = _qa.errori_anagrafica(_ana)
+        if _manca:
+            st.error("Prima di inviare completa nella parte 1: " + ", ".join(_manca) + ".")
+            return True
+        _err = _qa.gestisci_invio(conn, link, q, _ana, q_data, q_summary, chiave_json, motivo_label)
+        if _err:
+            st.error(f"Invio non riuscito: {_err}")
+        else:
+            st.success("✅ Grazie! Il questionario è arrivato allo Studio The Organism. Puoi chiudere questa pagina.")
+            st.balloons()
+        st.stop()
+
     if submitted and q_data is not None:
         try:
             cur.execute(
