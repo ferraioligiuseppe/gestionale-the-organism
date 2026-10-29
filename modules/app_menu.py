@@ -318,6 +318,7 @@ SOTTOSEZIONI = {
     ],
     AREA_STUDIO: [
         "📊 Dashboard incassi",
+        "🧾 Fatture in Cloud",
         "🏥 Il mio studio",
         "👤 Il mio profilo",
         "👥 Utenti / Ruoli",
