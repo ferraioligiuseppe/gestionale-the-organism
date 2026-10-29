@@ -333,7 +333,8 @@ def _scheda_crea(conn):
     for r in _righe(conn, "SELECT * FROM questionari_link_aperti ORDER BY attivo DESC, creato_il DESC LIMIT 50"):
         stato = "🟢 attivo" if r.get("attivo") else "⚪ disattivato"
         lim = f"/{r['max_compilazioni']}" if r.get("max_compilazioni") else ""
-        with st.expander(f"{stato} · {r.get('etichetta') or r['questionario']} · compilazioni {r.get('compilazioni') or 0}{lim} · "
+        nome_q = Q.get(r["questionario"], r["questionario"])
+        with st.expander(f"{stato} · {r.get('etichetta') or nome_q} · {nome_q[:40]} · compilazioni {r.get('compilazioni') or 0}{lim} · "
                          f"scade {str(r.get('scade_il'))[:10]}"):
             st.caption(Q.get(r["questionario"], r["questionario"]))
             if r.get("token"):
@@ -341,8 +342,20 @@ def _scheda_crea(conn):
             else:
                 st.info("Questo link è stato creato prima dell'aggiornamento e non si può più rivedere: "
                         "funziona ancora per chi lo ha già ricevuto. Se devi mandarlo ad altri, creane uno nuovo.")
-            if r.get("attivo") and st.button("Disattiva questo link", key=f"qa_off_{r['id']}"):
+            b1, b2 = st.columns(2)
+            if r.get("attivo") and b1.button("Disattiva questo link", key=f"qa_off_{r['id']}"):
                 _esegui(conn, "UPDATE questionari_link_aperti SET attivo = FALSE WHERE id = %s", (r["id"],)); st.rerun()
+            if b2.button("🗑️ Elimina questo link", key=f"qa_del_{r['id']}"):
+                st.session_state["qa_conferma_del"] = r["id"]
+            if st.session_state.get("qa_conferma_del") == r["id"]:
+                st.warning("Eliminare definitivamente questo link? Chi lo ha ricevuto non potrà più usarlo. "
+                           "I questionari già arrivati restano nell'archivio.")
+                k1, k2 = st.columns(2)
+                if k1.button("Sì, elimina", key=f"qa_del_si_{r['id']}", type="primary"):
+                    _esegui(conn, "DELETE FROM questionari_link_aperti WHERE id = %s", (r["id"],))
+                    st.session_state.pop("qa_conferma_del", None); st.rerun()
+                if k2.button("No", key=f"qa_del_no_{r['id']}"):
+                    st.session_state.pop("qa_conferma_del", None); st.rerun()
 
 
 def _crea_paziente(conn, ana, mod):
