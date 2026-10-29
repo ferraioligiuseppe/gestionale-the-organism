@@ -58,11 +58,13 @@ def _esegui(conn, sql, par=()):
 
 def assicura_tabelle(conn):
     if _righe(conn, "SELECT 1 AS ok FROM information_schema.tables WHERE table_name='questionari_arrivo'"):
+        # il link aperto non contiene dati: lo conserviamo per poterlo rivedere e rimandare
+        _esegui(conn, "ALTER TABLE questionari_link_aperti ADD COLUMN IF NOT EXISTS token TEXT")
         return
     _esegui(conn, """CREATE TABLE IF NOT EXISTS questionari_link_aperti (
         id BIGSERIAL PRIMARY KEY, questionario TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL,
         etichetta TEXT, creato_il TIMESTAMPTZ DEFAULT now(), scade_il TIMESTAMPTZ,
-        max_compilazioni INTEGER DEFAULT 0, compilazioni INTEGER DEFAULT 0, attivo BOOLEAN DEFAULT TRUE)""")
+        max_compilazioni INTEGER DEFAULT 0, compilazioni INTEGER DEFAULT 0, attivo BOOLEAN DEFAULT TRUE, token TEXT)""")
     _esegui(conn, """CREATE TABLE IF NOT EXISTS questionari_arrivo (
         id BIGSERIAL PRIMARY KEY, link_id BIGINT, questionario TEXT, anagrafica JSONB, risposte JSONB,
         riassunto TEXT, chiave_json TEXT, motivo TEXT, esito TEXT, candidati JSONB,
@@ -86,9 +88,26 @@ def _base_url():
 def crea_link(conn, questionario, etichetta, giorni, max_comp):
     token = secrets.token_urlsafe(24)
     scade = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=int(giorni))
-    err = _esegui(conn, "INSERT INTO questionari_link_aperti (questionario, token_hash, etichetta, scade_il, max_compilazioni) "
-                        "VALUES (%s,%s,%s,%s,%s)", (questionario, _hash(token), etichetta, scade, int(max_comp or 0)))
-    return (None, err) if err else (f"{_base_url()}/?q={questionario}&qa={token}", None)
+    err = _esegui(conn, "INSERT INTO questionari_link_aperti (questionario, token_hash, etichetta, scade_il, max_compilazioni, token) "
+                        "VALUES (%s,%s,%s,%s,%s,%s)", (questionario, _hash(token), etichetta, scade, int(max_comp or 0), token))
+    return (None, err) if err else (url_link(questionario, token), None)
+
+
+def url_link(questionario, token):
+    return f"{_base_url()}/?q={questionario}&qa={token}"
+
+
+def _mostra_invio(url, q, chiave):
+    """Link pronto da copiare, QR da scaricare e invio WhatsApp."""
+    st.code(url, language="text")
+    img = _qr(url)
+    c1, c2 = st.columns([1, 2])
+    if img:
+        c1.image(img, width=180)
+        c2.download_button("⬇️ Scarica il QR (PNG)", img, file_name=f"QR_{q}.png", mime="image/png", key=f"qr_{chiave}")
+    testo = f"Buongiorno, per la valutazione presso lo Studio The Organism può compilare questo questionario: {url}"
+    c2.markdown(f"[📱 Manda su WhatsApp](https://wa.me/?text={testo.replace(' ', '%20')})")
+    c2.caption("Per l'email: copia il link qui sopra (icona in alto a destra del riquadro) e incollalo nel messaggio.")
 
 
 def valida(conn, token, questionario):
@@ -307,23 +326,23 @@ def _scheda_crea(conn):
         if err:
             st.error(f"Link non creato: {err}")
         else:
-            st.success("Link creato. Non contiene dati personali: puoi pubblicarlo, mandarlo o stamparlo come QR.")
-            st.code(url, language="text")
-            img = _qr(url)
-            if img:
-                st.image(img, width=220)
-                st.download_button("⬇️ Scarica il QR (PNG)", img, file_name=f"QR_{q}.png", mime="image/png")
-            testo = f"Buongiorno, per la valutazione presso lo Studio The Organism può compilare questo questionario: {url}"
-            st.markdown(f"[📱 Manda su WhatsApp](https://wa.me/?text={testo.replace(' ', '%20')})")
-    st.markdown("**Link aperti esistenti**")
-    for r in _righe(conn, "SELECT * FROM questionari_link_aperti ORDER BY creato_il DESC LIMIT 50"):
-        c1, c2 = st.columns([5, 1])
-        stato = "attivo" if r.get("attivo") else "disattivato"
+            st.success("Link creato. Non contiene dati personali: puoi pubblicarlo, mandarlo o stamparlo come QR. "
+                       "Lo ritrovi sempre nell'elenco qui sotto.")
+            _mostra_invio(url, q, "nuovo")
+    st.markdown("**Link aperti esistenti** · apri un link per copiarlo, scaricare il QR o mandarlo")
+    for r in _righe(conn, "SELECT * FROM questionari_link_aperti ORDER BY attivo DESC, creato_il DESC LIMIT 50"):
+        stato = "🟢 attivo" if r.get("attivo") else "⚪ disattivato"
         lim = f"/{r['max_compilazioni']}" if r.get("max_compilazioni") else ""
-        c1.caption(f"**{r.get('etichetta') or r['questionario']}** · {Q.get(r['questionario'], r['questionario'])} · "
-                   f"compilazioni {r.get('compilazioni') or 0}{lim} · scade {str(r.get('scade_il'))[:10]} · {stato}")
-        if r.get("attivo") and c2.button("Disattiva", key=f"qa_off_{r['id']}"):
-            _esegui(conn, "UPDATE questionari_link_aperti SET attivo = FALSE WHERE id = %s", (r["id"],)); st.rerun()
+        with st.expander(f"{stato} · {r.get('etichetta') or r['questionario']} · compilazioni {r.get('compilazioni') or 0}{lim} · "
+                         f"scade {str(r.get('scade_il'))[:10]}"):
+            st.caption(Q.get(r["questionario"], r["questionario"]))
+            if r.get("token"):
+                _mostra_invio(url_link(r["questionario"], r["token"]), r["questionario"], r["id"])
+            else:
+                st.info("Questo link è stato creato prima dell'aggiornamento e non si può più rivedere: "
+                        "funziona ancora per chi lo ha già ricevuto. Se devi mandarlo ad altri, creane uno nuovo.")
+            if r.get("attivo") and st.button("Disattiva questo link", key=f"qa_off_{r['id']}"):
+                _esegui(conn, "UPDATE questionari_link_aperti SET attivo = FALSE WHERE id = %s", (r["id"],)); st.rerun()
 
 
 def _crea_paziente(conn, ana, mod):
