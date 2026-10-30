@@ -5,6 +5,8 @@ Modulo Esercizi Wordwall
 """
 
 import re
+from urllib.parse import unquote
+
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -320,6 +322,86 @@ def _elenco_libreria(conn) -> list:
         except Exception: pass
 
 
+_RE_WW = re.compile(r"https?://(?:www\.)?wordwall\.net/(?:[a-z]{2}(?:-[a-z]{2})?/)?(?:resource|embed)/(\d+)(?:/([\w\-%]+))?", re.I)
+
+
+def estrai_link_wordwall(testo: str) -> list:
+    """Trova tutti i link di attività Wordwall in un testo (anche copiato da una pagina o da un iframe).
+    Ritorna [(url_resource, titolo_dal_link)], senza doppioni."""
+    visti, out = set(), []
+    for m in _RE_WW.finditer(testo or ""):
+        rid, slug = m.group(1), m.group(2) or ""
+        if rid in visti:
+            continue
+        visti.add(rid)
+        titolo = unquote(slug).replace("-", " ").strip().capitalize() or f"Attività Wordwall {rid}"
+        out.append((f"https://wordwall.net/it/resource/{rid}" + (f"/{slug}" if slug else ""), titolo))
+    return out
+
+
+def _leggi_profilo(url: str) -> tuple:
+    """Prova a leggere le attività pubbliche dalla pagina profilo Wordwall. Ritorna (lista, errore)."""
+    import urllib.request
+    if "wordwall.net" not in url:
+        return [], "non è un indirizzo di wordwall.net"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (gestionale The Organism)"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            html = r.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        return [], f"Wordwall non ha risposto ({e}). Usa il metodo «incolla i link»."
+    trovati = estrai_link_wordwall(html.replace('href="/', 'href="https://wordwall.net/'))
+    return trovati, (None if trovati else "nessuna attività pubblica trovata in quella pagina")
+
+
+def _importa(conn, coppie, area) -> int:
+    noti = {e["wordwall_url"].split("?")[0].rstrip("/") for e in _elenco_libreria(conn)}
+    noti_id = {re.search(r"/(\d+)", u).group(1) for u in noti if re.search(r"/(\d+)", u)}
+    n = 0
+    for url, titolo in coppie:
+        rid = re.search(r"/(\d+)", url).group(1)
+        if rid in noti_id:
+            continue
+        _insert_esercizio(conn, LIBRERIA_ID, titolo, area, url, "importato")
+        noti_id.add(rid); n += 1
+    return n
+
+
+def _sezione_importa(conn) -> None:
+    with st.expander("📥 Importa in blocco da Wordwall", expanded=False):
+        st.caption("Wordwall non permette ai programmi di entrare nel tuo account: i link li porti tu, in uno di questi due modi. "
+                   "Gli esercizi già presenti non vengono duplicati; il titolo si ricava dal link e puoi correggerlo dopo.")
+        area = st.selectbox("Area da assegnare agli esercizi importati", AREE_WORDWALL, key="ww_imp_area")
+        t1, t2 = st.tabs(["📋 Incolla i link", "👤 Dal profilo pubblico"])
+        with t1:
+            st.markdown("Su Wordwall apri **Le mie attività**, apri ogni attività e copia l'indirizzo dalla barra del browser "
+                        "(oppure il codice «Incorpora»). Incollali qui, **uno sotto l'altro**: va bene anche un testo misto.")
+            testo = st.text_area("Link o testo con i link", height=160, key="ww_imp_testo",
+                                 placeholder="https://wordwall.net/it/resource/12345678/abbinamento-sinonimi\nhttps://wordwall.net/it/resource/…")
+            trovati = estrai_link_wordwall(testo)
+            if testo.strip():
+                st.caption(f"Riconosciuti {len(trovati)} esercizi" + (": " + ", ".join(t for _, t in trovati[:6]) + ("…" if len(trovati) > 6 else "") if trovati else ""))
+            if st.button(f"📥 Importa {len(trovati)} esercizi", disabled=not trovati, key="ww_imp_ok"):
+                n = _importa(conn, trovati, area)
+                st.success(f"Importati {n} esercizi nuovi ({len(trovati) - n} erano già in libreria)."); st.rerun()
+        with t2:
+            st.markdown("Funziona solo se le tue attività sono **pubbliche**. Su Wordwall apri il tuo nome in alto → **Profilo** "
+                        "e copia l'indirizzo della pagina (es. `https://wordwall.net/it/teacher/1234567/nome`).")
+            url = st.text_input("Indirizzo del profilo Wordwall", key="ww_imp_prof")
+            if st.button("🔍 Cerca le attività", disabled=not url.strip(), key="ww_imp_cerca"):
+                lista, err = _leggi_profilo(url.strip())
+                st.session_state["ww_prof_trovati"] = lista
+                if err:
+                    st.warning(err)
+            lista = st.session_state.get("ww_prof_trovati") or []
+            if lista:
+                st.caption(f"Trovate {len(lista)} attività: " + ", ".join(t for _, t in lista[:8]) + ("…" if len(lista) > 8 else ""))
+                if st.button(f"📥 Importa {len(lista)} attività", key="ww_imp_prof_ok"):
+                    n = _importa(conn, lista, area)
+                    st.session_state.pop("ww_prof_trovati", None)
+                    st.success(f"Importate {n} attività nuove."); st.rerun()
+
+
 def render_libreria(conn, paziente_id=None) -> None:
     """Libreria di tutti gli esercizi Wordwall: si giocano anche senza paziente."""
     _ensure_schema(conn)
@@ -338,9 +420,10 @@ def render_libreria(conn, paziente_id=None) -> None:
                 else:
                     _insert_esercizio(conn, LIBRERIA_ID, titolo.strip(), area, url.strip(), note.strip())
                     st.success("Esercizio aggiunto alla libreria."); st.rerun()
+    _sezione_importa(conn)
     elenco = _elenco_libreria(conn)
     if not elenco:
-        st.info("La libreria è vuota: aggiungi il primo esercizio qui sopra."); return
+        st.info("La libreria è vuota: aggiungi un esercizio o importali in blocco qui sopra."); return
     c1, c2 = st.columns([2, 1])
     cerca = c1.text_input("Cerca", placeholder="titolo o parola…", key="ww_lib_cerca").strip().lower()
     aree = sorted({e.get("area") or "—" for e in elenco})
