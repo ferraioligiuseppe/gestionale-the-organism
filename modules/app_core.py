@@ -2441,8 +2441,9 @@ class _PgCursor:
     - translate SQLite '?' placeholders -> psycopg2 '%s'
     - return psycopg2 DictRow (supports both dict and index access)
     """
-    def __init__(self, cur):
+    def __init__(self, cur, parent=None):
         self._cur = cur
+        self._parent = parent   # la connessione «wrapper»: serve per riconnettersi se cade a metà
 
     @staticmethod
     def _adapt_sql(sql: str) -> str:
@@ -2478,7 +2479,16 @@ class _PgCursor:
         sql2 = self._adapt_sql(str(sql))
         self._clear_if_aborted()
         try:
-            return self._lancia(sql2, params)
+            try:
+                return self._lancia(sql2, params)
+            except (psycopg2.InterfaceError, psycopg2.OperationalError):
+                # connessione caduta tra l'apertura del cursore e la query (riavvio o pausa del server):
+                # mi riconnetto e riprovo UNA volta, invece di mostrare l'errore all'utente
+                if self._parent is None:
+                    raise
+                self._parent._reconnect()
+                self._cur = self._parent._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+                return self._lancia(sql2, params)
         except Exception as e:
             # La transazione e' andata in errore: senza rollback ogni
             # statement successivo viene rifiutato.
@@ -2646,7 +2656,7 @@ class _PgConn:
     def cursor(self):
         self._ensure_alive()
         # DictCursor yields DictRow which supports both mapping and sequence access
-        return _PgCursor(self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor))
+        return _PgCursor(self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor), parent=self)
 
     def commit(self):
         return self._conn.commit()
