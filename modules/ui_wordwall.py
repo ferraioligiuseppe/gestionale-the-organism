@@ -62,10 +62,10 @@ def _to_embed_url(url_or_iframe: str) -> str:
     m = re.search(r'src\s*=\s*["\']([^"\']+)["\']', raw, flags=re.IGNORECASE)
     if m:
         raw = m.group(1).strip()
-    if "/resource/" in raw:
-        raw = raw.replace("/resource/", "/embed/")
-    if "/play/" in raw:
-        raw = raw.replace("/play/", "/embed/")
+    # Wordwall si lascia aprire dentro un altro sito SOLO con il link «Incorpora» (…/embed/<codice lungo>):
+    # il link normale (…/resource/<numero>/…) viene rifiutato, quindi in quel caso non lo incorporo.
+    if not re.search(r"/embed/[0-9a-f]{16,}", raw, re.I):
+        return ""
     if raw.startswith("http://"):
         raw = "https://" + raw[len("http://"):]
     if raw.startswith("//"):
@@ -282,7 +282,8 @@ def _lista_esercizi(conn, paziente_id: int) -> None:
             if is_playing:
                 embed_url = _to_embed_url(url)
                 if not embed_url:
-                    st.error("URL non valido per l'embed.")
+                    st.info("Per giocare qui dentro serve il codice **«Incorpora»** di Wordwall: aprilo nella scheda "
+                            "**📚 Libreria** e incollalo lì (vale per tutti i pazienti). Intanto usa «Apri su Wordwall».")
                 else:
                     st.markdown("")
                     components.iframe(
@@ -298,6 +299,20 @@ def _lista_esercizi(conn, paziente_id: int) -> None:
 
 
 LIBRERIA_ID = 0   # esercizi salvati in libreria, non ancora assegnati a nessun paziente
+
+
+def _cambia_url(conn, vecchio: str, nuovo: str) -> None:
+    """Sostituisce il link di un esercizio (in libreria e per tutti i pazienti che lo hanno)."""
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE wordwall_esercizi SET wordwall_url = %s WHERE wordwall_url = %s", (nuovo, vecchio))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: cur.close()
+        except Exception: pass
 
 
 def _elenco_libreria(conn) -> list:
@@ -322,13 +337,19 @@ def _elenco_libreria(conn) -> list:
         except Exception: pass
 
 
-_RE_WW = re.compile(r"https?://(?:www\.)?wordwall\.net/(?:[a-z]{2}(?:-[a-z]{2})?/)?(?:resource|embed)/(\d+)(?:/([\w\-%]+))?", re.I)
+_RE_WW = re.compile(r"https?://(?:www\.)?wordwall\.net/(?:[a-z]{2}(?:-[a-z]{2})?/)?(?:resource|embed)/(\d+)(?![0-9a-f])(?:/([\w\-%]+))?", re.I)
 
 
 def estrai_link_wordwall(testo: str) -> list:
     """Trova tutti i link di attività Wordwall in un testo (anche copiato da una pagina o da un iframe).
     Ritorna [(url_resource, titolo_dal_link)], senza doppioni."""
     visti, out = set(), []
+    # codici «Incorpora» (…/embed/<codice lungo>?…): sono quelli che si giocano dentro il gestionale
+    for m in re.finditer(r"https?://(?:www\.)?wordwall\.net/(?:[a-z]{2}(?:-[a-z]{2})?/)?embed/([0-9a-f]{16,})[^\s\"'<>]*", testo or "", re.I):
+        if m.group(1) in visti:
+            continue
+        visti.add(m.group(1))
+        out.append((m.group(0).replace("&amp;", "&"), f"Attività Wordwall {m.group(1)[:6]}"))
     for m in _RE_WW.finditer(testo or ""):
         rid, slug = m.group(1), m.group(2) or ""
         if rid in visti:
@@ -354,12 +375,16 @@ def _leggi_profilo(url: str) -> tuple:
     return trovati, (None if trovati else "nessuna attività pubblica trovata in quella pagina")
 
 
+def _id_ww(url: str) -> str:
+    m = re.search(r"/(?:embed|resource)/([0-9a-f]{16,}|\d+)", url or "", re.I)
+    return m.group(1).lower() if m else (url or "")
+
+
 def _importa(conn, coppie, area) -> int:
-    noti = {e["wordwall_url"].split("?")[0].rstrip("/") for e in _elenco_libreria(conn)}
-    noti_id = {re.search(r"/(\d+)", u).group(1) for u in noti if re.search(r"/(\d+)", u)}
+    noti_id = {_id_ww(e["wordwall_url"]) for e in _elenco_libreria(conn)}
     n = 0
     for url, titolo in coppie:
-        rid = re.search(r"/(\d+)", url).group(1)
+        rid = _id_ww(url)
         if rid in noti_id:
             continue
         _insert_esercizio(conn, LIBRERIA_ID, titolo, area, url, "importato")
@@ -374,8 +399,9 @@ def _sezione_importa(conn) -> None:
         area = st.selectbox("Area da assegnare agli esercizi importati", AREE_WORDWALL, key="ww_imp_area")
         t1, t2 = st.tabs(["📋 Incolla i link", "👤 Dal profilo pubblico"])
         with t1:
-            st.markdown("Su Wordwall apri **Le mie attività**, apri ogni attività e copia l'indirizzo dalla barra del browser "
-                        "(oppure il codice «Incorpora»). Incollali qui, **uno sotto l'altro**: va bene anche un testo misto.")
+            st.markdown("Su Wordwall apri **Le mie attività**, apri ogni attività e copia **il codice «Incorpora»** "
+                        "(Condividi → Incorpora: così si gioca anche dentro il gestionale) oppure l'indirizzo dalla barra del browser "
+                        "(si gioca solo su Wordwall). Incollali qui **uno sotto l'altro**: va bene anche un testo misto.")
             testo = st.text_area("Link o testo con i link", height=160, key="ww_imp_testo",
                                  placeholder="https://wordwall.net/it/resource/12345678/abbinamento-sinonimi\nhttps://wordwall.net/it/resource/…")
             trovati = estrai_link_wordwall(testo)
@@ -456,7 +482,18 @@ def render_libreria(conn, paziente_id=None) -> None:
                 emb = _to_embed_url(url)
                 if emb:
                     components.iframe(emb, height=PLAYER_HEIGHT_DEFAULT, scrolling=True)
-                    st.caption("Se non parte qui dentro, usa «Apri su Wordwall»: alcune attività non si lasciano incorporare.")
+                else:
+                    st.info("Per giocare **qui dentro** serve il codice **«Incorpora»** di Wordwall (il link normale "
+                            "Wordwall non lo lascia aprire dentro altri siti). Intanto puoi giocare con **«Apri su Wordwall»**.\n\n"
+                            "Su Wordwall apri l'attività → **Condividi** → **Incorpora** → copia il codice e incollalo qui sotto.")
+                    cod = st.text_area("Codice «Incorpora»", key=f"ww_lib_emb_{i}", height=80,
+                                       placeholder='<iframe style="max-width:100%" src="https://wordwall.net/it/embed/…" …></iframe>')
+                    nuovo = _to_embed_url(cod)
+                    if cod.strip() and not nuovo:
+                        st.warning("Non trovo un link «embed» valido in questo codice: copia proprio il codice della finestra «Incorpora».")
+                    if nuovo and st.button("💾 Salva il codice e gioca", key=f"ww_lib_emb_ok_{i}"):
+                        _cambia_url(conn, url, nuovo)
+                        st.session_state["ww_lib_play"] = nuovo; st.rerun()
 
 
 def render_wordwall(conn, paziente_id) -> None:
