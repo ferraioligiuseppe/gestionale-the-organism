@@ -226,7 +226,7 @@ def _sezione_storico(conn, paziente_id):
 
 
 # ---------------------------------------------------------------- entry point
-def ui_gamecenter(conn=None, paziente_id=None, paziente_nome=None):
+def ui_gamecenter(conn=None, paziente_id=None, paziente_nome=None, libera=False):
     st.header("🎮 PNEV Game Center")
 
     if conn is None:
@@ -240,10 +240,11 @@ def ui_gamecenter(conn=None, paziente_id=None, paziente_nome=None):
     except Exception as e:
         st.warning(f"Inizializzazione Game Center: {e}")
 
-    if paziente_id is None:
-        paziente_id = st.number_input("ID paziente", min_value=1, step=1, value=1)
-        st.caption("In produzione questo id arriva dal paziente selezionato nel gestionale "
-                   "(passa paziente_id a ui_gamecenter, come per gli altri moduli).")
+    if libera or paziente_id is None:
+        st.info("**Modalità libera**: i giochi funzionano, ma i risultati **non si salvano** in nessuna scheda. "
+                "Per salvarli, scegli prima un paziente in «Pazienti».")
+        _sezione_apri(None, None)
+        return
     else:
         st.caption(f"Paziente: {paziente_nome or ''} (id {int(paziente_id)})")
 

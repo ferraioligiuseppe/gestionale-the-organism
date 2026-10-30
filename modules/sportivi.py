@@ -751,7 +751,18 @@ def render_sportivi(paziente_id=None, paziente_nome=None, cognome=None, nome=Non
         st.warning(f"Inizializzazione tabelle Sport Vision: {e}")
 
     if paziente_id is None:
-        st.info("Seleziona un paziente dalla cartella per collegare un codice e vedere lo storico.")
+        st.info("**Modalità libera**: i moduli si aprono senza codice paziente e i risultati **non vengono collegati** "
+                "a nessuna scheda. Per collegarli, scegli prima un paziente in «Pazienti».")
+        st.link_button("▶️ Apri PNEV Sport Vision (indice)", f"{SPORT_BASE_URL}/sport.html", use_container_width=True)
+        cols = st.columns(3)
+        for i, slug in enumerate(ORDINE):
+            info = MODULI[slug]
+            with cols[i % 3]:
+                try:
+                    st.link_button(info["nome"], f"{SPORT_BASE_URL}/{slug}.html", use_container_width=True)
+                except Exception:
+                    st.markdown(f"- [{info['nome']}]({SPORT_BASE_URL}/{slug}.html)")
+                st.caption(info["cat"])
         return
 
     st.caption(f"Paziente: {paziente_nome or ''} (id {int(paziente_id)})")

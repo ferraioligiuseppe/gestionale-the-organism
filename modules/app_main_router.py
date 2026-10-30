@@ -547,9 +547,6 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
         "👁️ Groffman (visual tracing)",
-        "📐 PNEV-Chart (schede stampabili)",
-        "🥁 PNEV Metronomo",
-        "🎯 Segui la pallina",
         "🫁 Valutazione e programma Buteyko", "📈 Diario Pausa Controllo",
         "🎵 TMR — Movimenti ritmici",
         "✍️ Giochiamo imparando (prove touch)",
@@ -563,7 +560,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🔤 Impostazione fonemi",
         "🤸 Psicomotricità funzionale",
         "🖥️ Somministrazione test",
-        "📋 Questionari remoti", "🖨️ Questionari cartacei", "🎮 Esercizi Wordwall", "🏃 PNEV Sport Vision",
+        "📋 Questionari remoti", "🖨️ Questionari cartacei",
         "🔉 Diagnostica uditiva completa",
         "🎧 MAPS", "🗂 Programmi MAPS", "🎧 MAPS-CLEAR in studio",
         "🧭 Percorsi MAPS", "🎧 Bilancio uditivo", "📊 Audiometria funzionale",
@@ -840,6 +837,12 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Modulo questionari non disponibile: {e}")
         return True
     if sotto == "🎮 Esercizi Wordwall":
+        paz_id = st.session_state.get("paziente_attivo_id")
+        if not paz_id:
+            st.subheader("🎮 Esercizi Wordwall")
+            st.info("Gli esercizi Wordwall si **assegnano a un paziente**: scegli il paziente in «Pazienti» e torna qui. "
+                    "Per giocare senza paziente usa **PNEV Game Center** o **Segui la pallina**, che funzionano in modalità libera.")
+            return True
         try:
             from .ui_wordwall import render_wordwall
             render_wordwall(conn, paz_id)
@@ -847,17 +850,19 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Modulo Wordwall non disponibile: {e}")
         return True
     if sotto == "🕹️ PNEV Game Center":
-        from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
-        _pid = header_paziente_attivo(conn)
-        if _pid:
-            _rec = paziente_attivo_record() or {}
-            _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
-            from .pnev_gamecenter.ui_gamecenter import ui_gamecenter
-            ui_gamecenter(conn=conn, paziente_id=_pid, paziente_nome=_nome)
+        from .paziente_attivo import paziente_attivo_record
+        _pid = st.session_state.get("paziente_attivo_id")      # facoltativo: senza paziente = modalità libera
+        _rec = (paziente_attivo_record() or {}) if _pid else {}
+        _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
+        from .pnev_gamecenter.ui_gamecenter import ui_gamecenter
+        ui_gamecenter(conn=conn, paziente_id=_pid or None, paziente_nome=_nome, libera=not _pid)
         return True
     if sotto == "🏃 PNEV Sport Vision":
-        from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
-        _pid = header_paziente_attivo(conn)
+        from .paziente_attivo import paziente_attivo_record
+        _pid = st.session_state.get("paziente_attivo_id")      # facoltativo: senza paziente = modalità libera
+        if not _pid:
+            from .sportivi import render_sportivi
+            render_sportivi(paziente_id=None); return True
         if _pid:
             _rec = paziente_attivo_record() or {}
             _cognome = _rec.get('cognome') or _rec.get('Cognome') or ''
@@ -1800,6 +1805,11 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             return
         if sotto == "🎮 Esercizi Wordwall":
             from .paziente_attivo import header_paziente_attivo
+            if not st.session_state.get("paziente_attivo_id"):
+                st.subheader("🎮 Esercizi Wordwall")
+                st.info("Gli esercizi Wordwall si **assegnano a un paziente**: scegli il paziente in «Pazienti» e torna qui. "
+                        "Per giocare senza paziente usa **PNEV Game Center** o **Segui la pallina**.")
+                return
             paz_id = header_paziente_attivo(conn)
             if paz_id:
                 try:
@@ -1809,13 +1819,12 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                     st.error(f"Modulo Wordwall non disponibile: {e}")
             return
         if sotto == "🕹️ PNEV Game Center":
-            from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
-            _pid = header_paziente_attivo(conn)
-            if _pid:
-                _rec = paziente_attivo_record() or {}
-                _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
-                from .pnev_gamecenter.ui_gamecenter import ui_gamecenter
-                ui_gamecenter(conn=conn, paziente_id=_pid, paziente_nome=_nome)
+            from .paziente_attivo import paziente_attivo_record
+            _pid = st.session_state.get("paziente_attivo_id")
+            _rec = (paziente_attivo_record() or {}) if _pid else {}
+            _nome = f"{_rec.get('cognome') or _rec.get('Cognome') or ''} {_rec.get('nome') or _rec.get('Nome') or ''}".strip()
+            from .pnev_gamecenter.ui_gamecenter import ui_gamecenter
+            ui_gamecenter(conn=conn, paziente_id=_pid or None, paziente_nome=_nome, libera=not _pid)
             return
         if sotto == "🦴 Osteopatia":
             from .sections.ui_cliniche import render_osteopatia_section
