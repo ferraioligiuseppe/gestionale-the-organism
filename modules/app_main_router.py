@@ -829,6 +829,9 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "🧾 Fatture in Cloud":
         from .fatture_cloud import render_fatture_cloud
         render_fatture_cloud(conn, is_admin); return True
+    if sotto == "🧾 Recupero fatture SumUp":
+        from .recupero_fatture import render_recupero
+        render_recupero(conn, is_admin); return True
     if sotto == "📋 Questionari remoti":
         try:
             from .ui_questionari import render_questionari_section
@@ -1782,6 +1785,9 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🧾 Fatture in Cloud":
             from .fatture_cloud import render_fatture_cloud
             render_fatture_cloud(conn, is_admin); return
+        if sotto == "🧾 Recupero fatture SumUp":
+            from .recupero_fatture import render_recupero
+            render_recupero(conn, is_admin); return
         if sotto == "📋 Questionari remoti":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)

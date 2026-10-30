@@ -44,6 +44,31 @@ def chiama(percorso: str, parametri: dict | None = None):
         return None, f"collegamento non riuscito: {e}"
 
 
+def scrivi(metodo: str, percorso: str, corpo: dict):
+    """POST/PUT/DELETE sull'API. Ritorna (dati, errore leggibile con il dettaglio di Fatture in Cloud)."""
+    tok = _cfg().get("access_token")
+    if not tok:
+        return None, "manca il token nei Secrets"
+    req = urllib.request.Request(API + percorso, data=json.dumps(corpo).encode("utf-8"), method=metodo,
+                                 headers={"Authorization": f"Bearer {tok}", "Accept": "application/json",
+                                          "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            testo = r.read().decode("utf-8")
+            return (json.loads(testo) if testo else {}), None
+    except urllib.error.HTTPError as e:
+        try:
+            dett = json.loads(e.read().decode("utf-8"))
+            dett = (dett.get("error") or {}).get("message") or dett.get("message") or str(dett)[:300]
+        except Exception:
+            dett = ""
+        base = {401: "token non valido", 403: "il token non ha il permesso di scrittura sulle fatture: ricrealo con «Fatture emesse» in scrittura",
+                422: "dati della fattura non accettati"}.get(e.code, f"errore {e.code}")
+        return None, f"{base}{': ' + dett if dett else ''}"
+    except Exception as e:
+        return None, f"collegamento non riuscito: {e}"
+
+
 def aziende():
     d, err = chiama("/user/companies")
     if err:
@@ -70,7 +95,29 @@ def render_fatture_cloud(conn=None, is_admin: bool = True):
     with st.spinner("Mi collego a Fatture in Cloud…"):
         lista, err = aziende()
     if err:
-        st.error(f"❌ Collegamento non riuscito: {err}."); return
+        st.error(f"❌ Collegamento non riuscito: {err}.")
+        tok = str(_cfg().get("access_token") or "")
+        problemi = []
+        if tok != tok.strip():
+            problemi.append("ci sono spazi o «a capo» all'inizio o alla fine")
+        if any(c in tok.strip() for c in " \n\r\t"):
+            problemi.append("ci sono spazi o «a capo» in mezzo")
+        if any(c in tok for c in "“”‘’«»"):
+            problemi.append("ci sono virgolette «curve» dentro il token")
+        if tok.lower().startswith("bearer"):
+            problemi.append("è stata incollata anche la parola «Bearer»: va tolta")
+        if not tok.strip().startswith("a/"):
+            problemi.append("non comincia con «a/» come i token personali di Fatture in Cloud: forse è il Client ID o un altro codice")
+        if len(tok.strip()) < 100:
+            problemi.append("è troppo corto: forse è stato copiato solo in parte")
+        st.markdown(f"**Controllo del token (senza mostrarlo):** lunghezza {len(tok.strip())} caratteri · "
+                    f"comincia con «{tok.strip()[:2]}»")
+        if problemi:
+            st.warning("Possibili problemi: " + "; ".join(problemi) + ".")
+        else:
+            st.info("Il token sembra scritto correttamente: probabilmente è stato revocato o rigenerato. "
+                    "Generane uno nuovo (Applicazioni collegate → Ottieni il tuo token personale) e sostituiscilo nei Secrets.")
+        return
     if not lista:
         st.error("Il token funziona ma non vede nessuna azienda: ricrealo scegliendo l'azienda giusta."); return
     st.success(f"✅ Collegato. Aziende visibili con questo token: {len(lista)}.")

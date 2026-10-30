@@ -319,6 +319,7 @@ SOTTOSEZIONI = {
     AREA_STUDIO: [
         "📊 Dashboard incassi",
         "🧾 Fatture in Cloud",
+        "🧾 Recupero fatture SumUp",
         "🏥 Il mio studio",
         "👤 Il mio profilo",
         "👥 Utenti / Ruoli",
