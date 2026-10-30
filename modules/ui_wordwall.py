@@ -295,16 +295,100 @@ def _lista_esercizi(conn, paziente_id: int) -> None:
                     )
 
 
-def render_wordwall(conn, paziente_id: int) -> None:
-    """Pagina Esercizi Wordwall per il paziente attivo."""
+LIBRERIA_ID = 0   # esercizi salvati in libreria, non ancora assegnati a nessun paziente
+
+
+def _elenco_libreria(conn) -> list:
+    """Tutti gli esercizi conosciuti (uno per link), con quanti pazienti li hanno assegnati."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT wordwall_url, MIN(titolo) AS titolo, MIN(area) AS area, MIN(note) AS note,
+                   COUNT(DISTINCT CASE WHEN paziente_id <> 0 THEN paziente_id END) AS pazienti
+            FROM wordwall_esercizi GROUP BY wordwall_url ORDER BY MIN(area), MIN(titolo)
+            """
+        )
+        nomi = [d[0] for d in cur.description]
+        return [dict(zip(nomi, list(r))) for r in cur.fetchall()]
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return []
+    finally:
+        try: cur.close()
+        except Exception: pass
+
+
+def render_libreria(conn, paziente_id=None) -> None:
+    """Libreria di tutti gli esercizi Wordwall: si giocano anche senza paziente."""
     _ensure_schema(conn)
+    st.caption("Tutti gli esercizi Wordwall dello Studio, da giocare subito anche senza scegliere un paziente."
+               + (" Con il paziente scelto puoi anche **assegnarli** a lui." if paziente_id else ""))
+    with st.expander("➕ Aggiungi un esercizio alla libreria", expanded=False):
+        with st.form(key="ww_form_lib", clear_on_submit=True):
+            c1, c2 = st.columns([2, 1])
+            titolo = c1.text_input("Titolo *", placeholder="es. Abbinamento sinonimi")
+            area = c2.selectbox("Area", AREE_WORDWALL, index=0)
+            url = st.text_input("URL Wordwall *", placeholder="https://wordwall.net/it/resource/...  oppure il codice <iframe ...>")
+            note = st.text_input("Note (facoltative)")
+            if st.form_submit_button("Salva nella libreria", type="primary"):
+                if not titolo.strip() or not url.strip():
+                    st.error("Servono titolo e URL.")
+                else:
+                    _insert_esercizio(conn, LIBRERIA_ID, titolo.strip(), area, url.strip(), note.strip())
+                    st.success("Esercizio aggiunto alla libreria."); st.rerun()
+    elenco = _elenco_libreria(conn)
+    if not elenco:
+        st.info("La libreria è vuota: aggiungi il primo esercizio qui sopra."); return
+    c1, c2 = st.columns([2, 1])
+    cerca = c1.text_input("Cerca", placeholder="titolo o parola…", key="ww_lib_cerca").strip().lower()
+    aree = sorted({e.get("area") or "—" for e in elenco})
+    area_f = c2.selectbox("Area", ["Tutte"] + aree, key="ww_lib_area")
+    vis = [e for e in elenco if (not cerca or cerca in (e.get("titolo") or "").lower() or cerca in (e.get("note") or "").lower())
+           and (area_f == "Tutte" or (e.get("area") or "—") == area_f)]
+    st.markdown(f"**{len(vis)} esercizi**")
+    gia = {e["wordwall_url"] for e in _list_esercizi(conn, paziente_id)} if paziente_id else set()
+    attivo = st.session_state.get("ww_lib_play")
+    for i, e in enumerate(vis):
+        url = e["wordwall_url"]
+        with st.expander(f"{'▶️' if attivo == url else '🎮'} **{e.get('titolo')}** · {e.get('area') or '—'}"
+                         + (f" · assegnato a {e['pazienti']} paziente" + ("" if e["pazienti"] == 1 else "i") if e.get("pazienti") else ""), expanded=attivo == url):
+            a1, a2, a3 = st.columns(3)
+            a1.markdown(f"🔗 [Apri su Wordwall]({url})")
+            if attivo == url:
+                if a2.button("⏹️ Chiudi player", key=f"ww_lib_stop_{i}"):
+                    st.session_state["ww_lib_play"] = None; st.rerun()
+            elif a2.button("▶️ Gioca qui", key=f"ww_lib_play_{i}"):
+                st.session_state["ww_lib_play"] = url; st.rerun()
+            if paziente_id:
+                if url in gia:
+                    a3.caption("✓ già assegnato a questo paziente")
+                elif a3.button("➕ Assegna al paziente", key=f"ww_lib_ass_{i}"):
+                    _insert_esercizio(conn, paziente_id, e.get("titolo") or "", e.get("area"), url, e.get("note") or "")
+                    st.success("Assegnato."); st.rerun()
+            if e.get("note"):
+                st.caption(e["note"])
+            if attivo == url:
+                emb = _to_embed_url(url)
+                if emb:
+                    components.iframe(emb, height=PLAYER_HEIGHT_DEFAULT, scrolling=True)
+                    st.caption("Se non parte qui dentro, usa «Apri su Wordwall»: alcune attività non si lasciano incorporare.")
 
+
+def render_wordwall(conn, paziente_id) -> None:
+    """Pagina Esercizi Wordwall: libreria per tutti, esercizi assegnati se c'è un paziente."""
+    _ensure_schema(conn)
     st.subheader("🎮 Esercizi Wordwall")
-    st.caption(
-        "Assegna a questo paziente attività Wordwall create dal tuo account. "
-        "Apri il player per giocare direttamente nella scheda."
-    )
-
-    _form_nuovo_esercizio(conn, paziente_id)
-    st.markdown("")
-    _lista_esercizi(conn, paziente_id)
+    if not paziente_id:
+        st.info("**Modalità libera**: puoi giocare con tutti gli esercizi della libreria. "
+                "Per assegnarli a un paziente, sceglilo prima in «Pazienti».")
+        render_libreria(conn, None); return
+    t1, t2 = st.tabs(["🧒 Esercizi del paziente", "📚 Libreria"])
+    with t1:
+        st.caption("Esercizi assegnati a questo paziente. Apri il player per giocare direttamente nella scheda.")
+        _form_nuovo_esercizio(conn, paziente_id)
+        st.markdown("")
+        _lista_esercizi(conn, paziente_id)
+    with t2:
+        render_libreria(conn, paziente_id)

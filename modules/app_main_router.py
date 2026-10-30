@@ -837,12 +837,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             st.error(f"Modulo questionari non disponibile: {e}")
         return True
     if sotto == "🎮 Esercizi Wordwall":
-        paz_id = st.session_state.get("paziente_attivo_id")
-        if not paz_id:
-            st.subheader("🎮 Esercizi Wordwall")
-            st.info("Gli esercizi Wordwall si **assegnano a un paziente**: scegli il paziente in «Pazienti» e torna qui. "
-                    "Per giocare senza paziente usa **PNEV Game Center** o **Segui la pallina**, che funzionano in modalità libera.")
-            return True
+        paz_id = st.session_state.get("paziente_attivo_id")     # facoltativo: senza paziente = libreria
         try:
             from .ui_wordwall import render_wordwall
             render_wordwall(conn, paz_id)
@@ -1806,10 +1801,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🎮 Esercizi Wordwall":
             from .paziente_attivo import header_paziente_attivo
             if not st.session_state.get("paziente_attivo_id"):
-                st.subheader("🎮 Esercizi Wordwall")
-                st.info("Gli esercizi Wordwall si **assegnano a un paziente**: scegli il paziente in «Pazienti» e torna qui. "
-                        "Per giocare senza paziente usa **PNEV Game Center** o **Segui la pallina**.")
-                return
+                from .ui_wordwall import render_wordwall
+                render_wordwall(conn, None); return
             paz_id = header_paziente_attivo(conn)
             if paz_id:
                 try:
