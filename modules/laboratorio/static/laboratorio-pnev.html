@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Laboratorio PNEV</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: banco di lavoro clinico — intestazione, avvertenza, impostazioni comuni, schede-modulo a linguette, registro */
+:root{
+  --bg:#eef2f1; --surface:#ffffff; --ink:#15201d; --muted:#56635f; --line:#cfd8d5;
+  --accent:#1d6b5f; --accent-ink:#ffffff; --accent-soft:#d9ebe7;
+  --warn-bg:#fff4dc; --warn-line:#e2b85c; --ok:#2c7a3f; --ko:#b23a2e;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111816; --surface:#19221f; --ink:#e4ece9; --muted:#9aaba5; --line:#2e3b37;
+  --accent:#5fb3a3; --accent-ink:#0d1513; --accent-soft:#1f3631;
+  --warn-bg:#33290f; --warn-line:#8a6b23; --ok:#6cc37f; --ko:#ef7d70; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111816; --surface:#19221f; --ink:#e4ece9; --muted:#9aaba5; --line:#2e3b37;
+  --accent:#5fb3a3; --accent-ink:#0d1513; --accent-soft:#1f3631;
+  --warn-bg:#33290f; --warn-line:#8a6b23; --ok:#6cc37f; --ko:#ef7d70; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:10px}
+h1{font-family:var(--f-display);font-size:30px;line-height:1.1;margin:0;letter-spacing:.2px}
+.eyebrow{font-size:11.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.hz{font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.warn{background:var(--warn-bg);border-color:var(--warn-line)}
+.warn p{margin:0}
+.check{display:flex;gap:8px;align-items:flex-start;font-weight:500}
+.check input{margin-top:4px;width:18px;height:18px}
+h2{font-family:var(--f-display);font-size:21px;margin:0}
+h3{font-size:14px;margin:0;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.lead{margin:0;max-width:70ch}
+.basis{margin:0;font-size:13px;color:var(--muted);max-width:75ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);min-width:0}
+input,select,textarea{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+textarea{min-height:96px;font-family:var(--f-mono);font-size:13px;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{font:inherit;font-size:14px;font-weight:500;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 14px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tab .k{font-family:var(--f-mono);font-size:12px;opacity:.7;margin-right:6px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;font-size:14.5px;font-weight:600;background:var(--accent);color:var(--accent-ink);border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
+.btn.sec{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.steps{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-size:12px;font-family:var(--f-mono);padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--ink)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi b{display:block;font-family:var(--f-mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted)}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:12px}
+.ok{color:var(--ok);font-weight:600}.ko{color:var(--ko);font-weight:600}
+.play{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:2px 8px;cursor:pointer}
+/* Stage: fixed clinical grey, independent of theme */
+#stage{position:fixed;inset:0;background:#808080;z-index:50;touch-action:none}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+#stop{position:absolute;top:calc(8px + env(safe-area-inset-top,0px));right:calc(8px + env(safe-area-inset-right,0px));font:500 12px var(--f-body);background:rgba(0,0,0,.35);color:#eee;border:0;border-radius:6px;padding:6px 10px;cursor:pointer;z-index:3}
+#ov{position:absolute;left:50%;bottom:calc(10% + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#f2f2f2;color:#111;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;align-items:center;max-width:calc(100% - 32px);z-index:2;font-family:var(--f-body)}
+#ov .q{font-size:15px;font-weight:600;text-align:center}
+#ov .bs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#ov button{font:600 15px var(--f-body);padding:10px 16px;border-radius:8px;border:1px solid #1d6b5f;background:#1d6b5f;color:#fff;cursor:pointer}
+#ov button.alt{background:#fff;color:#1d6b5f}
+#ov input{font:500 24px var(--f-mono);text-align:center;letter-spacing:4px;width:280px;max-width:100%;background:#fff;color:#111;border:1px solid #999}
+#night{position:fixed;inset:0;background:#000;color:#555;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:var(--f-mono);text-align:center;padding:24px}
+#night button{font:500 14px var(--f-body);background:#222;color:#aaa;border:1px solid #333;border-radius:8px;padding:10px 18px;cursor:pointer}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Studio The Organism · metodo PNEV · sezione sperimentale</div>
+      <h1>Laboratorio PNEV</h1>
+    </div>
+    <div class="hz" id="hz">Misuro lo schermo…</div>
+  </header>
+
+  <section class="panel warn" aria-label="Sicurezza">
+    <p><b>Screening obbligatorio.</b> Questi moduli usano stimoli rapidi e, nel modulo binoculare, pattern colorati che cambiano fino a 10 volte al secondo. Escludi chi ha epilessia personale o familiare, crisi scatenate da luci o videogiochi, emicrania con aura. Ferma tutto in ogni momento con <b>Esc</b> o con il pulsante Stop.</p>
+    <label class="check"><input type="checkbox" id="safeOk"> Ho verificato l'anamnesi del paziente: nessuna controindicazione.</label>
+  </section>
+
+  <section class="panel" aria-label="Seduta">
+    <div class="grid">
+      <label class="f">Codice paziente (ID del gestionale)<input id="patient" placeholder="es. 123"></label>
+      <label class="f">Operatore<input id="operator" value="Dott. Ferraioli"></label>
+      <label class="f">Seduta<input id="sessionNote" placeholder="es. baseline, T1, dopo 6 settimane"></label>
+    </div>
+    <label class="f">Indirizzo della pagina Laboratorio nel gestionale<input id="gestUrl" placeholder="https://…streamlit.app/laboratorio"></label>
+    <p class="note">Ogni risultato nel Registro avrà il pulsante "Invia al gestionale": apre il gestionale con i dati già pronti da salvare nella scheda del paziente.</p>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-t="a"><span class="k">A</span>Binoculare</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="b"><span class="k">B</span>Suono e sonno</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="c"><span class="k">C</span>Memoria iconica</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="d"><span class="k">D</span>Ritmo theta</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="log"><span class="k">≡</span>Registro</button>
+  </nav>
+
+  <!-- ===== A ===== -->
+  <section class="panel" id="t-a">
+    <h2>A · Visore binoculare: soglia di accesso alla coscienza</h2>
+    <p class="lead">Un occhio vede una parola che compare lentamente, l'altro vede pattern colorati che la coprono. Il paziente preme appena vede qualcosa e dice se era sopra o sotto il punto centrale. Il tempo di emersione è la misura: le parole che hanno già una traccia emergono prima.</p>
+    <p class="basis">Base: Continuous Flash Suppression (Tsuchiya e Koch, 2005), paradigma "breaking-CFS". Richiede il visore per smartphone o gli occhiali rosso/ciano (rosso sull'occhio sinistro).</p>
+    <div class="grid">
+      <label class="f">Visualizzazione<select id="aMode"><option value="vr">Visore smartphone (schermo diviso)</option><option value="ana">Occhiali anaglifi rosso/ciano</option></select></label>
+      <label class="f">Occhio dominante (riceve la maschera)<select id="aDom"><option value="R">Destro</option><option value="L">Sinistro</option></select></label>
+      <label class="f">Cambi della maschera al secondo<input id="aHz" type="number" min="3" max="10" value="8"></label>
+      <label class="f">Intensità maschera (0,3–1)<input id="aInt" type="number" min="0.3" max="1" step="0.1" value="0.6"></label>
+      <label class="f">Comparsa della parola (s)<input id="aRamp" type="number" min="0.5" max="5" step="0.5" value="2"></label>
+      <label class="f">Tempo massimo per prova (s)<input id="aMax" type="number" min="3" max="20" value="10"></label>
+      <label class="f">Prove per lista<input id="aN" type="number" min="1" max="30" value="8"></label>
+      <label class="f">Spostamento per la fusione (px)<input id="aShift" type="number" min="-80" max="80" value="0"></label>
+    </div>
+    <div class="grid2">
+      <label class="f">Lista 1 · parole familiari o significative<textarea id="aL1">mamma
+casa
+sole
+gatto
+mare
+pane
+gioco
+scuola
+nonna
+amore</textarea></label>
+      <label class="f">Lista 2 · non-parole di controllo<textarea id="aL2">mipra
+sclove
+tarbo
+fengo
+lusca
+pracco
+gomeri
+vastre
+nidro
+colbe</textarea></label>
+    </div>
+    <div class="grid">
+      <label class="f">Tipo di stimolo<select id="aKind"><option value="w">Parole (liste sopra)</option><option value="i">Pagine di libro o immagini</option></select></label>
+      <label class="f">Set 1 · pagine già lette o significative<input type="file" id="aImg1" accept="image/*" multiple></label>
+      <label class="f">Set 2 · controllo (vuoto = Set 1 capovolto)<input type="file" id="aImg2" accept="image/*" multiple></label>
+    </div>
+    <p class="note" id="aImgInfo">Per le pagine: fotografa o scansiona le pagine e caricale qui. Nessuna immagine caricata.</p>
+    <p class="note">Risposte: barra spaziatrice, Invio o tocco quando vede qualcosa; poi freccia ↑ / ↓ o tocco nella metà alta o bassa. Nel visore serve un telecomando Bluetooth o una tastiera collegata al telefono.</p>
+    <div class="row"><button class="btn" id="aStart">Avvia prova binoculare</button><button class="btn sec" id="aPreview">Prova la fusione (10 s)</button></div>
+    <div id="aRes" hidden>
+      <div class="kpis" id="aKpis"></div>
+      <div class="tw"><table><thead><tr><th>#</th><th>Lista</th><th>Stimolo</th><th>Posizione</th><th>Risposta</th><th>Tempo (s)</th><th>Esito</th></tr></thead><tbody id="aRows"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ===== B ===== -->
+  <section class="panel" id="t-b" hidden>
+    <h2>B · Suono e sonno: riattivazione mirata della memoria</h2>
+    <p class="lead">Ogni immagine-parola viene imparata insieme a un suono proprio. Durante il pisolino o il sonno si fanno risentire, a volume bassissimo, solo i suoni di metà delle parole. Al risveglio si confronta il ricordo delle parole riattivate con quello delle altre.</p>
+    <p class="basis">Base: Targeted Memory Reactivation (Rudoy e colleghi, 2009). È la forma di "apprendimento sotto soglia" con le prove più solide. Il telefono resta accanto al letto, con lo schermo acceso e l'altoparlante o un cuscino-altoparlante.</p>
+    <div class="grid2">
+      <label class="f">Parole da imparare (una per riga, 8–24)<textarea id="bItems">chiave
+ombrello
+chitarra
+farfalla
+candela
+orologio
+pentola
+bicicletta
+conchiglia
+lanterna
+forbici
+tamburo</textarea></label>
+      <div class="f" style="display:flex;flex-direction:column;gap:8px">
+        <span class="note">Sequenza della seduta</span>
+        <div class="steps"><span class="chip">1 crea il set</span><span class="chip">2 apprendimento</span><span class="chip">3 test prima</span><span class="chip">4 sonno</span><span class="chip">5 test dopo</span></div>
+        <div class="row"><button class="btn" id="bCreate">1 · Crea il set di suoni</button></div>
+        <div class="row"><button class="btn sec" id="bLearn" disabled>2 · Apprendimento</button><button class="btn sec" id="bPre" disabled>3 · Test prima del sonno</button></div>
+        <div class="row"><button class="btn sec" id="bPost" disabled>5 · Test dopo il sonno</button></div>
+        <p class="note" id="bState">Nessun set attivo.</p>
+      </div>
+    </div>
+    <h3>4 · Riattivazione nel sonno</h3>
+    <div class="grid">
+      <label class="f">Attesa prima di iniziare (min)<input id="bDelay" type="number" min="0" max="120" value="20"></label>
+      <label class="f">Durata (min)<input id="bDur" type="number" min="1" max="240" value="30"></label>
+      <label class="f">Intervallo tra i suoni (s)<input id="bGap" type="number" min="3" max="60" value="8"></label>
+      <label class="f">Volume (0,02–0,4)<input id="bVol" type="number" min="0.02" max="0.4" step="0.02" value="0.08"></label>
+    </div>
+    <div class="row"><button class="btn sec" id="bNight" disabled>4 · Avvia la riattivazione</button><button class="btn sec" id="bTestVol" disabled>Prova il volume</button></div>
+    <div id="bTable" hidden class="tw"><table><thead><tr><th>Parola</th><th>Suono</th><th>Riattivata</th><th>Prima</th><th>Dopo</th></tr></thead><tbody id="bRows"></tbody></table></div>
+    <div class="kpis" id="bKpis" hidden></div>
+    <details>
+      <summary class="note">Salva o recupera il set (per il test del giorno dopo su un altro dispositivo)</summary>
+      <div class="row" style="margin-top:8px"><button class="btn sec" id="bCopy">Copia codice del set</button><span class="note" id="bCopyMsg"></span></div>
+      <label class="f" style="margin-top:8px">Incolla un codice per ripristinare<textarea id="bPaste" placeholder="{...}"></textarea></label>
+      <div class="row"><button class="btn sec" id="bLoad">Ripristina set</button></div>
+    </details>
+  </section>
+
+  <!-- ===== C ===== -->
+  <section class="panel" id="t-c" hidden>
+    <h2>C · Memoria iconica: quanta "fotografia" resta</h2>
+    <p class="lead">Una griglia di 12 lettere compare per un attimo. Dopo un intervallo, un suono indica quale riga riferire: acuto la riga alta, medio quella centrale, grave quella bassa. Dalla riga si stima quante lettere erano ancora disponibili nella traccia visiva; il resoconto totale fa da confronto.</p>
+    <p class="basis">Base: paradigma del resoconto parziale di Sperling (1960). Nelle persone tipiche la traccia è ricca subito e cala entro circa mezzo secondo. Usa il monitor; utile per lo studio su lettori con memoria eccezionale.</p>
+    <div class="grid">
+      <label class="f">Esposizione (ms)<input id="cExp" type="number" min="17" max="500" value="50"></label>
+      <label class="f">Ritardi del suono (ms)<input id="cDel" value="0, 150, 300, 500, 1000"></label>
+      <label class="f">Prove per ritardo<input id="cN" type="number" min="1" max="10" value="3"></label>
+      <label class="f">Prove di resoconto totale<input id="cW" type="number" min="0" max="10" value="4"></label>
+    </div>
+    <div class="row"><button class="btn sec" id="cTones">Ascolta i tre suoni</button><button class="btn" id="cStart">Avvia memoria iconica</button></div>
+    <p class="note">Il paziente dice le lettere a voce; tu le scrivi nel riquadro e premi Invio.</p>
+    <div id="cRes" hidden>
+      <div class="kpis" id="cKpis"></div>
+      <div class="tw"><table><thead><tr><th>Condizione</th><th>Prove</th><th>Lettere corrette (media)</th><th>Lettere disponibili stimate su 12</th></tr></thead><tbody id="cRows"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ===== D ===== -->
+  <section class="panel" id="t-d" hidden>
+    <h2>D · Ritmo theta: la cadenza aiuta a fissare?</h2>
+    <p class="lead">Due blocchi di parole a scorrimento rapido: uno a cadenza regolare nella banda theta con un clic a ogni parola, uno con la stessa velocità media ma irregolare. Poi un test di riconoscimento mescola parole viste e parole nuove. Si confronta il ricordo tra i due blocchi.</p>
+    <p class="basis">Base: la codifica in memoria è legata al ritmo theta (circa 4–8 Hz) e una stimolazione ritmica può agganciarlo. Questa versione non richiede EEG; con l'EEG si potrà sincronizzare sul ritmo reale del paziente.</p>
+    <div class="grid">
+      <label class="f">Frequenza (Hz)<select id="dHz"><option>4</option><option selected>5</option><option>6</option><option>7</option><option>8</option></select></label>
+      <label class="f">Parole per blocco<input id="dN" type="number" min="6" max="20" value="16"></label>
+      <label class="f">Clic sonoro<select id="dClick"><option value="1">Sì</option><option value="0">No</option></select></label>
+      <label class="f">Ripetizioni del blocco<input id="dRep" type="number" min="1" max="4" value="2"></label>
+    </div>
+    <label class="f">Serbatoio di parole (almeno 3 × parole per blocco)<textarea id="dPool">albero anello aquila arancia barca bottiglia borsa bussola cammello campana cappello carota castello cavallo cesto ciliegia coltello corda cuscino delfino divano elefante fiocco foglia fontana formica fragola gelato giraffa gomitolo granchio lampada leone libro limone lucchetto martello matita medusa mela montagna nave nido occhiali orso palla pecora penna pera pettine piuma ponte quadro razzo rana sedia scarpa secchio tazza tenda torta treno uovo vaso volpe zaino zucca</textarea></label>
+    <div class="row"><button class="btn" id="dStart">Avvia ritmo theta</button></div>
+    <div id="dRes" hidden>
+      <div class="kpis" id="dKpis"></div>
+    </div>
+  </section>
+
+  <!-- ===== LOG ===== -->
+  <section class="panel" id="t-log" hidden>
+    <h2>Registro della seduta</h2>
+    <p class="note">I dati restano in questa pagina finché non la chiudi. Copia il CSV e incollalo nel gestionale o in un foglio di calcolo.</p>
+    <div class="row"><button class="btn sec" id="logCopy">Copia CSV</button><span class="note" id="logMsg"></span></div>
+    <div class="tw"><table><thead><tr><th>Ora</th><th>Paziente</th><th>Modulo</th><th>Parametri</th><th>Risultato</th><th>Gestionale</th></tr></thead><tbody id="logRows"><tr><td colspan="6" class="note">Nessuna prova ancora. Ogni modulo completato aggiunge qui una riga.</td></tr></tbody></table></div>
+  </section>
+</div>
+
+<div id="stage" hidden>
+  <canvas id="cv"></canvas>
+  <button id="stop" type="button">Stop (Esc)</button>
+  <div id="ov" hidden></div>
+</div>
+<div id="night" hidden>
+  <div id="nightTxt">Riattivazione</div>
+  <button id="nightStop" type="button">Interrompi</button>
+</div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+const median=a=>{if(!a.length)return NaN;const s=a.slice().sort((x,y)=>x-y);const m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;};
+const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num=(n,d=3)=>isFinite(n)?+(+n).toFixed(d):null;
+const fmt=(n,d=2)=>isFinite(n)?n.toFixed(d).replace('.',','):'—';
+const lines=id=>$(id).value.split(/[\n,;]+|\s{2,}/).map(s=>s.trim()).filter(Boolean);
+const FONT='"IBM Plex Sans",system-ui,sans-serif', MONO='"IBM Plex Mono",ui-monospace,monospace';
+const GREY='#808080';
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x===b?'true':'false'));
+  ['a','b','c','d','log'].forEach(t=>$('t-'+t).hidden=(t!==b.dataset.t));
+}));
+
+/* ---------- Frame rate ---------- */
+const S={frameMs:1000/60,stageOn:false,aborted:false,scene:null,idle:null,pending:null,ovRes:null};
+(function(){const t=[];function f(ts){t.push(ts);if(t.length<45)requestAnimationFrame(f);else{const d=[];for(let i=1;i<t.length;i++)d.push(t[i]-t[i-1]);S.frameMs=median(d)||S.frameMs;$('hz').textContent='Schermo '+Math.round(1000/S.frameMs)+' Hz · fotogramma '+S.frameMs.toFixed(1).replace('.',',')+' ms';}}requestAnimationFrame(f);})();
+
+/* ---------- Audio ---------- */
+let AC=null;
+function audio(){try{if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();}catch(e){}return AC;}
+function tone(freq,dur,vol,type='sine',when=0){const ac=audio();if(!ac)return;const t=ac.currentTime+when;const o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.01);g.gain.setValueAtTime(vol,t+Math.max(0.012,dur-0.03));g.gain.linearRampToValueAtTime(0,t+dur);o.connect(g).connect(ac.destination);o.start(t);o.stop(t+dur+0.02);}
+function click(vol=0.25){tone(1600,0.018,vol,'sine');}
+
+/* ---------- Stage ---------- */
+const stage=$('stage'),cv=$('cv'),ctx=cv.getContext('2d');let W=0,H=0;
+function resize(){const dpr=window.devicePixelRatio||1;W=stage.clientWidth;H=stage.clientHeight;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);}
+window.addEventListener('resize',()=>{if(S.stageOn)resize();});
+function render(ts){
+  if(!S.stageOn)return;
+  const sc=S.scene;
+  if(sc){
+    if(sc.start==null)sc.start=ts;
+    if(sc.frames<=0){S.scene=null;sc.resolve(ts-sc.start);drawIdle();}
+    else{sc.draw(ctx,ts-sc.start);sc.frames--;}
+  }else drawIdle();
+  requestAnimationFrame(render);
+}
+function drawIdle(){if(S.idle)S.idle(ctx);else{ctx.fillStyle=GREY;ctx.fillRect(0,0,W,H);}}
+function showFor(draw,ms){return new Promise(res=>{if(S.aborted)return res(0);S.scene={draw,frames:Math.max(1,Math.round(ms/S.frameMs)),resolve:res,start:null};});}
+function showUntil(draw){const sc={frames:Infinity,start:null,t0:null};sc.draw=(c,t)=>{if(sc.t0==null)sc.t0=performance.now();draw(c,t);};sc.done=new Promise(r=>sc.resolve=r);S.scene=sc;return{sc,end(){sc.frames=0;}};}
+function guard(){if(!$('safeOk').checked){const w=document.querySelector('.warn');w.scrollIntoView({behavior:'smooth',block:'center'});w.style.outline='3px solid var(--warn-line)';return false;}return true;}
+function openStage(idle){S.aborted=false;S.idle=idle||null;S.scene=null;stage.hidden=false;S.stageOn=true;resize();requestAnimationFrame(render);try{const p=stage.requestFullscreen&&stage.requestFullscreen();if(p&&p.catch)p.catch(()=>{});}catch(e){}}
+function closeStage(){S.stageOn=false;stage.hidden=true;$('ov').hidden=true;S.scene=null;try{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});}catch(e){}}
+function abort(){S.aborted=true;if(S.pending){const p=S.pending;S.pending=null;p(null);}if(S.ovRes){const r=S.ovRes;S.ovRes=null;r(null);}if(S.scene){S.scene.frames=0;}closeStage();}
+$('stop').addEventListener('click',abort);
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&S.stageOn&&S.wasFs){abort();}S.wasFs=!!document.fullscreenElement;});
+function waitInput(filter,timeout){return new Promise(res=>{let to=null;const done=v=>{if(to)clearTimeout(to);S.pending=null;res(v);};S.pending=v=>done(v);S.filter=filter;if(timeout)to=setTimeout(()=>{if(S.pending)done({kind:'timeout'});},timeout);});}
+document.addEventListener('keydown',e=>{
+  if(!S.stageOn)return;
+  if(e.key==='Escape'){e.preventDefault();abort();return;}
+  if(S.pending&&!S.ovRes){const ev={kind:'key',key:e.key,t:performance.now()};if(S.filter(ev)){e.preventDefault();S.pending(ev);}}
+});
+cv.addEventListener('pointerdown',e=>{if(S.pending&&!S.ovRes){const ev={kind:'tap',y:e.clientY/H,t:performance.now()};if(S.filter(ev))S.pending(ev);}});
+
+/* overlay */
+function ovButtons(q,buttons){const ov=$('ov');ov.innerHTML='<div class="q">'+esc(q)+'</div><div class="bs"></div>';const bs=ov.querySelector('.bs');ov.hidden=false;
+  return new Promise(res=>{const keymap={};const done=v=>{document.removeEventListener('keydown',kd,true);S.ovRes=null;ov.hidden=true;res(v);};S.ovRes=done;
+    buttons.forEach((b,i)=>{const el=document.createElement('button');el.type='button';el.textContent=b.label;if(i>0&&b.alt!==false)el.className='alt';el.onclick=()=>done(b.value);bs.appendChild(el);(b.keys||[]).forEach(k=>keymap[k.toLowerCase()]=b.value);});
+    function kd(e){if(e.key==='Escape')return;const v=keymap[e.key.toLowerCase()];if(v!==undefined){e.preventDefault();e.stopPropagation();done(v);}}
+    document.addEventListener('keydown',kd,true);});}
+function ovText(q){const ov=$('ov');ov.innerHTML='<div class="q">'+esc(q)+'</div><input id="ovIn" autocomplete="off" autocapitalize="characters"><div class="bs"><button type="button" id="ovOk">Conferma (Invio)</button></div>';ov.hidden=false;const inp=$('ovIn');setTimeout(()=>inp.focus(),30);
+  return new Promise(res=>{const done=v=>{S.ovRes=null;ov.hidden=true;res(v);};S.ovRes=done;$('ovOk').onclick=()=>done(inp.value);inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();done(inp.value);}});});}
+
+/* drawing helpers */
+function fill(c,col){c.fillStyle=col;c.fillRect(0,0,W,H);}
+function txt(c,s,x,y,px,col,alpha=1,font=FONT,weight=600){c.save();c.globalAlpha=alpha;c.fillStyle=col;c.font=weight+' '+px+'px '+font;c.textAlign='center';c.textBaseline='middle';c.fillText(s,x,y);c.restore();}
+function cross(c,x,y,s,col){c.save();c.strokeStyle=col;c.lineWidth=Math.max(2,s/8);c.beginPath();c.moveTo(x-s/2,y);c.lineTo(x+s/2,y);c.moveTo(x,y-s/2);c.lineTo(x,y+s/2);c.stroke();c.restore();}
+
+/* ---------- Log ---------- */
+const LOG=[];
+/* codifica per il gestionale: JSON -> deflate-raw -> base64url ("z1.") oppure JSON -> base64url ("j1.") */
+function b64url(bytes){let s='';for(let i=0;i<bytes.length;i++)s+=String.fromCharCode(bytes[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+async function encodePayload(obj){const raw=new TextEncoder().encode(JSON.stringify(obj));
+  try{if(typeof CompressionStream==='function'){const cs=new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate-raw'));const buf=new Uint8Array(await new Response(cs).arrayBuffer());return 'z1.'+b64url(buf);}}catch(e){}
+  return 'j1.'+b64url(raw);}
+try{const u=localStorage.getItem('pnevlab.gestUrl');if(u)$('gestUrl').value=u;}catch(e){}
+$('gestUrl').addEventListener('change',()=>{try{localStorage.setItem('pnevlab.gestUrl',$('gestUrl').value.trim());}catch(e){}renderLog();});
+function linkFor(r){const base=$('gestUrl').value.trim();if(!base||!r.code)return null;return base+(base.includes('?')?'&':'?')+'lab='+r.code;}
+function renderLog(){const tb=$('logRows');if(!LOG.length)return;tb.innerHTML='';
+  LOG.slice().reverse().forEach((r,ri)=>{const i=LOG.length-1-ri;const tr=document.createElement('tr');const href=linkFor(r);
+    const cell=!r.code?'<span class="note">preparo…</span>':href?`<a class="play" href="${esc(href)}" target="_blank" rel="noopener">Invia al gestionale</a> <button class="play" type="button" data-c="${i}">Copia codice</button>`:`<span class="note">Imposta l'indirizzo sopra</span> <button class="play" type="button" data-c="${i}">Copia codice</button>`;
+    tr.innerHTML=`<td>${esc(r.ora)}</td><td>${esc(r.paziente)}</td><td>${esc(r.modulo)}</td><td>${esc(r.parametri)}</td><td>${esc(r.risultato)}</td><td>${cell}</td>`;tb.appendChild(tr);});
+  tb.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>copyText(LOG[+b.dataset.c].code,$('logMsg'),'Codice copiato: incollalo nel gestionale, pagina Laboratorio.'));}
+function addLog(mod,params,result,metriche={},prove=[]){
+  const r={ora:new Date().toLocaleString('it-IT'),ts:new Date().toISOString(),paziente:$('patient').value.trim()||'—',operatore:$('operator').value,seduta:$('sessionNote').value,modulo:mod,parametri:params,risultato:result,metriche,prove};
+  LOG.push(r);renderLog();
+  const payload={v:1,app:'laboratorio-pnev',ts:r.ts,paziente:r.paziente,operatore:r.operatore,seduta:r.seduta,modulo:mod,parametri:params,risultato:result,metriche,prove:prove.slice(0,120)};
+  encodePayload(payload).then(c=>{r.code=c;renderLog();});}
+async function copyText(s,msgEl,okMsg){try{await navigator.clipboard.writeText(s);msgEl.textContent=okMsg;}catch(e){const ta=document.createElement('textarea');ta.value=s;document.body.appendChild(ta);ta.select();let ok=false;try{ok=document.execCommand('copy');}catch(_){}ta.remove();msgEl.textContent=ok?okMsg:'Copia non riuscita: seleziona la tabella e copiala a mano.';}}
+$('logCopy').addEventListener('click',()=>{const h=['ora','paziente','operatore','seduta','modulo','parametri','risultato'];const q=v=>'"'+String(v).replace(/"/g,'""')+'"';copyText([h.join(';')].concat(LOG.map(r=>h.map(k=>q(r[k])).join(';'))).join('\n'),$('logMsg'),'CSV copiato ('+LOG.length+' righe).');});
+
+/* ======================= A · CFS ======================= */
+function makeMondrians(mode,intensity){const out=[];for(let k=0;k<24;k++){const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');
+  g.fillStyle=mode==='ana'?'#000':GREY;g.fillRect(0,0,256,256);
+  for(let i=0;i<55;i++){const w=20+Math.random()*90,h=20+Math.random()*90,x=Math.random()*256-w/2,y=Math.random()*256-h/2;
+    if(mode==='ana'){const v=Math.round(255*(0.25+0.75*Math.random())*intensity+40*(1-intensity));g.fillStyle=`rgb(${v},${v},${v})`;}
+    else{const hue=Math.floor(Math.random()*360),sat=Math.round(70*intensity),l=Math.round(50+(Math.random()*2-1)*35*intensity);g.fillStyle=`hsl(${hue},${sat}%,${l}%)`;}
+    g.fillRect(x,y,w,h);}
+  out.push(c);}return out;}
+function tint(src,rgb){const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');g.drawImage(src,0,0);g.globalCompositeOperation='multiply';g.fillStyle=rgb;g.fillRect(0,0,256,256);return c;}
+function aGeom(mode,shift){
+  if(mode==='vr'){const s=Math.min(W/2,H)*0.82;const y=(H-s)/2;return{L:{x:W/4-s/2+shift,y,s},R:{x:3*W/4-s/2-shift,y,s}};}
+  const s=Math.min(W,H)*0.8;return{C:{x:(W-s)/2,y:(H-s)/2,s}};}
+function fusionFrame(c,r,col1,col2){const b=Math.max(6,r.s*0.035),n=12,step=r.s/n;c.save();
+  for(let i=0;i<n;i++){[[r.x+i*step,r.y,step,b],[r.x+i*step,r.y+r.s-b,step,b],[r.x,r.y+i*step,b,step],[r.x+r.s-b,r.y+i*step,b,step]].forEach((q,j)=>{c.fillStyle=((i+j)%2)?col1:col2;c.fillRect(q[0],q[1],q[2],q[3]);});}
+  c.restore();return b;}
+/* target: parola (stringa) oppure pagina/immagine (canvas) */
+function drawTarget(c,t,cx,cy,pos,s,col,alpha){
+  const sign=pos==='su'?-1:1;
+  if(typeof t==='string'){txt(c,t,cx,cy+sign*s*0.22,s*0.12,col,alpha);return;}
+  const bw=s*0.72,bh=s*0.3,k=Math.min(bw/t.width,bh/t.height),w=t.width*k,h=t.height*k;
+  const yc=cy+sign*(s*0.06+bh/2);
+  c.save();c.globalAlpha=alpha;c.drawImage(t,cx-w/2,yc-h/2,w,h);c.restore();
+}
+const IMG={s1:[],s2:[]};
+function loadImgs(files){return Promise.all([...files].map(f=>new Promise(res=>{const url=URL.createObjectURL(f);const im=new Image();
+  im.onload=()=>{const sc=Math.min(1,700/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*sc));c.height=Math.max(1,Math.round(im.height*sc));c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);c.label=f.name;res(c);};
+  im.onerror=()=>{URL.revokeObjectURL(url);res(null);};im.src=url;}))).then(a=>a.filter(Boolean));}
+function flipImg(c){const o=document.createElement('canvas');o.width=c.width;o.height=c.height;const g=o.getContext('2d');g.translate(c.width,c.height);g.rotate(Math.PI);g.drawImage(c,0,0);o.label=c.label+' (capovolta)';return o;}
+function tintImg(c,eye){const o=document.createElement('canvas');o.width=c.width;o.height=c.height;const g=o.getContext('2d');g.drawImage(c,0,0);const d=g.getImageData(0,0,o.width,o.height),p=d.data;
+  for(let i=0;i<p.length;i+=4){const y=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];if(eye==='L'){p[i]=y;p[i+1]=0;p[i+2]=0;}else{p[i]=0;p[i+1]=y;p[i+2]=y;}}
+  g.putImageData(d,0,0);o.label=c.label;return o;}
+function imgInfo(){$('aImgInfo').textContent=`Set 1: ${IMG.s1.length} immagini · Set 2: ${IMG.s2.length?IMG.s2.length+' immagini':'Set 1 capovolto'}.`;}
+$('aImg1').addEventListener('change',async e=>{IMG.s1=await loadImgs(e.target.files);imgInfo();if(IMG.s1.length)$('aKind').value='i';});
+$('aImg2').addEventListener('change',async e=>{IMG.s2=await loadImgs(e.target.files);imgInfo();});
+function aScene(cfg,word,pos,phase){
+  // phase: 'fix' | 'cfs' | 'ask'
+  return (c,t)=>{
+    const g=aGeom(cfg.mode,cfg.shift);
+    const k=Math.floor(t/(1000/cfg.hz))%cfg.masks.length;
+    const alpha=Math.min(1,t/(cfg.ramp*1000))*cfg.maxC;
+    if(cfg.mode==='vr'){
+      fill(c,'#5a5a5a');
+      ['L','R'].forEach(eye=>{const r=g[eye];c.fillStyle=GREY;c.fillRect(r.x,r.y,r.s,r.s);const b=fusionFrame(c,r,'#111','#eee');
+        const ix=r.x+b,iy=r.y+b,is=r.s-2*b,cx=r.x+r.s/2,cy=r.y+r.s/2;
+        if(phase==='cfs'){
+          if(eye===cfg.dom){c.drawImage(cfg.masks[k],ix,iy,is,is);}
+          else{drawTarget(c,word,cx,cy,pos,r.s,'#000',alpha);}
+        }
+        if(phase==='ask'){txt(c,'▲ sopra',cx,cy-r.s*0.22,r.s*0.08,'#111');txt(c,'▼ sotto',cx,cy+r.s*0.22,r.s*0.08,'#111');}
+        cross(c,cx,cy,r.s*0.05,eye===cfg.dom&&phase==='cfs'?'#fff':'#111');
+      });
+    }else{
+      fill(c,'#000');const r=g.C;const cx=r.x+r.s/2,cy=r.y+r.s/2;
+      c.save();c.globalCompositeOperation='lighter';
+      const b=fusionFrame(c,r,'#444','#eee');const ix=r.x+b,iy=r.y+b,is=r.s-2*b;
+      const colOf=eye=>eye==='L'?'rgb(255,0,0)':'rgb(0,255,255)';
+      if(phase==='cfs'){
+        c.drawImage(cfg.tinted[k],ix,iy,is,is);
+        const other=cfg.dom==='L'?'R':'L';
+        drawTarget(c,word,cx,cy,pos,r.s,colOf(other),alpha);
+      }
+      if(phase==='ask'){txt(c,'▲ sopra',cx,cy-r.s*0.22,r.s*0.08,'#ddd');txt(c,'▼ sotto',cx,cy+r.s*0.22,r.s*0.08,'#ddd');}
+      cross(c,cx,cy,r.s*0.05,'#fff');c.restore();
+    }
+  };
+}
+function aConfig(){const mode=$('aMode').value,int=Math.min(1,Math.max(0.3,+$('aInt').value||0.6));const masks=makeMondrians(mode,int);const dom=$('aDom').value;
+  const cfg={mode,dom,hz:Math.min(10,Math.max(3,+$('aHz').value||8)),ramp:Math.max(0.5,+$('aRamp').value||2),max:Math.max(3,+$('aMax').value||10),maxC:0.85,shift:+$('aShift').value||0,masks};
+  if(mode==='ana')cfg.tinted=masks.map(m=>tint(m,dom==='L'?'rgb(255,0,0)':'rgb(0,255,255)'));return cfg;}
+$('aPreview').addEventListener('click',async()=>{if(!guard())return;const cfg=aConfig();openStage();await showFor(aScene(cfg,'PNEV','su','fix'),10000);closeStage();});
+$('aStart').addEventListener('click',async()=>{
+  if(!guard())return;const cfg=aConfig();const n=Math.max(1,+$('aN').value||8);
+  const kind=$('aKind').value;let trials=[];
+  if(kind==='i'){
+    if(!IMG.s1.length){$('aImgInfo').textContent='Carica almeno una pagina o immagine nel Set 1.';return;}
+    const other=cfg.dom==='L'?'R':'L';const prep=c=>cfg.mode==='ana'?Object.assign(tintImg(c,other),{label:c.label}):c;
+    const s1=shuffle(IMG.s1),s2=shuffle(IMG.s2.length?IMG.s2:IMG.s1.map(flipImg));
+    for(let i=0;i<n;i++){const a=s1[i%s1.length],b=s2[i%s2.length];trials.push({list:'1 pagine lette',w:prep(a),name:a.label});trials.push({list:'2 controllo',w:prep(b),name:b.label});}
+  }else{
+    const l1=shuffle(lines('aL1')),l2=shuffle(lines('aL2'));
+    for(let i=0;i<n;i++){if(l1.length)trials.push({list:'1 familiari',w:l1[i%l1.length]});if(l2.length)trials.push({list:'2 controllo',w:l2[i%l2.length]});}
+  }
+  trials=shuffle(trials);const rows=[];
+  openStage(aScene(cfg,'','su','fix'));await sleep(800);
+  for(let i=0;i<trials.length&&!S.aborted;i++){
+    const tr=trials[i];const pos=Math.random()<0.5?'su':'giù';
+    await showFor(aScene(cfg,'',pos,'fix'),1000);if(S.aborted)break;
+    const ctl=showUntil(aScene(cfg,tr.w,pos,'cfs'));
+    const r=await waitInput(e=>e.kind==='tap'||[' ','Enter','ArrowUp','ArrowDown'].includes(e.key),cfg.max*1000);
+    ctl.end();if(S.aborted||!r)break;
+    let rt=null,ans='—',ok=false;
+    if(r.kind!=='timeout'){
+      rt=(r.t-ctl.sc.t0)/1000;
+      if(r.key==='ArrowUp')ans='su';else if(r.key==='ArrowDown')ans='giù';
+      else{S.scene=null;S.idle=aScene(cfg,'',pos,'ask');const p=await waitInput(e=>e.kind==='tap'||['ArrowUp','ArrowDown'].includes(e.key));if(S.aborted||!p)break;ans=(p.key==='ArrowUp'||(p.kind==='tap'&&p.y<0.5))?'su':'giù';S.idle=aScene(cfg,'',pos,'fix');}
+      ok=ans===pos;
+    }
+    rows.push({i:i+1,list:tr.list,w:tr.name||tr.w,pos,ans,rt,ok,timeout:r.kind==='timeout'});
+    await sleep(500);
+  }
+  closeStage();if(!rows.length)return;
+  const sum=lst=>{const rr=rows.filter(r=>r.list[0]===lst[0]);const good=rr.filter(r=>r.ok);return{n:rr.length,ok:good.length,med:median(good.map(r=>r.rt)),to:rr.filter(r=>r.timeout).length};};
+  const s1=sum('1 familiari'),s2=sum('2 controllo');const d=s2.med-s1.med;
+  $('aKpis').innerHTML=`<div class="kpi"><b>${fmt(s1.med)} s</b><span>Lista 1 · emersione (mediana) · ${s1.ok}/${s1.n} corrette</span></div>
+   <div class="kpi"><b>${fmt(s2.med)} s</b><span>Lista 2 · emersione (mediana) · ${s2.ok}/${s2.n} corrette</span></div>
+   <div class="kpi"><b>${isFinite(d)?(d>0?'+':'')+fmt(d):'—'} s</b><span>Vantaggio di ${kind==='i'?'Set 1 (pagine lette)':'Lista 1 (familiari)'} · positivo = emerge prima</span></div>
+   <div class="kpi"><b>${s1.to+s2.to}</b><span>Prove senza risposta entro ${cfg.max} s</span></div>`;
+  $('aRows').innerHTML=rows.map(r=>`<tr><td>${r.i}</td><td>${esc(r.list)}</td><td>${esc(r.w)}</td><td>${r.pos}</td><td>${r.timeout?'nessuna':r.ans}</td><td>${r.rt==null?'—':fmt(r.rt)}</td><td class="${r.ok?'ok':'ko'}">${r.ok?'✓':'✗'}</td></tr>`).join('');
+  $('aRes').hidden=false;
+  addLog('A Binoculare',`${cfg.mode==='vr'?'visore':'anaglifo'}, dominante ${cfg.dom==='R'?'dx':'sx'}, maschera ${cfg.hz} Hz, rampa ${cfg.ramp} s, ${rows.length} prove`,`L1 ${fmt(s1.med)} s (${s1.ok}/${s1.n}); L2 ${fmt(s2.med)} s (${s2.ok}/${s2.n}); vantaggio ${fmt(d)} s`,
+    {stimolo:kind==='i'?'pagine':'parole',visualizzazione:cfg.mode,occhio_dominante:cfg.dom,maschera_hz:cfg.hz,set1_mediana_s:num(s1.med),set2_mediana_s:num(s2.med),vantaggio_s:num(d),set1_corrette:s1.ok,set1_prove:s1.n,set2_corrette:s2.ok,set2_prove:s2.n,senza_risposta:s1.to+s2.to},
+    rows.map(r=>({lista:r.list,stimolo:String(r.w),posizione:r.pos,risposta:r.timeout?null:r.ans,tempo_s:r.rt==null?null:num(r.rt),esatta:r.ok})));
+});
+
+/* ======================= B · TMR ======================= */
+const NOTES=[262,294,330,392,440,523,587,659,784];const TYPES=['sine','triangle','square','sawtooth'];
+let TMR=null;
+function sndLabel(s){return ['Do','Re','Mi','Sol','La','Do↑','Re↑','Mi↑','Sol↑'][NOTES.indexOf(s.f)]+' · '+({sine:'flauto',triangle:'ocarina',square:'clarinetto',sawtooth:'ottone'}[s.type])+(s.pat===2?' · doppio':'');}
+function playSnd(s,vol=0.25){const v=vol*(s.type==='square'||s.type==='sawtooth'?0.45:1);if(s.pat===2){tone(s.f,0.14,v,s.type,0);tone(s.f,0.14,v,s.type,0.2);}else tone(s.f,0.38,v,s.type,0);}
+function saveTMR(){try{localStorage.setItem('pnevlab.tmr',JSON.stringify(TMR));}catch(e){}}
+function renderTMR(){
+  const has=!!TMR;['bLearn','bPre','bPost','bNight','bTestVol'].forEach(id=>$(id).disabled=!has);
+  if(!has){$('bState').textContent='Nessun set attivo.';$('bTable').hidden=true;$('bKpis').hidden=true;return;}
+  $('bState').textContent=`Set del ${TMR.created} · paziente ${TMR.patient||'—'} · ${TMR.items.length} parole, ${TMR.items.filter(i=>i.cued).length} da riattivare.`;
+  $('bRows').innerHTML=TMR.items.map((it,i)=>`<tr><td>${esc(it.w)}</td><td><button class="play" data-i="${i}" type="button">▶</button> ${esc(sndLabel(it.snd))}</td><td>${it.cued?'sì':'no'}</td><td>${it.pre==null?'—':it.pre?'<span class="ok">✓</span>':'<span class="ko">✗</span>'}</td><td>${it.post==null?'—':it.post?'<span class="ok">✓</span>':'<span class="ko">✗</span>'}</td></tr>`).join('');
+  $('bRows').querySelectorAll('.play').forEach(b=>b.onclick=()=>playSnd(TMR.items[+b.dataset.i].snd));
+  $('bTable').hidden=false;
+  const grp=c=>{const it=TMR.items.filter(i=>i.cued===c);const pre=it.filter(i=>i.pre!=null),post=it.filter(i=>i.post!=null);return{pre:pre.length?pre.filter(i=>i.pre).length/pre.length*100:NaN,post:post.length?post.filter(i=>i.post).length/post.length*100:NaN};};
+  const c=grp(true),u=grp(false);
+  if(isFinite(c.pre)){$('bKpis').hidden=false;$('bKpis').innerHTML=`<div class="kpi"><b>${fmt(c.pre,0)}% → ${fmt(c.post,0)}%</b><span>Riattivate: prima → dopo il sonno</span></div><div class="kpi"><b>${fmt(u.pre,0)}% → ${fmt(u.post,0)}%</b><span>Non riattivate: prima → dopo</span></div><div class="kpi"><b>${isFinite(c.post)&&isFinite(u.post)?fmt((c.post-c.pre)-(u.post-u.pre),0)+' punti':'—'}</b><span>Effetto della riattivazione (differenza delle variazioni)</span></div>`;}
+  else $('bKpis').hidden=true;
+}
+try{const s=localStorage.getItem('pnevlab.tmr');if(s)TMR=JSON.parse(s);}catch(e){}
+renderTMR();
+$('bCreate').addEventListener('click',()=>{audio();const words=lines('bItems').slice(0,24);if(words.length<4){$('bState').textContent='Servono almeno 4 parole.';return;}
+  const combos=shuffle(NOTES.flatMap(f=>TYPES.flatMap(type=>[1,2].map(pat=>({f,type,pat})))));
+  const cuedIdx=new Set(shuffle(words.map((_,i)=>i)).slice(0,Math.floor(words.length/2)));
+  TMR={created:new Date().toLocaleString('it-IT'),patient:$('patient').value,items:words.map((w,i)=>({w,snd:combos[i],cued:cuedIdx.has(i),pre:null,post:null}))};saveTMR();renderTMR();});
+$('bLearn').addEventListener('click',async()=>{if(!guard()||!TMR)return;audio();openStage((c)=>{fill(c,GREY);cross(c,W/2,H/2,24,'#222');});
+  await sleep(800);
+  for(let round=0;round<2&&!S.aborted;round++){for(const it of shuffle(TMR.items)){if(S.aborted)break;playSnd(it.snd);await showFor(c=>{fill(c,GREY);txt(c,it.w,W/2,H/2,Math.min(W,H)*0.11,'#111');},2500);await showFor(c=>fill(c,GREY),500);}}
+  const ok=!S.aborted;closeStage();if(ok)addLog('B Suono e sonno','apprendimento, 2 giri',TMR.items.length+' parole con suono');});
+async function bTest(key){if(!guard()||!TMR)return;audio();openStage(c=>{fill(c,GREY);txt(c,'♪',W/2,H/2-H*0.08,Math.min(W,H)*0.14,'#222',1,FONT,500);});await sleep(600);
+  for(const it of shuffle(TMR.items)){if(S.aborted)break;playSnd(it.snd);let v;
+    while(true){v=await ovButtons('Il paziente dice la parola di questo suono?',[{label:'Ricordata (R)',value:true,keys:['r']},{label:'Non ricordata (N)',value:false,keys:['n']},{label:'Riascolta (spazio)',value:'again',keys:[' ']}]);if(v==='again'){playSnd(it.snd);continue;}break;}
+    if(v===null)break;it[key]=v;await sleep(250);}
+  closeStage();saveTMR();renderTMR();const done=TMR.items.filter(i=>i[key]!=null);if(!done.length)return;
+  const pct=(c,k)=>{const it=TMR.items.filter(i=>i.cued===c&&i[k]!=null);return it.length?num(it.filter(i=>i[k]).length/it.length*100,1):null;};
+  const m={fase:key==='pre'?'prima del sonno':'dopo il sonno',ricordate:done.filter(i=>i[key]).length,parole:done.length,riattivate_prima_pct:pct(true,'pre'),non_riattivate_prima_pct:pct(false,'pre')};
+  if(key==='post'){m.riattivate_dopo_pct=pct(true,'post');m.non_riattivate_dopo_pct=pct(false,'post');if([m.riattivate_prima_pct,m.riattivate_dopo_pct,m.non_riattivate_prima_pct,m.non_riattivate_dopo_pct].every(v=>v!=null))m.effetto_riattivazione_punti=num((m.riattivate_dopo_pct-m.riattivate_prima_pct)-(m.non_riattivate_dopo_pct-m.non_riattivate_prima_pct),1);}
+  addLog('B Suono e sonno','test '+m.fase+' (set del '+TMR.created+')',m.ricordate+'/'+m.parole+' ricordate'+(m.effetto_riattivazione_punti!=null?'; effetto riattivazione '+m.effetto_riattivazione_punti+' punti':''),m,TMR.items.map(i=>({parola:i.w,suono:sndLabel(i.snd),riattivata:i.cued,prima:i.pre,dopo:i.post})));}
+$('bPre').addEventListener('click',()=>bTest('pre'));$('bPost').addEventListener('click',()=>bTest('post'));
+$('bTestVol').addEventListener('click',()=>{if(TMR)playSnd(TMR.items[0].snd,+$('bVol').value||0.08);});
+let nightRun=null;
+$('bNight').addEventListener('click',async()=>{if(!TMR)return;audio();const delay=(+$('bDelay').value||0)*60,dur=(+$('bDur').value||30)*60,gap=Math.max(3,+$('bGap').value||8),vol=Math.min(0.4,Math.max(0.02,+$('bVol').value||0.08));
+  const cued=TMR.items.filter(i=>i.cued);let lock=null;try{lock=await navigator.wakeLock.request('screen');}catch(e){}
+  const run={stop:false,played:0};nightRun=run;$('night').hidden=false;const t0=Date.now();
+  while(!run.stop){const el=(Date.now()-t0)/1000;
+    if(el<delay){$('nightTxt').textContent='Attesa addormentamento · inizio tra '+Math.ceil((delay-el)/60)+' min';await sleep(1000);continue;}
+    if(el>=delay+dur)break;
+    const it=cued[run.played%cued.length];playSnd(it.snd,vol);run.played++;
+    $('nightTxt').textContent='Riattivazione in corso · '+run.played+' suoni · termina tra '+Math.ceil((delay+dur-el)/60)+' min';
+    for(let k=0;k<gap*10&&!run.stop;k++)await sleep(100);}
+  $('night').hidden=true;try{lock&&lock.release();}catch(e){}
+  addLog('B Suono e sonno',`riattivazione: attesa ${delay/60} min, durata ${dur/60} min, ogni ${gap} s, volume ${vol}`,run.played+' suoni riprodotti'+(run.stop?' (interrotta)':''));});
+$('nightStop').addEventListener('click',()=>{if(nightRun)nightRun.stop=true;});
+$('bCopy').addEventListener('click',()=>{if(TMR)copyText(JSON.stringify(TMR),$('bCopyMsg'),'Codice copiato.');});
+$('bLoad').addEventListener('click',()=>{try{const t=JSON.parse($('bPaste').value);if(!t.items)throw 0;TMR=t;saveTMR();renderTMR();$('bCopyMsg').textContent='Set ripristinato.';}catch(e){$('bCopyMsg').textContent='Codice non valido: incolla il testo copiato con "Copia codice del set".';}});
+
+/* ======================= C · Sperling ======================= */
+const CONS='BCDFGHKLMNPRSTVZ';const ROWF=[880,440,220];
+$('cTones').addEventListener('click',async()=>{for(const f of ROWF){tone(f,0.3,0.3);await sleep(550);}});
+function cGrid(){const g=[];for(let r=0;r<3;r++){const row=[];while(row.length<4){const ch=CONS[Math.floor(Math.random()*CONS.length)];if(!row.includes(ch)&&!g.flat().includes(ch))row.push(ch);}g.push(row);}return g;}
+function cScore(resp,set){const used=new Set();let n=0;for(const ch of resp.toUpperCase().replace(/[^A-Z]/g,'')){if(set.includes(ch)&&!used.has(ch)){used.add(ch);n++;}}return n;}
+$('cStart').addEventListener('click',async()=>{
+  if(!guard())return;audio();const exp=Math.max(S.frameMs,+$('cExp').value||50);const delays=($('cDel').value.match(/\d+/g)||['0']).map(Number);const n=Math.max(1,+$('cN').value||3),nw=Math.max(0,+$('cW').value||0);
+  let trials=[];delays.forEach(d=>{for(let i=0;i<n;i++)trials.push({type:'p',d,row:Math.floor(Math.random()*3)});});for(let i=0;i<nw;i++)trials.push({type:'w'});trials=shuffle(trials);
+  const idle=c=>{fill(c,GREY);cross(c,W/2,H/2,24,'#222');};openStage(idle);await sleep(1000);const res=[];let realExp=[];
+  for(const tr of trials){if(S.aborted)break;
+    await showFor(idle,800);const g=cGrid();const sz=Math.min(W,H)*0.09;
+    const ms=await showFor(c=>{fill(c,GREY);g.forEach((row,r)=>row.forEach((ch,k)=>txt(c,ch,W/2+(k-1.5)*sz*1.5,H/2+(r-1)*sz*1.5,sz,'#000',1,MONO,500)));},exp);realExp.push(ms);
+    S.idle=c=>fill(c,GREY);if(tr.type==='p'){if(tr.d>0)await sleep(tr.d);tone(ROWF[tr.row],0.25,0.35);}
+    const ans=await ovText(tr.type==='p'?'Lettere della riga indicata dal suono':'Tutte le lettere che ricorda');S.idle=idle;if(ans===null)break;
+    res.push(tr.type==='p'?{type:'p',d:tr.d,score:cScore(ans,g[tr.row])}:{type:'w',score:cScore(ans,g.flat())});}
+  closeStage();if(!res.length)return;
+  const rowsHtml=[];const parts=[];
+  delays.forEach(d=>{const rr=res.filter(r=>r.type==='p'&&r.d===d);if(!rr.length)return;const m=mean(rr.map(r=>r.score));rowsHtml.push(`<tr><td>Parziale · suono a ${d} ms</td><td>${rr.length}</td><td>${fmt(m,1)} su 4</td><td>${fmt(m*3,1)}</td></tr>`);parts.push(`${d}ms=${fmt(m*3,1)}`);});
+  const ww=res.filter(r=>r.type==='w');const mw=mean(ww.map(r=>r.score));if(ww.length)rowsHtml.push(`<tr><td>Resoconto totale</td><td>${ww.length}</td><td>${fmt(mw,1)} su 12</td><td>${fmt(mw,1)}</td></tr>`);
+  const p0=res.filter(r=>r.type==='p'&&r.d===Math.min(...delays));const best=mean(p0.map(r=>r.score))*3;
+  $('cKpis').innerHTML=`<div class="kpi"><b>${fmt(best,1)}</b><span>Lettere disponibili subito (stima su 12)</span></div><div class="kpi"><b>${fmt(mw,1)}</b><span>Lettere nel resoconto totale</span></div><div class="kpi"><b>${fmt(median(realExp),0)} ms</b><span>Esposizione reale (mediana)</span></div>`;
+  $('cRows').innerHTML=rowsHtml.join('');$('cRes').hidden=false;
+  addLog('C Memoria iconica',`esposizione ${fmt(median(realExp),0)} ms, ritardi ${delays.join('/')} ms, ${res.length} prove`,`disponibili: ${parts.join(', ')}; totale ${fmt(mw,1)}`,
+    Object.assign({esposizione_ms:num(median(realExp),0),disponibili_subito:num(best,2),resoconto_totale:num(mw,2)},Object.fromEntries(delays.map(d=>{const rr=res.filter(r=>r.type==='p'&&r.d===d);return['disponibili_'+d+'ms',rr.length?num(mean(rr.map(r=>r.score))*3,2):null];}))),
+    res.map(r=>r.type==='p'?{tipo:'parziale',ritardo_ms:r.d,lettere_corrette:r.score}:{tipo:'totale',lettere_corrette:r.score}));
+});
+
+/* ======================= D · Ritmo ======================= */
+function invN(p){p=Math.min(Math.max(p,1e-6),1-1e-6);const a=[-39.69683028665376,220.9460984245205,-275.9285104469687,138.357751867269,-30.66479806614716,2.506628277459239],b=[-54.47609879822406,161.5858368580409,-155.6989798598866,66.80131188771972,-13.28068155288572],c=[-0.007784894002430293,-0.3223964580411365,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783],d=[0.007784695709041462,0.3224671290700398,2.445134137142996,3.754408661907416];const pl=0.02425;let q,r;
+  if(p<pl){q=Math.sqrt(-2*Math.log(p));return(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  if(p>1-pl){q=Math.sqrt(-2*Math.log(1-p));return-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  q=p-0.5;r=q*q;return(((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}
+$('dStart').addEventListener('click',async()=>{
+  if(!guard())return;audio();const hz=+$('dHz').value,n=Math.max(6,+$('dN').value||16),useClick=$('dClick').value==='1',rep=Math.max(1,+$('dRep').value||2);
+  const pool=shuffle([...new Set(lines('dPool').flatMap(s=>s.split(/\s+/)))]);if(pool.length<3*n){$('dRes').hidden=false;$('dKpis').innerHTML=`<div class="kpi"><b>${pool.length}</b><span>Parole nel serbatoio: ne servono almeno ${3*n}</span></div>`;return;}
+  const sets={rit:pool.slice(0,n),ari:pool.slice(n,2*n),nuove:pool.slice(2*n,3*n)};
+  const order=Math.random()<0.5?['rit','ari']:['ari','rit'];const base=1000/hz;
+  const idle=c=>{fill(c,GREY);cross(c,W/2,H/2,20,'#222');};openStage(idle);
+  for(const blk of order){if(S.aborted)break;
+    const go=await ovButtons(`Blocco ${order.indexOf(blk)+1} di 2 · guarda le parole al centro`,[{label:'Inizia (spazio)',value:true,keys:[' ','Enter']}]);if(!go)break;await sleep(1200);
+    for(let r=0;r<rep&&!S.aborted;r++){for(const w of shuffle(sets[blk])){if(S.aborted)break;
+      const soa=blk==='rit'?base:base*(0.55+Math.random()*0.9);
+      if(useClick)click();
+      await showFor(c=>{fill(c,GREY);txt(c,w,W/2,H/2,Math.min(W,H)*0.075,'#111');},soa*0.6);
+      await showFor(idle,soa*0.4);}}
+  }
+  if(S.aborted){closeStage();return;}
+  await ovButtons('Ora il test: per ogni parola, il paziente dice se l\'ha vista prima',[{label:'Inizia (spazio)',value:true,keys:[' ','Enter']}]);
+  const test=shuffle([...sets.rit.map(w=>({w,src:'rit'})),...sets.ari.map(w=>({w,src:'ari'})),...sets.nuove.map(w=>({w,src:'nuove'}))]);
+  for(const it of test){if(S.aborted)break;S.idle=c=>{fill(c,GREY);txt(c,it.w,W/2,H/2-H*0.08,Math.min(W,H)*0.09,'#111');};
+    const v=await ovButtons('Vista prima?',[{label:'Sì, vista (S)',value:true,keys:['s']},{label:'No, nuova (N)',value:false,keys:['n']}]);if(v===null)break;it.ans=v;}
+  closeStage();const answered=test.filter(t=>t.ans!=null);if(!answered.length)return;
+  const rate=src=>{const a=answered.filter(t=>t.src===src);return{n:a.length,y:a.filter(t=>t.ans).length};};
+  const R=rate('rit'),A=rate('ari'),N=rate('nuove');
+  const dp=(h)=>invN((h.y+0.5)/(h.n+1))-invN((N.y+0.5)/(N.n+1));
+  const dR=dp(R),dA=dp(A);
+  $('dKpis').innerHTML=`<div class="kpi"><b>${R.y}/${R.n}</b><span>Riconosciute · blocco ritmico ${hz} Hz</span></div><div class="kpi"><b>${A.y}/${A.n}</b><span>Riconosciute · blocco irregolare</span></div><div class="kpi"><b>${N.y}/${N.n}</b><span>Falsi riconoscimenti (parole nuove)</span></div><div class="kpi"><b>${fmt(dR)} / ${fmt(dA)}</b><span>d′ ritmico / irregolare (più alto = ricordo migliore)</span></div>`;
+  $('dRes').hidden=false;
+  addLog('D Ritmo theta',`${hz} Hz, ${n} parole per blocco × ${rep}, clic ${useClick?'sì':'no'}, ordine ${order.join('→')}`,`ritmico ${R.y}/${R.n}, irregolare ${A.y}/${A.n}, falsi ${N.y}/${N.n}; d′ ${fmt(dR)} vs ${fmt(dA)}`,
+    {frequenza_hz:hz,riconosciute_ritmico:R.y,parole_ritmico:R.n,riconosciute_irregolare:A.y,parole_irregolare:A.n,falsi_riconoscimenti:N.y,parole_nuove:N.n,dprime_ritmico:num(dR),dprime_irregolare:num(dA),vantaggio_ritmo_dprime:num(dR-dA)},
+    answered.map(t=>({parola:t.w,blocco:t.src,risposta_vista:t.ans})));
+});
+})();
+</script>
+</body>
+</html>
