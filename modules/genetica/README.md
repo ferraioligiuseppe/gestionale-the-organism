@@ -31,6 +31,17 @@ Le tabelle vengono create in automatico al primo accesso (`CREATE TABLE IF NOT E
 
 **Multi-tenant / RLS**: le tabelle hanno la colonna `studio_id TEXT`. Allinea tipo e policy alla convenzione degli altri moduli. Trovi un modello in `db_genetica.RLS_TEMPLATE`.
 
+## Scheda «Volto e foto»
+
+- Foto del volto salvate nella tabella `genetica_foto`, solo con la spunta del consenso dei genitori/tutore. Vengono ridimensionate a 1600 px e salvate in JPEG senza dati EXIF, quindi senza GPS. Non vengono mai inviate a servizi esterni o all'AI.
+- Contiene 54 segni del volto (`volto.py`), divisi in 6 gruppi. I segni li valuta il clinico: non c'è nessun riconoscimento automatico.
+
+## Proposte dal gestionale (`import_gestionale.py`)
+
+- Legge in **sola lettura** le valutazioni già salvate: INPP, valutazione visuo-percettiva, visita oculistica, anamnesi visiva, audiogramma, anamnesi prima infanzia e sviluppo, logopedia, DSA e NPS.
+- Propone solo segni **presenti**, ognuno con fonte e data. Il clinico conferma con un clic.
+- Le soglie sono in testa al file, per esempio INPP ≥ 2, stereopsi > 100″, ipermetropia ≥ +2,00, miopia ≤ −0,50, astigmatismo ≥ 1,00 cil, PPC > 10/15 cm, PTA > 25 dB.
+
 ## Come funziona il punteggio
 
 - **IC (contenuto informativo)**: un segno presente in poche sindromi pesa di più. La disabilità intellettiva (oltre 2.000 sindromi) pesa poco; un'aprassia oculomotoria pesa molto.

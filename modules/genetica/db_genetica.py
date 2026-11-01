@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Europe/Rome")
 
-_TABELLE = ("genetica_profilo", "genetica_esito", "genetica_analisi")
+_TABELLE = ("genetica_profilo", "genetica_esito", "genetica_analisi", "genetica_foto")
 _tabelle_pronte = False   # ensure_tables una sola volta per processo
 
 
@@ -91,6 +91,21 @@ CREATE TABLE IF NOT EXISTS genetica_analisi (
     risultati     JSONB
 );
 CREATE INDEX IF NOT EXISTS ix_genetica_analisi_paz ON genetica_analisi (paziente_id);
+
+-- Foto del volto per la valutazione morfologica. Restano nel database dello studio:
+-- nessun invio a servizi esterni o AI. Salvate solo con il consenso dei genitori/tutore.
+CREATE TABLE IF NOT EXISTS genetica_foto (
+    id           BIGSERIAL PRIMARY KEY,
+    studio_id    BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+    paziente_id  BIGINT NOT NULL,
+    vista        TEXT,              -- 'Frontale', 'Profilo destro', ...
+    mime         TEXT NOT NULL,
+    dati         BYTEA NOT NULL,
+    consenso     BOOLEAN NOT NULL,
+    note         TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_genetica_foto_paz ON genetica_foto (paziente_id);
 """
 
 # Policy RLS: stessa convenzione di audiometrie_tonali, lead_sito, sportivi.
@@ -229,3 +244,35 @@ def storico_analisi(conn, paziente_id: int, limite: int = 10) -> list[dict]:
         return [{"eseguita_at": r[0], "n_presenti": r[1], "n_assenti": r[2], "informativita": r[3],
                  "risultati": r[4] if isinstance(r[4], list) else json.loads(r[4] or "[]")}
                 for r in cur.fetchall()]
+
+
+# ------------------------------------------------------------------ foto del volto
+def add_foto(conn, paziente_id: int, dati: bytes, mime: str, vista: str = "", consenso: bool = False,
+             note: str = "", studio_id: str | None = None) -> None:
+    """Salva una foto (già ridimensionata e senza dati EXIF). Rifiuta senza consenso."""
+    if not consenso:
+        raise ValueError("Serve il consenso dei genitori/tutore per salvare la foto.")
+    import psycopg2
+    with _cur(conn) as cur:
+        cur.execute(
+            """INSERT INTO genetica_foto (studio_id, paziente_id, vista, mime, dati, consenso, note)
+               VALUES (COALESCE(%s::bigint, current_setting('app.current_studio', true)::bigint),
+                       %s, %s, %s, %s, %s, %s)""",
+            (_sid(studio_id), paziente_id, vista, mime, psycopg2.Binary(dati), True, note))
+    conn.commit()
+
+
+def get_foto(conn, paziente_id: int) -> list[dict]:
+    """Foto del paziente, dalla più recente: [{'id','vista','mime','dati','note','created_at'}]."""
+    with _cur(conn) as cur:
+        cur.execute(
+            """SELECT id, vista, mime, dati, note, created_at FROM genetica_foto
+               WHERE paziente_id = %s ORDER BY created_at DESC""", (paziente_id,))
+        return [{"id": r[0], "vista": r[1], "mime": r[2], "dati": bytes(r[3]), "note": r[4],
+                 "created_at": r[5]} for r in cur.fetchall()]
+
+
+def del_foto(conn, foto_id: int, paziente_id: int) -> None:
+    with _cur(conn) as cur:
+        cur.execute("DELETE FROM genetica_foto WHERE id = %s AND paziente_id = %s", (foto_id, paziente_id))
+    conn.commit()
