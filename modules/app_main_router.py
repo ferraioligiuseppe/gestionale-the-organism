@@ -540,6 +540,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "🕒 Cronologia", "📚 Archivio relazioni", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🧩 Rilievi PNEV", "🎙️ Colloqui clinici", "🌳 Genosociogramma", "🥗 Alimentazione",
+        "🧬 Genetica PNEV",
         "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
@@ -687,6 +688,29 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
                 with st.expander("Dettagli tecnici"):
                     st.code(traceback.format_exc())
             return True
+    if sotto == "🧬 Genetica PNEV":
+        try:
+            from .genetica.ui_genetica import render_genetica
+            _paz_nome = ""
+            try:
+                _c = conn.cursor()
+                _c.execute("SELECT Cognome, Nome FROM Pazienti WHERE id=%s", (paz_id,))
+                _r = _c.fetchone()
+                if _r:
+                    _paz_nome = f"{_r[0] or ''} {_r[1] or ''}".strip()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            render_genetica(conn, int(paz_id), _paz_nome,
+                            st.session_state.get("studio_id", 1))
+        except Exception as e:
+            import traceback
+            st.error(f"Errore Genetica PNEV: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
     if sotto == "📝 Diagnosi assistita":
         try:
             from .diagnosi_assistita import render_diagnosi
