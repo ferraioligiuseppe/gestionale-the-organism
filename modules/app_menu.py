@@ -163,6 +163,9 @@ PAZIENTI_RAMI = {
         "🌳 Genosociogramma",
         # Metodo Kousmine: valutazione, esami, piano firmato, diario, esiti.
         "🥗 Alimentazione",
+        # Genetica PNEV: confronto del profilo PNEV con le sindromi HPO.
+        # Orientamento all'invio al genetista, non diagnostico.
+        "🧬 Genetica PNEV",
         "🗓️ Diario clinico",
         "📝 Diagnosi assistita",
         "📚 Archivio relazioni",
