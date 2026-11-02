@@ -69,6 +69,14 @@ th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-
 th{font-weight:600;color:var(--muted);font-size:12px}
 .ok{color:var(--ok);font-weight:600}.ko{color:var(--ko);font-weight:600}
 .play{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:2px 8px;cursor:pointer}
+.guida{max-width:100%}
+.guida h3{font-size:16px;text-transform:none;letter-spacing:0;color:var(--ink);margin-top:10px}
+.guida h2{margin-top:8px}
+.guida p,.guida li{max-width:75ch}
+.guida blockquote{margin:0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:6px}
+.guida hr{border:0;border-top:1px solid var(--line);margin:8px 0}
+.guida table{display:block;overflow-x:auto}
+.guida td,.guida th{white-space:normal;min-width:140px}
 /* Stage: fixed clinical grey, independent of theme */
 #stage{position:fixed;inset:0;background:#808080;z-index:50;touch-action:none}
 #cv{position:absolute;inset:0;width:100%;height:100%;display:block}
@@ -102,12 +110,25 @@ th{font-weight:600;color:var(--muted);font-size:12px}
 
   <section class="panel" aria-label="Seduta">
     <div class="grid">
-      <label class="f">Codice paziente (ID del gestionale)<input id="patient" placeholder="es. 123"></label>
+      <label class="f">Codice paziente<input id="patient" placeholder="PNEV-XXXX-XXXX" autocomplete="off"></label>
       <label class="f">Operatore<input id="operator" value="Dott. Ferraioli"></label>
       <label class="f">Seduta<input id="sessionNote" placeholder="es. baseline, T1, dopo 6 settimane"></label>
     </div>
+    <div class="grid">
+      <label class="f">Pazienti recenti su questo dispositivo<select id="recenti"><option value="">— scegli —</option></select></label>
+    </div>
+    <details id="calcBox">
+      <summary class="note">Calcola il codice da cognome, nome e data di nascita</summary>
+      <div class="grid" style="margin-top:8px">
+        <label class="f">Cognome<input id="cCog" autocomplete="off"></label>
+        <label class="f">Nome<input id="cNom" autocomplete="off"></label>
+        <label class="f">Data di nascita<input id="cNas" type="date"></label>
+      </div>
+      <div class="row" style="margin-top:8px"><button class="btn sec" id="cCalc" type="button">Calcola codice</button><span class="note" id="cMsg"></span></div>
+      <p class="note">Scrivi i dati come in anagrafica: maiuscole, accenti, spazi e apostrofi non contano. Il codice è cifrato: dal codice non si risale al nome. Nome e cognome non vengono salvati; il dispositivo ricorda solo codice e iniziali.</p>
+    </details>
     <label class="f">Indirizzo della pagina Laboratorio nel gestionale<input id="gestUrl" placeholder="https://…streamlit.app/laboratorio"></label>
-    <p class="note">Ogni risultato nel Registro avrà il pulsante "Invia al gestionale": apre il gestionale con i dati già pronti da salvare nella scheda del paziente.</p>
+    <p class="note">Ogni risultato nel Registro avrà il pulsante "Invia al gestionale": apre il gestionale, che riconosce il paziente dal codice e propone di salvare il risultato nella sua scheda.</p>
   </section>
 
   <nav class="tabs" role="tablist">
@@ -116,6 +137,7 @@ th{font-weight:600;color:var(--muted);font-size:12px}
     <button class="tab" role="tab" aria-selected="false" data-t="c"><span class="k">C</span>Memoria iconica</button>
     <button class="tab" role="tab" aria-selected="false" data-t="d"><span class="k">D</span>Ritmo theta</button>
     <button class="tab" role="tab" aria-selected="false" data-t="log"><span class="k">≡</span>Registro</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="guida"><span class="k">?</span>Guida</button>
   </nav>
 
   <!-- ===== A ===== -->
@@ -251,6 +273,199 @@ tamburo</textarea></label>
     </div>
   </section>
 
+  <!-- ===== GUIDA ===== -->
+  <section class="panel guida" id="t-guida" hidden>
+    <h2>Guida all'uso</h2>
+<p>Il Laboratorio PNEV è la <strong>sezione sperimentale</strong> del metodo. Le prove si fanno nella <strong>pagina del Laboratorio</strong>, sul computer o sul telefono dentro il visore. I risultati si salvano qui, nella <strong>scheda del paziente</strong> del gestionale.</p>
+<blockquote>
+<p><strong>Sperimentale vuol dire:</strong> non ci sono ancora valori di riferimento. Ogni paziente si confronta <strong>con sé stesso nel tempo</strong> (prima, durante e dopo il trattamento). I risultati non servono a fare diagnosi.</p>
+</blockquote>
+<hr />
+<h2>1. Prima di iniziare (una volta sola)</h2>
+<ol>
+<li><strong>Attrezzatura</strong></li>
+<li>Moduli B, C e D: basta il computer con le casse o le cuffie.</li>
+<li>Modulo A: serve il <strong>visore per smartphone</strong> con telecomando Bluetooth, oppure gli <strong>occhiali rosso/ciano</strong> sul monitor (lente rossa sull'occhio sinistro).</li>
+<li><strong>Collegamento al gestionale:</strong> apri il Laboratorio e nel campo <strong>"Indirizzo della pagina Laboratorio nel gestionale"</strong> incolla l'indirizzo del gestionale (quello che vedi in alto nel browser). Il Laboratorio lo ricorda.</li>
+<li><strong>Telecomando del visore:</strong> accoppialo al telefono dalle impostazioni Bluetooth. Il tasto principale vale come "visto". Le frecce su e giù valgono come "sopra" e "sotto".</li>
+</ol>
+<h2>2. Sicurezza: ogni volta</h2>
+<ul>
+<li><strong>Screening obbligatorio.</strong> Escludi chi ha epilessia personale o familiare, crisi scatenate da luci o videogiochi, o emicrania con aura.</li>
+<li>Spunta la casella dello screening: senza la spunta le prove non partono.</li>
+<li><strong>Esc</strong> (o il pulsante <strong>Stop</strong>) ferma subito tutto.</li>
+<li>Fermati al primo segno di fastidio: mal di testa, nausea, occhi che lacrimano, malessere.</li>
+<li>Bambini: sedute brevi (10–15 minuti) e sempre con l'adulto presente.</li>
+</ul>
+<h2>3. Il flusso di lavoro in 6 passi</h2>
+<ol>
+<li><strong>Scegli il paziente.</strong> Il Laboratorio non usa mai nome e cognome: usa un <strong>codice paziente</strong> del tipo <strong>PNEV-XXXX-XXXX</strong>, calcolato da cognome, nome e data di nascita. Dal codice non si risale al nome. Ci sono tre modi per inserirlo:</li>
+<li><strong>Dal gestionale (il più comodo):</strong> apri la scheda del paziente → Laboratorio PNEV → <strong>"🧪 Apri il Laboratorio per questo paziente"</strong>. Il codice è già inserito.</li>
+<li><strong>Calcolandolo nel Laboratorio:</strong> apri "Calcola il codice da cognome, nome e data di nascita", scrivi i dati e premi <strong>"Calcola codice"</strong>. Maiuscole, accenti, spazi e apostrofi non contano: "D'Amato Maria Rosa" e "DAMATO MARIAROSA" danno lo stesso codice.</li>
+<li><strong>Dai pazienti recenti:</strong> il dispositivo ricorda i codici già usati, con le sole iniziali (per esempio "DM · PNEV-4ZVP-CH1S"). Sceglilo dall'elenco.</li>
+<li>Compila il campo <strong>Seduta</strong> (per esempio "baseline", "T1", "dopo 6 settimane") e spunta lo <strong>screening</strong>.</li>
+<li>Scegli il modulo (A, B, C o D) e fai la prova.</li>
+<li>Apri la linguetta <strong>Registro</strong>: ogni prova conclusa aggiunge una riga.</li>
+<li>Premi <strong>"Invia al gestionale"</strong>. Si apre il gestionale direttamente su <strong>Valutazione PNEV → Sperimentale → Laboratorio PNEV</strong>. Il gestionale <strong>riconosce il paziente dal codice</strong> e lo propone già.</li>
+<li>Controlla il paziente e premi <strong>"Salva nella scheda"</strong>.</li>
+</ol>
+<p><strong>Senza collegamento</strong> (per esempio il telefono nel visore senza rete): nel Registro premi <strong>"Copia codice"</strong>. Poi, nel gestionale, apri <strong>"Incolla un codice dal Registro del Laboratorio"</strong>, incolla e salva.</p>
+<p>Lo stesso risultato non si può salvare due volte: se lo invii di nuovo, il gestionale te lo segnala.</p>
+<hr />
+<h2>4. I quattro moduli</h2>
+<h3>A · Visore binoculare: quanto ci mette una parola a "emergere"</h3>
+<p><strong>Cosa misura.</strong> Un occhio vede una parola (o la pagina di un libro) che compare piano piano. L'altro occhio vede macchie colorate che cambiano di continuo e la coprono. Il paziente preme appena vede <strong>qualcosa</strong>. Il <strong>tempo di emersione</strong> misura quanto in fretta lo stimolo arriva alla coscienza. Gli stimoli che hanno già una traccia in memoria tendono a emergere prima. Il nome tecnico della tecnica è <em>breaking Continuous Flash Suppression</em>.</p>
+<p><strong>Come si fa</strong></p>
+<ol>
+<li>Visualizzazione: <strong>Visore smartphone</strong> oppure <strong>Occhiali rosso/ciano</strong>.</li>
+<li><strong>Occhio dominante:</strong> quello che riceve la maschera. Per trovarlo, fai guardare al paziente un oggetto lontano attraverso un buco fatto con le mani: l'occhio che resta allineato è il dominante.</li>
+<li>Premi <strong>"Prova la fusione (10 s)"</strong>. Il paziente deve vedere <strong>un solo quadrato</strong> con la croce al centro. Se ne vede due, regola le lenti del visore (distanza tra le pupille e messa a fuoco) oppure il campo <strong>"Spostamento per la fusione"</strong>.</li>
+<li>Scegli gli stimoli:</li>
+<li><strong>Parole:</strong> Lista 1 con parole familiari o significative per il paziente (nomi di casa, parole emotive), Lista 2 con parole di controllo (non-parole).</li>
+<li><strong>Pagine di libro:</strong> in "Tipo di stimolo" scegli <strong>Pagine di libro o immagini</strong>. Carica nel <strong>Set 1</strong> le foto delle pagine già lette. Il <strong>Set 2</strong> sono pagine mai viste; se lo lasci vuoto, il controllo diventa la stessa pagina capovolta.</li>
+<li>Avvia la prova.</li>
+<li>Il paziente fissa la croce e preme (tasto o tocco) appena vede qualcosa.</li>
+<li>Poi dice se era <strong>sopra</strong> o <strong>sotto</strong> la croce: freccia su o giù, oppure tocco nella metà alta o bassa dello schermo.</li>
+</ol>
+<p><strong>Impostazioni di partenza consigliate:</strong> maschera a 8 cambi al secondo, intensità 0,6, comparsa in 2 secondi, massimo 10 secondi per prova, 8 prove per lista.</p>
+<p><strong>Come leggere i risultati</strong></p>
+<ul>
+<li><strong>Emersione (mediana, in secondi):</strong> più bassa = lo stimolo arriva prima alla coscienza.</li>
+<li><strong>Vantaggio della Lista 1 (o del Set 1):</strong> un valore <strong>positivo</strong> vuol dire che le parole familiari, o le pagine lette, emergono prima di quelle di controllo. È il segno di una traccia.</li>
+<li><strong>Prove corrette:</strong> se il paziente sbaglia spesso sopra/sotto, sta premendo a caso. Fai ripetere la spiegazione.</li>
+<li><strong>Prove senza risposta:</strong> se sono molte, la maschera è troppo forte. Abbassa l'intensità a 0,4–0,5.</li>
+</ul>
+<h3>B · Suono e sonno: rinforzare la memoria mentre si dorme</h3>
+<p><strong>Cosa misura.</strong> Ogni parola si impara insieme a un suono tutto suo. Durante un pisolino o la notte si fanno risentire, a volume bassissimo, <strong>solo i suoni di metà delle parole</strong>. Al risveglio si confronta il ricordo delle parole "riattivate" con quello delle altre. Il nome tecnico è <em>Targeted Memory Reactivation</em>.</p>
+<p><strong>Come si fa (5 fasi, nello stesso giorno o la sera prima)</strong></p>
+<ol>
+<li><strong>Crea il set:</strong> scrivi da 12 a 24 parole (immagini concrete) e premi <strong>"Crea il set di suoni"</strong>. Il programma decide da solo quali saranno riattivate.</li>
+<li><strong>Apprendimento:</strong> ogni parola compare per 2,5 secondi con il suo suono, per due giri.</li>
+<li><strong>Test prima del sonno:</strong> suona un suono e il paziente dice la parola. Premi <strong>R</strong> (ricordata) o <strong>N</strong> (non ricordata); con la barra spaziatrice il suono si ripete.</li>
+<li><strong>Riattivazione nel sonno:</strong></li>
+<li>Imposta l'attesa (tempo per addormentarsi, di solito 20 minuti), la durata (30 minuti), l'intervallo (8 secondi) e il <strong>volume</strong> (0,05–0,10).</li>
+<li>Prima prova il volume: si deve sentire appena, <strong>non deve svegliare</strong>.</li>
+<li>Lascia il telefono acceso accanto al letto, collegato al caricatore.</li>
+<li><strong>Test dopo il sonno:</strong> come il test prima.</li>
+</ol>
+<p>Se il test del giorno dopo si fa su un altro dispositivo, usa <strong>"Copia codice del set"</strong> e poi <strong>"Ripristina set"</strong> sull'altro dispositivo.</p>
+<p><strong>Come leggere i risultati</strong></p>
+<ul>
+<li><strong>Riattivate: prima → dopo</strong> e <strong>Non riattivate: prima → dopo</strong>, in percentuale.</li>
+<li><strong>Effetto della riattivazione (in punti):</strong> quanto sono migliorate le parole riattivate <strong>in più</strong> rispetto alle altre. <strong>Positivo</strong> = la riattivazione nel sonno ha aiutato.</li>
+<li>Con poche parole il risultato oscilla molto: confronta più sedute.</li>
+</ul>
+<h3>C · Memoria iconica: quanta "fotografia" resta dopo un lampo</h3>
+<p><strong>Cosa misura.</strong> Una griglia di 12 lettere compare per un attimo (50 millisecondi). Subito dopo, un <strong>suono</strong> indica quale riga riferire: <strong>acuto = riga in alto</strong>, <strong>medio = riga centrale</strong>, <strong>grave = riga in basso</strong>. Dal numero di lettere giuste si stima quante lettere erano ancora "visibili" nella traccia per qualche istante. È il paradigma di Sperling (1960).</p>
+<p><strong>Come si fa</strong></p>
+<ol>
+<li>Usa il monitor, con il paziente seduto a circa 60 cm.</li>
+<li>Premi <strong>"Ascolta i tre suoni"</strong> e fai riconoscere acuto, medio e grave prima di iniziare.</li>
+<li>Avvia la prova. Il paziente dice le lettere a voce, tu le scrivi nel riquadro e premi <strong>Invio</strong>. L'ordine delle lettere non conta.</li>
+<li>Le prove di <strong>resoconto totale</strong> (nessun suono, "dimmi tutte le lettere che ricordi") servono da confronto.</li>
+</ol>
+<p><strong>Come leggere i risultati</strong></p>
+<ul>
+<li><strong>Lettere disponibili subito (su 12):</strong> la ricchezza della traccia visiva immediata.</li>
+<li><strong>Resoconto totale:</strong> quante lettere si riescono a dire "a memoria". Di solito sono 4 o 5.</li>
+<li>La tabella mostra come la traccia <strong>cala</strong> quando il suono arriva più tardi (0 → 1000 ms). Se il calo è molto lento o la traccia resta molto ricca, siamo davanti a una memoria visiva fuori dal comune.</li>
+</ul>
+<h3>D · Ritmo theta: la cadenza aiuta a ricordare?</h3>
+<p><strong>Cosa misura.</strong> Due blocchi di parole scorrono veloci al centro dello schermo. Il primo va a ritmo <strong>regolare</strong> (4–8 al secondo, la banda "theta" legata alla memoria), con un clic a ogni parola. Il secondo ha la <strong>stessa velocità media ma è irregolare</strong>. Poi un test mescola le parole viste con parole nuove, e il paziente dice per ognuna se l'ha vista.</p>
+<p><strong>Come si fa</strong></p>
+<ol>
+<li>Frequenza di partenza <strong>5 Hz</strong>, 16 parole per blocco, clic attivo, 2 ripetizioni.</li>
+<li>Il paziente guarda le parole senza fare niente. L'ordine dei blocchi è casuale.</li>
+<li>Nel test, per ogni parola premi <strong>S</strong> (vista) o <strong>N</strong> (nuova).</li>
+</ol>
+<p><strong>Come leggere i risultati</strong></p>
+<ul>
+<li><strong>Riconosciute</strong> in ciascun blocco e <strong>falsi riconoscimenti</strong> (parole nuove dette "viste").</li>
+<li><strong>d′ (d-primo):</strong> misura quanto il paziente distingue le parole viste da quelle nuove. 0 = a caso; da 1 in su = buono; da 2 in su = ottimo.</li>
+<li>Se il <strong>d′ ritmico</strong> è più alto dell'<strong>irregolare</strong>, la cadenza aiuta quel paziente a fissare le informazioni: è un'indicazione utile per il trattamento, anche insieme ai protocolli MAPS.</li>
+</ul>
+<hr />
+<h2>5. Nel gestionale</h2>
+<p><strong>Dove:</strong> Valutazione PNEV → <strong>🧪 Sperimentale</strong> → <strong>🧪 Laboratorio PNEV</strong>.</p>
+<ul>
+<li><strong>Pulsante "🧪 Apri il Laboratorio per questo paziente":</strong> compare quando è aperta la scheda di un paziente, insieme al suo codice Laboratorio.</li>
+<li><strong>Risultato ricevuto dal Laboratorio:</strong> compare in alto quando arrivi dal link "Invia al gestionale". Il gestionale cerca il codice in anagrafica e propone il paziente; controlla e premi <strong>"Salva nella scheda"</strong>.</li>
+<li>Se il codice non corrisponde al paziente aperto, o a nessun paziente, il gestionale ti avvisa e puoi scegliere tu l'ID.</li>
+<li><strong>Incolla un codice:</strong> per i risultati copiati a mano.</li>
+<li><strong>Andamento nel tempo:</strong> compare quando un paziente ha almeno due sedute dello stesso modulo. Le misure seguite sono:</li>
+<li>A: emersione e vantaggio;</li>
+<li>B: effetto della riattivazione;</li>
+<li>C: lettere disponibili e resoconto totale;</li>
+<li>D: d′ ritmico e d′ irregolare.</li>
+<li><strong>Tutti i risultati:</strong> l'elenco completo. In "Dettaglio o eliminazione" vedi ogni singola prova; un risultato si elimina solo spuntando la conferma.</li>
+<li><strong>Sicurezza dei dati:</strong> ogni studio vede solo i propri risultati. Nel Laboratorio e nel link viaggiano solo il codice PNEV e i risultati, mai nome e cognome.</li>
+</ul>
+<h2>6. Protocollo consigliato</h2>
+<ol>
+<li><strong>Baseline:</strong> una seduta per ogni modulo che ti interessa, con le impostazioni di partenza. Nel campo Seduta scrivi "baseline".</li>
+<li><strong>Allenamento:</strong> 10–15 minuti, 2–3 volte a settimana, sempre con le <strong>stesse impostazioni</strong>, altrimenti i risultati non si possono confrontare.</li>
+<li><strong>Retest dopo 6–8 settimane:</strong> stesse impostazioni della baseline, Seduta "T1".</li>
+<li>Annota nel diario clinico cosa hai osservato: attenzione, fatica, strategie del paziente.</li>
+</ol>
+<h2>7. Problemi frequenti</h2>
+<table>
+<thead>
+<tr>
+<th>Problema</th>
+<th>Soluzione</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nel visore si vedono due quadrati</td>
+<td>Regola la distanza tra le lenti e la messa a fuoco, poi lo "Spostamento per la fusione"</td>
+</tr>
+<tr>
+<td>Il telecomando non risponde</td>
+<td>Controlla che sia accoppiato. Su alcuni modelli c'è un interruttore di modalità: scegli quella che fa da "tastiera" o "mouse"</td>
+</tr>
+<tr>
+<td>Il paziente non vede mai nulla (modulo A)</td>
+<td>Abbassa l'intensità della maschera o aumenta il tempo massimo</td>
+</tr>
+<tr>
+<td>I suoni non si sentono</td>
+<td>Alza il volume del dispositivo e tocca un pulsante della pagina prima di iniziare: i browser attivano l'audio solo dopo un tocco</td>
+</tr>
+<tr>
+<td>"Imposta l'indirizzo sopra" nel Registro</td>
+<td>Manca l'indirizzo del gestionale (vedi capitolo 1)</td>
+</tr>
+<tr>
+<td>"Codice illeggibile" nel gestionale</td>
+<td>Il codice è stato copiato a metà: ricopialo per intero</td>
+</tr>
+<tr>
+<td>"Il codice non corrisponde a nessun paziente"</td>
+<td>Cognome, nome o data scritti diversamente dall'anagrafica (per esempio un nome in più o la data sbagliata). Correggi l'anagrafica o scegli l'ID a mano</td>
+</tr>
+<tr>
+<td>Manca il pulsante "Apri il Laboratorio per questo paziente"</td>
+<td>In anagrafica mancano cognome, nome o data di nascita</td>
+</tr>
+<tr>
+<td>"Risultato già salvato"</td>
+<td>Nessun problema: c'era già, non è stato creato un doppione</td>
+</tr>
+<tr>
+<td>Ho chiuso il Laboratorio prima di inviare</td>
+<td>Il Registro si svuota quando chiudi la pagina: invia sempre i risultati prima di chiudere</td>
+</tr>
+</tbody>
+</table>
+<h2>8. Limiti</h2>
+<ul>
+<li>È uno strumento <strong>sperimentale e di ricerca</strong>: non esistono ancora valori normativi.</li>
+<li>I risultati si leggono come <strong>cambiamento nello stesso paziente</strong>, non come confronto con gli altri.</li>
+<li>Il Laboratorio non sostituisce la valutazione clinica PNEV.</li>
+</ul>
+  </section>
+
   <!-- ===== LOG ===== -->
   <section class="panel" id="t-log" hidden>
     <h2>Registro della seduta</h2>
@@ -288,7 +503,7 @@ const GREY='#808080';
 /* ---------- Tabs ---------- */
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x===b?'true':'false'));
-  ['a','b','c','d','log'].forEach(t=>$('t-'+t).hidden=(t!==b.dataset.t));
+  ['a','b','c','d','log','guida'].forEach(t=>$('t-'+t).hidden=(t!==b.dataset.t));
 }));
 
 /* ---------- Frame rate ---------- */
@@ -347,6 +562,33 @@ function txt(c,s,x,y,px,col,alpha=1,font=FONT,weight=600){c.save();c.globalAlpha
 function cross(c,x,y,s,col){c.save();c.strokeStyle=col;c.lineWidth=Math.max(2,s/8);c.beginPath();c.moveTo(x-s/2,y);c.lineTo(x+s/2,y);c.moveTo(x,y-s/2);c.lineTo(x,y+s/2);c.stroke();c.restore();}
 
 /* ---------- Log ---------- */
+/* ---------- Codice paziente PNEV ----------
+   Stesso calcolo di modules/laboratorio/db_laboratorio.py (codice_pnev):
+   COGNOME|NOME|AAAA-MM-GG normalizzati -> SHA-256 -> 40 bit -> 8 caratteri base32. */
+const ALFA='0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const normNome=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z]/g,'');
+async function codicePnev(cog,nom,data){
+  const testo='PNEV-LAB-v1|'+normNome(cog)+'|'+normNome(nom)+'|'+data;
+  const h=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(testo)));
+  let n=0n;for(let i=0;i<5;i++)n=(n<<8n)|BigInt(h[i]);
+  let c='';for(let i=0;i<8;i++)c+=ALFA[Number((n>>BigInt(35-5*i))&31n)];
+  return 'PNEV-'+c.slice(0,4)+'-'+c.slice(4);}
+const iniziali=(cog,nom)=>(normNome(cog)[0]||'')+(normNome(nom)[0]||'');
+function leggiRecenti(){try{return JSON.parse(localStorage.getItem('pnevlab.recenti')||'[]');}catch(e){return [];}}
+function ricordaPaziente(code,ini){const l=leggiRecenti().filter(x=>x.code!==code);l.unshift({code,ini:ini||'',ts:Date.now()});try{localStorage.setItem('pnevlab.recenti',JSON.stringify(l.slice(0,40)));}catch(e){}mostraRecenti();}
+function mostraRecenti(){const sel=$('recenti');const l=leggiRecenti();sel.innerHTML='<option value="">'+(l.length?'— scegli —':'nessuno ancora')+'</option>'+l.map(x=>`<option value="${esc(x.code)}">${esc((x.ini?x.ini+' · ':'')+x.code)}</option>`).join('');}
+$('recenti').addEventListener('change',e=>{if(e.target.value)$('patient').value=e.target.value;});
+$('cCalc').addEventListener('click',async()=>{
+  const cog=$('cCog').value,nom=$('cNom').value,nas=$('cNas').value;
+  if(!normNome(cog)||!normNome(nom)||!/^\d{4}-\d{2}-\d{2}$/.test(nas)){$('cMsg').textContent='Servono cognome, nome e data di nascita.';return;}
+  try{const code=await codicePnev(cog,nom,nas);$('patient').value=code;ricordaPaziente(code,iniziali(cog,nom));
+    $('cCog').value='';$('cNom').value='';$('cNas').value='';$('cMsg').textContent='Codice '+code+' inserito e ricordato.';}
+  catch(e){$('cMsg').textContent='Calcolo non disponibile in questo browser: usa il pulsante del gestionale.';}});
+/* arrivo dal gestionale: ...#pz-PNEV-XXXX-XXXX-RM */
+function leggiHash(){const m=/^#pz-(PNEV-[0-9A-Z]{4}-[0-9A-Z]{4})(?:-([A-Z]{1,3}))?$/.exec(location.hash||'');
+  if(m){$('patient').value=m[1];ricordaPaziente(m[1],m[2]||'');}}
+mostraRecenti();leggiHash();window.addEventListener('hashchange',leggiHash);
+
 const LOG=[];
 /* codifica per il gestionale: JSON -> deflate-raw -> base64url ("z1.") oppure JSON -> base64url ("j1.") */
 function b64url(bytes){let s='';for(let i=0;i<bytes.length;i++)s+=String.fromCharCode(bytes[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
