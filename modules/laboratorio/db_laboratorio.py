@@ -14,6 +14,8 @@ Convenzioni: segnaposto %s, BIGSERIAL, TEXT, TIMESTAMPTZ, Europe/Rome.
 from __future__ import annotations
 
 import base64
+import re
+import unicodedata
 import hashlib
 import json
 import zlib
@@ -144,10 +146,103 @@ def data_esecuzione(dati: dict) -> datetime | None:
         return None
 
 
-def paziente_dal_codice(dati: dict) -> int | None:
-    """Il campo «Codice paziente» della pagina deve contenere l'ID del gestionale."""
-    valore = "".join(ch for ch in str(dati.get("paziente", "")) if ch.isdigit())
-    return int(valore) if valore else None
+# ---------------------------------------------------------------- codice paziente
+# Codice pseudonimo PNEV-XXXX-XXXX calcolato da cognome, nome e data di nascita.
+# Lo stesso calcolo e' nella pagina del Laboratorio (funzione codicePnev):
+# se cambi qualcosa qui, va cambiato identico anche li'.
+_ALFABETO = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_RE_CODICE = re.compile(r"^PNEV-[0-9A-Z]{4}-[0-9A-Z]{4}$")
+
+
+def normalizza_nome(testo) -> str:
+    """Maiuscolo, senza accenti, solo lettere A-Z (spazi e apostrofi spariscono)."""
+    t = unicodedata.normalize("NFD", str(testo or ""))
+    t = "".join(ch for ch in t if not ("\u0300" <= ch <= "\u036f"))
+    return re.sub(r"[^A-Z]", "", t.upper())
+
+
+def normalizza_data(valore) -> str | None:
+    """Data di nascita in formato AAAA-MM-GG, da date/datetime o da testo."""
+    if valore is None or valore == "":
+        return None
+    if hasattr(valore, "strftime"):
+        return valore.strftime("%Y-%m-%d")
+    t = str(valore).strip()[:10]
+    for formato in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(t, formato).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def codice_pnev(cognome, nome, data_nascita) -> str | None:
+    data = normalizza_data(data_nascita)
+    cog, nom = normalizza_nome(cognome), normalizza_nome(nome)
+    if not (cog and nom and data):
+        return None
+    impr = hashlib.sha256(f"PNEV-LAB-v1|{cog}|{nom}|{data}".encode("utf-8")).digest()
+    n = int.from_bytes(impr[:5], "big")
+    c = "".join(_ALFABETO[(n >> (35 - 5 * i)) & 31] for i in range(8))
+    return f"PNEV-{c[:4]}-{c[4:]}"
+
+
+def iniziali(cognome, nome) -> str:
+    return (normalizza_nome(cognome)[:1] + normalizza_nome(nome)[:1])
+
+
+def dati_paziente(conn, paziente_id: int) -> dict | None:
+    """Cognome, nome e data di nascita dall'anagrafica (tabella Pazienti)."""
+    cur = _cursore(conn)
+    try:
+        cur.execute("SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti WHERE id = %s", (int(paziente_id),))
+        r = cur.fetchone()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+    finally:
+        _chiudi(cur)
+    if not r:
+        return None
+    return {"id": _valore(r, 0, "id"), "cognome": _valore(r, 1, "cognome"),
+            "nome": _valore(r, 2, "nome"), "data_nascita": _valore(r, 3, "data_nascita")}
+
+
+def trova_paziente_da_codice(conn, codice: str) -> int | None:
+    """Cerca in anagrafica il paziente il cui codice PNEV coincide."""
+    codice = (codice or "").strip().upper()
+    if not _RE_CODICE.match(codice):
+        return None
+    cur = _cursore(conn)
+    try:
+        cur.execute("SELECT id, Cognome, Nome, Data_Nascita FROM Pazienti")
+        righe = cur.fetchall() or []
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+    finally:
+        _chiudi(cur)
+    for r in righe:
+        if codice_pnev(_valore(r, 1, "cognome"), _valore(r, 2, "nome"), _valore(r, 3, "data_nascita")) == codice:
+            return int(_valore(r, 0, "id"))
+    return None
+
+
+def paziente_dal_codice(dati: dict, conn=None) -> int | None:
+    """Dal campo «Codice paziente»: codice PNEV-XXXX-XXXX (cercato in anagrafica)
+    oppure, per i risultati vecchi, l'ID numerico del gestionale."""
+    valore = str(dati.get("paziente", "")).strip()
+    if _RE_CODICE.match(valore.upper()):
+        return trova_paziente_da_codice(conn, valore) if conn is not None else None
+    cifre = "".join(ch for ch in valore if ch.isdigit())
+    return int(cifre) if cifre else None
+
 
 # ---------------------------------------------------------------- database
 # Il gestionale avvolge le connessioni in un suo cursore (_PgCursor) che non

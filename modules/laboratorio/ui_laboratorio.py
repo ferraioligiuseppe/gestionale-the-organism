@@ -71,7 +71,14 @@ def _riquadro_salvataggio(conn, codice: str, paziente_id: int | None, studio_id:
 
     _mostra_anteprima(dati)
 
-    dal_codice = db.paziente_dal_codice(dati)
+    dal_codice = db.paziente_dal_codice(dati, conn)
+    codice_txt = str(dati.get("paziente") or "")
+    if codice_txt.upper().startswith("PNEV-"):
+        if dal_codice:
+            st.success(f"Codice {codice_txt} riconosciuto: paziente {dal_codice} dell'anagrafica.")
+        else:
+            st.warning(f"Il codice {codice_txt} non corrisponde a nessun paziente in anagrafica "
+                       "(controlla cognome, nome e data di nascita). Scegli tu l'ID qui sotto.")
     proposto = paziente_id or dal_codice
     if paziente_id and dal_codice and paziente_id != dal_codice:
         st.warning(f"Il codice indica il paziente {dal_codice}, ma è aperta la scheda del paziente {paziente_id}. Controlla prima di salvare.")
@@ -134,12 +141,50 @@ def _andamento(righe: list[dict]) -> None:
             st.line_chart(df)
 
 
+def _manuale() -> None:
+    """Manuale d'uso: modules/laboratorio/manuale_laboratorio.md."""
+    from pathlib import Path
+    percorso = Path(__file__).resolve().parent / "manuale_laboratorio.md"
+    try:
+        testo = percorso.read_text(encoding="utf-8")
+    except OSError:
+        st.warning("Manuale non trovato: carica manuale_laboratorio.md nella cartella modules/laboratorio.")
+        return
+    st.download_button("Scarica il manuale (testo)", testo.encode("utf-8"),
+                       file_name="Manuale_Laboratorio_PNEV.md", mime="text/markdown")
+    st.markdown(testo)
+
+
 def render_laboratorio(conn, paziente_id: int | None = None, studio_id: int | None = None) -> None:
     st.subheader("Laboratorio PNEV · sezione sperimentale")
     st.caption("Visore binoculare, suono e sonno, memoria iconica, ritmo theta. Le prove si svolgono nella pagina del Laboratorio; qui si salvano e si seguono nel tempo.")
     st.link_button("Apri il Laboratorio PNEV", LAB_URL)
 
+    scheda_risultati, scheda_manuale = st.tabs(["📊 Risultati", "📖 Manuale d'uso"])
+    with scheda_manuale:
+        _manuale()
+    with scheda_risultati:
+        _risultati(conn, paziente_id, studio_id)
+
+
+def _pulsante_paziente(conn, paziente_id: int) -> None:
+    """Apre il Laboratorio con il codice del paziente gia' inserito."""
+    p = db.dati_paziente(conn, paziente_id)
+    codice = db.codice_pnev(p["cognome"], p["nome"], p["data_nascita"]) if p else None
+    if not codice:
+        st.caption("Per il codice Laboratorio servono cognome, nome e data di nascita in anagrafica.")
+        return
+    ini = db.iniziali(p["cognome"], p["nome"])
+    c1, c2 = st.columns([1, 2])
+    c1.link_button("🧪 Apri il Laboratorio per questo paziente", f"{LAB_URL}#pz-{codice}-{ini}")
+    c2.markdown(f"Codice Laboratorio del paziente: **`{codice}`**  \n"
+                "Il Laboratorio lo inserisce da solo e lo ricorda tra i pazienti recenti.")
+
+
+def _risultati(conn, paziente_id: int | None, studio_id: int | None) -> None:
     db.crea_tabella(conn)
+    if paziente_id:
+        _pulsante_paziente(conn, paziente_id)
 
     # 1) risultato arrivato dal link «Invia al gestionale»
     in_arrivo = st.session_state.get(CHIAVE_STATO)
