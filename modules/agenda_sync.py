@@ -171,6 +171,12 @@ def carica_pazienti_match(conn) -> list[dict]:
                 out.append({"id": r[0], "cognome": r[1] or "", "nome": r[2] or ""})
         return out
     except Exception:
+        # Senza rollback la transazione resta «in errore» e fa fallire
+        # tutte le letture successive sulla stessa connessione.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return []
 
 

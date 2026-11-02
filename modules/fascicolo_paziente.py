@@ -73,6 +73,7 @@ ETICHETTE = {
     "archivio_relazioni": ("Archivio relazioni", "📚 Archivio relazioni"),
     "grafo_sessioni": ("Giochiamo imparando — prove touch", "✍️ Giochiamo imparando (prove touch)"),
     "registro_attivita": ("Registro attività", "🕒 Cronologia"),
+    "brogliaccio": ("Brogliaccio (telefonate, cose da fare)", "📒 Brogliaccio dello studio"),
     "consensi_privacy": ("Consensi privacy", "🔒 Privacy & Consensi"),
 }
 

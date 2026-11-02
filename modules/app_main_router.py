@@ -608,6 +608,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     # ── PAZIENTI ──────────────────────────────────────────────────────
     if sotto == "🏠 Dashboard":
         _render_dashboard(conn); return True
+    if sotto == "📒 Brogliaccio dello studio":
+        try:
+            from .brogliaccio.ui_brogliaccio import render_brogliaccio
+            render_brogliaccio(conn)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore brogliaccio: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
     if sotto == "📅 Agenda appuntamenti":
         try:
             from .agenda import render_agenda
