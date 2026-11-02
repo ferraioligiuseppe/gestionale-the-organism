@@ -379,6 +379,35 @@ def _crea_e_seleziona(conn, cognome, nome, dn, sesso, tel):
 
 
 # ════════════════════════════════════════════════════════════════════
+#  RICERCA
+# ════════════════════════════════════════════════════════════════════
+
+def _norm_ricerca(testo) -> str:
+    """Maiuscolo e senza accenti: «Nicolò» e «NICOLO» diventano uguali."""
+    import unicodedata
+    t = unicodedata.normalize("NFD", str(testo or ""))
+    return "".join(c for c in t if not unicodedata.combining(c)).upper()
+
+
+def _filtra_pazienti(pazienti, cerca: str):
+    """Ogni parola scritta deve comparire in cognome, nome, telefono o ID,
+    in qualunque ordine: «ferraioli giuseppe», «giuseppe ferraioli» e
+    «ferr giu» trovano lo stesso paziente. Prima l'intera frase veniva
+    cercata dentro il solo cognome o il solo nome, e non trovava nessuno.
+    In cima chi ha il cognome che comincia con la prima parola scritta."""
+    parole = _norm_ricerca(cerca).split()
+    if not parole:
+        return pazienti
+    trovati = []
+    for p in pazienti:
+        testo = _norm_ricerca(" ".join(str(p.get(k) or "") for k in ("cognome", "nome", "telefono", "id")))
+        if all(w in testo for w in parole):
+            trovati.append(p)
+    trovati.sort(key=lambda p: 0 if _norm_ricerca(p.get("cognome")).startswith(parole[0]) else 1)
+    return trovati
+
+
+# ════════════════════════════════════════════════════════════════════
 #  DIALOG SELEZIONE
 # ════════════════════════════════════════════════════════════════════
 
@@ -414,20 +443,13 @@ def _corpo_seleziona(conn, ns="default"):
     # sempre la lista intera invece del risultato filtrato.
     cerca = st.text_input(
         "Cerca",
-        placeholder="🔍 Cognome, nome, ID o telefono...",
+        placeholder="🔍 Cognome e nome, ID o telefono — poi premi Invio",
         key=f"paz_attivo_cerca_box_{ns}",
         label_visibility="collapsed",
     )
 
     if cerca.strip():
-        q = cerca.strip().upper()
-        pazienti = [
-            p for p in pazienti
-            if q in (p.get("cognome", "") or "").upper()
-            or q in (p.get("nome", "") or "").upper()
-            or q in (p.get("telefono", "") or "")
-            or q in str(p.get("id", ""))
-        ]
+        pazienti = _filtra_pazienti(pazienti, cerca)
 
     # Filtro per età della scheda aperta: in Screening 0-4 anni si vedono solo
     # i bambini di quell'età, in WHODAS solo gli adulti, e così via. Le fasce
@@ -485,7 +507,7 @@ def _corpo_seleziona(conn, ns="default"):
             pazienti = [p for p in pazienti if (p.get("cognome") or "").strip().upper().startswith(lettera)]
             st.caption(f"{len(pazienti)} cognomi con la {lettera} · tocca di nuovo la lettera per tornare a tutti")
         else:
-            st.caption("Tocca una lettera, oppure scrivi le prime lettere del cognome nel campo in alto.")
+            st.caption("Tocca una lettera, oppure scrivi cognome e nome nel campo in alto e premi Invio.")
 
     PER_PAG = 30
     # Elenco tipo foglio Excel: tutte le righe in un'unica lista che scorre,
