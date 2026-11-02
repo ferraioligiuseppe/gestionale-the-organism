@@ -54,7 +54,7 @@ MAX_CODICE = 60_000  # caratteri: oltre è sicuramente un errore
 DDL = """
 CREATE TABLE IF NOT EXISTS lab_risultati (
     id           BIGSERIAL PRIMARY KEY,
-    studio_id    BIGINT,                      -- ADATTA: colonna tenant usata dalle policy RLS
+    studio_id    BIGINT      NOT NULL DEFAULT NULLIF(current_setting('app.current_studio', true), '')::bigint,
     paziente_id  BIGINT      NOT NULL,
     modulo       TEXT        NOT NULL,
     seduta       TEXT,
@@ -68,8 +68,27 @@ CREATE TABLE IF NOT EXISTS lab_risultati (
     impronta     TEXT        UNIQUE           -- impedisce di salvare due volte lo stesso risultato
 );
 CREATE INDEX IF NOT EXISTS lab_risultati_paziente_idx
-    ON lab_risultati (paziente_id, modulo, eseguito_il);
+    ON lab_risultati (studio_id, paziente_id, modulo, eseguito_il)
 """
+
+# Sicurezza multi-studio (RLS): stessa convenzione di PECS e genosociogramma.
+# Lo studio arriva dalla connessione (app_core: -c app.current_studio=<id>).
+# La prima parte sistema la tabella creata dalla versione precedente del
+# modulo, dove studio_id poteva restare vuoto.
+RLS_SQL = """
+UPDATE lab_risultati SET studio_id = 1 WHERE studio_id IS NULL;
+ALTER TABLE lab_risultati ALTER COLUMN studio_id
+    SET DEFAULT NULLIF(current_setting('app.current_studio', true), '')::bigint;
+ALTER TABLE lab_risultati ALTER COLUMN studio_id SET NOT NULL;
+ALTER TABLE lab_risultati ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lab_risultati FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS lab_risultati_tenant ON lab_risultati;
+CREATE POLICY lab_risultati_tenant ON lab_risultati
+    USING (studio_id = NULLIF(current_setting('app.current_studio', true), '')::bigint)
+    WITH CHECK (studio_id = NULLIF(current_setting('app.current_studio', true), '')::bigint)
+"""
+
+_SCHEMA_PRONTO = False
 
 
 class CodiceNonValido(ValueError):
@@ -164,11 +183,25 @@ _COLONNE = ["id", "modulo", "seduta", "operatore", "parametri", "risultato",
 
 
 def crea_tabella(conn) -> None:
+    """Crea tabella e protezione RLS se mancano. Lavora una sola volta per avvio:
+    gli ALTER TABLE bloccano la tabella e non vanno ripetuti a ogni pagina."""
+    global _SCHEMA_PRONTO
+    if _SCHEMA_PRONTO:
+        return
     cur = _cursore(conn)
     try:
         for istruzione in [x.strip() for x in DDL.split(";") if x.strip()]:
             cur.execute(istruzione)
         conn.commit()
+        cur.execute("SELECT relrowsecurity, relforcerowsecurity FROM pg_class "
+                    "WHERE relname = 'lab_risultati' AND relkind = 'r'")
+        stato = cur.fetchone()
+        protetta = bool(_valore(stato, 0, "relrowsecurity")) and bool(_valore(stato, 1, "relforcerowsecurity"))
+        if not protetta:
+            for istruzione in [x.strip() for x in RLS_SQL.split(";") if x.strip()]:
+                cur.execute(istruzione)
+            conn.commit()
+        _SCHEMA_PRONTO = True
     except Exception:
         try:
             conn.rollback()
@@ -188,7 +221,8 @@ def salva_risultato(conn, paziente_id: int, dati: dict, codice: str, studio_id: 
             INSERT INTO lab_risultati
                 (studio_id, paziente_id, modulo, seduta, operatore, parametri, risultato,
                  metriche, prove, eseguito_il, impronta)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+            VALUES (COALESCE(%s::bigint, NULLIF(current_setting('app.current_studio', true), '')::bigint),
+                    %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
             ON CONFLICT (impronta) DO NOTHING
             RETURNING id
             """,
