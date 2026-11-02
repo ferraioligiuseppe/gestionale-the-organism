@@ -14,6 +14,17 @@ from .app_menu import (
     AREA_MARKETING, AREA_STUDIO, AREA_TERAPIA_PNEV, RAMI_PER_AREA,
 )
 
+# ── Laboratorio PNEV (sezione sperimentale) ───────────────────────────
+# Voce aggiunta qui per non toccare app_menu.py: compare nell'area
+# «🧠 Valutazione PNEV», ramo «🧪 Sperimentale». Quando il Laboratorio
+# esce dalla fase sperimentale si può spostare in app_menu.PNEV_RAMI.
+VOCE_LABORATORIO = "🧪 Laboratorio PNEV"
+try:
+    from .app_menu import AREA_PNEV as _AREA_PNEV_LAB
+    RAMI_PER_AREA.get(_AREA_PNEV_LAB, {}).setdefault("🧪 Sperimentale", [VOCE_LABORATORIO])
+except Exception:
+    _AREA_PNEV_LAB = None
+
 
 # ══════════════════════════════════════════════════════════════════════
 #  SELETTORE PAZIENTE
@@ -1094,6 +1105,32 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     if sotto == "👁️ Eye tracking":
         from .ui_eyetracking import render_eyetracking
         render_eyetracking(conn, st.session_state.get("paziente_attivo_id")); return True
+    if sotto == VOCE_LABORATORIO:
+        # Non e' in VOCI_CON_PAZIENTE: un risultato arrivato dal link
+        # «Invia al gestionale» porta gia' l'ID del paziente, quindi non
+        # deve restare bloccato sulla scelta del paziente.
+        try:
+            from .laboratorio.ui_laboratorio import render_laboratorio, CHIAVE_STATO
+            if st.session_state.get(CHIAVE_STATO):
+                try:
+                    from .paziente_attivo import paziente_attivo_id
+                    _pid_lab = paziente_attivo_id()
+                except Exception:
+                    _pid_lab = None
+            else:
+                _pid_lab = header_paziente_attivo(conn)
+            render_laboratorio(conn, paziente_id=_pid_lab,
+                               studio_id=st.session_state.get("studio_id", 1))
+        except Exception as e:
+            import traceback
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            st.error(f"Errore Laboratorio PNEV: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
     if sotto == "🩶 Postura (Wii Balance Board)":
         try:
             from .ui_stabilometria import render_stabilometria
@@ -2053,6 +2090,17 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     # Salto "in sospeso" richiesto da un'altra pagina (es. ▶️ Apri DEM).
     # Va applicato PRIMA di creare i widget, altrimenti Streamlit blocca
     # la modifica delle chiavi nav_area / nav_sotto_*.
+    # Risultato in arrivo dal Laboratorio PNEV (link «Invia al gestionale»,
+    # ...?lab=...): lo conserva in sessione e apre la pagina del Laboratorio.
+    try:
+        if st.query_params.get("lab") and _AREA_PNEV_LAB:
+            from .laboratorio.ui_laboratorio import cattura_codice_da_url
+            cattura_codice_da_url()
+            st.session_state["goto_area"] = _AREA_PNEV_LAB
+            st.session_state["goto_sotto"] = VOCE_LABORATORIO
+    except Exception:
+        pass
+
     _goto_a = st.session_state.pop("goto_area", None)
     if _goto_a in AREE_ORDINE:
         st.session_state["nav_area"] = _goto_a
@@ -2298,3 +2346,4 @@ def dispatch_main_section(*, sezione: str,
         return True
 
     return False
+
