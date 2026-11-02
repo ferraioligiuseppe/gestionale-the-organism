@@ -8,9 +8,19 @@ condizioni visive si confrontano con i dati uditivi nello stesso
 screening. Sessioni ripetute nel tempo (training), sia in studio
 sia da casa tramite link con token.
 """
+import base64
+import os
+from datetime import datetime
+
 import streamlit as st
+import streamlit.components.v1 as components
 
 from modules.pnev_pubblico import db_pnev_pubblico as db
+
+# Lettore MAPS-Read dentro il gestionale (stesso programma di pnev.it, versione senza blocco di dominio):
+# a fine seduta manda i dati qui e la seduta si salva da sola.
+_LETTORE = components.declare_component(
+    "maps_read_lettore", path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "maps_read_component"))
 
 MAPS_READ_URL_DEFAULT = "https://www.pnev.it/wp-content/uploads/maps-read/MAPS-Read-v1.html"
 
@@ -42,12 +52,20 @@ def render_maps_read_studio(conn, paz_id, paziente):
     else:
         utente_id = utente[0]
 
-    token = db.crea_magic_link(conn, utente_id)
-    url_player = f"{MAPS_READ_URL_DEFAULT}?t={token}"
-
-    st.link_button("🔤 Apri MAPS-Read (nuova scheda)", url_player, type="primary", use_container_width=True)
-    st.caption("Usalo in studio con il paziente davanti a te, oppure manda il link al genitore per farlo riprovare a casa.")
-    st.code(url_player, language=None)
+    tab_qui, tab_link = st.tabs(["🖥️ Usa qui nel gestionale", "🔗 Link per casa o scheda nuova"])
+    with tab_qui:
+        st.caption("Il lettore si apre qui sotto. Per CLEAR servono le cuffie e il permesso del microfono. "
+                   "A fine seduta (💾 Salva e vedi il riepilogo) la seduta si registra da sola in questo paziente, con l'audio.")
+        valore = _LETTORE(key=f"maps_read_{paz_id}", default=None)
+        if isinstance(valore, dict) and valore.get("id") and valore.get("id") != st.session_state.get("maps_read_ultimo"):
+            st.session_state["maps_read_ultimo"] = valore["id"]
+            _salva_da_lettore(conn, utente_id, valore)
+    with tab_link:
+        token = db.crea_magic_link(conn, utente_id)
+        url_player = f"{MAPS_READ_URL_DEFAULT}?t={token}"
+        st.link_button("🔤 Apri MAPS-Read (nuova scheda)", url_player, type="primary", use_container_width=True)
+        st.caption("Usalo in una scheda a parte, oppure manda il link al genitore per farlo riprovare a casa.")
+        st.code(url_player, language=None)
 
     st.divider()
     st.markdown("**📋 Sessioni già registrate per questo paziente**")
@@ -58,7 +76,7 @@ def render_maps_read_studio(conn, paz_id, paziente):
         for s in sessioni:
             _, g, data_s, contenuto, condizione, testo_usato, cpre, fpre, cpost, fpost, facilita, note, audio_url = s
             riga = (f"Giorno {g} — {data_s:%d/%m/%Y %H:%M} — **{condizione}** "
-                    f"— comfort {cpre}→{cpost} · fatica {fpre}→{fpost} · {facilita or '—'}")
+                    f"— comfort {cpre or '—'}→{cpost or '—'} · fatica {fpre or '—'}→{fpost or '—'} · {facilita or '—'}")
             if audio_url:
                 cA, cB = st.columns([5, 1])
                 cA.write(riga)
@@ -104,3 +122,62 @@ def render_maps_read_studio(conn, paz_id, paziente):
                 )
                 st.success(f"Sessione del giorno {giorno} salvata ✅" + (" (audio caricato)" if audio_url else ""))
                 st.rerun()
+
+
+def _giorno_corrente(conn, utente_id) -> int:
+    """Stesso giorno se oggi c'è già una seduta, altrimenti il giorno successivo all'ultimo."""
+    sessioni = db.get_sessioni_read(conn, utente_id) or []
+    if not sessioni:
+        return 1
+    oggi = datetime.now().date()
+    for s in sessioni:
+        try:
+            if s[2].date() == oggi:
+                return int(s[1])
+        except Exception:
+            pass
+    return max(int(s[1]) for s in sessioni) + 1
+
+
+def _num(x):
+    """Risposta 1-5; None se la domanda è stata saltata."""
+    try:
+        return int(x) if x not in (None, "", "—") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _salva_da_lettore(conn, utente_id, v: dict) -> None:
+    """Salva la seduta arrivata dal lettore incorporato (stessa tabella delle sedute da casa)."""
+    giorno = _giorno_corrente(conn, utente_id)
+    condizione = (v.get("condizione") or "Nessun supporto").strip()
+    note = []
+    a = v.get("analisi") or {}
+    if a.get("disponibile"):
+        note.append(f"Lettura: {a.get('secondi')} s · {a.get('wpm')} parole/min · corrette {a.get('corrette')}/{a.get('totali')}")
+    c = v.get("clear") or {}
+    if c:
+        agg = len(c.get("aggiustamenti") or [])
+        note.append(f"CLEAR: orecchio {c.get('orecchio')}, ritardo {c.get('ritardo_iniziale')}→{c.get('ritardo_finale')} ms"
+                    + (f", adattivo ({agg} aggiustamenti)" if c.get("adattivo") else ""))
+    audio_url = None
+    if v.get("audio_b64"):
+        try:
+            from modules.dropbox_upload import upload_audio_bytes
+            est = "webm" if "webm" in (v.get("audio_tipo") or "webm") else "ogg"
+            nome = "".join(ch for ch in condizione[:24] if ch.isalnum() or ch in " -_").strip().replace(" ", "_") or "lettura"
+            audio_url = upload_audio_bytes(base64.b64decode(v["audio_b64"]),
+                                           f"/maps-read/{utente_id}/giorno{giorno}_{nome}_{v.get('id', '')[-6:]}.{est}")
+        except Exception as e:
+            st.warning(f"Audio non caricato su Dropbox ({e}): la seduta viene salvata senza audio.")
+    try:
+        db.salva_sessione_read(
+            conn, utente_id, giorno=giorno, contenuto=v.get("contenuto") or "Brano narrativo",
+            condizione=condizione, testo_usato=(v.get("testo") or "").strip(),
+            comfort_pre=_num(v.get("comfort_pre")), fatica_pre=_num(v.get("fatica_pre")),
+            comfort_post=_num(v.get("comfort_post")), fatica_post=_num(v.get("fatica_post")),
+            facilita=None if v.get("facilita") in (None, "", "—") else v.get("facilita"),
+            note=" · ".join(note), audio_url=audio_url)
+        st.success(f"✓ Seduta del giorno {giorno} salvata: {condizione}" + (" (con audio)" if audio_url else ""))
+    except Exception as e:
+        st.error(f"Seduta non salvata: {e}")
