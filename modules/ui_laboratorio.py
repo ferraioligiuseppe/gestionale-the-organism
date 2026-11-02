@@ -91,13 +91,37 @@ def _riquadro_salvataggio(conn, codice: str, paziente_id: int | None, studio_id:
         st.rerun()
 
 
+def _quando(r: dict):
+    """Data del risultato come datetime (alcuni cursori la restituiscono come testo)."""
+    v = r.get("eseguito_il") or r.get("salvato_il")
+    if isinstance(v, str):
+        try:
+            from datetime import datetime
+            v = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return v
+
+
+def _data_testo(r: dict) -> str:
+    v = _quando(r)
+    if v is None:
+        return "—"
+    try:
+        return v.astimezone(db.TZ).strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return v.strftime("%d/%m/%Y %H:%M")
+
+
 def _andamento(righe: list[dict]) -> None:
     for modulo, misure in db.METRICHE_ANDAMENTO.items():
         del_modulo = [r for r in righe if r["modulo"] == modulo]
         punti = []
         for r in del_modulo:
-            quando = r["eseguito_il"] or r["salvato_il"]
-            riga = {"Data": pd.to_datetime(quando)}
+            quando = _quando(r)
+            if quando is None:
+                continue
+            riga = {"Data": pd.to_datetime(quando, utc=True)}
             for chiave, etichetta in misure:
                 valore = (r["metriche"] or {}).get(chiave)
                 if isinstance(valore, (int, float)):
@@ -145,7 +169,7 @@ def render_laboratorio(conn, paziente_id: int | None = None, studio_id: int | No
     st.markdown("#### Tutti i risultati")
     tabella = pd.DataFrame([
         {
-            "Data": (r["eseguito_il"] or r["salvato_il"]).astimezone(db.TZ).strftime("%d/%m/%Y %H:%M"),
+            "Data": _data_testo(r),
             "Modulo": db.MODULI.get(r["modulo"], r["modulo"]),
             "Seduta": r["seduta"] or "",
             "Risultato": r["risultato"] or "",
