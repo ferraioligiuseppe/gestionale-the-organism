@@ -130,17 +130,59 @@ def paziente_dal_codice(dati: dict) -> int | None:
     valore = "".join(ch for ch in str(dati.get("paziente", "")) if ch.isdigit())
     return int(valore) if valore else None
 
-
 # ---------------------------------------------------------------- database
+# Il gestionale avvolge le connessioni in un suo cursore (_PgCursor) che non
+# supporta «with conn.cursor() as cur»: qui il cursore si apre e si chiude a mano.
+def _cursore(conn):
+    return conn.cursor()
+
+
+def _chiudi(cur) -> None:
+    try:
+        cur.close()
+    except Exception:
+        pass
+
+
+def _valore(riga, indice: int, chiave: str):
+    """Legge un campo sia da righe-tupla sia da righe-dizionario."""
+    if riga is None:
+        return None
+    if isinstance(riga, dict):
+        return riga.get(chiave)
+    try:
+        return riga[indice]
+    except (KeyError, IndexError, TypeError):
+        try:
+            return riga[chiave]
+        except Exception:
+            return None
+
+
+_COLONNE = ["id", "modulo", "seduta", "operatore", "parametri", "risultato",
+            "metriche", "prove", "eseguito_il", "salvato_il"]
+
+
 def crea_tabella(conn) -> None:
-    with conn.cursor() as cur:
-        cur.execute(DDL)
-    conn.commit()
+    cur = _cursore(conn)
+    try:
+        for istruzione in [x.strip() for x in DDL.split(";") if x.strip()]:
+            cur.execute(istruzione)
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _chiudi(cur)
 
 
 def salva_risultato(conn, paziente_id: int, dati: dict, codice: str, studio_id: int | None = None) -> int | None:
     """Salva un risultato. Restituisce l'id, oppure None se era già stato salvato."""
-    with conn.cursor() as cur:
+    cur = _cursore(conn)
+    try:
         cur.execute(
             """
             INSERT INTO lab_risultati
@@ -165,34 +207,50 @@ def salva_risultato(conn, paziente_id: int, dati: dict, codice: str, studio_id: 
             ),
         )
         riga = cur.fetchone()
-    conn.commit()
-    return riga[0] if riga else None
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        _chiudi(cur)
+    return _valore(riga, 0, "id")
 
 
 def elenco_risultati(conn, paziente_id: int, modulo: str | None = None) -> list[dict]:
-    sql = """
-        SELECT id, modulo, seduta, operatore, parametri, risultato, metriche, prove,
-               eseguito_il, salvato_il
-        FROM lab_risultati
-        WHERE paziente_id = %s
-    """
+    sql = (
+        "SELECT " + ", ".join(_COLONNE) + " FROM lab_risultati WHERE paziente_id = %s"
+    )
     params: list = [int(paziente_id)]
     if modulo:
         sql += " AND modulo = %s"
         params.append(modulo)
     sql += " ORDER BY COALESCE(eseguito_il, salvato_il) DESC"
-    with conn.cursor() as cur:
-        cur.execute(sql, params)
-        colonne = [c[0] for c in cur.description]
-        righe = [dict(zip(colonne, r)) for r in cur.fetchall()]
+    cur = _cursore(conn)
+    try:
+        cur.execute(sql, tuple(params))
+        grezze = cur.fetchall() or []
+    finally:
+        _chiudi(cur)
+    righe = [{c: _valore(r, i, c) for i, c in enumerate(_COLONNE)} for r in grezze]
     for r in righe:  # alcuni driver restituiscono JSONB come stringa
         for k in ("metriche", "prove"):
             if isinstance(r[k], str):
-                r[k] = json.loads(r[k])
+                try:
+                    r[k] = json.loads(r[k])
+                except ValueError:
+                    r[k] = {} if k == "metriche" else []
+            elif r[k] is None:
+                r[k] = {} if k == "metriche" else []
     return righe
 
 
 def elimina_risultato(conn, risultato_id: int) -> None:
-    with conn.cursor() as cur:
+    cur = _cursore(conn)
+    try:
         cur.execute("DELETE FROM lab_risultati WHERE id = %s", (int(risultato_id),))
-    conn.commit()
+        conn.commit()
+    finally:
+        _chiudi(cur)
