@@ -56,6 +56,9 @@ TIPI_CON_IMPORTO = [T_VISITA, T_SEDUTA, T_PAGAM]
 METODI = ["POS", "Contanti", "Bonifico", "Da pagare", "Gratuito"]
 INCASSATI = ["POS", "Contanti", "Bonifico"]
 FATTURA = ["Da fare", "Fatta", "Non serve"]
+PRESTAZIONI = ["Seduta / terapia multisensoriale", "Valutazione / visita", "Esame strumentale",
+               "Seduta online", "Stanza del sale", "Altro"]
+PRESTAZIONE_PROPOSTA = {T_SEDUTA: PRESTAZIONI[0], T_VISITA: PRESTAZIONI[1]}
 
 STATO_APERTO = "aperto"
 STATO_FATTO = "fatto"
@@ -87,10 +90,12 @@ CREATE TABLE IF NOT EXISTS brogliaccio (
 CREATE INDEX IF NOT EXISTS ix_brogliaccio_quando ON brogliaccio (quando DESC);
 CREATE INDEX IF NOT EXISTS ix_brogliaccio_paz ON brogliaccio (paziente_id, quando DESC);
 CREATE INDEX IF NOT EXISTS ix_brogliaccio_aperti ON brogliaccio (stato, assegnato_a) WHERE stato = 'aperto';
-ALTER TABLE brogliaccio ADD COLUMN IF NOT EXISTS importo   NUMERIC(10,2);
-ALTER TABLE brogliaccio ADD COLUMN IF NOT EXISTS pagamento TEXT;
-ALTER TABLE brogliaccio ADD COLUMN IF NOT EXISTS fattura   TEXT;
 """
+
+# Colonne aggiunte dopo (costo, prestazione, fattura, SumUp): si aggiungono SOLO se mancano,
+# così l'ALTER TABLE (che blocca la tabella per un istante) gira una volta sola.
+COLONNE_NUOVE = {"importo": "NUMERIC(10,2)", "pagamento": "TEXT", "fattura": "TEXT",
+                 "prestazione": "TEXT", "fattura_rif": "TEXT", "sumup_code": "TEXT"}
 
 
 # ── Accesso al DB (stesso stile di registro_attivita) ─────────────────
@@ -149,13 +154,21 @@ def _esegui(conn, sql, par=(), ritorna_id=False):
 
 
 def init_db(conn) -> bool:
-    return bool(_esegui(conn, "SET LOCAL lock_timeout = '3000ms';" + DDL))
+    if not _esegui(conn, "SET LOCAL lock_timeout = '3000ms';" + DDL):
+        return False
+    presenti = {r["column_name"] for r in _q(conn, "SELECT column_name FROM information_schema.columns "
+                                                   "WHERE table_name = 'brogliaccio'")}
+    mancanti = [f"ADD COLUMN IF NOT EXISTS {c} {t}" for c, t in COLONNE_NUOVE.items() if c not in presenti]
+    if mancanti:
+        return bool(_esegui(conn, "SET LOCAL lock_timeout = '3000ms'; ALTER TABLE brogliaccio " + ", ".join(mancanti)))
+    return True
 
 
 # ── Scrittura ─────────────────────────────────────────────────────────
 def aggiungi(conn, *, tipo, operatore, utente, paziente_id=None, nominativo="", telefono="",
              sede="", descrizione="", prossimo_passo="", assegnato_a="", scadenza=None,
-             quando=None, rif_data=None, importo=None, pagamento=None, fattura=None):
+             quando=None, rif_data=None, importo=None, pagamento=None, fattura=None,
+             prestazione=None, sumup_code=None):
     """Annota un fatto. Ritorna l'id o None."""
     passo = (prossimo_passo or "").strip()
     stato = STATO_APERTO if passo else STATO_NESSUNO
@@ -164,14 +177,15 @@ def aggiungi(conn, *, tipo, operatore, utente, paziente_id=None, nominativo="", 
     return _esegui(conn,
         "INSERT INTO brogliaccio (quando, paziente_id, nominativo, telefono, tipo, sede, operatore,"
         " descrizione, prossimo_passo, assegnato_a, scadenza, stato, rif_data, creato_da,"
-        " importo, pagamento, fattura)"
-        " VALUES (COALESCE(%s, now()), %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        " importo, pagamento, fattura, prestazione, sumup_code)"
+        " VALUES (COALESCE(%s, now()), %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
         (quando, int(paziente_id) if paziente_id else None, (nominativo or "").strip() or None,
          (telefono or "").strip() or None, tipo, sede or None, operatore or None,
          (descrizione or "").strip() or None, passo or None,
          ((assegnato_a or "").strip() or None) if passo else None,
          scadenza if passo else None, stato, rif_data, utente or None,
-         (round(float(importo), 2) if importo not in (None, "") else None), pagamento or None, fattura or None),
+         (round(float(importo), 2) if importo not in (None, "") else None), pagamento or None, fattura or None,
+         prestazione or None, sumup_code or None),
         ritorna_id=True)
 
 
@@ -259,6 +273,36 @@ def riepilogo_importi(righe) -> dict:
         elif m == "Da pagare":
             r["da_pagare"] += v; r["n_da_pagare"] += 1
     return r
+
+
+# ── Incassi ───────────────────────────────────────────────────────────
+def righe_con_importo(conn, da: dt.date, a: dt.date):
+    """Righe con importo tra due date (estremi compresi), per data del fatto."""
+    return _q(conn, _SEL + " AND b.importo IS NOT NULL AND (b.quando AT TIME ZONE 'Europe/Rome')::date BETWEEN %s AND %s"
+                    " ORDER BY b.quando", (da, a))
+
+
+def fatture_da_fare(conn):
+    return _q(conn, _SEL + " AND b.fattura = 'Da fare' AND b.importo IS NOT NULL ORDER BY b.quando")
+
+
+def segna_fattura(conn, rid, rif, utente=""):
+    """Fattura creata: la riga passa a «Fatta» e il passo «Fare la fattura», se aperto, si chiude."""
+    ok = _esegui(conn, "UPDATE brogliaccio SET fattura='Fatta', fattura_rif=%s WHERE id=%s", (rif, int(rid)))
+    _esegui(conn, "UPDATE brogliaccio SET stato='fatto', chiuso_da=%s, chiuso_il=now(), esito=%s"
+                  " WHERE id=%s AND stato='aperto' AND prossimo_passo ILIKE 'fare la fattura%%'",
+            (utente or None, f"Fattura {rif}", int(rid)))
+    return ok
+
+
+def abbina_sumup(conn, rid, codice):
+    return _esegui(conn, "UPDATE brogliaccio SET sumup_code=%s, pagamento='POS' WHERE id=%s", (codice, int(rid)))
+
+
+def codici_sumup(conn) -> dict:
+    """codice SumUp → id della riga a cui è abbinato."""
+    return {r["sumup_code"]: int(r["id"]) for r in
+            _q(conn, "SELECT id, sumup_code FROM brogliaccio WHERE sumup_code IS NOT NULL AND NOT eliminato")}
 
 
 def del_giorno(conn, giorno: dt.date):

@@ -22,7 +22,7 @@ import streamlit as st
 
 from . import db_brogliaccio as db
 
-VISTE = ["✍️ Annota", "📌 Da fare", "🔎 Cosa manca", "🗓️ Giornata", "📖 Brogliaccio"]
+VISTE = ["✍️ Annota", "📌 Da fare", "🔎 Cosa manca", "🗓️ Giornata", "📖 Brogliaccio", "💶 Incassi"]
 NESSUNO = "— nessun paziente / nuovo contatto —"
 
 
@@ -149,8 +149,11 @@ def render_brogliaccio(conn):
         _vista_cosa_manca(conn, operatori, io)
     elif vista == VISTE[3]:
         _vista_giornata(conn)
-    else:
+    elif vista == VISTE[4]:
         _vista_storico(conn, operatori)
+    else:
+        from .ui_incassi import vista_incassi
+        vista_incassi(conn, operatori, io, _pazienti(conn), _etichetta_paz, _utente())
 
 
 # ── ✍️ Annota ──────────────────────────────────────────────────────────
@@ -178,9 +181,13 @@ def _vista_annota(conn, operatori, io):
         sede = b3.selectbox("Sede", [""] + db.SEDI)
         descrizione = st.text_area("Cosa (in breve)", height=80,
                                    placeholder="es. chiede info sullo screening visivo per il figlio di 7 anni")
-        importo, pagamento, fattura = None, None, None
+        importo, pagamento, fattura, prestazione = None, None, None, None
         if tipo in db.TIPI_CON_IMPORTO:
             st.markdown("**💶 Costo**")
+            prest_def = db.PRESTAZIONE_PROPOSTA.get(tipo)
+            prestazione = st.selectbox("Prestazione", [""] + db.PRESTAZIONI,
+                                       index=(db.PRESTAZIONI.index(prest_def) + 1) if prest_def else 0,
+                                       key=f"brog_prest_{tipo}")
             e1, e2, e3 = st.columns([2, 2, 2])
             importo = e1.number_input("Importo (€)", min_value=0.0, step=5.0, value=None, format="%.2f",
                                       placeholder="es. 30", key=f"brog_imp_{tipo}")
@@ -214,7 +221,8 @@ def _vista_annota(conn, operatori, io):
                           descrizione=descrizione, prossimo_passo=passo, assegnato_a=a_chi,
                           scadenza=entro, quando=quando,
                           rif_data=giorno if quando is not None else None,
-                          importo=importo, pagamento=pagamento or None, fattura=fattura or None)
+                          importo=importo, pagamento=pagamento or None, fattura=fattura or None,
+                          prestazione=prestazione or None)
         if rid:
             st.session_state["_brog_salvato"] = True
             st.rerun()
@@ -503,8 +511,10 @@ def _riga(r, conn=None):
     if r.get("descrizione"):
         testo += f" — {r['descrizione']}"
     if r.get("importo") is not None or r.get("pagamento") or r.get("fattura"):
-        pezzi = [db.euro(r["importo"]) if r.get("importo") is not None else None, r.get("pagamento"),
-                 f"fattura {r['fattura'].lower()}" if r.get("fattura") else None]
+        pezzi = [r.get("prestazione"), db.euro(r["importo"]) if r.get("importo") is not None else None, r.get("pagamento"),
+                 (f"fattura {r['fattura_rif']}" if r.get("fattura_rif") else
+                  (f"fattura {r['fattura'].lower()}" if r.get("fattura") else None)),
+                 "💳 SumUp" if r.get("sumup_code") else None]
         testo += "  \n&nbsp;&nbsp;💶 " + " · ".join(p for p in pezzi if p)
     if r.get("prossimo_passo"):
         testo += f"  \n&nbsp;&nbsp;{stato} {r['prossimo_passo']} → **{r.get('assegnato_a') or '—'}**"
