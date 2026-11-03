@@ -178,6 +178,14 @@ def _vista_annota(conn, operatori, io):
         sede = b3.selectbox("Sede", [""] + db.SEDI)
         descrizione = st.text_area("Cosa (in breve)", height=80,
                                    placeholder="es. chiede info sullo screening visivo per il figlio di 7 anni")
+        importo, pagamento, fattura = None, None, None
+        if tipo in db.TIPI_CON_IMPORTO:
+            st.markdown("**💶 Costo**")
+            e1, e2, e3 = st.columns([2, 2, 2])
+            importo = e1.number_input("Importo (€)", min_value=0.0, step=5.0, value=None, format="%.2f",
+                                      placeholder="es. 30", key=f"brog_imp_{tipo}")
+            pagamento = e2.selectbox("Come ha pagato", [""] + db.METODI, key=f"brog_pag_{tipo}")
+            fattura = e3.selectbox("Fattura", [""] + db.FATTURA, key=f"brog_fat_{tipo}")
         st.markdown("**Prossimo passo** — lascia vuoto se non c'è niente da fare")
         c1, c2, c3 = st.columns([3, 2, 2])
         passo = c1.text_input("Cosa fare", value=db.PASSO_PROPOSTO.get(tipo, ""), key=f"brog_passo_{tipo}")
@@ -195,6 +203,8 @@ def _vista_annota(conn, operatori, io):
         if pid == NESSUNO and not nominativo.strip() and not descrizione.strip():
             st.warning("Scegli un paziente oppure scrivi almeno il nome o cosa è successo.")
             return
+        if fattura == "Da fare" and not (passo or "").strip():
+            passo = "Fare la fattura"
         quando = dt.datetime.combine(giorno, ora).replace(tzinfo=db.TZ)
         if abs((quando - dt.datetime.now(db.TZ)).total_seconds()) < 600:
             quando = None   # «adesso»: lo mette il database
@@ -203,7 +213,8 @@ def _vista_annota(conn, operatori, io):
                           nominativo=nominativo, telefono=telefono, sede=sede,
                           descrizione=descrizione, prossimo_passo=passo, assegnato_a=a_chi,
                           scadenza=entro, quando=quando,
-                          rif_data=giorno if quando is not None else None)
+                          rif_data=giorno if quando is not None else None,
+                          importo=importo, pagamento=pagamento or None, fattura=fattura or None)
         if rid:
             st.session_state["_brog_salvato"] = True
             st.rerun()
@@ -409,6 +420,8 @@ def _vista_giornata(conn):
         d["note"].append(f"{r['tipo']} · {r.get('operatore') or '—'}"
                          + (f" — {r['descrizione']}" if r.get("descrizione") else ""))
 
+    _box_incassi(db.del_giorno(conn, giorno), f"💶 Incassi del {db.fmt(giorno)}")
+
     if not per_paz and not altri:
         st.info("Nessuna attività registrata per questo giorno.")
         return
@@ -460,10 +473,27 @@ def _vista_storico(conn, operatori):
         righe = [r for r in righe if c in " ".join(str(r.get(x) or "") for x in
                  ("cognome", "nome", "nominativo", "telefono", "descrizione", "prossimo_passo", "esito")).lower()]
     st.caption(f"{len(righe)} righe")
+    if any(r.get("importo") is not None for r in righe):
+        _box_incassi(righe, "💶 Importi delle righe qui sotto")
     if not righe:
         st.info("Nessuna annotazione con questi filtri.")
     for r in righe:
         _riga(r, conn=conn)
+
+
+def _box_incassi(righe, titolo):
+    t = db.riepilogo_importi(righe)
+    if not t["n"] and not t["fatture_da_fare"]:
+        return
+    st.markdown(f"##### {titolo}")
+    c = st.columns(5)
+    c[0].metric("Incassato", db.euro(t["incassato"]))
+    for i, m in enumerate(db.INCASSATI, start=1):
+        c[i].metric(m, db.euro(t["per_metodo"][m]))
+    c[4].metric("Da pagare", db.euro(t["da_pagare"]), delta=f"{t['n_da_pagare']} da incassare" if t["n_da_pagare"] else None,
+                delta_color="inverse")
+    if t["fatture_da_fare"]:
+        st.caption(f"🧾 Fatture ancora da fare: **{t['fatture_da_fare']}**")
 
 
 def _riga(r, conn=None):
@@ -472,6 +502,10 @@ def _riga(r, conn=None):
              f"_{r.get('operatore') or '—'}_")
     if r.get("descrizione"):
         testo += f" — {r['descrizione']}"
+    if r.get("importo") is not None or r.get("pagamento") or r.get("fattura"):
+        pezzi = [db.euro(r["importo"]) if r.get("importo") is not None else None, r.get("pagamento"),
+                 f"fattura {r['fattura'].lower()}" if r.get("fattura") else None]
+        testo += "  \n&nbsp;&nbsp;💶 " + " · ".join(p for p in pezzi if p)
     if r.get("prossimo_passo"):
         testo += f"  \n&nbsp;&nbsp;{stato} {r['prossimo_passo']} → **{r.get('assegnato_a') or '—'}**"
         if r.get("stato") == "fatto":

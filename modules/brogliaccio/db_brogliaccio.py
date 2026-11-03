@@ -51,6 +51,12 @@ PASSO_PROPOSTO = {
 
 SEDI = ["Pagani", "Sant'Agnello", "Avellino", "Napoli", "Telefono / online"]
 
+# ── Costo ─────────────────────────────────────────────────────────────
+TIPI_CON_IMPORTO = [T_VISITA, T_SEDUTA, T_PAGAM]
+METODI = ["POS", "Contanti", "Bonifico", "Da pagare", "Gratuito"]
+INCASSATI = ["POS", "Contanti", "Bonifico"]
+FATTURA = ["Da fare", "Fatta", "Non serve"]
+
 STATO_APERTO = "aperto"
 STATO_FATTO = "fatto"
 STATO_NESSUNO = "nessuno"   # solo annotazione, nessun passo da fare
@@ -81,6 +87,9 @@ CREATE TABLE IF NOT EXISTS brogliaccio (
 CREATE INDEX IF NOT EXISTS ix_brogliaccio_quando ON brogliaccio (quando DESC);
 CREATE INDEX IF NOT EXISTS ix_brogliaccio_paz ON brogliaccio (paziente_id, quando DESC);
 CREATE INDEX IF NOT EXISTS ix_brogliaccio_aperti ON brogliaccio (stato, assegnato_a) WHERE stato = 'aperto';
+ALTER TABLE brogliaccio ADD COLUMN IF NOT EXISTS importo   NUMERIC(10,2);
+ALTER TABLE brogliaccio ADD COLUMN IF NOT EXISTS pagamento TEXT;
+ALTER TABLE brogliaccio ADD COLUMN IF NOT EXISTS fattura   TEXT;
 """
 
 
@@ -146,7 +155,7 @@ def init_db(conn) -> bool:
 # ── Scrittura ─────────────────────────────────────────────────────────
 def aggiungi(conn, *, tipo, operatore, utente, paziente_id=None, nominativo="", telefono="",
              sede="", descrizione="", prossimo_passo="", assegnato_a="", scadenza=None,
-             quando=None, rif_data=None):
+             quando=None, rif_data=None, importo=None, pagamento=None, fattura=None):
     """Annota un fatto. Ritorna l'id o None."""
     passo = (prossimo_passo or "").strip()
     stato = STATO_APERTO if passo else STATO_NESSUNO
@@ -154,13 +163,15 @@ def aggiungi(conn, *, tipo, operatore, utente, paziente_id=None, nominativo="", 
         assegnato_a = operatore
     return _esegui(conn,
         "INSERT INTO brogliaccio (quando, paziente_id, nominativo, telefono, tipo, sede, operatore,"
-        " descrizione, prossimo_passo, assegnato_a, scadenza, stato, rif_data, creato_da)"
-        " VALUES (COALESCE(%s, now()), %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        " descrizione, prossimo_passo, assegnato_a, scadenza, stato, rif_data, creato_da,"
+        " importo, pagamento, fattura)"
+        " VALUES (COALESCE(%s, now()), %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
         (quando, int(paziente_id) if paziente_id else None, (nominativo or "").strip() or None,
          (telefono or "").strip() or None, tipo, sede or None, operatore or None,
          (descrizione or "").strip() or None, passo or None,
          ((assegnato_a or "").strip() or None) if passo else None,
-         scadenza if passo else None, stato, rif_data, utente or None),
+         scadenza if passo else None, stato, rif_data, utente or None,
+         (round(float(importo), 2) if importo not in (None, "") else None), pagamento or None, fattura or None),
         ritorna_id=True)
 
 
@@ -222,6 +233,32 @@ def elenco(conn, giorni=7, operatore=None, tipo=None, paziente_id=None, limite=5
         sql += " AND b.paziente_id=%s"
         par.append(int(paziente_id))
     return _q(conn, sql + " ORDER BY b.quando DESC LIMIT %s", tuple(par) + (int(limite),))
+
+
+def euro(v) -> str:
+    """30.5 → «30,50 €»."""
+    try:
+        return f"{float(v):,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+    except (TypeError, ValueError):
+        return "—"
+
+
+def riepilogo_importi(righe) -> dict:
+    """Totali delle righe con importo: incassato (per metodo), da pagare, gratuito, fatture da fare."""
+    r = {"incassato": 0.0, "per_metodo": {m: 0.0 for m in INCASSATI}, "da_pagare": 0.0,
+         "n_da_pagare": 0, "fatture_da_fare": 0, "n": 0}
+    for x in righe:
+        if x.get("fattura") == "Da fare":
+            r["fatture_da_fare"] += 1
+        if x.get("importo") is None:
+            continue
+        v = float(x["importo"]); m = x.get("pagamento") or ""
+        r["n"] += 1
+        if m in INCASSATI:
+            r["incassato"] += v; r["per_metodo"][m] += v
+        elif m == "Da pagare":
+            r["da_pagare"] += v; r["n_da_pagare"] += 1
+    return r
 
 
 def del_giorno(conn, giorno: dt.date):
