@@ -205,6 +205,25 @@ def riassegna(conn, rid, a_chi, scadenza=None):
                    (a_chi, scadenza, int(rid)))
 
 
+_MODIFICABILI = ("quando", "paziente_id", "nominativo", "telefono", "tipo", "sede", "operatore", "descrizione",
+                 "prossimo_passo", "assegnato_a", "scadenza", "importo", "pagamento", "fattura", "prestazione")
+
+
+def aggiorna(conn, rid, campi: dict):
+    """Aggiorna i campi di una riga (dal foglio). Se compare o sparisce il prossimo passo, aggiorna lo stato."""
+    campi = {k: v for k, v in campi.items() if k in _MODIFICABILI}
+    if not campi:
+        return True
+    sets = ", ".join(f"{k}=%s" for k in campi)
+    ok = _esegui(conn, f"UPDATE brogliaccio SET {sets} WHERE id=%s", tuple(campi.values()) + (int(rid),))
+    if "prossimo_passo" in campi:
+        if (campi["prossimo_passo"] or "").strip():
+            _esegui(conn, "UPDATE brogliaccio SET stato='aperto' WHERE id=%s AND stato='nessuno'", (int(rid),))
+        else:
+            _esegui(conn, "UPDATE brogliaccio SET stato='nessuno' WHERE id=%s AND stato='aperto'", (int(rid),))
+    return ok
+
+
 def elimina(conn, rid):
     return _esegui(conn, "UPDATE brogliaccio SET eliminato=TRUE WHERE id=%s", (int(rid),))
 

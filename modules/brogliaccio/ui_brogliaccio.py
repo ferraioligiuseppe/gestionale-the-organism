@@ -22,7 +22,7 @@ import streamlit as st
 
 from . import db_brogliaccio as db
 
-VISTE = ["✍️ Annota", "📌 Da fare", "🔎 Cosa manca", "🗓️ Giornata", "📖 Brogliaccio", "💶 Incassi"]
+VISTE = ["📋 Foglio", "✍️ Annota", "📌 Da fare", "🔎 Cosa manca", "🗓️ Giornata", "📖 Brogliaccio", "💶 Incassi"]
 NESSUNO = "— nessun paziente / nuovo contatto —"
 
 
@@ -142,14 +142,17 @@ def render_brogliaccio(conn):
     vista = st.radio("Vista", VISTE, horizontal=True, key="brog_vista", label_visibility="collapsed")
     st.divider()
     if vista == VISTE[0]:
-        _vista_annota(conn, operatori, io)
+        from .ui_foglio import vista_foglio
+        vista_foglio(conn, operatori, io, _pazienti(conn), _etichetta_paz, _utente())
     elif vista == VISTE[1]:
-        _vista_da_fare(conn, operatori, io)
+        _vista_annota(conn, operatori, io)
     elif vista == VISTE[2]:
-        _vista_cosa_manca(conn, operatori, io)
+        _vista_da_fare(conn, operatori, io)
     elif vista == VISTE[3]:
-        _vista_giornata(conn)
+        _vista_cosa_manca(conn, operatori, io)
     elif vista == VISTE[4]:
+        _vista_giornata(conn)
+    elif vista == VISTE[5]:
         _vista_storico(conn, operatori)
     else:
         from .ui_incassi import vista_incassi
