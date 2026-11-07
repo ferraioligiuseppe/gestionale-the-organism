@@ -309,6 +309,9 @@ SOTTOSEZIONI = {
     ],
     AREA_TERAPIA: [
         "📝 Relazione clinica",
+        # PEI, Profilo Dinamico Funzionale, DF/PF: archivio dei documenti della
+        # scuola e contributo dello studio al GLO (nucleo modules/pei_core).
+        "🏫 PEI e PDF (scuola)",
         "📄 Report PDF con grafici",
         "📊 Export statistici",
         "🧪 Caso demo",

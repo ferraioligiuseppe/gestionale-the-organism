@@ -551,6 +551,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "📎 Documenti clinici", "🗓️ Diario clinico", "🧩 Quadro storico", "🕒 Cronologia", "📚 Archivio relazioni", "💡 Assistente PNEV",
         "📈 Esiti / Follow-up", "📝 Diagnosi assistita",
         "🧩 Rilievi PNEV", "🎙️ Colloqui clinici", "🌳 Genosociogramma", "🥗 Alimentazione",
+        "🏫 PEI e PDF (scuola)",
         "🧬 Genetica PNEV",
         "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
@@ -1223,6 +1224,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         _assistente_coda(conn, paz_id)
+        return True
+    if sotto == "🏫 PEI e PDF (scuola)":
+        try:
+            from .pei.ui_pei import render_pei
+            render_pei(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo PEI e PDF: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
         return True
     if sotto in ("🤖 Relazioni cliniche (AI)", "📝 Relazione clinica"):
         try:

@@ -58,6 +58,9 @@ REGOLE_ETA: dict[str, tuple[int | None, int | None]] = {
     "📚 Strumenti open":                (6, None),
     "🤸 Psicomotricità funzionale":      (None, 12),
     "🔤 Impostazione fonemi":           (None, 12),
+
+    # Documenti scolastici per l'inclusione: dall'infanzia alla fine delle superiori
+    "🏫 PEI e PDF (scuola)":            (2, 22),
 }
 
 # ── Fasce d'età e percorso di valutazione consigliato ──────────────────
