@@ -15,20 +15,34 @@ tipi: text | textarea | select | multiselect | date | checkbox | number | tabell
 (tabella: opzioni = elenco colonne {"key","label","tipo","opzioni"})
 """
 
-SCHEMA_VERSION = "2026.2"
+SCHEMA_VERSION = "2026.4"   # 2026.3: profilo ICF-CY · 2026.4: relazione di funzionamento ICF-CY
 
 TIPI_DOCUMENTO = {
     "PEI": "Piano Educativo Individualizzato",
     "PDF": "Profilo Dinamico Funzionale",
     "DF":  "Diagnosi Funzionale",
     "PF":  "Profilo di Funzionamento",
+    "RICF": "Relazione di funzionamento ICF-CY",
 }
+# tipi mostrati di default; gli altri solo se l'app li chiede (tipi_extra)
+TIPI_BASE = ["PEI", "PDF", "DF", "PF"]
 
 GRADI = ["infanzia", "primaria", "secondaria_I", "secondaria_II"]
 
 
 def F(key, label, tipo="textarea", opzioni=None):
     return {"key": key, "label": label, "tipo": tipo, "opzioni": opzioni or []}
+
+
+from .icf import (CAMPO_CONTESTO, CAMPO_FUNZIONAMENTO, COLONNE_CONTESTO,  # noqa: E402
+                  COLONNE_FUNZIONAMENTO)
+
+CAMPO_ICF_FUNZ = F(CAMPO_FUNZIONAMENTO, "Profilo ICF-CY: funzioni, strutture, attività e partecipazione",
+                   "tabella", COLONNE_FUNZIONAMENTO)
+CAMPO_ICF_CONT = F(CAMPO_CONTESTO, "Profilo ICF-CY: fattori ambientali (barriere e facilitatori)",
+                   "tabella", COLONNE_CONTESTO)
+SEZIONE_ICF = {"id": "icf", "titolo": "Profilo ICF-CY (OMS 2007)",
+               "campi": [CAMPO_ICF_FUNZ, CAMPO_ICF_CONT]}
 
 
 # --------------------------------------------------------------------------
@@ -62,7 +76,7 @@ SCHEMA_PDF = [
         F(f"{k}_breve", "Potenzialità di sviluppo — breve termine (6 mesi)"),
         F(f"{k}_medio", "Potenzialità di sviluppo — medio termine (2 anni)"),
     ]} for k, t in ASSI_PDF
-] + [
+] + [SEZIONE_ICF] + [
     {"id": "sintesi", "titolo": "Sintesi e note", "campi": [
         F("sintesi", "Sintesi complessiva del funzionamento"),
         F("note", "Note"),
@@ -125,6 +139,7 @@ SCHEMA_PEI = [
         F("sintesi_profilo", "Sintesi"),
         F("dimensioni_interessate", "Dimensioni per cui è prevista una progettazione specifica", "multiselect",
           [t for _, t in DIMENSIONI_PEI]),
+        CAMPO_ICF_FUNZ,
     ]},
     {"id": "s3", "titolo": "3. Raccordo con il Progetto Individuale", "campi": [
         F("raccordo", "Sintesi dei contenuti del Progetto Individuale e modalità di coordinamento con il PEI"),
@@ -143,6 +158,7 @@ SCHEMA_PEI = [
         F("verifica_conclusiva_s5", "Verifica conclusiva degli esiti"),
     ]},
     {"id": "s6", "titolo": "6. Osservazioni sul contesto: barriere e facilitatori", "campi": [
+        CAMPO_ICF_CONT,
         F("barriere", "Barriere (contesto fisico, organizzativo, relazionale)"),
         F("facilitatori", "Facilitatori"),
         F("indicazioni_studente_contesto", "Indicazioni fornite dallo studente"),
@@ -217,11 +233,45 @@ SCHEMA_ALLEGATO_SEMPLICE = [
     ]},
 ]
 
+# PF: redatto secondo l'ICF (D.Lgs. 66/2017 art. 5), quindi con il profilo ICF-CY
+SCHEMA_PF = SCHEMA_ALLEGATO_SEMPLICE + [SEZIONE_ICF]
+
+# Relazione di funzionamento ICF-CY: contributo dello studio per famiglia, UVM e GLO.
+# Non è il Profilo di Funzionamento (D.Lgs. 66/2017 art. 5), che redige l'UVM dell'ASL.
+SCHEMA_RICF = [
+    {"id": "dati", "titolo": "Dati generali", "campi": [
+        F("soggetto", "Paziente (nome o codice)", "text"),
+        F("scuola", "Scuola e classe", "text"),
+        F("data_redazione", "Data di redazione", "date"),
+        F("redatto_da", "Redatta da", "text"),
+        F("motivo", "Motivo della valutazione e richiesta"),
+        F("strumenti", "Valutazioni e strumenti utilizzati", "tabella", [
+            {"key": "strumento", "label": "Valutazione / strumento", "tipo": "text"},
+            {"key": "data", "label": "Data", "tipo": "text"},
+            {"key": "esito", "label": "Esito sintetico", "tipo": "text"}]),
+    ]},
+    SEZIONE_ICF,
+    {"id": "sintesi", "titolo": "Sintesi e indicazioni", "campi": [
+        F("sintesi", "Sintesi del funzionamento"),
+        F("punti_forza", "Punti di forza e risorse"),
+        F("indicazioni_scuola", "Indicazioni per la scuola (utili al PEI)"),
+        F("indicazioni_famiglia", "Indicazioni per la famiglia"),
+        F("percorso", "Percorso proposto dallo studio"),
+    ]},
+]
+
+NOTE_FINALI = {
+    "RICF": ("Relazione redatta dallo studio come contributo alla valutazione. Codifica secondo "
+             "ICF-CY (OMS, 2007). Non sostituisce il Profilo di Funzionamento redatto dall'Unità "
+             "di valutazione multidisciplinare (D.Lgs. 66/2017, art. 5)."),
+}
+
 SCHEMI = {
     "PEI": SCHEMA_PEI,
     "PDF": SCHEMA_PDF,
     "DF": SCHEMA_ALLEGATO_SEMPLICE,
-    "PF": SCHEMA_ALLEGATO_SEMPLICE,
+    "PF": SCHEMA_PF,
+    "RICF": SCHEMA_RICF,
 }
 
 

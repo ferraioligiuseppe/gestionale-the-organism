@@ -141,7 +141,7 @@ def _aggiungi(contenuto: dict, chiave: str, testo: str) -> bool:
 def pannello(conn, paz_id, utente, tenant_id):
     """Restituisce la callback (doc, prefisso) da passare a pagina_pei(prima_del_modulo=...)."""
     def disegna(doc, pref):
-        if doc.tipo not in ("PDF", "PEI"):
+        if doc.tipo not in ("PDF", "PEI", "RICF"):
             return
         with st.expander("🧬 Dati dello studio: Profilo Neuro-Evolutivo e relazioni"):
             st.caption("Salva prima le modifiche in corso: l'inserimento ricarica il documento dal database.")
@@ -179,6 +179,8 @@ def pannello(conn, paz_id, utente, tenant_id):
                 testo = str(r["testo"]).strip()
                 st.caption(testo[:500] + ("…" if len(testo) > 500 else ""))
                 destinazioni = ({"sintesi": "Sintesi del PDF", "note": "Note del PDF"} if doc.tipo == "PDF"
+                                else {"sintesi": "Sintesi del funzionamento",
+                                      "indicazioni_scuola": "Indicazioni per la scuola"} if doc.tipo == "RICF"
                                 else {"sintesi_profilo": "Sezione 2 — sintesi",
                                       "situazione_familiare": "Sezione 1 — quadro informativo"})
                 dest = st.selectbox("Dove inserire l'estratto", list(destinazioni),

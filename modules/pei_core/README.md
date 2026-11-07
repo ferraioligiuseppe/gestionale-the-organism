@@ -15,6 +15,7 @@ Va copiato identico in due repo:
 | `pdf_io.py` | Export PDF (ReportLab, verde #1D6B44), validazione PDF caricati, unione PDF |
 | `db.py` | Funzioni PostgreSQL (`%s`, JSONB, BYTEA) |
 | `schema.sql` | Tabelle `pei_documenti` e `pei_allegati` |
+| `icf.py` | ICF-CY (OMS 2007): catalogo codici, qualificatori, raccordo con le dimensioni A-D, bozze sez. 4, 6, 11 |
 | `ui.py` | Pagina Streamlit completa: `pagina_pei(...)` |
 
 ## Requisiti (`requirements.txt`)
@@ -43,6 +44,14 @@ pagina_pei(conn, rif_tipo="paziente", rif_id=paziente_id, utente=operatore,
            tenant_id=studio_id, intestazione=disegna_carta_intestata)
 ```
 `intestazione` è una funzione `(canvas, doc)`: usa quella della carta intestata già esistente.
+
+## ICF-CY (dalla versione 2026.3)
+- PDF e PF hanno la sezione «Profilo ICF-CY»; nel PEI la tabella del funzionamento sta nella sezione 2,
+  i fattori ambientali nella sezione 6.
+- «Precompila sezione 2» copia il profilo ICF dal PF/PDF al PEI.
+- «Riporta il profilo ICF-CY» scrive bozze nelle sezioni 4 (per dimensione), 6 (barriere/facilitatori)
+  e 11 (entità delle difficoltà = qualificatore d più alto per dominio, solo proposta).
+- Per aggiungere codici: una riga in `CATALOGO` di `icf.py`.
 
 ## Note
 - Il modello PEI va ricontrollato sul modello ministeriale ufficiale;

@@ -15,9 +15,10 @@ from datetime import date
 import streamlit as st
 
 from . import db
+from .icf import CAMPO_CONTESTO, CAMPO_FUNZIONAMENTO, controlla_icf, riporta_nel_pei
 from .model import Documento, controlla_anonimato, controlla_percorso, precompila_sezione2
 from .pdf_io import genera_pdf, unisci_pdf
-from .schema import TIPI_DOCUMENTO, schema_per
+from .schema import TIPI_BASE, TIPI_DOCUMENTO, schema_per
 
 
 _ST_VER = tuple(int(x) for x in st.__version__.split(".")[:2])
@@ -88,11 +89,12 @@ def pagina_pei(conn, rif_tipo: str, rif_id: int, utente: str = "",
                anonimo_obbligatorio: bool = False, salva_esportato=None,
                etichetta_salva: str = "Salva una copia nei documenti",
                margini=None, valori_iniziali: dict | None = None,
-               mostra_esempio: bool = False, prima_del_modulo=None):
+               mostra_esempio: bool = False, prima_del_modulo=None, tipi_extra=()):
     """salva_esportato: callback opzionale (nome_file, bytes_pdf, doc) -> bool,
     per archiviare il PDF esportato nell'area documenti dell'app ospite.
     mostra_esempio: offre il caso didattico (TFA Manager).
-    prima_del_modulo: callback (doc, prefisso_chiavi) disegnato sopra i campi."""
+    prima_del_modulo: callback (doc, prefisso_chiavi) disegnato sopra i campi.
+    tipi_extra: tipi in più rispetto a TIPI_BASE (es. ["RICF"] nel gestionale)."""
     st.subheader("PEI · PDF · documenti per l'inclusione")
 
     # ---- scelta documento --------------------------------------------------
@@ -110,7 +112,7 @@ def pagina_pei(conn, rif_tipo: str, rif_id: int, utente: str = "",
 
     if scelta == "__nuovo__":
         c1, c2 = st.columns(2)
-        tipo = c1.selectbox("Tipo", list(TIPI_DOCUMENTO),
+        tipo = c1.selectbox("Tipo", TIPI_BASE + [t for t in tipi_extra if t not in TIPI_BASE],
                             format_func=lambda k: f"{k} — {TIPI_DOCUMENTO[k]}")
         anno = c2.text_input("Anno scolastico", value="2026/2027")
         if st.button("Crea"):
@@ -140,9 +142,9 @@ def pagina_pei(conn, rif_tipo: str, rif_id: int, utente: str = "",
 
     # ---- precompilazione sezione 2 (solo PEI) ------------------------------
     if doc.tipo == "PEI":
-        sorgenti = [d for d in docs if d["tipo"] in ("PF", "PDF", "DF")]
+        sorgenti = [d for d in docs if d["tipo"] in ("PF", "PDF", "DF", "RICF")]
         if sorgenti:
-            with st.popover("Precompila sezione 2 da PF / PDF / DF"):
+            with st.popover("Precompila sezione 2 da PF / PDF / DF / relazione ICF"):
                 s_id = st.selectbox("Documento sorgente", [d["id"] for d in sorgenti],
                                     format_func=lambda i: etichette[i], key=f"{pref}_src")
                 if st.button("Precompila", key=f"{pref}_go"):
@@ -151,6 +153,22 @@ def pagina_pei(conn, rif_tipo: str, rif_id: int, utente: str = "",
                     db.salva_documento(conn, doc, rif_tipo, rif_id, utente, tenant_id, sorgente_id=s_id)
                     azzera_widget(pref)
                     st.rerun()
+
+    # ---- ICF-CY -> sezioni 4, 6 e 11 (solo PEI) -----------------------------
+    if doc.tipo == "PEI" and (doc.contenuto.get(CAMPO_FUNZIONAMENTO) or doc.contenuto.get(CAMPO_CONTESTO)):
+        with st.popover("Riporta il profilo ICF-CY nelle sezioni 4, 6 e 11"):
+            st.caption("Scrive bozze delle osservazioni per dimensione (sez. 4), di barriere e "
+                       "facilitatori (sez. 6) e una proposta di entità delle difficoltà (sez. 11). "
+                       "Salva prima le modifiche alle tabelle ICF.")
+            sovr = st.checkbox("Sovrascrivi anche i campi già compilati", key=f"{pref}_icf_sovr")
+            if st.button("Riporta", key=f"{pref}_icf_go"):
+                esiti = riporta_nel_pei(doc.contenuto, sovrascrivi=sovr)
+                db.salva_documento(conn, doc, rif_tipo, rif_id, utente, tenant_id)
+                st.session_state[f"{pref}_icf_esiti"] = esiti
+                azzera_widget(pref)
+                st.rerun()
+    for e in st.session_state.pop(f"{pref}_icf_esiti", []):
+        st.caption("ICF-CY · " + e)
 
     # ---- aggancio dell'app ospite (es. dati clinici del gestionale) --------
     if prima_del_modulo:
@@ -167,6 +185,8 @@ def pagina_pei(conn, rif_tipo: str, rif_id: int, utente: str = "",
     for a in avvisi:
         st.warning(a)
     for a in controlla_percorso(doc):
+        st.info(a)
+    for a in controlla_icf(doc.contenuto):
         st.info(a)
     if doc.provvisorio:
         st.caption("PEI provvisorio: sono mostrate solo le sezioni prescritte dall'art. 16 c.3 "

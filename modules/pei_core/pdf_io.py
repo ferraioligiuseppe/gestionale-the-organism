@@ -143,6 +143,10 @@ def genera_pdf(doc: Documento, intestazione=None, includi_vuoti: bool = False,
             story.append(KeepTogether([Paragraph(escape(sez["titolo"]), st["sez"])] + blocchi[:2]))
             story += blocchi[2:]
 
+    from .schema import NOTE_FINALI
+    if doc.tipo in NOTE_FINALI:
+        story += [Spacer(1, 10), Paragraph(escape(NOTE_FINALI[doc.tipo]), st["vuoto"])]
+
     def on_page(c, d):
         if intestazione:
             intestazione(c, d)

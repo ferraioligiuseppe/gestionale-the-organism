@@ -15,6 +15,8 @@ from zoneinfo import ZoneInfo
 from .schema import (SCHEMA_VERSION, ASSI_PDF, ASSI_PER_DIMENSIONE, TIPI_DOCUMENTO,
                      SEZIONI_PEI_PROVVISORIO, campi_flat, schema_per)
 
+from .icf import CAMPO_CONTESTO, CAMPO_FUNZIONAMENTO
+
 TZ = ZoneInfo("Europe/Rome")
 
 
@@ -101,6 +103,9 @@ def precompila_sezione2(pei: Documento, sorgente: Documento) -> Documento:
                 righe.append(f"{etichetta}: {att}")
         sintesi = sorgente.contenuto.get("sintesi", "").strip()
         testo = "\n".join(([sintesi, ""] if sintesi else []) + righe)
+    elif sorgente.tipo == "RICF":
+        testo = "\n\n".join(x for x in (sorgente.contenuto.get("sintesi", "").strip(),
+                                         sorgente.contenuto.get("indicazioni_scuola", "").strip()) if x)
     elif sorgente.tipo == "DF":
         c["pf_disponibile"] = False
         c.setdefault("df_riferimento", sorgente.contenuto.get("data_redazione", ""))
@@ -119,6 +124,10 @@ def precompila_sezione2(pei: Documento, sorgente: Documento) -> Documento:
                      for a in assi if str(sorgente.contenuto.get(f"{a}_attuale", "")).strip()]
             if pezzi:
                 c[f"oss_{dim}"] = "BOZZA DAL PDF — da rivedere con l'osservazione in classe\n" + "\n".join(pezzi)
+    # Profilo ICF-CY: dal PF o dal PDF passa al PEI (sezioni 2 e 6)
+    for k in (CAMPO_FUNZIONAMENTO, CAMPO_CONTESTO):
+        if not c.get(k) and sorgente.contenuto.get(k):
+            c[k] = [dict(r) for r in sorgente.contenuto[k]]
     for k in ("soggetto", "anno_scolastico"):
         if not c.get(k) and sorgente.contenuto.get(k):
             c[k] = sorgente.contenuto[k]

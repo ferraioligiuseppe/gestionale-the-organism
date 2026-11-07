@@ -112,15 +112,24 @@ def render_pei(conn, paz_id):
         return
 
     st.caption("Il PEI è redatto e approvato dal GLO della scuola. Qui archivi DF, PDF e PEI "
-               "ricevuti e prepari il contributo dello studio, su carta intestata.")
+               "ricevuti e prepari il contributo dello studio, su carta intestata: la «Relazione di "
+               "funzionamento ICF-CY» è il documento dello studio per famiglia, UVM e GLO.")
     paz = _paziente(conn, paz_id)
     intestazione, margini = _intestazione()
     operatore = str(st.session_state.get("username") or st.session_state.get("user") or "")
     studio = _studio_id(conn)
+    from .fonti_icf import pannello as pannello_icf
     from .fonti_pnev import pannello
+    pann_pnev = pannello(conn, paz_id, operatore, studio)
+    pann_icf = pannello_icf(conn, paz_id, operatore, studio)
+
+    def pannelli(doc, pref):
+        pann_pnev(doc, pref)
+        pann_icf(doc, pref)
+
     pagina_pei(conn, rif_tipo="paziente", rif_id=int(paz_id), utente=operatore,
                tenant_id=studio, intestazione=intestazione, margini=margini,
-               prima_del_modulo=pannello(conn, paz_id, operatore, studio),
+               prima_del_modulo=pannelli, tipi_extra=["RICF"],
                valori_iniziali={"soggetto": paz["nome_completo"]},
                salva_esportato=_archivia(conn, paz_id),
                etichetta_salva="Salva nei Documenti clinici del paziente")

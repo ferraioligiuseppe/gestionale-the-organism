@@ -271,6 +271,41 @@ ESEMPIO_PEI = {
 }
 
 
+# Profilo ICF-CY del caso (coerente con gli assi del PDF)
+ESEMPIO_PDF["icf_funzionamento"] = [
+    {"codice": "b140 Funzioni dell'attenzione", "performance": "2 - difficoltà media (25-49%)",
+     "capacita": "", "note": "Calo dell'attenzione negli ambienti rumorosi"},
+    {"codice": "b164 Funzioni cognitive di livello superiore (esecutive)",
+     "performance": "2 - difficoltà media (25-49%)", "capacita": "",
+     "note": "Flessibilità cognitiva fragile nei compiti aperti"},
+    {"codice": "b152 Funzioni emozionali", "performance": "2 - difficoltà media (25-49%)",
+     "capacita": "", "note": "Ansia anticipatoria ai cambi di programma"},
+    {"codice": "b230 Funzioni uditive", "performance": "1 - difficoltà lieve (5-24%)",
+     "capacita": "", "note": "Ipersensibilità ai rumori di fondo (soglie nella norma)"},
+    {"codice": "d175 Risoluzione di problemi", "performance": "2 - difficoltà media (25-49%)",
+     "capacita": "1 - difficoltà lieve (5-24%)", "note": "Migliora con scaletta guidata"},
+    {"codice": "d350 Conversazione", "performance": "2 - difficoltà media (25-49%)",
+     "capacita": "1 - difficoltà lieve (5-24%)", "note": "Turni e segnali non verbali"},
+    {"codice": "d720 Interazioni interpersonali complesse", "performance": "3 - difficoltà grave (50-95%)",
+     "capacita": "2 - difficoltà media (25-49%)", "note": "Lavori di gruppo non strutturati"},
+    {"codice": "d230 Eseguire la routine quotidiana", "performance": "1 - difficoltà lieve (5-24%)",
+     "capacita": "0 - nessuna difficoltà (0-4%)", "note": "Serve l'orario visivo"},
+]
+ESEMPIO_PDF["icf_contesto"] = [
+    {"codice": "e250 Suono (rumore ambientale)", "valore": ".3 barriera grave",
+     "note": "Laboratori, palestra, intervallo"},
+    {"codice": "e130 Prodotti e tecnologia per l'istruzione (strumenti compensativi)",
+     "valore": "+2 facilitatore medio", "note": "Mappe, scalette, cuffie antirumore"},
+    {"codice": "e330 Persone in posizione di autorità (docenti)", "valore": "+3 facilitatore sostanziale",
+     "note": "Consegne scritte e anticipate"},
+    {"codice": "e425 Atteggiamenti di conoscenti e compagni", "valore": ".1 barriera lieve",
+     "note": "Battute non comprese nel gruppo classe"},
+]
+
+ESEMPIO_PEI.setdefault("icf_funzionamento", [dict(r) for r in ESEMPIO_PDF["icf_funzionamento"]])
+ESEMPIO_PEI.setdefault("icf_contesto", [dict(r) for r in ESEMPIO_PDF["icf_contesto"]])
+
+
 def crea_esempio(conn, rif_tipo: str, rif_id: int, utente: str = "",
                  tenant_id: int | None = None) -> tuple[int, int]:
     """Crea nel database il PDF e il PEI d'esempio collegati. Restituisce (id_pdf, id_pei)."""
