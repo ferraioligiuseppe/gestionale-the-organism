@@ -202,6 +202,38 @@ def riconosci(conn, ana):
     return "nuovo", []
 
 
+def stessa_persona(a1, a2):
+    """Due compilazioni della stessa persona? Stessa data di nascita e stesso nome (anche invertito o con un piccolo
+    errore di battitura). Senza data: nome e cognome uguali più stesso telefono o stessa email.
+    Fratelli (stesso telefono, data diversa) restano distinti."""
+    c1, n1, d1 = norm(a1.get("cognome")), norm(a1.get("nome")), _data(a1.get("data_nascita"))
+    c2, n2, d2 = norm(a2.get("cognome")), norm(a2.get("nome")), _data(a2.get("data_nascita"))
+    if not (c1 and n1 and c2 and n2):
+        return False
+    nomi_simili = (_simile(c1, c2) and _simile(n1, n2)) or (_simile(c1, n2) and _simile(n1, c2))
+    if d1 and d2:
+        return d1 == d2 and nomi_simili
+    stessi_nomi = {c1, n1} == {c2, n2}
+    stesso_tel = tel(a1.get("telefono")) and tel(a1.get("telefono")) == tel(a2.get("telefono"))
+    stessa_mail = str(a1.get("email") or "").strip().lower() and \
+        str(a1.get("email") or "").strip().lower() == str(a2.get("email") or "").strip().lower()
+    return stessi_nomi and bool(stesso_tel or stessa_mail)
+
+
+def raggruppa_arrivi(lista):
+    """Raggruppa gli arrivi in attesa per persona. Ritorna una lista di gruppi (liste di arrivi), nell'ordine di arrivo."""
+    gruppi = []
+    for a in lista:
+        ana = a["anagrafica"] if isinstance(a["anagrafica"], dict) else json.loads(a["anagrafica"] or "{}")
+        for g in gruppi:
+            ana_g = g[0]["anagrafica"] if isinstance(g[0]["anagrafica"], dict) else json.loads(g[0]["anagrafica"] or "{}")
+            if stessa_persona(ana, ana_g):
+                g.append(a); break
+        else:
+            gruppi.append([a])
+    return gruppi
+
+
 # ───────────────────────────── salvataggio nell'anamnesi (come i link personali) ─────────────────────────────
 def salva_in_anamnesi(cur, paziente_id, q_data, q_summary, chiave_json, motivo_label):
     import pnev_module as pnev
@@ -385,45 +417,71 @@ def _collega(conn, arr, paz_id, stato):
         return str(e)
 
 
+def _collega_tutti(conn, gruppo, paz_id, stato):
+    errori = [e for e in (_collega(conn, a, paz_id, stato) for a in gruppo) if e]
+    return "; ".join(errori) if errori else None
+
+
 def _scheda_arrivo(conn):
     Q = _questionari()
     lista = _righe(conn, "SELECT * FROM questionari_arrivo WHERE stato='da_verificare' ORDER BY creato_il")
     if not lista:
         st.success("Nessun questionario da verificare. Quelli riconosciuti con certezza sono già nelle schede dei pazienti.")
         return
-    for a in lista:
+    gruppi = raggruppa_arrivi(lista)
+    if len(gruppi) < len(lista):
+        st.caption(f"{len(lista)} questionari da {len(gruppi)} persone: le compilazioni della stessa persona sono raggruppate.")
+    for g in gruppi:
+        a = g[0]
         ana = a["anagrafica"] if isinstance(a["anagrafica"], dict) else json.loads(a["anagrafica"] or "{}")
-        cand = a["candidati"] if isinstance(a["candidati"], list) else json.loads(a["candidati"] or "[]")
+        cand, visti = [], set()
+        for x in g:                                   # candidati di tutte le compilazioni, senza doppioni
+            for c in (x["candidati"] if isinstance(x["candidati"], list) else json.loads(x["candidati"] or "[]")):
+                if c["id"] not in visti:
+                    visti.add(c["id"]); cand.append(c)
         dn = _data(ana.get("data_nascita"))
+        nomi_q = ", ".join(Q.get(x["questionario"], x["questionario"]) for x in g)
+        quanti = f"{len(g)} questionari" if len(g) > 1 else nomi_q
         titolo = (f"{ESITI.get(a['esito'], a['esito'])} · {ana.get('cognome','').upper()} {ana.get('nome','').upper()}"
-                  f"{' · ' + dn.strftime('%d/%m/%Y') if dn else ''} · {Q.get(a['questionario'], a['questionario'])} · {str(a['creato_il'])[:10]}")
+                  f"{' · ' + dn.strftime('%d/%m/%Y') if dn else ''} · {quanti} · {str(a['creato_il'])[:10]}")
+        chiave = f"{a['id']}"
         with st.expander(titolo):
             st.caption(f"Compilato da: {'genitore ' + ana.get('genitore','') if ana.get('chi_compila') == 'genitore' else 'la persona stessa'} · "
                        f"tel. {ana.get('telefono') or '—'} · {ana.get('email') or '—'} · {ana.get('citta') or '—'} · consenso {ana.get('consenso_il') or 'no'}")
+            if len(g) > 1:
+                st.markdown(f"**{len(g)} questionari della stessa persona:**")
+                for x in g:
+                    k1, k2 = st.columns([5, 1])
+                    k1.write(f"• {Q.get(x['questionario'], x['questionario'])} — {str(x['creato_il'])[:16]}")
+                    if k2.button("🗑️ Scarta", key=f"qa_scarta1_{x['id']}", help="Scarta solo questa compilazione"):
+                        _esegui(conn, "UPDATE questionari_arrivo SET stato='scartato', gestito_il=now() WHERE id=%s", (x["id"],)); st.rerun()
+            tutti = f" tutti ({len(g)})" if len(g) > 1 else ""
             for c in cand:
                 k1, k2 = st.columns([4, 1])
                 k1.write(f"**{c['nome']}** — {c['motivo']}")
-                if k2.button("Collega", key=f"qa_col_{a['id']}_{c['id']}"):
-                    err = _collega(conn, a, c["id"], "collegato")
+                if k2.button("Collega" + tutti, key=f"qa_col_{chiave}_{c['id']}"):
+                    err = _collega_tutti(conn, g, c["id"], "collegato")
                     st.error(err) if err else st.rerun()
             st.markdown(("**Oppure crea un nuovo paziente**" if cand else "**Crea il nuovo paziente**") + " (controlla i dati):")
-            with st.form(f"qa_nuovo_paz_{a['id']}"):
+            with st.form(f"qa_nuovo_paz_{chiave}"):
                 c1, c2, c3 = st.columns(3)
                 mod = {"cognome": c1.text_input("Cognome", ana.get("cognome", "")), "nome": c2.text_input("Nome", ana.get("nome", "")),
                        "data_nascita": (c3.date_input("Data di nascita", dn, format="DD/MM/YYYY") or "").__str__(),
                        "sesso": ana.get("sesso", ""), "telefono": ana.get("telefono", ""), "email": ana.get("email", ""), "citta": ana.get("citta", "")}
                 b1, b2 = st.columns(2)
-                crea = b1.form_submit_button("➕ Crea il paziente e collega", type="primary")
-                scarta = b2.form_submit_button("🗑️ Scarta (compilazione non valida)")
+                crea = b1.form_submit_button("➕ Crea il paziente e collega" + tutti, type="primary")
+                scarta = b2.form_submit_button("🗑️ Scarta" + (" tutte" if len(g) > 1 else " (compilazione non valida)"))
             if crea:
                 if not mod["cognome"].strip() or not mod["nome"].strip():
                     st.error("Servono nome e cognome.")
                 else:
                     pid = _crea_paziente(conn, ana, mod)
-                    err = _collega(conn, a, pid, "nuovo_creato") if pid else "paziente non creato"
+                    err = _collega_tutti(conn, g, pid, "nuovo_creato") if pid else "paziente non creato"
                     st.error(err) if err else st.rerun()
             if scarta:
-                _esegui(conn, "UPDATE questionari_arrivo SET stato='scartato', gestito_il=now() WHERE id=%s", (a["id"],)); st.rerun()
+                for x in g:
+                    _esegui(conn, "UPDATE questionari_arrivo SET stato='scartato', gestito_il=now() WHERE id=%s", (x["id"],))
+                st.rerun()
 
 
 def _scheda_archivio(conn):
