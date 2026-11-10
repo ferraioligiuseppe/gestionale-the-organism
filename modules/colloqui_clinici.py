@@ -147,30 +147,52 @@ def trascrivi(dati: bytes, nome: str = "audio.wav") -> tuple[str, str]:
 
 def _acquisisci(audio, key_testo, key_hash, nome):
     """Trascrive un audio nuovo e lo accoda al testo. Va chiamata PRIMA di
-    disegnare il riquadro del testo, altrimenti Streamlit non lo aggiorna."""
+    disegnare il riquadro del testo, altrimenti Streamlit non lo aggiorna.
+
+    Se la trascrizione non riesce l'audio NON viene scartato: resta
+    disponibile per riprovare o per scaricarlo sul computer."""
     if audio is None:
         return
-    dati = audio.getvalue()
-    firma = hashlib.md5(dati).hexdigest()
+    originale = audio.getvalue()
+    firma = hashlib.md5(originale).hexdigest()
     if st.session_state.get(key_hash) == firma:
         return
-    st.session_state[key_hash] = firma
+    k_err = key_hash + "_err"
+    fallita = st.session_state.get(k_err)
+    if isinstance(fallita, dict) and fallita.get("firma") == firma:
+        # già provata e non riuscita: non riprovo da solo a ogni clic
+        st.error(fallita.get("errore") or "Trascrizione non riuscita.")
+        st.warning("La registrazione non è persa: è ancora qui. Riprova, oppure scaricala "
+                   "sul computer per non perderla.")
+        c1, c2 = st.columns(2)
+        if c1.button("🔁 Riprova la trascrizione", key=key_hash + "_riprova", use_container_width=True):
+            st.session_state.pop(k_err, None)
+            st.rerun()
+        c2.download_button("⬇️ Scarica la registrazione", data=originale,
+                           file_name=getattr(audio, "name", None) or nome,
+                           mime=getattr(audio, "type", None) or "audio/wav",
+                           key=key_hash + "_scarica", use_container_width=True)
+        return
     with st.spinner("Trascrizione in corso…"):
         # WAV del browser → MP3 leggero: senza, oltre i ~4 minuti si superava
         # il limite di 25 MB e la trascrizione falliva.
+        dati = originale
         try:
             from .audio_compatto import comprimi, nome_file
             dati, _mime = comprimi(dati, getattr(audio, "type", None) or "audio/wav")
-            nome = nome_file(_mime)
+            nome_t = nome_file(_mime)
         except Exception:
-            nome = getattr(audio, "name", None) or nome
-        testo, err = trascrivi(dati, nome)
+            nome_t = getattr(audio, "name", None) or nome
+        testo, err = trascrivi(dati, nome_t)
     if err:
-        st.error(err)
+        st.session_state[k_err] = {"firma": firma, "errore": err}
+        st.rerun()
         return
+    st.session_state.pop(k_err, None)
+    st.session_state[key_hash] = firma
     prima = (st.session_state.get(key_testo) or "").rstrip()
     st.session_state[key_testo] = (prima + "\n\n" + testo).strip() if prima else testo
-    st.success("Trascritto e aggiunto al testo. Rileggilo e correggilo prima di salvare.")
+    st.success("Trascritto e aggiunto al testo. Il testo viene salvato da solo qui sotto.")
 
 
 # ── Sintesi e rilievi con l'AI ────────────────────────────────────────
@@ -294,20 +316,43 @@ def _nuovo(conn, paz_id, px, tipo_default):
 
         testo = st.text_area("Testo del colloquio", key=k("testo"), height=220,
                              placeholder="La trascrizione compare qui. Puoi correggerla o scrivere a mano.")
-        if st.button("💾 Salva colloquio", key=k("salva"), type="primary", disabled=not testo.strip()):
-            nuovo, err = _esegui(conn,
-                "INSERT INTO colloqui_clinici (paziente_id, data, ruolo, tipo, presenti, professionista, "
-                "consenso_audio, trascrizione) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (int(paz_id), data, ruolo, tipo, presenti.strip(), _utente(), bool(consenso), testo.strip()),
-                ritorna_id=True)
-            if err:
-                st.error(f"Non salvato: {err}")
+
+        # ── Salvataggio automatico ──────────────────────────────────
+        # Appena c'è del testo il colloquio viene scritto nel database, e
+        # riscritto a ogni modifica: se la pagina si ricarica, l'app riparte
+        # o si cambia schermata, il lavoro resta tra i «Colloqui registrati».
+        stato = (str(data), ruolo, tipo, presenti.strip(), bool(consenso), testo.strip())
+        err_auto = ""
+        if testo.strip() and st.session_state.get(k("salvato")) != stato:
+            bozza = st.session_state.get(k("bozza_id"))
+            if bozza:
+                _, err_auto = _esegui(conn,
+                    "UPDATE colloqui_clinici SET data=%s, ruolo=%s, tipo=%s, presenti=%s, consenso_audio=%s, "
+                    "trascrizione=%s, aggiornato_il=CURRENT_TIMESTAMP WHERE id=%s",
+                    (data, ruolo, tipo, presenti.strip(), bool(consenso), testo.strip(), bozza))
             else:
-                st.session_state["_coll_ultimo_ruolo"] = ruolo
-                st.session_state[f"{px}_aperto"] = nuovo
-                for s in ("testo", "presenti", "consenso", "h_mic", "h_file", "mic", "file"):
-                    st.session_state.pop(k(s), None)
-                st.rerun()
+                bozza, err_auto = _esegui(conn,
+                    "INSERT INTO colloqui_clinici (paziente_id, data, ruolo, tipo, presenti, professionista, "
+                    "consenso_audio, trascrizione) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (int(paz_id), data, ruolo, tipo, presenti.strip(), _utente(), bool(consenso), testo.strip()),
+                    ritorna_id=True)
+                if not err_auto:
+                    st.session_state[k("bozza_id")] = bozza
+            if not err_auto:
+                st.session_state[k("salvato")] = stato
+        if err_auto:
+            st.error(f"⚠️ Salvataggio automatico non riuscito: {err_auto}. Copia il testo prima di uscire.")
+        elif st.session_state.get(k("bozza_id")) and st.session_state.get(k("salvato")) == stato:
+            st.caption("✅ Salvato automaticamente. Lo ritrovi tra i «Colloqui registrati» di questo paziente.")
+
+        if st.button("✅ Ho finito: chiudi e apri il colloquio", key=k("salva"), type="primary",
+                     disabled=not testo.strip() or bool(err_auto)):
+            st.session_state["_coll_ultimo_ruolo"] = ruolo
+            st.session_state[f"{px}_aperto"] = st.session_state.get(k("bozza_id"))
+            for s in ("testo", "presenti", "consenso", "h_mic", "h_file", "mic", "file",
+                      "bozza_id", "salvato", "h_mic_err", "h_file_err"):
+                st.session_state.pop(k(s), None)
+            st.rerun()
 
 
 def _dettaglio(conn, paz_id, col, px):
@@ -326,6 +371,17 @@ def _dettaglio(conn, paz_id, col, px):
         testo = st.text_area("Testo del colloquio", key=k("testo"), height=200)
         sintesi = st.text_area("Sintesi clinica", key=k("sintesi"), height=140,
                                placeholder="Premi «Sintesi e rilievi» per farla proporre dall'AI, o scrivila tu.")
+        # Salvataggio automatico delle modifiche (il bottone resta, ma non è più necessario)
+        if k("salvato") not in st.session_state:
+            st.session_state[k("salvato")] = (col.get("trascrizione") or "", col.get("sintesi") or "")
+        if (testo, sintesi) != st.session_state[k("salvato")]:
+            _, _err_a = _esegui(conn, "UPDATE colloqui_clinici SET trascrizione=%s, sintesi=%s, "
+                                      "aggiornato_il=CURRENT_TIMESTAMP WHERE id=%s", (testo, sintesi, cid))
+            if _err_a:
+                st.error(f"⚠️ Salvataggio automatico non riuscito: {_err_a}")
+            else:
+                st.session_state[k("salvato")] = (testo, sintesi)
+                st.caption("✅ Modifiche salvate automaticamente.")
         b1, b2, b3 = st.columns([2, 3, 2])
         if b1.button("💾 Salva modifiche", key=k("salva")):
             _, err = _esegui(conn, "UPDATE colloqui_clinici SET trascrizione=%s, sintesi=%s, "
