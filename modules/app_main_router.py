@@ -320,10 +320,18 @@ def _render_dashboard(conn) -> None:
         except Exception:
             st.caption("—")
 
+    # ── A che punto siamo e qual è il prossimo passo ──────────────────
+    try:
+        from .percorso_paziente import render_percorso
+        render_percorso(conn, paz_id, "dash_perc")
+    except Exception as _e_perc:
+        st.caption(f"Percorso non disponibile: {_e_perc}")
+
     # ── Tutto il paziente in un colpo d'occhio: cosa c'è e cosa manca ──
+    # Chiuso: la strada da seguire è il percorso qui sopra, questo è l'elenco completo.
     try:
         from .fascicolo_paziente import render_fascicolo
-        render_fascicolo(conn, paz_id, "dash_fasc", aperto=True)
+        render_fascicolo(conn, paz_id, "dash_fasc", aperto=False)
     except Exception as _e_fasc:
         st.caption(f"Fascicolo non disponibile: {_e_fasc}")
 
@@ -469,6 +477,9 @@ def _bottone_prossimo_passo(conn, paz_id, sotto_corrente):
     """Bottone in fondo alla schermata che porta al passo successivo della
     sequenza di visita, scelta in base all'età del paziente, senza dover
     tornare al menu e ricercare l'area giusta."""
+    # Sostituito dal bottone unico di modules/percorso_paziente.py, che
+    # compare in fondo a OGNI pagina del percorso (vedi dispatch_smart_section).
+    return
     percorso = _percorso_attuale()
     voci = [p[2] for p in percorso]
     dest = None
@@ -2359,6 +2370,16 @@ def dispatch_smart_section(*, area: str, sotto: str,
             pass
 
     _render_area(area, sotto, conn, is_admin)
+
+    # In fondo a ogni pagina del percorso: «Prossimo passo» e ritorno alla scheda.
+    try:
+        from .percorso_paziente import bottone_in_fondo
+        bottone_in_fondo(conn, sotto)
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 # ══════════════════════════════════════════════════════════════════════
