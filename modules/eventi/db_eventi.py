@@ -74,15 +74,28 @@ def _placeholder(conn: Any) -> str:
     return "%s" if _is_postgres(conn) else "?"
 
 
+def _in_ora_di_roma(d: dict) -> dict:
+    """Porta ogni data/ora con fuso (TIMESTAMPTZ) all'ora italiana.
+
+    Il database le restituisce in UTC: senza questa conversione l'evento
+    delle 20:00 compariva alle 19:00, e il modulo di modifica ripartiva
+    dall'ora sbagliata, togliendo un'altra ora a ogni salvataggio."""
+    for k, v in d.items():
+        if isinstance(v, datetime) and v.tzinfo is not None:
+            d[k] = v.astimezone(ROME_TZ)
+    return d
+
+
 def _row_to_dict(cur, row) -> Optional[dict]:
     """Converte una row in dict usando cur.description; gestisce DictRow di psycopg2."""
     if row is None:
         return None
     try:
-        return dict(row)
+        d = dict(row)
     except Exception:
         cols = [d[0] for d in cur.description]
-        return dict(zip(cols, row))
+        d = dict(zip(cols, row))
+    return _in_ora_di_roma(d)
 
 
 def _rows_to_dicts(cur, rows) -> list[dict]:
