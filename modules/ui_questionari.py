@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 import json
+import urllib.parse
 import datetime
 import smtplib
 from email.message import EmailMessage
@@ -250,7 +251,7 @@ def _genera_e_invia(conn, cur, paziente_id: int, q_code: str, q_label: str,
 
         # WhatsApp link
         testo_wa = f"Gentile genitore, la preghiamo di compilare il questionario {q_label}: {url}"
-        wa_url = f"https://wa.me/?text={testo_wa.replace(' ', '%20')}"
+        wa_url = f"https://wa.me/?text={urllib.parse.quote(testo_wa, safe='')}"
         st.markdown(f"[📱 Invia via WhatsApp]({wa_url})")
 
         # Invio email

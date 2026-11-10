@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import io
 import json
+import urllib.parse
 import re
 import secrets
 import unicodedata
@@ -106,7 +107,7 @@ def _mostra_invio(url, q, chiave):
         c1.image(img, width=180)
         c2.download_button("⬇️ Scarica il QR (PNG)", img, file_name=f"QR_{q}.png", mime="image/png", key=f"qr_{chiave}")
     testo = f"Buongiorno, per la valutazione presso lo Studio The Organism può compilare questo questionario: {url}"
-    c2.markdown(f"[📱 Manda su WhatsApp](https://wa.me/?text={testo.replace(' ', '%20')})")
+    c2.markdown(f"[📱 Manda su WhatsApp](https://wa.me/?text={urllib.parse.quote(testo, safe='')})")
     c2.caption("Per l'email: copia il link qui sopra (icona in alto a destra del riquadro) e incollalo nel messaggio.")
 
 
