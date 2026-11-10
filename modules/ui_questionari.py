@@ -581,20 +581,27 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
     if _n_arrivi:
         st.caption("Le risposte sono qui sotto, un riquadro per questionario.")
 
+    # Leggo TUTTE le righe di anamnesi del paziente, non solo l'ultima: se
+    # dopo il questionario viene creata un'altra anamnesi, le risposte dei
+    # genitori restavano nella riga vecchia e qui la pagina risultava vuota.
     try:
         cur = conn.cursor()
         cur.execute(
             "SELECT id, data_anamnesi, motivo, pnev_json, pnev_summary "
             "FROM anamnesi WHERE paziente_id = %s "
-            "ORDER BY data_anamnesi DESC, id DESC LIMIT 1",
+            "ORDER BY data_anamnesi DESC, id DESC",
             (paziente_id,)
         )
-        row = cur.fetchone()
+        righe_an = cur.fetchall() or []
     except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         st.error(f"Errore lettura anamnesi: {e}")
         return
 
-    if not row:
+    if not righe_an:
         st.info("Nessun questionario compilato ancora per questo paziente.")
         st.caption(
             "Quando il genitore/paziente compila il questionario tramite il link, "
@@ -602,27 +609,25 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
         )
         return
 
-    if isinstance(row, dict):
-        an_id      = row.get("id")
-        data_an    = row.get("data_anamnesi", "")
-        pnev_raw   = row.get("pnev_json") or {}
-        summary    = row.get("pnev_summary") or ""
-    else:
-        an_id      = row[0]
-        data_an    = row[1]
-        pnev_raw   = row[3] or {}
-        summary    = row[4] or ""
-
-    # Parse pnev_json
-    if isinstance(pnev_raw, str):
-        try:
-            pnev_obj = json.loads(pnev_raw)
-        except Exception:
-            pnev_obj = {}
-    else:
-        pnev_obj = pnev_raw or {}
-
-    questionari = pnev_obj.get("questionari", {})
+    questionari, summary, data_an = {}, "", ""
+    for row in righe_an:
+        pnev_raw = row[3] or {}
+        if isinstance(pnev_raw, str):
+            try:
+                pnev_obj = json.loads(pnev_raw)
+            except Exception:
+                pnev_obj = {}
+        else:
+            pnev_obj = pnev_raw or {}
+        q_riga = pnev_obj.get("questionari") if isinstance(pnev_obj, dict) else None
+        if not isinstance(q_riga, dict) or not q_riga:
+            continue
+        if not data_an:
+            data_an = row[1]
+        if not summary:
+            summary = row[4] or ""
+        for _k, _v in q_riga.items():
+            questionari.setdefault(_k, _v)      # vince la compilazione più recente
 
     if not questionari:
         st.info("Nessuna risposta ai questionari ancora disponibile.")
@@ -651,34 +656,13 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
     # ── INPPS ────────────────────────────────────────────────────────
     inpps = questionari.get("inpps_screening_genitori", {})
     if inpps:
-        with st.expander("📋 INPP-R — Screening (compilato dai genitori)", expanded=True):
-            screening = inpps.get("screening", {})
-            positivi  = inpps.get("positivi", {})
-            score     = screening.get("totale_positivi", 0)
-            soglia    = screening.get("cutoff", 7)
+        with st.expander("📋 Questionario Neurosviluppo INPP – Bambini (compilato dai genitori)", expanded=True):
+            _mostra_inpp(inpps)
 
-            col1, col2 = st.columns(2)
-            col1.metric("Score totale", score)
-            col2.metric("Soglia clinica", soglia)
-
-            if score >= soglia:
-                st.error(f"🔴 Score ≥ soglia ({soglia}): profilo positivo INPP-R")
-            else:
-                st.success(f"🟢 Score < soglia: profilo nella norma")
-
-            if positivi:
-                st.markdown("**Aree positive:**")
-                for area, val in positivi.items():
-                    st.markdown(f"- {area}: **{val}**")
-
-            if screening:
-                st.markdown("**Dettaglio risposte:**")
-                for domanda, risposta in list(screening.items())[:20]:
-                    if risposta:
-                        st.markdown(
-                            f"<span style='color:#9a6700'>• {domanda}: {risposta}</span>",
-                            unsafe_allow_html=True
-                        )
+    inpps_ad = questionari.get("inpps_screening_adulti", {})
+    if inpps_ad:
+        with st.expander("📋 Questionario Neurosviluppo INPP – Adulti (compilato dal paziente)", expanded=True):
+            _mostra_inpp(inpps_ad)
 
     # ── MELILLO BAMBINI ───────────────────────────────────────────────
     mel_b = questionari.get("melillo_bambini", {})
@@ -711,7 +695,7 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
             _mostra_questionario_generico(vis_a, "visione_adulti")
 
     # ── ALTRI QUESTIONARI (senza un riquadro dedicato) ────────────────
-    _gia_mostrati = {"anamnesi_pnev", "inpps_screening_genitori", "melillo_bambini",
+    _gia_mostrati = {"anamnesi_pnev", "inpps_screening_genitori", "inpps_screening_adulti", "melillo_bambini",
                      "melillo_adulti", "fisher_auditivo_bambini", "visione_bambini",
                      "visione_adulti"}
     for _k, _v in questionari.items():
@@ -736,6 +720,65 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
         st.session_state["nav_area"] = AREA_REPORT_AI
         st.session_state[f"nav_sotto_{AREA_REPORT_AI}"] = "🤖 Relazioni cliniche (AI)"
         st.rerun()
+
+
+_AREE_INPP = {"neurologica_scuola": "Neurologica / scuola", "nutrizione": "Nutrizione",
+              "udito_madaule": "Udito (Madaule)"}
+_GRUPPI_NUTR = {"gastro": "Gastro-intestinale", "pelle": "Pelle", "orlg": "Orecchio-naso-gola", "asma": "Asma"}
+_TESTI_LIBERI = {"diagnosi_pregresse": "Diagnosi pregresse", "diagnosi": "Diagnosi", "farmaci": "Farmaci",
+                 "sintomi": "Sintomi", "psichiatrica": "Storia psichiatrica", "altro_medico": "Altro (medico)",
+                 "pelle_altro": "Pelle – altro", "asma_altro": "Asma – altro"}
+
+
+def _mostra_inpp(d: dict) -> None:
+    """Questionario INPP (bambini o adulti): esito, conteggi e le voci segnate, con il testo della domanda."""
+    try:
+        from .etichette_inpp import ETICHETTE_INPP
+    except Exception:
+        ETICHETTE_INPP = {}
+    scr = d.get("screening") or {}
+    totale, soglia = scr.get("totale_positivi", 0), scr.get("cutoff", 7)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Voci segnate", totale)
+    c2.metric("Soglia", soglia)
+    c3.metric("Compilato il", _fmt(d.get("date"))[:10] or "—")
+    if totale >= soglia:
+        st.error(f"🔴 {totale} voci, soglia {soglia}: possibile immaturità neuromotoria (screening, da confermare in visita).")
+    else:
+        st.success(f"🟢 {totale} voci, sotto la soglia di {soglia}: nessun segnale dallo screening.")
+
+    pos = d.get("positivi") or {}
+    if pos:
+        st.markdown(" · ".join(f"**{_AREE_INPP.get(k, k)}**: {v}" for k, v in pos.items()))
+
+    segnate = [k for k, v in (d.get("items") or {}).items() if v]
+    if segnate:
+        st.markdown("**Voci segnate**")
+        for k in segnate:
+            st.markdown(f"- {ETICHETTE_INPP.get(k, k)}")
+    else:
+        st.caption("Nessuna voce segnata.")
+
+    nutr = d.get("nutrizione") or {}
+    righe_n = []
+    for g, nome_g in _GRUPPI_NUTR.items():
+        voci = [k for k, v in (nutr.get(g) or {}).items() if v]
+        if voci:
+            righe_n.append(f"- {nome_g}: {', '.join(voci)}")
+    if nutr.get("sete_esagerata"):
+        righe_n.append("- Sete particolarmente esagerata")
+    for k in ("pelle_altro", "asma_altro"):
+        if nutr.get(k):
+            righe_n.append(f"- {_TESTI_LIBERI[k]}: {nutr[k]}")
+    if righe_n:
+        st.markdown("**Nutrizione**")
+        st.markdown("\n".join(righe_n))
+
+    liberi = [(k, v) for k, v in (d.get("free_text") or {}).items() if v]
+    if liberi:
+        st.markdown("**Scritto dalla famiglia**")
+        for k, v in liberi:
+            st.markdown(f"- {_TESTI_LIBERI.get(k, k)}: {v}")
 
 
 def _mostra_questionario_generico(dati: dict, nome: str) -> None:
@@ -776,6 +819,22 @@ def _mostra_questionario_generico(dati: dict, nome: str) -> None:
 #  ENTRY POINT — sezione completa
 # ══════════════════════════════════════════════════════════════════════
 
+def _ci_sono_risposte(conn, paziente_id: int) -> bool:
+    if arrivi_paziente(conn, paziente_id):
+        return True
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT 1 FROM questionari_links WHERE paziente_id = %s "
+                    "AND used_at IS NOT NULL LIMIT 1", (paziente_id,))
+        return cur.fetchone() is not None
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
 def render_questionari_section(conn, paziente_id: int) -> None:
     """
     Entry point completo: genera link + visualizza risposte.
@@ -783,11 +842,20 @@ def render_questionari_section(conn, paziente_id: int) -> None:
     """
     st.title("📋 Questionari — Anamnesi Remota")
 
-    tab_invia, tab_stato, tab_risposte = st.tabs([
-        "📤 Genera e invia link",
-        "📬 Stato degli invii",
-        "📊 Risposte ricevute",
-    ])
+    # Se per questo paziente è già arrivato qualcosa, la prima scheda è quella
+    # delle risposte: di solito si entra qui per leggerle.
+    if _ci_sono_risposte(conn, paziente_id):
+        tab_risposte, tab_invia, tab_stato = st.tabs([
+            "📊 Risposte ricevute",
+            "📤 Genera e invia link",
+            "📬 Stato degli invii",
+        ])
+    else:
+        tab_invia, tab_stato, tab_risposte = st.tabs([
+            "📤 Genera e invia link",
+            "📬 Stato degli invii",
+            "📊 Risposte ricevute",
+        ])
 
     with tab_stato:
         render_stato_invii(conn, paziente_id)

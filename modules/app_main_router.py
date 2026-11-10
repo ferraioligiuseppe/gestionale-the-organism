@@ -259,6 +259,16 @@ def _render_dashboard(conn) -> None:
             except Exception:
                 _arrivi = []
 
+            def _nome_q(codice):
+                """Nome leggibile del questionario (INPP – Bambini, non «Inpps»)."""
+                try:
+                    from .ui_questionari import _Q_LABELS
+                    n = _Q_LABELS.get(codice, "")
+                except Exception:
+                    n = ""
+                n = n.split(" ", 1)[1] if n and not n[0].isalnum() else n
+                return n.replace("Questionario Neurosviluppo ", "") or codice.replace("_", " ").title()
+
             def _vai_ai_questionari():
                 st.session_state["goto_area"] = "📋 Questionari"
                 st.session_state["goto_sotto"] = "📋 Questionari remoti"
@@ -266,7 +276,7 @@ def _render_dashboard(conn) -> None:
                 st.rerun()
 
             for _i, (_q, _quando, _stato) in enumerate(_arrivi):
-                _lbl = f"✅ {_q.replace('_',' ').title()} — ricevuto {_fmt_data(_quando)}"
+                _lbl = f"✅ {_nome_q(_q)} — ricevuto {_fmt_data(_quando)}"
                 if st.button(_lbl, key=f"dash_go_arrivo_{_i}", use_container_width=True):
                     _vai_ai_questionari()
             for _i, lk in enumerate(links):
@@ -276,7 +286,7 @@ def _render_dashboard(conn) -> None:
                     exp  = lk.get("expires_at","")
                 else:
                     q, used, exp = lk[0], lk[1], lk[2]
-                q_clean = q.replace("_"," ").title()
+                q_clean = _nome_q(q)
                 _lbl = f"✅ {q_clean}" if used else f"⏳ {q_clean} — scade {_fmt_data(exp)}"
                 if st.button(_lbl, key=f"dash_go_quest_{_i}_{q}", use_container_width=True):
                     _vai_ai_questionari()
@@ -2323,14 +2333,12 @@ def dispatch_smart_section(*, area: str, sotto: str,
     # attivo si azzera e va riscelto dall'elenco: evita di continuare a
     # lavorare sulla scheda del paziente precedente senza accorgersene.
     # Dentro la stessa area (Anamnesi → Visiva) resta quello scelto.
-    try:
-        _prec = st.session_state.get("_area_paziente_attivo")
-        if _prec is not None and _prec != area:
-            from .paziente_attivo import reset_paziente_attivo
-            reset_paziente_attivo()
-        st.session_state["_area_paziente_attivo"] = area
-    except Exception:
-        pass
+    # (10/11/2026) Il paziente NON si azzera più cambiando area: il gestionale
+    # lo perdeva a ogni passaggio (Pazienti → Questionari → Valutazione) e
+    # ogni salto «Apri» finiva su «Nessun paziente selezionato». Resta quello
+    # scelto finché non si preme «Cambia paziente»; il nome è sempre in cima
+    # alla pagina.
+    st.session_state["_area_paziente_attivo"] = area
 
     # Blocco note del diario nella barra laterale: disponibile in ogni
     # schermata, così durante la visita si annota senza uscire dal modulo
