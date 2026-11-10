@@ -92,6 +92,207 @@ Studio The Organism
 """
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  STATO DEGLI INVII — inviato / aperto / completato
+# ══════════════════════════════════════════════════════════════════════
+_TRACCIAMENTO_PRONTO = False
+
+
+def assicura_tracciamento(conn) -> bool:
+    """Aggiunge a questionari_links le colonne che servono a sapere se il
+    link è stato aperto. Si esegue una volta sola per avvio dell'app."""
+    global _TRACCIAMENTO_PRONTO
+    if _TRACCIAMENTO_PRONTO:
+        return True
+    cur = conn.cursor()
+    try:
+        for col, tipo in (("aperto_il", "TIMESTAMPTZ"), ("ultima_apertura", "TIMESTAMPTZ"),
+                          ("aperture", "INTEGER"), ("inviato_a", "TEXT"), ("invio_esito", "TEXT")):
+            cur.execute(f"ALTER TABLE questionari_links ADD COLUMN IF NOT EXISTS {col} {tipo}")
+        conn.commit()
+        _TRACCIAMENTO_PRONTO = True
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def registra_apertura(conn, link_id: int) -> None:
+    """Chiamata dalla pagina pubblica quando il link personale viene aperto.
+    Conta una sola volta per ogni visita (non a ogni clic nella pagina).
+    Non deve mai bloccare la compilazione: ogni errore viene ignorato."""
+    chiave = f"_q_apertura_registrata_{int(link_id)}"
+    if st.session_state.get(chiave):
+        return
+    st.session_state[chiave] = True
+    if not assicura_tracciamento(conn):
+        return
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE questionari_links SET aperto_il = COALESCE(aperto_il, now()), "
+            "ultima_apertura = now(), aperture = COALESCE(aperture, 0) + 1 "
+            "WHERE id = %s", (int(link_id),))
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def _segna_invio(conn, token_hash: str, inviato_a: str, esito: str) -> None:
+    """Annota a chi è stato mandato il link e com'è andato l'invio dell'email."""
+    if not assicura_tracciamento(conn):
+        return
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE questionari_links SET aperture = COALESCE(aperture, 0), "
+            "inviato_a = %s, invio_esito = %s WHERE token_hash = %s",
+            (inviato_a or None, esito, token_hash))
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def _a_roma(v):
+    """Data/ora (testo o datetime) portata all'ora italiana; None se non leggibile."""
+    from zoneinfo import ZoneInfo
+    if not v:
+        return None
+    try:
+        d = datetime.datetime.fromisoformat(v.replace("Z", "+00:00")) if isinstance(v, str) else v
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=datetime.timezone.utc)
+        return d.astimezone(ZoneInfo("Europe/Rome"))
+    except Exception:
+        return None
+
+
+def _fmt(v) -> str:
+    d = _a_roma(v)
+    return d.strftime("%d/%m/%Y %H:%M") if d else ""
+
+
+def stato_link(used_at, expires_at, aperture, ultima_apertura, adesso=None) -> tuple[str, str]:
+    """Ritorna (codice, testo) dello stato di un link personale."""
+    from zoneinfo import ZoneInfo
+    adesso = adesso or datetime.datetime.now(ZoneInfo("Europe/Rome"))
+    if used_at:
+        return "completato", f"✅ Completato il {_fmt(used_at)}"
+    scad = _a_roma(expires_at)
+    scaduto = bool(scad and adesso > scad)
+    if aperture is None:
+        return ("scaduto" if scaduto else "ignoto",
+                ("⌛ Scaduto, non completato" if scaduto else "❔ Non completato")
+                + " (apertura non registrata: link creato prima di questo controllo)")
+    n = int(aperture)
+    if n > 0:
+        volte = "1 volta" if n == 1 else f"{n} volte"
+        base = f"aperto {volte}, ultima il {_fmt(ultima_apertura)}, ma non completato"
+        return ("scaduto_aperto", "⌛ Scaduto: " + base) if scaduto else ("aperto", "👀 " + base[0].upper() + base[1:])
+    return ("scaduto_mai", "⌛ Scaduto: mai aperto") if scaduto else ("mai", "📭 Mai aperto")
+
+
+def render_stato_invii(conn, paziente_id: int) -> None:
+    """Elenco dei link personali inviati, con lo stato di ognuno."""
+    st.subheader("📬 Stato degli invii")
+    if not assicura_tracciamento(conn):
+        st.warning("Non riesco a preparare il controllo delle aperture su questo database.")
+        return
+
+    c1, c2 = st.columns([2, 1])
+    ambito = c1.radio("Mostra", ["Questo paziente", "Tutti i pazienti (ultimi 30 giorni)"],
+                      horizontal=True, key=f"q_stato_ambito_{paziente_id}")
+    solo_aperti = c2.checkbox("Solo non completati", value=False, key=f"q_stato_solo_{paziente_id}")
+    tutti = ambito.startswith("Tutti")
+
+    campi = ("id, paziente_id, questionario, created_at, expires_at, used_at, "
+             "aperto_il, ultima_apertura, aperture, inviato_a, invio_esito")
+    cur = conn.cursor()
+    try:
+        if tutti:
+            cur.execute(f"SELECT {campi} FROM questionari_links ORDER BY id DESC LIMIT 400")
+        else:
+            cur.execute(f"SELECT {campi} FROM questionari_links WHERE paziente_id = %s "
+                        "ORDER BY id DESC LIMIT 100", (paziente_id,))
+        righe = [tuple(r[i] for i in range(11)) for r in (cur.fetchall() or [])]
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        st.error(f"Errore lettura invii: {e}")
+        return
+
+    from zoneinfo import ZoneInfo
+    adesso = datetime.datetime.now(ZoneInfo("Europe/Rome"))
+    if tutti:
+        limite = adesso - datetime.timedelta(days=30)
+        righe = [r for r in righe if (_a_roma(r[3]) or adesso) >= limite]
+
+    nomi = {}
+    if tutti and righe:
+        try:
+            ids = sorted({int(r[1]) for r in righe if r[1] is not None})
+            cur.execute("SELECT id, Cognome, Nome FROM Pazienti WHERE id = ANY(%s)", (ids,))
+            for p in cur.fetchall() or []:
+                nomi[int(p[0])] = f"{p[1] or ''} {p[2] or ''}".strip()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    if not righe:
+        st.info("Nessun link personale inviato.")
+        return
+
+    tabella, conta = [], {"completato": 0, "aperto": 0, "mai": 0}
+    for (_id, pid, q, creato, scade, usato, _ap, ultima, aperture, inviato_a, esito) in righe:
+        codice, testo = stato_link(usato, scade, aperture, ultima, adesso)
+        if codice == "completato":
+            conta["completato"] += 1
+        elif codice in ("aperto", "scaduto_aperto"):
+            conta["aperto"] += 1
+        elif codice in ("mai", "scaduto_mai"):
+            conta["mai"] += 1
+        if solo_aperti and codice == "completato":
+            continue
+        riga = {}
+        if tutti:
+            riga["Paziente"] = nomi.get(int(pid), f"#{pid}") if pid is not None else ""
+        riga["Questionario"] = _Q_LABELS.get(q, q)
+        riga["Inviato il"] = _fmt(creato)
+        riga["Stato"] = testo
+        riga["Scade il"] = _fmt(scade)
+        riga["Mandato a"] = inviato_a or ""
+        riga["Email"] = esito or ""
+        tabella.append(riga)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Link inviati", len(righe))
+    m2.metric("Completati", conta["completato"])
+    m3.metric("Aperti e non completati", conta["aperto"])
+    m4.metric("Mai aperti", conta["mai"])
+
+    if tabella:
+        st.dataframe(tabella, use_container_width=True, hide_index=True)
+    else:
+        st.success("Tutti i link di questo elenco sono stati completati.")
+    st.caption(
+        "«Aperto» vuol dire che la pagina del questionario è stata aperta con quel link. "
+        "L'apertura si registra per i link aperti da oggi in poi. "
+        "I link aperti riutilizzabili (QR) non hanno un destinatario e non compaiono qui.")
+
+
 def render_genera_link_email(conn, paziente_id: int) -> None:
     """
     Pannello per generare link questionari e inviarli via email.
@@ -272,11 +473,14 @@ def _genera_e_invia(conn, cur, paziente_id: int, q_code: str, q_label: str,
                     subject=f"Questionario {q_label} — Studio The Organism",
                     body=corpo,
                 )
+                _segna_invio(conn, token_hash, email_dest, "inviata")
                 st.success(f"✅ Link creato e inviato via email a **{email_dest}**")
             except Exception as e_mail:
+                _segna_invio(conn, token_hash, email_dest, "NON inviata: " + str(e_mail)[:120])
                 st.warning(f"Link creato ma email non inviata: {e_mail}")
                 st.info("Copia il link sopra e invialo manualmente.")
         else:
+            _segna_invio(conn, token_hash, "", "non inviata (link da mandare a mano)")
             st.success("✅ Link creato. Copialo e invialo manualmente.")
 
     except Exception as e:
@@ -490,10 +694,14 @@ def render_questionari_section(conn, paziente_id: int) -> None:
     """
     st.title("📋 Questionari — Anamnesi Remota")
 
-    tab_invia, tab_risposte = st.tabs([
+    tab_invia, tab_stato, tab_risposte = st.tabs([
         "📤 Genera e invia link",
+        "📬 Stato degli invii",
         "📊 Risposte ricevute",
     ])
+
+    with tab_stato:
+        render_stato_invii(conn, paziente_id)
 
     with tab_invia:
         render_genera_link_email(conn, paziente_id)

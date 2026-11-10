@@ -575,6 +575,12 @@ def maybe_handle_public_questionario(get_conn) -> bool:
 
     if not aperto:
         paziente_id = int(link.get("paziente_id") if hasattr(link, "get") else link["paziente_id"])
+        # Annoto che il link personale è stato aperto (scheda «Stato degli invii»).
+        try:
+            from modules.ui_questionari import registra_apertura as _registra_apertura
+            _registra_apertura(conn, int(link.get("id") if hasattr(link, "get") else link["id"]))
+        except Exception:
+            pass
     titolo = _QUESTIONARI_PUBBLICI.get(q, "Questionario")
 
     # Diario alimentare: non si compila in una volta sola. La famiglia salva
