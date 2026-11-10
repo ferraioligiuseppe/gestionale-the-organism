@@ -24,7 +24,9 @@ import streamlit as st
 ETICHETTE = {
     "anamnesi_prima_infanzia": ("Anamnesi (gravidanza, prima infanzia)", "📋 Anamnesi PNEV"),
     "anamnesi_sviluppo": ("Anamnesi (dopo i 2 anni)", "📋 Anamnesi PNEV"),
-    "anamnesi": ("Anamnesi PNEV (vecchia)", "📋 Anamnesi PNEV"),
+    "anamnesi": ("Risposte ai questionari dei genitori / anamnesi PNEV (vecchia)", "📋 Questionari remoti"),
+    "questionari_arrivo": ("Questionari ricevuti dal link aperto (QR)", "📋 Questionari remoti"),
+    "questionari_links": ("Questionari inviati con link personale", "📋 Questionari remoti"),
     "inpp_valutazioni": ("Profilo neuro-evolutivo (neuro-psico-motorio)", "🧬 Profilo Neuro-Evolutivo"),
     "valutazioni_visive": ("Valutazione visuo-percettiva", "👁️ Valutazione visuo-percettiva"),
     "dem_risultati": ("DEM", "🔢 DEM interattivo"),
@@ -141,17 +143,61 @@ def _tabelle(conn):
     return out
 
 
+# I passi che ci si aspetta per ogni paziente: (nome, tabelle che lo provano, voce di menu)
+ESSENZIALI = [
+    ("Anamnesi", ("anamnesi_prima_infanzia", "anamnesi_sviluppo"), "📋 Anamnesi PNEV"),
+    ("Profilo neuro-evolutivo", ("inpp_valutazioni",), "🧬 Profilo Neuro-Evolutivo"),
+    ("Valutazione visiva", ("valutazioni_visive",), "👁️ Valutazione visuo-percettiva"),
+    ("Audiometria", ("audiometrie_tonali", "functional_audiograms"), "📊 Audiometria funzionale"),
+    ("Diagnosi", ("diagnosi_assistita",), "📝 Diagnosi assistita"),
+]
+
+# Tabelle con una sola riga per paziente che nasce VUOTA appena si apre la
+# pagina: contano solo se dentro c'e' almeno un campo compilato.
+_UNA_RIGA_JSON = ("anamnesi_prima_infanzia", "anamnesi_sviluppo")
+_VALIDITA_SECONDI = 60
+
+
+def _riga_json_vuota(conn, t, paz_id) -> bool:
+    import json
+    r = _q(conn, f'SELECT dati FROM "{t}" WHERE paziente_id=%s', (int(paz_id),))
+    for x in r:
+        try:
+            d = x.get("dati")
+            d = json.loads(d) if isinstance(d, str) else (d or {})
+        except Exception:
+            return False          # non leggibile: nel dubbio la mostro
+        for v in (d or {}).values():
+            if v is None or v is False or v == "" or v == [] or v == 0:
+                continue
+            return False
+    return True
+
+
+def mancanti(conn, paz_id) -> list:
+    """[(nome, voce)] dei passi essenziali per cui non c'e' ancora nulla."""
+    presenti = {r["tabella"] for r in riepilogo(conn, paz_id)}
+    return [(nome, voce) for nome, tabelle, voce in ESSENZIALI
+            if not any(t in presenti for t in tabelle)]
+
+
 def riepilogo(conn, paz_id, forza=False):
     """[{tabella, nome, voce, n, ultima}] solo per le tabelle con dati."""
+    import time
     k = f"_fascicolo_{paz_id}"
-    if not forza and k in st.session_state:
+    kt = f"_fascicolo_quando_{paz_id}"
+    fresco = (time.time() - float(st.session_state.get(kt, 0))) < _VALIDITA_SECONDI
+    if not forza and fresco and k in st.session_state:
         return st.session_state[k]
+    st.session_state[kt] = time.time()
     out = []
     for t, dcol in sorted(_tabelle(conn).items()):
         sel = f"COUNT(*) AS n" + (f", MAX({dcol}) AS ultima" if dcol else "")
         r = _q(conn, f'SELECT {sel} FROM "{t}" WHERE paziente_id=%s', (int(paz_id),))
         n = int((r[0].get("n") if r else 0) or 0)
         if not n:
+            continue
+        if t in _UNA_RIGA_JSON and _riga_json_vuota(conn, t, paz_id):
             continue
         nome, voce = ETICHETTE.get(t, (t.replace("_", " ").capitalize(), None))
         out.append({"tabella": t, "nome": nome, "voce": voce, "n": n,
@@ -200,6 +246,18 @@ def render_fascicolo(conn, paz_id, chiave="fasc", aperto=False):
                      expanded=aperto):
         if not righe:
             st.caption("Ancora nessun dato salvato per questo paziente.")
+        manca = mancanti(conn, paz_id)
+        if manca:
+            st.markdown("**Manca ancora** (clicca per farlo adesso)")
+            cm = st.columns(len(manca))
+            for j, (nome_m, voce_m) in enumerate(manca):
+                if cm[j].button(f"➕ {nome_m}", key=f"{chiave}_manca_{j}", use_container_width=True):
+                    st.session_state["goto_area"] = _area_di(voce_m) or st.session_state.get("goto_area")
+                    st.session_state["goto_sotto"] = voce_m
+                    st.session_state["paziente_attivo_id"] = paz_id
+                    st.rerun()
+        if righe:
+            st.markdown("**C'è già**")
         for i, r in enumerate(righe):
             a, b = st.columns([5, 1])
             a.markdown(f"**{r['nome']}** · {r['n']} {'voce' if r['n'] == 1 else 'voci'} · "

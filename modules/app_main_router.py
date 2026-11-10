@@ -252,23 +252,36 @@ def _render_dashboard(conn) -> None:
                 (paz_id,)
             )
             links = cur.fetchall() or []
-            if links:
-                for lk in links:
-                    if isinstance(lk, dict):
-                        q    = lk.get("questionario","")
-                        used = lk.get("used_at")
-                        exp  = lk.get("expires_at","")
-                    else:
-                        q, used, exp = lk[0], lk[1], lk[2]
-                    q_clean = q.replace("_"," ").title()
-                    _lbl = f"✅ {q_clean}" if used else f"⏳ {q_clean} — scade {_fmt_data(exp)}"
-                    if st.button(_lbl, key=f"dash_go_quest_{q}", use_container_width=True):
-                        st.session_state["goto_area"] = "📋 Questionari"
-                        st.session_state["goto_sotto"] = "📋 Questionari remoti"
-                        st.session_state["paziente_attivo_id"] = paz_id
-                        st.rerun()
-            else:
-                st.caption("Nessun link inviato")
+            # Anche i questionari arrivati da un link aperto (QR) e collegati al paziente
+            try:
+                from .ui_questionari import arrivi_paziente as _arrivi_paz
+                _arrivi = _arrivi_paz(conn, paz_id)[:5]
+            except Exception:
+                _arrivi = []
+
+            def _vai_ai_questionari():
+                st.session_state["goto_area"] = "📋 Questionari"
+                st.session_state["goto_sotto"] = "📋 Questionari remoti"
+                st.session_state["paziente_attivo_id"] = paz_id
+                st.rerun()
+
+            for _i, (_q, _quando, _stato) in enumerate(_arrivi):
+                _lbl = f"✅ {_q.replace('_',' ').title()} — ricevuto {_fmt_data(_quando)}"
+                if st.button(_lbl, key=f"dash_go_arrivo_{_i}", use_container_width=True):
+                    _vai_ai_questionari()
+            for _i, lk in enumerate(links):
+                if isinstance(lk, dict):
+                    q    = lk.get("questionario","")
+                    used = lk.get("used_at")
+                    exp  = lk.get("expires_at","")
+                else:
+                    q, used, exp = lk[0], lk[1], lk[2]
+                q_clean = q.replace("_"," ").title()
+                _lbl = f"✅ {q_clean}" if used else f"⏳ {q_clean} — scade {_fmt_data(exp)}"
+                if st.button(_lbl, key=f"dash_go_quest_{_i}_{q}", use_container_width=True):
+                    _vai_ai_questionari()
+            if not links and not _arrivi:
+                st.caption("Nessun questionario")
         except Exception:
             st.caption("—")
 
@@ -296,6 +309,13 @@ def _render_dashboard(conn) -> None:
                 st.caption("Nessun test registrato")
         except Exception:
             st.caption("—")
+
+    # ── Tutto il paziente in un colpo d'occhio: cosa c'è e cosa manca ──
+    try:
+        from .fascicolo_paziente import render_fascicolo
+        render_fascicolo(conn, paz_id, "dash_fasc", aperto=True)
+    except Exception as _e_fasc:
+        st.caption(f"Fascicolo non disponibile: {_e_fasc}")
 
     # ── Sintesi economica: incassi + coupon ───────────────────────────
     st.markdown("---")
@@ -472,7 +492,29 @@ _PERCORSO = [
 ]
 
 
+def _anamnesi_compilata(conn, paz_id):
+    """True solo se nell'anamnesi unica c'è almeno un campo compilato.
+    La riga in archivio nasce vuota appena si apre la pagina: da sola non
+    vuol dire che l'anamnesi sia stata fatta."""
+    try:
+        from .anamnesi_unica import _riga
+        from .anamnesi_sviluppo import _compilato, carica_anamnesi_sviluppo
+        dati, _origine = _riga(conn, paz_id)
+        if any(_compilato(v) for v in (dati or {}).values()):
+            return True
+        sv = carica_anamnesi_sviluppo(conn, paz_id) or {}
+        return any(_compilato(v) for v in sv.values())
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+
+
 def _passo_fatto(conn, paz_id, sotto):
+    if sotto == "📋 Anamnesi PNEV":
+        return _anamnesi_compilata(conn, paz_id)
     sql = {
         "📋 Anamnesi PNEV": "SELECT 1 FROM anamnesi_prima_infanzia WHERE paziente_id=%s LIMIT 1",
         "🧬 Profilo Neuro-Evolutivo": "SELECT 1 FROM inpp_valutazioni WHERE paziente_id=%s LIMIT 1",

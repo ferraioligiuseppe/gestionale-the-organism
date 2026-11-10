@@ -201,6 +201,74 @@ def stato_link(used_at, expires_at, aperture, ultima_apertura, adesso=None) -> t
     return ("scaduto_mai", "⌛ Scaduto: mai aperto") if scaduto else ("mai", "📭 Mai aperto")
 
 
+def arrivi_paziente(conn, paziente_id: int) -> list:
+    """Questionari arrivati da un link aperto (QR) e collegati a questo
+    paziente: lista di (questionario, arrivato_il, stato). Lista vuota se
+    non ce ne sono o se la tabella non esiste ancora."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT questionario, creato_il, stato FROM questionari_arrivo "
+            "WHERE paziente_id = %s AND stato <> 'scartato' "
+            "ORDER BY creato_il DESC LIMIT 50", (paziente_id,))
+        return [(r[0], r[1], r[2]) for r in (cur.fetchall() or [])]
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return []
+
+
+_STATI_ARRIVO = {"collegato_auto": "collegato in automatico", "collegato": "collegato a mano",
+                 "nuovo_creato": "nuovo paziente creato", "da_verificare": "da verificare"}
+
+
+def _mostra_arrivi(conn, paziente_id: int) -> int:
+    """Elenca i questionari arrivati dal link aperto. Ritorna quanti sono."""
+    arr = arrivi_paziente(conn, paziente_id)
+    for q, quando, stato in arr:
+        st.markdown(f"- ✅ **{_Q_LABELS.get(q, q)}** — ricevuto il {_fmt(quando)} "
+                    f"dal link aperto ({_STATI_ARRIVO.get(stato, stato)})")
+    return len(arr)
+
+
+def elenco_ricevuti(conn, paziente_id: int) -> int:
+    """Elenca tutti i questionari arrivati per il paziente, dal link aperto
+    e dal link personale. Ritorna quanti sono."""
+    n = _mostra_arrivi(conn, paziente_id)
+    try:
+        c = conn.cursor()
+        c.execute("SELECT questionario, used_at FROM questionari_links "
+                  "WHERE paziente_id = %s AND used_at IS NOT NULL "
+                  "ORDER BY id DESC LIMIT 50", (paziente_id,))
+        for r in (c.fetchall() or []):
+            st.markdown(f"- ✅ **{_Q_LABELS.get(r[0], r[0])}** — completato il {_fmt(r[1])} "
+                        "dal link personale")
+            n += 1
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    return n
+
+
+def render_riquadro_ricevuti(conn, paziente_id: int, px: str = "an") -> None:
+    """Riquadro da mettere nelle altre pagine del paziente (es. anamnesi):
+    dice quali questionari sono arrivati e porta alle risposte."""
+    with st.container(border=True):
+        st.markdown("**📋 Questionari compilati a casa**")
+        if elenco_ricevuti(conn, paziente_id):
+            if st.button("Apri le risposte", key=f"{px}_apri_risposte_{paziente_id}"):
+                st.session_state["goto_area"] = "📋 Questionari"
+                st.session_state["goto_sotto"] = "📋 Questionari remoti"
+                st.session_state["paziente_attivo_id"] = paziente_id
+                st.rerun()
+        else:
+            st.caption("Nessun questionario ricevuto per questo paziente.")
+
+
 def render_stato_invii(conn, paziente_id: int) -> None:
     """Elenco dei link personali inviati, con lo stato di ognuno."""
     st.subheader("📬 Stato degli invii")
@@ -250,6 +318,12 @@ def render_stato_invii(conn, paziente_id: int) -> None:
                 conn.rollback()
             except Exception:
                 pass
+
+    if not tutti:
+        st.markdown("**Ricevuti dal link aperto (QR)**")
+        if not _mostra_arrivi(conn, paziente_id):
+            st.caption("Nessuno.")
+        st.markdown("**Link personali inviati**")
 
     if not righe:
         st.info("Nessun link personale inviato.")
@@ -502,6 +576,11 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
     """
     st.subheader("📋 Risposte Questionari — Anamnesi")
 
+    # Che cosa è arrivato per questo paziente, da qualunque tipo di link
+    _n_arrivi = elenco_ricevuti(conn, paziente_id)
+    if _n_arrivi:
+        st.caption("Le risposte sono qui sotto, un riquadro per questionario.")
+
     try:
         cur = conn.cursor()
         cur.execute(
@@ -630,6 +709,16 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
     if vis_a:
         with st.expander("👁️ Visione Adulti (compilato)", expanded=False):
             _mostra_questionario_generico(vis_a, "visione_adulti")
+
+    # ── ALTRI QUESTIONARI (senza un riquadro dedicato) ────────────────
+    _gia_mostrati = {"anamnesi_pnev", "inpps_screening_genitori", "melillo_bambini",
+                     "melillo_adulti", "fisher_auditivo_bambini", "visione_bambini",
+                     "visione_adulti"}
+    for _k, _v in questionari.items():
+        if _k in _gia_mostrati or not isinstance(_v, dict) or not _v:
+            continue
+        with st.expander(f"📄 {_k.replace('_', ' ').capitalize()} (compilato)", expanded=False):
+            _mostra_questionario_generico(_v, _k)
 
     # ── PULSANTE → RELAZIONE AI ───────────────────────────────────────
     st.markdown("---")

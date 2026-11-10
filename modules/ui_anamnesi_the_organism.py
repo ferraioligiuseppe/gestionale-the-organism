@@ -660,5 +660,11 @@ def render_anamnesi_the_organism(conn, paz_id: int) -> None:
     st.subheader("Anamnesi — dalla gravidanza a oggi")
     st.caption("Modello Castagnini per tappe e dati oggettivi, modello Teitelbaum per "
                "qualità del movimento e profilo di rischio.")
+    # I questionari compilati a casa dai genitori: si vedono da qui.
+    try:
+        from .ui_questionari import render_riquadro_ricevuti
+        render_riquadro_ricevuti(conn, int(paz_id), "an_org")
+    except Exception:
+        pass
     from .anamnesi_unica import render_anamnesi_unica
     render_anamnesi_unica(conn, paz_id, "org")
