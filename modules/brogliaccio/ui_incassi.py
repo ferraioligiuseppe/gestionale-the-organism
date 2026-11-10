@@ -276,7 +276,7 @@ def _sumup(conn, operatori, io, pazienti, etichetta_paz, utente):
             if proposte:
                 etichette = {int(r["id"]): f"{db.fmt(r['quando'], ora=True)} · {db.nome_paziente(r)} · {r.get('operatore') or '—'}"
                              for r in proposte}
-                scelta = st.selectbox("Riga del brogliaccio", list(etichette), key=f"inc_ab_{t['codice']}",
+                scelta = st.selectbox("Riga di «Oggi in studio»", list(etichette), key=f"inc_ab_{t['codice']}",
                                       format_func=lambda i, _e=etichette: _e.get(i, f"riga {i}"))
                 if st.button("🔗 Abbina", key=f"inc_abb_{t['codice']}"):
                     db.abbina_sumup(conn, scelta, t["codice"]); st.rerun()

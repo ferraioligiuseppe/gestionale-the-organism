@@ -221,7 +221,7 @@ SOTTOSEZIONI = {
         # Brogliaccio: telefonate, cose da fare con un responsabile, e i
         # controlli «cosa manca» (appuntamenti senza traccia, visite senza
         # relazione). Sta in cima perche' e' la prima cosa da aprire al mattino.
-        "📒 Brogliaccio dello studio",
+        "📒 Oggi in studio",
         "📅 Agenda appuntamenti",
     ],
     AREA_TERAPIA_PNEV: [

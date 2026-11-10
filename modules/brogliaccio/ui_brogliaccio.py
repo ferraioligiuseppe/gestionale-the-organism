@@ -22,7 +22,7 @@ import streamlit as st
 
 from . import db_brogliaccio as db
 
-VISTE = ["📋 Foglio", "✍️ Annota", "📌 Da fare", "🔎 Cosa manca", "🗓️ Giornata", "📖 Brogliaccio", "💶 Incassi"]
+VISTE = ["📋 Foglio", "✍️ Annota", "📌 Da fare", "🔎 Cosa manca", "🗓️ Giornata", "📖 Storico", "💶 Incassi"]
 NESSUNO = "— nessun paziente / nuovo contatto —"
 
 
@@ -112,7 +112,7 @@ def _oggi() -> dt.date:
 
 # ── Pagina ────────────────────────────────────────────────────────────
 def render_brogliaccio(conn):
-    st.header("📒 Brogliaccio dello studio")
+    st.header("📒 Oggi in studio")
     st.caption("Ogni telefonata, visita o relazione in una riga: **chi** l'ha fatto e "
                "**chi deve fare il passo dopo**. Così non ci si dimentica più niente.")
     if conn is None:
@@ -122,7 +122,7 @@ def render_brogliaccio(conn):
         if db.init_db(conn):
             st.session_state["_brogliaccio_ok"] = True
         else:
-            st.error("Non riesco a creare la tabella del brogliaccio. Riprova tra qualche secondo.")
+            st.error("Non riesco a creare la tabella di «Oggi in studio». Riprova tra qualche secondo.")
             return
 
     operatori = _operatori(conn)
@@ -302,7 +302,7 @@ def _vista_cosa_manca(conn, operatori, io):
     # 1. Appuntamenti passati senza nessuna traccia nel gestionale
     st.markdown("### 1 · Appuntamenti senza traccia")
     st.caption("Appuntamenti in agenda (Google) con un paziente riconosciuto, per cui quel giorno "
-               "nel gestionale non risulta niente: né una scheda salvata, né una riga nel brogliaccio.")
+               "nel gestionale non risulta niente: né una scheda salvata, né una riga in «Oggi in studio».")
     eventi, errori = [], []
     try:
         from ..agenda_sync import appuntamenti
@@ -393,7 +393,7 @@ def _vista_cosa_manca(conn, operatori, io):
 def _vista_giornata(conn):
     giorno = st.date_input("Giorno", value=_oggi(), format="DD/MM/YYYY", key="brog_giorno")
     st.caption("Per ogni paziente di quel giorno: chi l'aveva in agenda, chi ha lavorato sulla sua "
-               "scheda nel gestionale e cosa è stato annotato nel brogliaccio.")
+               "scheda nel gestionale e cosa è stato annotato in «Oggi in studio».")
     per_paz: dict = {}
 
     def _p(pid, cognome="", nome=""):
@@ -456,7 +456,7 @@ def _vista_giornata(conn):
             "In agenda con": ", ".join(v["agenda"]) or "—",
             "Scheda lavorata da": ", ".join(sorted(nome_utente(u) for u in v["gestionale"])) or "—",
             "Moduli": ", ".join(sorted(_nome_tabella(t) for t in v["moduli"])) or "—",
-            "Brogliaccio": " | ".join(v["note"]) or "—",
+            "Oggi in studio": " | ".join(v["note"]) or "—",
             "⚠️": "senza traccia" if v["agenda"] and not v["gestionale"] and not v["note"] else "",
         })
     st.dataframe(righe, use_container_width=True, hide_index=True)

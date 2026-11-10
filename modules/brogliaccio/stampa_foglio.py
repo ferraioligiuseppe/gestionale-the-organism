@@ -100,9 +100,9 @@ def pdf_foglio(giorno: dt.date | None = None, righe: list | None = None, sede: s
     ]))
 
     if giorno and righe is not None:
-        titolo = f"Brogliaccio dello studio · {db.fmt(giorno)}"
+        titolo = f"Oggi in studio · {db.fmt(giorno)}"
     else:
-        titolo = "Brogliaccio dello studio · giorno ____ / ____ / ________"
+        titolo = "Oggi in studio · giorno ____ / ____ / ________"
     sede_txt = sede or "____________________"
     elementi = [P(titolo, st_tit),
                 P(f"Sede: {sede_txt}   ·   Compilato da: ____________________   ·   "
@@ -120,15 +120,15 @@ def pdf_foglio(giorno: dt.date | None = None, righe: list | None = None, sede: s
         elementi.append(P("Totale incassato:  POS € ________   Contanti € ________   Bonifico € ________   "
                           "Da pagare € ________   Fatture da fare n. ____", ParagraphStyle("r", fontName=fb, fontSize=9,
                                                                                          leading=12, textColor=VERDE)))
-        elementi.append(P("A fine giornata ricopiare le righe nel gestionale: 📒 Brogliaccio → 📋 Foglio.", st_sotto))
+        elementi.append(P("A fine giornata ricopiare le righe nel gestionale: 📒 Oggi in studio → 📋 Foglio.", st_sotto))
 
     def piede(c, d):
         c.saveState(); c.setFont(f, 7); c.setFillColor(GRIGIO)
-        c.drawString(12 * mm, 7 * mm, "Studio The Organism · Metodo PNEV · brogliaccio dello studio")
+        c.drawString(12 * mm, 7 * mm, "Studio The Organism · Metodo PNEV · Oggi in studio")
         c.drawRightString(landscape(A4)[0] - 12 * mm, 7 * mm, f"pag. {d.page}")
         c.restoreState()
 
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=10 * mm,
-                      bottomMargin=12 * mm, title="Brogliaccio dello studio").build(elementi, onFirstPage=piede, onLaterPages=piede)
+                      bottomMargin=12 * mm, title="Oggi in studio").build(elementi, onFirstPage=piede, onLaterPages=piede)
     return buf.getvalue()

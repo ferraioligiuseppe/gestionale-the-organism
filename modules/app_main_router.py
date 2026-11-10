@@ -672,13 +672,13 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     # ── PAZIENTI ──────────────────────────────────────────────────────
     if sotto == "🏠 Dashboard":
         _render_dashboard(conn); return True
-    if sotto == "📒 Brogliaccio dello studio":
+    if sotto == "📒 Oggi in studio":
         try:
             from .brogliaccio.ui_brogliaccio import render_brogliaccio
             render_brogliaccio(conn)
         except Exception as e:
             import traceback
-            st.error(f"Errore brogliaccio: {e}")
+            st.error(f"Errore in «Oggi in studio»: {e}")
             with st.expander("Dettagli tecnici"):
                 st.code(traceback.format_exc())
         return True

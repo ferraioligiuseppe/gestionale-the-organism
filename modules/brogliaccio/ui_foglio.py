@@ -96,11 +96,11 @@ def vista_foglio(conn, operatori, io, pazienti, etichetta_paz, utente):
     try:
         from .stampa_foglio import pdf_foglio
         s1.download_button("🖨️ Stampa il foglio del giorno (PDF)", data=pdf_foglio(giorno, righe),
-                           file_name=f"brogliaccio_{giorno.isoformat()}.pdf", mime="application/pdf",
+                           file_name=f"oggi_in_studio_{giorno.isoformat()}.pdf", mime="application/pdf",
                            use_container_width=True, key="foglio_pdf",
                            help="Le righe già salvate, più alcune righe vuote e i totali. Salva prima le modifiche.")
         s2.download_button("📄 Foglio vuoto da compilare a mano (PDF)", data=pdf_foglio(None, None),
-                           file_name="brogliaccio_foglio_vuoto.pdf", mime="application/pdf",
+                           file_name="oggi_in_studio_foglio_vuoto.pdf", mime="application/pdf",
                            use_container_width=True, key="foglio_pdf_vuoto")
     except Exception as e:
         s1.caption(f"Stampa non disponibile: {e}")
