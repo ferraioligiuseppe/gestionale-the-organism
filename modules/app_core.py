@@ -8858,10 +8858,12 @@ def ui_debug_db():
                 for p in pericolose
             )
             try:
-                expected_pwd = _secrets_get_root("EXPORT_PASSWORD", "theorganism2026")
+                expected_pwd = str(_secrets_get_root("EXPORT_PASSWORD", "") or "")
             except Exception:
-                expected_pwd = "theorganism2026"
-            if is_destructive and pwd != expected_pwd:
+                expected_pwd = ""
+            if is_destructive and not expected_pwd:
+                st.error("⛔ Password admin non configurata: aggiungi EXPORT_PASSWORD nei Secrets.")
+            elif is_destructive and pwd != expected_pwd:
                 st.error("⛔ Query distruttiva: serve la password admin.")
             else:
                 try:

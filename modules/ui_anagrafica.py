@@ -767,10 +767,12 @@ def _genera_excel(pazienti: list) -> bytes:
 
 
 def _password_export() -> str:
+    """Password dell'esportazione, letta solo dai Secrets (EXPORT_PASSWORD).
+    Se manca ritorna stringa vuota e l'esportazione resta bloccata."""
     try:
-        return st.secrets.get("EXPORT_PASSWORD", "theorganism2026")
+        return str(st.secrets.get("EXPORT_PASSWORD", "") or "")
     except Exception:
-        return "theorganism2026"
+        return ""
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1656,7 +1658,10 @@ def _dialog_export(pazienti: list, totale: int):
         if st.button("✕ Annulla", key="exp_ann", use_container_width=True):
             st.rerun()
     if ok:
-        if pwd != _password_export():
+        _attesa = _password_export()
+        if not _attesa:
+            st.error("Password non configurata: aggiungi EXPORT_PASSWORD nei Secrets.")
+        elif pwd != _attesa:
             st.error("Password errata.")
         else:
             try:
