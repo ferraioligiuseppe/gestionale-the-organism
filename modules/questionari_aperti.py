@@ -24,7 +24,8 @@ import unicodedata
 
 import streamlit as st
 
-ESCLUSI = {"DIARIO_ALIM"}          # il diario si compila in più giorni: serve un paziente già noto
+ESCLUSI = set()                    # nessuno escluso: il diario ha un percorso suo (link personale dopo l'anagrafica)
+DIARIO = "DIARIO_ALIM"
 STATI = {"collegato_auto": "🟢 collegato in automatico", "da_verificare": "da verificare",
          "collegato": "✓ collegato", "nuovo_creato": "✓ nuovo paziente creato", "scartato": "scartato"}
 ESITI = {"certo": "🟢 Stessa persona", "probabile": "🟡 Probabilmente la stessa",
@@ -61,6 +62,7 @@ def assicura_tabelle(conn):
     if _righe(conn, "SELECT 1 AS ok FROM information_schema.tables WHERE table_name='questionari_arrivo'"):
         # il link aperto non contiene dati: lo conserviamo per poterlo rivedere e rimandare
         _esegui(conn, "ALTER TABLE questionari_link_aperti ADD COLUMN IF NOT EXISTS token TEXT")
+        _esegui(conn, "ALTER TABLE questionari_arrivo ADD COLUMN IF NOT EXISTS diario_token_hash TEXT")
         return
     _esegui(conn, """CREATE TABLE IF NOT EXISTS questionari_link_aperti (
         id BIGSERIAL PRIMARY KEY, questionario TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL,
@@ -71,7 +73,7 @@ def assicura_tabelle(conn):
         riassunto TEXT, chiave_json TEXT, motivo TEXT, esito TEXT, candidati JSONB,
         paziente_id BIGINT, stato TEXT DEFAULT 'da_verificare', creato_il TIMESTAMPTZ DEFAULT now(),
         gestito_il TIMESTAMPTZ)""")
-
+    _esegui(conn, "ALTER TABLE questionari_arrivo ADD COLUMN IF NOT EXISTS diario_token_hash TEXT")
 
 def _segreto():
     s = st.secrets.get("public_links", {}).get("TOKEN_SECRET") or st.secrets.get("privacy", {}).get("TOKEN_SECRET") or "pnev"
@@ -324,6 +326,147 @@ def gestisci_invio(conn, link, q, ana, q_data, q_summary, chiave_json, motivo_la
         return str(e)
 
 
+# ───────────────────────────── diario alimentare dal link aperto ─────────────────────────────
+def _giorno_json(g):
+    return {k: (v.isoformat() if isinstance(v, (dt.date, dt.datetime)) else v) for k, v in g.items()}
+
+
+def _giorno_da_json(g):
+    g = dict(g)
+    if isinstance(g.get("data"), str):
+        g["data"] = dt.date.fromisoformat(g["data"][:10])
+    return g
+
+
+def avvia_diario(conn, link, ana):
+    """Dopo anagrafica e consenso crea il link PERSONALE del diario.
+    Persona riconosciuta con certezza → link del paziente (i giorni vanno subito nel suo diario).
+    Altrimenti → diario «in attesa» nella casella d'arrivo, con un suo link; i giorni passano al paziente quando lo colleghi.
+    Ritorna (url, errore, riconosciuto)."""
+    base = _base_url()
+    esito, cand = riconosci(conn, ana)
+    cur = conn.cursor()
+    try:
+        if esito == "certo":
+            from .app_core import create_questionario_link
+            paz = int(cand[0]["id"])
+            tok = create_questionario_link(cur, paz, DIARIO, ttl_days=21)
+            url = f"{base}/?q={DIARIO}&t={tok}"
+            cur.execute("INSERT INTO questionari_arrivo (link_id, questionario, anagrafica, risposte, riassunto, chiave_json, motivo, "
+                        "esito, candidati, paziente_id, stato, gestito_il) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())",
+                        (link["id"], DIARIO, json.dumps(ana), json.dumps({"giorni": {}, "nota": "diario sul link personale del paziente"}),
+                         "Diario alimentare avviato dal link aperto", DIARIO, "Diario alimentare", esito, json.dumps(cand), paz, "collegato_auto"))
+        else:
+            tok = secrets.token_urlsafe(24)
+            url = f"{base}/?q={DIARIO}&qd={tok}"
+            cur.execute("INSERT INTO questionari_arrivo (link_id, questionario, anagrafica, risposte, riassunto, chiave_json, motivo, "
+                        "esito, candidati, stato, diario_token_hash) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        (link["id"], DIARIO, json.dumps(ana), json.dumps({"giorni": {}, "finito": False}),
+                         "Diario alimentare (in corso)", DIARIO, "Diario alimentare", esito, json.dumps(cand), "da_verificare", _hash(tok)))
+        cur.execute("UPDATE questionari_link_aperti SET compilazioni = COALESCE(compilazioni,0) + 1 WHERE id = %s", (link["id"],))
+        conn.commit()
+        return url, None, esito == "certo"
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None, str(e), False
+
+
+def _istruzioni_diario():
+    st.markdown(
+        "**Come si fa**\n\n"
+        "1. Ogni sera scrivete cosa ha mangiato e bevuto durante la giornata, pasto per pasto, con parole vostre.\n"
+        "2. Premete **Salva il giorno**.\n"
+        "3. Il giorno dopo riaprite **lo stesso link personale** e fate lo stesso.\n"
+        "4. Dopo 7 giorni premete **Ho finito**: il diario arriva allo studio.")
+
+
+def pagina_avvio_diario(conn, link):
+    """Pagina pubblica del link APERTO del diario: anagrafica + consenso, poi il link personale."""
+    st.title("🍽️ Diario alimentare di 7 giorni")
+    st.caption("Prima i dati di chi compila, poi ricevete il vostro link personale per scrivere un giorno alla volta.")
+    st.markdown("---")
+    fatto = st.session_state.get("qa_diario_url")
+    if not fatto:
+        ana = scheda_anagrafica(prefisso="qa_diario")
+        if st.button("▶ Inizia il diario", type="primary", use_container_width=True):
+            manca = errori_anagrafica(ana)
+            if manca:
+                st.error("Completa prima: " + ", ".join(manca) + ".")
+                return
+            url, err, _ric = avvia_diario(conn, link, ana)
+            if err:
+                st.error(f"Non è stato possibile iniziare il diario: {err}")
+                return
+            st.session_state["qa_diario_url"] = url
+            st.rerun()
+        return
+    st.success("✅ Il vostro diario è pronto.")
+    st.markdown("**Questo è il vostro link personale**: lo riaprirete ogni sera. Salvatelo subito.")
+    st.code(fatto, language="text")
+    c1, c2 = st.columns(2)
+    c1.link_button("📝 Apri il mio diario adesso", fatto, use_container_width=True)
+    c2.link_button("📱 Mandalo a me su WhatsApp",
+                   "https://wa.me/?text=" + urllib.parse.quote("Il mio diario alimentare (Studio The Organism): " + fatto, safe=""),
+                   use_container_width=True)
+    _istruzioni_diario()
+
+
+def pagina_diario_aperto(conn, token):
+    """Pagina del link PERSONALE nato da un link aperto (persona non ancora collegata con certezza)."""
+    r = _righe(conn, "SELECT * FROM questionari_arrivo WHERE diario_token_hash=%s AND questionario=%s", (_hash(token), DIARIO))
+    if not r or r[0]["stato"] == "scartato":
+        st.error("Link non valido o non più attivo. Contattate lo studio.")
+        return
+    a = r[0]
+    ris = a["risposte"] if isinstance(a["risposte"], dict) else json.loads(a["risposte"] or "{}")
+    giorni = ris.get("giorni") or {}
+    paz = a.get("paziente_id")
+    st.title("🍽️ Diario alimentare di 7 giorni")
+    if ris.get("finito"):
+        st.success("Il diario è già stato inviato allo studio. Grazie!")
+        return
+    _istruzioni_diario()
+    from . import alimentazione as _al
+    if paz:   # nel frattempo lo studio ha collegato la persona: si scrive direttamente nel suo diario
+        visti = {g["data"].isoformat(): g for g in _al._diario(conn, paz) if g.get("data")}
+        giorni = {**giorni, **{k: _giorno_json(v) for k, v in visti.items()}}
+    st.progress(min(len(giorni), 7) / 7, text=f"Giorni scritti: {len(giorni)} su 7")
+    g = _al.modulo_giorno(f"qd_{token[:10]}", compatto=True)
+    if g:
+        if paz:
+            err = _al.salva_giorno(conn, paz, g, "link aperto")
+        else:
+            giorni[g["data"].isoformat()] = _giorno_json(g)
+            ris["giorni"] = giorni
+            err = _esegui(conn, "UPDATE questionari_arrivo SET risposte=%s, riassunto=%s WHERE id=%s",
+                          (json.dumps(ris), f"Diario alimentare (in corso, {len(giorni)} giorni)", a["id"]))
+        if err:
+            st.error(f"Giorno non salvato: {err}")
+        else:
+            st.success(f"Salvato il {g['data']:%d/%m}. Ci vediamo domani sera!")
+            st.rerun()
+    if giorni:
+        st.markdown("**Giorni già scritti** (se riscrivete un giorno, si aggiorna)")
+        for k in sorted(giorni):
+            x = giorni[k]
+            pasti = " · ".join(v for v in (x.get("colazione"), x.get("pranzo"), x.get("cena")) if v)
+            st.caption(f"{dt.date.fromisoformat(k):%d/%m} — {pasti[:120] or 'solo note'}")
+    st.markdown("---")
+    if st.button("✅ Ho finito: invia il diario allo studio", type="primary", disabled=not giorni, use_container_width=True):
+        ris["finito"] = True
+        err = _esegui(conn, "UPDATE questionari_arrivo SET risposte=%s, riassunto=%s WHERE id=%s",
+                      (json.dumps(ris), f"Diario alimentare ({len(giorni)} giorni, completato)", a["id"]))
+        if err:
+            st.error(f"Invio non riuscito: {err}")
+        else:
+            st.success("Grazie! Il diario è arrivato allo studio. Potete chiudere questa pagina.")
+            st.balloons()
+        st.stop()
+
+
 # ───────────────────────────── gestionale: link e casella d'arrivo ─────────────────────────────
 def _questionari():
     try:
@@ -407,7 +550,14 @@ def _collega(conn, arr, paz_id, stato):
     cur = conn.cursor()
     try:
         ris = arr["risposte"] if isinstance(arr["risposte"], dict) else json.loads(arr["risposte"] or "{}")
-        salva_in_anamnesi(cur, paz_id, ris, arr.get("riassunto") or "", arr["chiave_json"], arr["motivo"])
+        if arr.get("questionario") == DIARIO:
+            from . import alimentazione as _al
+            for g in (ris.get("giorni") or {}).values():
+                err = _al.salva_giorno(conn, paz_id, _giorno_da_json(g), "link aperto")
+                if err:
+                    raise RuntimeError(f"giorno {g.get('data')}: {err}")
+        else:
+            salva_in_anamnesi(cur, paz_id, ris, arr.get("riassunto") or "", arr["chiave_json"], arr["motivo"])
         cur.execute("UPDATE questionari_arrivo SET paziente_id=%s, stato=%s, gestito_il=now() WHERE id=%s", (paz_id, stato, arr["id"]))
         conn.commit(); return None
     except Exception as e:
@@ -441,7 +591,13 @@ def _scheda_arrivo(conn):
                 if c["id"] not in visti:
                     visti.add(c["id"]); cand.append(c)
         dn = _data(ana.get("data_nascita"))
-        nomi_q = ", ".join(Q.get(x["questionario"], x["questionario"]) for x in g)
+        def _nome_q(x):
+            n = Q.get(x["questionario"], x["questionario"])
+            if x["questionario"] == DIARIO:
+                rx = x["risposte"] if isinstance(x["risposte"], dict) else json.loads(x["risposte"] or "{}")
+                n += f" ({len(rx.get('giorni') or {})} giorni{', completato' if rx.get('finito') else ', in corso'})"
+            return n
+        nomi_q = ", ".join(_nome_q(x) for x in g)
         quanti = f"{len(g)} questionari" if len(g) > 1 else nomi_q
         titolo = (f"{ESITI.get(a['esito'], a['esito'])} · {ana.get('cognome','').upper()} {ana.get('nome','').upper()}"
                   f"{' · ' + dn.strftime('%d/%m/%Y') if dn else ''} · {quanti} · {str(a['creato_il'])[:10]}")
@@ -453,7 +609,7 @@ def _scheda_arrivo(conn):
                 st.markdown(f"**{len(g)} questionari della stessa persona:**")
                 for x in g:
                     k1, k2 = st.columns([5, 1])
-                    k1.write(f"• {Q.get(x['questionario'], x['questionario'])} — {str(x['creato_il'])[:16]}")
+                    k1.write(f"• {_nome_q(x)} — {str(x['creato_il'])[:16]}")
                     if k2.button("🗑️ Scarta", key=f"qa_scarta1_{x['id']}", help="Scarta solo questa compilazione"):
                         _esegui(conn, "UPDATE questionari_arrivo SET stato='scartato', gestito_il=now() WHERE id=%s", (x["id"],)); st.rerun()
             tutti = f" tutti ({len(g)})" if len(g) > 1 else ""

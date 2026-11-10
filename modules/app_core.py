@@ -535,16 +535,25 @@ def maybe_handle_public_questionario(get_conn) -> bool:
         q = (qp.get("q", [""])[0] or "").upper()
         t = (qp.get("t", [""])[0] or "")
         qa = (qp.get("qa", [""])[0] or "")
+        qd = (qp.get("qd", [""])[0] or "")
     else:
         q = (qp.get("q", "") or "").upper()
         t = (qp.get("t", "") or "")
         qa = (qp.get("qa", "") or "")
+        qd = (qp.get("qd", "") or "")
 
-    if q not in _QUESTIONARI_PUBBLICI or not (t or qa):
+    if q not in _QUESTIONARI_PUBBLICI or not (t or qa or qd):
         return False
 
     conn = get_conn()
     cur = conn.cursor()
+
+    # Diario alimentare nato da un link aperto: link personale provvisorio (persona non ancora collegata)
+    if qd and not t and q == "DIARIO_ALIM":
+        from modules import questionari_aperti as _qa
+        _qa.assicura_tabelle(conn)
+        _qa.pagina_diario_aperto(conn, qd)
+        return True
 
     # Link APERTO (senza paziente): anagrafica + questionario, poi riconoscimento della persona
     aperto = bool(qa) and not t
@@ -571,6 +580,10 @@ def maybe_handle_public_questionario(get_conn) -> bool:
     # Diario alimentare: non si compila in una volta sola. La famiglia salva
     # un giorno alla volta per una settimana, sempre con lo stesso link, e
     # alla fine preme «Ho finito»: solo allora il link si chiude.
+    if q == "DIARIO_ALIM" and aperto:
+        # link aperto del diario: anagrafica e consenso, poi il link personale
+        _qa.pagina_avvio_diario(conn, link)
+        return True
     if q == "DIARIO_ALIM":
         try:
             from modules import alimentazione as _al
