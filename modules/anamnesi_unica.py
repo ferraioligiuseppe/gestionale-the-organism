@@ -845,6 +845,66 @@ def _disegna_sezione(titolo, campi, salvati, px, out):
             i += 1
 
 
+# ── Anamnesi compilata a casa dai genitori (questionario «Anamnesi PNEV») ──
+def _anamnesi_di_casa(conn, paz_id) -> tuple[dict, dict]:
+    """(prima_infanzia, sviluppo) dell'ultima anamnesi compilata a casa dal
+    link del questionario; due dizionari vuoti se non c'e'. Ha le stesse
+    chiavi dell'anamnesi unica (vedi modules/pnev/ui_anamnesi_pnev.py)."""
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT pnev_json FROM anamnesi WHERE paziente_id=%s "
+                    "ORDER BY data_anamnesi DESC, id DESC", (int(paz_id),))
+        righe = cur.fetchall() or []
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return {}, {}
+    for r in righe:
+        pj = _json(r.get("pnev_json") if isinstance(r, dict) else r[0])
+        casa = _json(_json(pj.get("questionari")).get("anamnesi_pnev"))
+        if casa:
+            return _json(casa.get("prima_infanzia")), _json(casa.get("sviluppo"))
+    return {}, {}
+
+
+def _da_riportare(casa: dict, studio: dict) -> dict:
+    """Le risposte di casa per i campi che in studio sono ancora vuoti.
+    Non tocca mai un campo gia' compilato in studio."""
+    return {k: v for k, v in (casa or {}).items()
+            if _compilato(v) and not _compilato((studio or {}).get(k))}
+
+
+def _proponi_anamnesi_di_casa(conn, paz_id, pi: dict, sv: dict, px: str) -> None:
+    casa_pi, casa_sv = _anamnesi_di_casa(conn, paz_id)
+    if not casa_pi and not casa_sv:
+        return
+    nuovi_pi, nuovi_sv = _da_riportare(casa_pi, pi), _da_riportare(casa_sv, sv)
+    n = len(nuovi_pi) + len(nuovi_sv)
+    if not n:
+        st.caption("📥 Le risposte dell'anamnesi compilata a casa dai genitori sono già tutte riportate qui.")
+        return
+    with st.container(border=True):
+        st.markdown(f"**📥 I genitori hanno compilato l'anamnesi a casa: {n} "
+                    f"{'risposta non è ancora riportata' if n == 1 else 'risposte non sono ancora riportate'} qui.**")
+        st.caption("Riportandole si riempiono solo i campi vuoti: quello che è già scritto in studio non viene toccato.")
+        if st.button("Riporta le risposte dei genitori", key=f"{px}_riporta_casa", type="primary"):
+            ok1, e1 = (_salva(conn, paz_id, {**pi, **nuovi_pi}, "Riportata dal questionario dei genitori")
+                       if nuovi_pi else (True, ""))
+            ok2, e2 = (_salva_sviluppo(conn, paz_id, {**sv, **nuovi_sv}) if nuovi_sv else (True, ""))
+            if ok1 and ok2:
+                # i campi a schermo ricordano il valore vecchio: li faccio rileggere
+                for k in nuovi_pi:
+                    st.session_state.pop(f"{px}_{k}", None)
+                for k in nuovi_sv:
+                    st.session_state.pop(f"{px}_sv_{k}", None)
+                st.session_state.pop(f"diag_storico_{paz_id}", None)
+                st.rerun()
+            else:
+                st.error(f"Non sono riuscito a riportarle: {e1 or e2}")
+
+
 def render_anamnesi_unica(conn, paz_id, px: str = "an") -> tuple[dict, dict]:
     """Disegna l'anamnesi completa. Restituisce (prima_infanzia, sviluppo)."""
     if conn is None or not paz_id:
@@ -863,6 +923,9 @@ def render_anamnesi_unica(conn, paz_id, px: str = "an") -> tuple[dict, dict]:
                + (f" · {tot} campi compilati" if tot else ""))
     if origine.startswith("Recuperata"):
         st.info(f"📥 {origine}. Controlla i campi e premi «Salva anamnesi» per confermarli.")
+    elif origine.startswith("Riportata"):
+        st.info(f"📥 {origine}. Controlla i campi e premi «Salva anamnesi» per confermarli.")
+    _proponi_anamnesi_di_casa(conn, paz_id, pi, sv_salv, px)
 
     nuovo_pi: dict = {}
     for gruppo, sezioni in GRUPPI:
