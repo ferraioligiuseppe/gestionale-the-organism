@@ -551,7 +551,8 @@ def _corpo_seleziona(conn, ns="default"):
                      # l'id del paziente attivo nella chiave: quando cambia paziente
                      # la tabella riparte senza la vecchia riga selezionata, così
                      # si può sempre scegliere chiunque, anche uno scelto prima.
-                     key=f"pa_grid_{ns}_{lettera or ''}_{len(df)}_{st.session_state.get(KEY_ID) or 0}")
+                     key=f"pa_grid_{ns}_{lettera or ''}_{len(df)}_{st.session_state.get(KEY_ID) or 0}"
+                         f"_{st.session_state.get('_pa_grid_giro', 0)}")
         sel = getattr(ris, "selected_rows", None)
         if sel is None and isinstance(ris, dict):
             sel = ris.get("selected_rows")
@@ -563,7 +564,12 @@ def _corpo_seleziona(conn, ns="default"):
             except Exception:
                 scelto = None
         if scelto and scelto == st.session_state.get(KEY_ID):
-            st.caption("✓ Questo paziente è già quello in lavorazione.")
+            # È già il paziente in lavorazione: chiudo la finestra invece di
+            # lasciarla aperta con un avviso (sembrava bloccata). Cambio la
+            # chiave della tabella, altrimenti alla prossima apertura la riga
+            # risulterebbe ancora selezionata e la finestra si richiuderebbe.
+            st.session_state["_pa_grid_giro"] = st.session_state.get("_pa_grid_giro", 0) + 1
+            st.rerun()
         elif scelto:
             try:
                 set_paziente_attivo(conn, scelto)

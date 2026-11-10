@@ -191,9 +191,24 @@ def riepilogo(conn, paz_id, forza=False):
         return st.session_state[k]
     st.session_state[kt] = time.time()
     out = []
-    for t, dcol in sorted(_tabelle(conn).items()):
-        sel = f"COUNT(*) AS n" + (f", MAX({dcol}) AS ultima" if dcol else "")
-        r = _q(conn, f'SELECT {sel} FROM "{t}" WHERE paziente_id=%s', (int(paz_id),))
+    tab = sorted(_tabelle(conn).items())
+    # Una sola domanda al database per tutte le tabelle (prima erano una
+    # sessantina, una per tabella: la pagina restava ferma qualche secondo).
+    # Se la domanda unica non riesce, si torna a chiedere tabella per tabella.
+    insieme = None
+    if tab:
+        pezzi = [f"SELECT '{t}' AS t, COUNT(*) AS n, "
+                 + (f'MAX("{dcol}")::text' if dcol else "NULL::text")
+                 + f' AS ultima FROM "{t}" WHERE paziente_id = %s' for t, dcol in tab]
+        r_tutti = _q(conn, " UNION ALL ".join(pezzi), tuple(int(paz_id) for _ in tab))
+        if r_tutti:
+            insieme = {x["t"]: x for x in r_tutti}
+    for t, dcol in tab:
+        if insieme is not None:
+            r = [insieme[t]] if t in insieme else []
+        else:
+            sel = f"COUNT(*) AS n" + (f", MAX({dcol}) AS ultima" if dcol else "")
+            r = _q(conn, f'SELECT {sel} FROM "{t}" WHERE paziente_id=%s', (int(paz_id),))
         n = int((r[0].get("n") if r else 0) or 0)
         if not n:
             continue
@@ -234,7 +249,13 @@ def _area_di(voce):
 def _fmt(v):
     if hasattr(v, "strftime"):
         return v.strftime("%d/%m/%Y")
-    return str(v)[:10] if v else "—"
+    if not v:
+        return "—"
+    t = str(v)[:10]
+    try:                                    # data arrivata come testo: 2026-11-10 → 10/11/2026
+        return dt.date.fromisoformat(t).strftime("%d/%m/%Y")
+    except Exception:
+        return t
 
 
 def render_fascicolo(conn, paz_id, chiave="fasc", aperto=False):
