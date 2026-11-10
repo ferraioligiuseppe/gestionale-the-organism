@@ -641,6 +641,18 @@ def _scheda_arrivo(conn):
                 st.rerun()
 
 
+def _ora_roma(v):
+    """Data e ora in ora italiana (il database le tiene in UTC)."""
+    try:
+        from zoneinfo import ZoneInfo
+        d = dt.datetime.fromisoformat(v) if isinstance(v, str) else v
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=dt.timezone.utc)
+        return d.astimezone(ZoneInfo("Europe/Rome")).strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return str(v)[:16]
+
+
 def _scheda_archivio(conn):
     Q = _questionari()
     for a in _righe(conn, "SELECT a.*, p.cognome AS p_cog, p.nome AS p_nom FROM questionari_arrivo a "
@@ -648,7 +660,7 @@ def _scheda_archivio(conn):
                           "ORDER BY a.creato_il DESC LIMIT 100"):
         ana = a["anagrafica"] if isinstance(a["anagrafica"], dict) else json.loads(a["anagrafica"] or "{}")
         chi = f"{(a.get('p_cog') or '').upper()} {(a.get('p_nom') or '').upper()}".strip() or f"{ana.get('cognome','')} {ana.get('nome','')}"
-        st.caption(f"{str(a['creato_il'])[:16]} · {Q.get(a['questionario'], a['questionario'])} · {chi} · {STATI.get(a['stato'], a['stato'])}")
+        st.caption(f"{_ora_roma(a['creato_il'])} · {Q.get(a['questionario'], a['questionario'])} · {chi} · {STATI.get(a['stato'], a['stato'])}")
 
 
 def render_link_aperti(conn):
