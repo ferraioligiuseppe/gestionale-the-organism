@@ -81,8 +81,13 @@ def _in_ora_di_roma(d: dict) -> dict:
     delle 20:00 compariva alle 19:00, e il modulo di modifica ripartiva
     dall'ora sbagliata, togliendo un'altra ora a ogni salvataggio."""
     for k, v in d.items():
-        if isinstance(v, datetime) and v.tzinfo is not None:
+        if not isinstance(v, datetime):
+            continue
+        if v.tzinfo is not None:
             d[k] = v.astimezone(ROME_TZ)
+        elif k == "data_ora":
+            # Colonna senza fuso: il database la tiene in UTC.
+            d[k] = v.replace(tzinfo=timezone.utc).astimezone(ROME_TZ)
     return d
 
 
@@ -131,10 +136,39 @@ def genera_slug(titolo: str, data_ora: Optional[datetime] = None) -> str:
     if not t:
         t = "evento"
 
+    # Prima si accorcia il titolo, POI si aggiunge la data: tagliando tutto
+    # insieme a 90 caratteri, con un titolo lungo la data spariva e due eventi
+    # con lo stesso titolo in giorni diversi avevano lo stesso indirizzo.
     if data_ora is not None:
-        t += "-" + data_ora.strftime("%Y%m%d")
+        return t[:80].strip("-") + "-" + data_ora.strftime("%Y%m%d")
+    return t[:90].strip("-")  # max 90 char, lasciamo margine sui 100 dello schema
 
-    return t[:90]  # max 90 char, lasciamo margine sui 100 dello schema
+
+def _slug_libero(conn: Any, slug: str) -> str:
+    """Lo slug se è libero, altrimenti lo stesso con -2, -3… in coda."""
+    ph = _placeholder(conn)
+    base, n, prova = slug, 1, slug
+    while n < 50:
+        cur = conn.cursor()
+        try:
+            cur.execute(f"SELECT 1 FROM ev_eventi WHERE slug = {ph};", (prova,))
+            occupato = cur.fetchone() is not None
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return prova
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if not occupato:
+            return prova
+        n += 1
+        prova = f"{base[:86]}-{n}"
+    return prova
 
 
 # =============================================================================
@@ -183,7 +217,7 @@ def crea_evento(
         raise ValueError("data_ora è obbligatoria")
 
     if not slug:
-        slug = genera_slug(titolo, data_ora)
+        slug = _slug_libero(conn, genera_slug(titolo, data_ora))
 
     ph = _placeholder(conn)
     cur = conn.cursor()
