@@ -125,6 +125,13 @@ def render_brogliaccio(conn):
             st.error("Non riesco a creare la tabella di «Oggi in studio». Riprova tra qualche secondo.")
             return
 
+    # 🔔 Che cosa è arrivato da fuori: da dove viene e dove si apre
+    try:
+        from ..novita import render_novita
+        render_novita(conn, "ois_nov")
+    except Exception:
+        pass
+
     operatori = _operatori(conn)
     io = _io(operatori)
 

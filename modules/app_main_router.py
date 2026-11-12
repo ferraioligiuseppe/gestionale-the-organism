@@ -2149,6 +2149,15 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     # ── Selezione area ────────────────────────────────────────────────
     st.sidebar.markdown("### The Organism")
 
+    # 🔔 Novità: in cima al menu, in ogni pagina, quante cose sono arrivate
+    # da fuori (questionari, iscrizioni, contatti) e non sono ancora state viste.
+    try:
+        from .app_core import get_connection as _conn_novita
+        from .novita import bottone_sidebar as _novita_sidebar
+        _novita_sidebar(_conn_novita())
+    except Exception:
+        pass
+
     if is_admin:
         with st.sidebar.expander("🛠️ Strumenti tecnici (admin)"):
             st.caption("Script di servizio: cron, migrazioni, debug.")
