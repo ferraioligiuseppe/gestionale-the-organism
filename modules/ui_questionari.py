@@ -781,6 +781,116 @@ def _mostra_inpp(d: dict) -> None:
             st.markdown(f"- {_TESTI_LIBERI.get(k, k)}: {v}")
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  I QUESTIONARI PER L'AI — risposte complete, non solo il conteggio
+# ══════════════════════════════════════════════════════════════════════
+_NOMI_PER_AI = {
+    "inpps_screening_genitori": "INPP – Bambini (compilato dai genitori)",
+    "inpps_screening_adulti": "INPP – Adulti (compilato dal paziente)",
+    "anamnesi_pnev": "Anamnesi PNEV compilata a casa (gravidanza, sviluppo, familiarità)",
+    "melillo_bambini": "Melillo Bambini", "melillo_adulti": "Melillo Adulti",
+    "fisher_auditivo_bambini": "Fisher – problemi uditivi (bambini)",
+    "visione_bambini": "Visione Bambini", "visione_adulti": "Visione Adulti",
+}
+_MAX_PER_QUESTIONARIO = 3500      # caratteri: un questionario non deve coprire tutto il resto
+_VUOTI = (None, "", False, 0, "0", "no", "No", "NO", "—", "-", [], {})
+
+
+def _righe_inpp_ai(d: dict) -> list[str]:
+    try:
+        from .etichette_inpp import ETICHETTE_INPP
+    except Exception:
+        ETICHETTE_INPP = {}
+    scr = d.get("screening") or {}
+    out = [f"  Voci segnate: {scr.get('totale_positivi', '?')} (soglia di attenzione {scr.get('cutoff', 7)})"]
+    pos = d.get("positivi") or {}
+    if pos:
+        out.append("  Per area: " + ", ".join(f"{_AREE_INPP.get(k, k)} {v}" for k, v in pos.items()))
+    for k, v in (d.get("items") or {}).items():
+        if v:
+            out.append(f"  · {ETICHETTE_INPP.get(k, k)}")
+    nutr = d.get("nutrizione") or {}
+    for g, nome_g in _GRUPPI_NUTR.items():
+        voci = [k for k, v in (nutr.get(g) or {}).items() if v]
+        if voci:
+            out.append(f"  Nutrizione – {nome_g}: {', '.join(voci)}")
+    if nutr.get("sete_esagerata"):
+        out.append("  Nutrizione – sete particolarmente esagerata")
+    for k in ("pelle_altro", "asma_altro"):
+        if nutr.get(k):
+            out.append(f"  {_TESTI_LIBERI[k]}: {nutr[k]}")
+    for k, v in (d.get("free_text") or {}).items():
+        if v:
+            out.append(f"  Scritto dalla famiglia – {_TESTI_LIBERI.get(k, k)}: {v}")
+    return out
+
+
+def _appiattisci_ai(d, prefisso="") -> list[str]:
+    """Qualunque questionario → righe «domanda: risposta», solo le risposte date."""
+    out = []
+    if not isinstance(d, dict):
+        return out
+    for k, v in d.items():
+        nome = (prefisso + str(k)).replace("_", " ")
+        if isinstance(v, dict):
+            out.extend(_appiattisci_ai(v, nome + " › "))
+        elif isinstance(v, (list, tuple)):
+            voci = [str(x) for x in v if x not in _VUOTI]
+            if voci:
+                out.append(f"  · {nome}: {', '.join(voci)}")
+        elif v is True:
+            out.append(f"  · {nome}: sì")
+        elif v not in _VUOTI:
+            out.append(f"  · {nome}: {v}")
+    return out
+
+
+def testo_questionari_per_ai(conn, paziente_id: int) -> list[str]:
+    """Le risposte complete dei questionari compilati da famiglia e paziente,
+    pronte per lo storico della Diagnosi assistita. Lista vuota se non ce ne sono."""
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT data_anamnesi, pnev_json FROM anamnesi WHERE paziente_id = %s "
+                    "ORDER BY data_anamnesi DESC, id DESC", (int(paziente_id),))
+        righe = cur.fetchall() or []
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return []
+    trovati = {}                      # chiave → (data, dati): vince la compilazione più recente
+    for r in righe:
+        data, grezzo = (r[0], r[1])
+        if isinstance(grezzo, str):
+            try:
+                grezzo = json.loads(grezzo)
+            except Exception:
+                grezzo = {}
+        q = (grezzo or {}).get("questionari") if isinstance(grezzo, dict) else None
+        if isinstance(q, dict):
+            for k, v in q.items():
+                if isinstance(v, dict) and v and k not in trovati:
+                    trovati[k] = (data, v)
+    out = []
+    for k, (data, d) in trovati.items():
+        quando = _fmt(d.get("date") or (str(data)[:10] if data else ""))[:10]
+        out.append(f"- {_NOMI_PER_AI.get(k, k.replace('_', ' ').capitalize())}"
+                   + (f" — {quando}" if quando else ""))
+        corpo = _righe_inpp_ai(d) if k.startswith("inpps_screening") else _appiattisci_ai(d)
+        if not corpo:
+            corpo = ["  (compilato, nessuna risposta significativa)"]
+        testo, tagliato = [], 0
+        for riga in corpo:
+            if tagliato + len(riga) > _MAX_PER_QUESTIONARIO:
+                testo.append(f"  (… altre {len(corpo) - len(testo)} risposte non riportate per brevità)")
+                break
+            testo.append(riga)
+            tagliato += len(riga)
+        out.extend(testo)
+    return out
+
+
 def _mostra_questionario_generico(dati: dict, nome: str) -> None:
     """Mostra le risposte di un questionario generico in formato leggibile."""
     if not dati:

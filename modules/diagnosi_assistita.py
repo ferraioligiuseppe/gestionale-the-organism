@@ -167,6 +167,18 @@ def _riassunto_storico(conn, paz_id) -> str:
             txt = (r.get("pnev_summary") or r.get("Motivo") or "").strip()
             parti.append(f"- {_fmt(_data_di(r))}: {txt}" if txt else f"- {_fmt(_data_di(r))}")
 
+    # Le risposte COMPLETE dei questionari (voci segnate, testi della famiglia):
+    # la riga qui sopra ne porta solo il riassunto, tipo «INPP: 8 voci».
+    try:
+        from .ui_questionari import testo_questionari_per_ai
+        qq = testo_questionari_per_ai(conn, paz_id)
+        if qq:
+            parti.append("\nQUESTIONARI COMPILATI DA FAMIGLIA E PAZIENTE (risposte complete — "
+                         "sono riferite da chi compila, non misurate in studio):")
+            parti.extend(qq)
+    except Exception:
+        pass
+
     es = _query(conn, "SELECT * FROM esiti_pnev WHERE paziente_id=%s", (paz_id,))
     if es:
         parti.append("\nESITI / FOLLOW-UP (cosa ha funzionato o no — IMPORTANTE):")
