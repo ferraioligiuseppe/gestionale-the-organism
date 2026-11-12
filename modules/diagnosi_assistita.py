@@ -197,6 +197,15 @@ def _riassunto_storico(conn, paz_id) -> str:
                 riga += f": {r['sintesi']}"
             parti.append(riga)
 
+    try:
+        from .cartella_logopedica import sintesi_cartella
+        cl = sintesi_cartella(conn, paz_id)
+        if cl:
+            parti.append("\nCARTELLA LOGOPEDICA (quadro, linguaggio per livelli, sezioni per patologia, test, piano):")
+            parti.extend(cl)
+    except Exception:
+        pass
+
     ls = _query(conn, "SELECT * FROM logopedia_sedute WHERE paziente_id=%s", (paz_id,))
     if ls:
         parti.append("\nSEDUTE LOGOPEDICHE (diario):")

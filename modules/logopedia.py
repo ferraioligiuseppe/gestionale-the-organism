@@ -67,9 +67,16 @@ def render_logopedia(conn=None, paz_id=None, paziente=None):
     _assicura_tabella_sedute(conn)
     _assicura_tabella_obiettivi(conn)
 
-    modo = st.radio("Sezione", ["📋 Valutazione + SMOF", "📅 Diario sedute",
+    modo = st.radio("Sezione", ["📁 Cartella logopedica", "📋 Valutazione + SMOF", "📅 Diario sedute",
                                 "🎯 Obiettivi & monitoraggio", "📄 Relazione PDF"],
                     horizontal=True, key="logo_modo")
+    if modo == "📁 Cartella logopedica":
+        try:
+            from .cartella_logopedica import render_cartella
+            render_cartella(conn, paz_id)
+        except Exception as e:
+            st.error(f"Cartella logopedica non disponibile: {e}")
+        return
     if modo == "📅 Diario sedute":
         _render_diario(conn, paz_id)
         return

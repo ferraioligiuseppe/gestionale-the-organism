@@ -25,6 +25,7 @@ ETICHETTE = {
     "anamnesi_prima_infanzia": ("Anamnesi (gravidanza, prima infanzia)", "📋 Anamnesi PNEV"),
     "anamnesi_sviluppo": ("Anamnesi (dopo i 2 anni)", "📋 Anamnesi PNEV"),
     "anamnesi": ("Risposte ai questionari dei genitori / anamnesi PNEV (vecchia)", "📋 Questionari remoti"),
+    "cartella_logopedica": ("Cartella logopedica", "🗣️ Logopedia / SMOF"),
     "questionari_arrivo": ("Questionari ricevuti dal link aperto (QR)", "📋 Questionari remoti"),
     "questionari_links": ("Questionari inviati con link personale", "📋 Questionari remoti"),
     "inpp_valutazioni": ("Profilo neuro-evolutivo (neuro-psico-motorio)", "🧬 Profilo Neuro-Evolutivo"),
@@ -87,7 +88,7 @@ _ESCLUSE_PAROLE = ("storico", "_log", "log_", "token", "otp", "cache", "audit", 
                    "pubblico_", "public_tokens", "presenza", "calibraz", "gc_")
 
 # Gia' riassunte per esteso dalla Diagnosi assistita: non le ripetiamo in forma generica.
-GIA_RIASSUNTE = {"documenti_clinici", "getman_risultati", "groffman_risultati", "valutazioni_visive",
+GIA_RIASSUNTE = {"cartella_logopedica", "documenti_clinici", "getman_risultati", "groffman_risultati", "valutazioni_visive",
                  "anamnesi", "esiti_pnev", "logopedia_valutazioni", "logopedia_sedute",
                  "logopedia_obiettivi", "terapia_sedute", "terapia_obiettivi", "terapia_programma",
                  "anamnesi_prima_infanzia", "anamnesi_sviluppo", "inpp_valutazioni", "rilievi_pnev",
