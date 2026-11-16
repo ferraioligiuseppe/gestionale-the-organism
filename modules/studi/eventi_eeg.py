@@ -54,14 +54,18 @@ def cancella_codice(codice: str) -> int:
 
 def riassunto(testo: str) -> dict:
     """Intestazione del registro: brano, inizio, uscita, conteggi e numero di eventi."""
-    info = {"brano": "", "inizio": "", "uscita": "", "conteggi": "", "eventi": 0}
+    info = {"brano": "", "inizio": "", "uscita": "", "conteggi": "", "eventi": 0, "secondi_analizzati": 0,
+            "tonalita_stimata": "", "chiarezza_tonale": "", "seconda_tonalita": "", "carattere": "",
+            "centroide_medio_hz": "", "quota_acuti_pct": "", "dinamica_db": "", "cromagramma": ""}
     in_tabella = False
     for riga in testo.splitlines():
         parti = riga.split(";")
         if in_tabella:
-            if len(parti) > 5 and parti[5] not in ("INIZIO", "FINE"):
+            if len(parti) > 5 and parti[5] == "SPETTRO":
+                info["secondi_analizzati"] += 1
+            elif len(parti) > 5 and parti[5] not in ("INIZIO", "FINE"):
                 info["eventi"] += 1
-        elif parti[0] in ("brano", "inizio", "uscita", "conteggi") and len(parti) > 1:
+        elif parti[0] in info and parti[0] not in ("eventi", "secondi_analizzati") and len(parti) > 1:
             info[parti[0]] = parti[1]
         elif parti[0] == "n":
             in_tabella = True
