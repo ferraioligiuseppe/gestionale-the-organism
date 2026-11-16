@@ -838,6 +838,12 @@ def main():
             render_iscrizione_pubblica(lambda: conn, qp("s") or "")
             return
 
+        # Dati inviati dall'app Pegasis per uno studio (modules/studi): link ?azione=studio_dati&d=...
+        if azione == "studio_dati":
+            from modules.studi.ui_studi import render_ricezione_dati
+            render_ricezione_dati(lambda: conn, qp("d") or "")
+            return
+
         # Salvataggio delle prove touch di «Giochiamo imparando» (token proprio)
         if azione == "touch":
             from modules.grafomotricita.ui_grafomotricita import azione_touch
