@@ -178,6 +178,12 @@ def render(get_conn, operatore: str = ""):
                         st.write(f"**{info['brano']}** · inizio {info['inizio']} · uscita {info['uscita']} · "
                                  f"{info['eventi']} eventi")
                         st.caption(info["conteggi"].replace(",", " · "))
+                        if info["tonalita_stimata"]:
+                            st.write(f"Tonalità stimata **{info['tonalita_stimata']}** (chiarezza {info['chiarezza_tonale']}, "
+                                     f"poi {info['seconda_tonalita']}) · suono {info['carattere']} "
+                                     f"({info['centroide_medio_hz']} Hz) · acuti {info['quota_acuti_pct']}% · "
+                                     f"dinamica {info['dinamica_db']} dB · {info['secondi_analizzati']} s analizzati")
+                            st.caption("Note nel brano (%): " + info["cromagramma"].replace(",", " · "))
                         st.download_button("Scarica il CSV", testo.encode("utf-8"), file_name=scelto_f.split("/")[-1],
                                            mime="text/csv")
 
