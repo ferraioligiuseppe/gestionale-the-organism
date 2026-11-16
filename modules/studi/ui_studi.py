@@ -13,9 +13,11 @@ import streamlit as st
 try:
     from . import db_studi as db
     from . import testi_privacy as tp
+    from . import eventi_eeg as eeg
 except ImportError:
     import db_studi as db
     import testi_privacy as tp
+    import eventi_eeg as eeg
 
 # indirizzo dell'area pubblica dove si apre il link di iscrizione (?azione=studio&s=<token>)
 URL_PUBBLICO = "https://pnev-eventi-prova.streamlit.app"
@@ -92,7 +94,8 @@ def render(get_conn, operatore: str = ""):
     s = db.studio(conn, sid)
     link = f"{URL_PUBBLICO}/?azione=studio&s={s['token_iscrizione']}"
 
-    t_iscr, t_part, t_imp, t_esp, t_priv = st.tabs(["Iscrizione", "Partecipanti", "Importa dati", "Esporta", "Privacy e registro"])
+    t_iscr, t_part, t_imp, t_eeg, t_esp, t_priv = st.tabs(
+        ["Iscrizione", "Partecipanti", "Importa dati", "Registri EEG", "Esporta", "Privacy e registro"])
 
     with t_iscr:
         st.markdown("**Link di iscrizione** da mandare al gruppo:")
@@ -129,7 +132,13 @@ def render(get_conn, operatore: str = ""):
         with st.expander("Ritiro di un partecipante"):
             cod = st.text_input("Codice partecipante da ritirare").strip().upper()
             if st.button("Ritira e cancella i suoi dati", type="primary", disabled=not cod):
-                db.revoca(conn, sid, cod, operatore); st.success(f"{cod}: dati cancellati."); st.rerun()
+                db.revoca(conn, sid, cod, operatore)
+                if eeg.configurato():
+                    try:
+                        eeg.cancella_codice(cod)
+                    except Exception as e:  # la cassetta non risponde: va ripetuto
+                        st.warning(f"Registri EEG non cancellati ({e}): riprova dal pulsante «Ritira» più tardi.")
+                st.success(f"{cod}: dati cancellati."); st.rerun()
 
     with t_imp:
         st.write("Incolla qui il testo ricevuto con «Invia i dati allo studio» (email o WhatsApp).")
@@ -140,6 +149,37 @@ def render(get_conn, operatore: str = ""):
                 st.success(f"{cod}: {n} dati nuovi salvati.")
             except Exception as e:  # testo malformato o codice non iscritto
                 st.error(f"Non riesco a importare: {e}")
+
+    with t_eeg:
+        st.caption("Registri dei cambi del suono inviati da Pegasis a fine brano, per allinearli con l'EEG (EmotivPRO).")
+        if not eeg.configurato():
+            st.info("Collega la cassetta postale: nei segreti di Streamlit aggiungi PEGASIS_EVENTI_URL e PEGASIS_EVENTI_TOKEN.")
+        else:
+            codici = {r["codice"] for r in db.avanzamento(conn, sid)}
+            try:
+                files = [f for f in eeg.elenco() if eeg.codice_da_chiave(f["chiave"]) in codici]
+            except Exception as e:
+                files = None
+                st.error(f"La cassetta postale non risponde: {e}")
+            if files is not None:
+                if not files:
+                    st.write("Nessun registro ancora arrivato per questo studio.")
+                else:
+                    files.sort(key=lambda f: f["chiave"], reverse=True)
+                    st.write(f"{len(files)} registri.")
+                    st.dataframe([{"codice": eeg.codice_da_chiave(f["chiave"]), "file": f["chiave"].split("/")[-1],
+                                   "kB": round(f["byte"] / 1024, 1), "arrivato": str(f["caricato"])[:19].replace("T", " ")}
+                                  for f in files], use_container_width=True, hide_index=True)
+                    scelto_f = st.selectbox("Apri un registro", [f["chiave"] for f in files],
+                                            format_func=lambda k: k.split("/", 1)[1])
+                    if scelto_f:
+                        testo = eeg.scarica(scelto_f)
+                        info = eeg.riassunto(testo)
+                        st.write(f"**{info['brano']}** · inizio {info['inizio']} · uscita {info['uscita']} · "
+                                 f"{info['eventi']} eventi")
+                        st.caption(info["conteggi"].replace(",", " · "))
+                        st.download_button("Scarica il CSV", testo.encode("utf-8"), file_name=scelto_f.split("/")[-1],
+                                           mime="text/csv")
 
     with t_esp:
         dati = db.esporta_anonimo(conn, sid)
