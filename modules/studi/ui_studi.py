@@ -194,6 +194,15 @@ def render(get_conn, operatore: str = ""):
                            disabled=not dati)
 
     with t_priv:
+        with st.expander("Cancella questo studio"):
+            st.caption("Solo per uno studio creato per errore e senza iscritti. Scrivi il numero dello studio per confermare.")
+            conferma = st.text_input(f"Numero dello studio da cancellare ({sid})", key=f"canc_{sid}")
+            if st.button("Cancella lo studio", type="primary", disabled=conferma.strip() != str(sid), key=f"btn_canc_{sid}"):
+                try:
+                    db.elimina_studio(conn, sid, operatore)
+                    st.success("Studio cancellato."); st.rerun()
+                except ValueError as e:
+                    st.error(str(e))
         st.markdown(f"**Versione dei testi:** {tp.PRIVACY_VERSIONE}")
         with st.expander("Foglio informativo"):
             st.markdown(tp.FOGLIO_INFORMATIVO)
