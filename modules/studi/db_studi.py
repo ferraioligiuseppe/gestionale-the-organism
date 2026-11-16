@@ -311,7 +311,7 @@ def leggi_csv_pegasis(testo: str):
         k = row[0]
         if k == "partecipante":
             codice = row[1].strip().upper()
-        elif k in ("tipo", "prove"):
+        elif k in ("tipo", "prove", "ascolto"):
             intestazioni[k] = row
         elif k in ("WHO5", "PNEV"):
             righe.append({"tipo": k, "data": row[1], "sessioni": int(row[2] or 0), "punteggio": float(row[3] or 0), "valori": row[4]})
@@ -321,6 +321,11 @@ def leggi_csv_pegasis(testo: str):
             nomi = intestazioni.get("prove", [])[3:]
             valori = ";".join(f"{n}={v}" for n, v in zip(nomi, row[3:]))
             righe.append({"tipo": "PROVE", "data": row[1], "sessioni": int(row[2] or 0), "punteggio": None, "valori": valori})
+        elif k == "ASCOLTO":
+            # test di ascolto con il modello di cuffie: cuffie, tipo, soglie dx/sx, selettività, lateralità…
+            nomi = intestazioni.get("ascolto", [])[3:]
+            valori = ";".join(f"{n}={v}" for n, v in zip(nomi, row[3:]))
+            righe.append({"tipo": "ASCOLTO", "data": row[1], "sessioni": int(row[2] or 0), "punteggio": None, "valori": valori})
         elif k == "versione_app":
             righe.append({"tipo": "VERSIONE", "data": None, "sessioni": None, "punteggio": None, "valori": row[1].strip()})
         elif k == "sessioni_fatte":
