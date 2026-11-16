@@ -249,6 +249,8 @@ def leggi_csv_pegasis(testo: str):
             nomi = intestazioni.get("prove", [])[3:]
             valori = ";".join(f"{n}={v}" for n, v in zip(nomi, row[3:]))
             righe.append({"tipo": "PROVE", "data": row[1], "sessioni": int(row[2] or 0), "punteggio": None, "valori": valori})
+        elif k == "versione_app":
+            righe.append({"tipo": "VERSIONE", "data": None, "sessioni": None, "punteggio": None, "valori": row[1].strip()})
         elif k == "sessioni_fatte":
             righe.append({"tipo": "SESSIONI", "data": None, "sessioni": int(row[1] or 0), "punteggio": None, "valori": ""})
     if not codice:
