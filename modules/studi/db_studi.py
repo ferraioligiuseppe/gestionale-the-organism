@@ -21,6 +21,43 @@ except ImportError:  # import diretto dalla cartella
     from testi_privacy import CONSENSI, PRIVACY_VERSIONE
 
 ROMA = ZoneInfo("Europe/Rome")
+
+# ---------------- Accesso al database ----------------
+# Il gestionale usa un proprio cursore (righe come tuple o come dizionari, senza «with»):
+# queste funzioni funzionano con entrambi e con psycopg2 puro.
+
+def _rows(cur):
+    rows = cur.fetchall() or []
+    if rows and isinstance(rows[0], dict):
+        return [dict(r) for r in rows]
+    cols = [d[0] for d in (cur.description or [])]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def _one(cur):
+    """Prima riga come dizionario, o None."""
+    r = cur.fetchone()
+    if r is None:
+        return None
+    if isinstance(r, dict):
+        return dict(r)
+    return dict(zip([d[0] for d in cur.description], r))
+
+
+def _val(cur):
+    """Primo valore della prima riga, o None."""
+    r = cur.fetchone()
+    if r is None:
+        return None
+    return list(r.values())[0] if isinstance(r, dict) else r[0]
+
+
+def _close(cur):
+    try:
+        cur.close()
+    except Exception:
+        pass
+
 ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # senza 0/O, 1/I: si dettano senza errori
 
 SCHEMA = """
@@ -96,9 +133,30 @@ CREATE TABLE IF NOT EXISTS studi_registro (
 """
 
 
+def _rollback_su_errore(fn):
+    """Se una scrittura fallisce, annulla la transazione: la connessione del gestionale resta utilizzabile."""
+    import functools
+
+    @functools.wraps(fn)
+    def wrap(conn, *a, **k):
+        try:
+            return fn(conn, *a, **k)
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
+    return wrap
+
+
+@_rollback_su_errore
 def crea_tabelle(conn):
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute(SCHEMA)
+    finally:
+        _close(cur)
     conn.commit()
 
 
@@ -122,49 +180,59 @@ def lista_blocchi(gruppi: list[str], blocco: int, n: int, seed: int) -> list[str
     return out[:n]
 
 
+@_rollback_su_errore
 def crea_studio(conn, titolo, descrizione="", sessioni=20, minuti=30, attesa_giorni=35, brani="",
                 gruppi="A,B", blocco=4, posti=200, comitato_etico="", operatore=""):
     token = secrets.token_urlsafe(12)
     seed = secrets.randbits(32)
     elenco = [g.strip() for g in gruppi.split(",") if g.strip()]
     lista = lista_blocchi(elenco, blocco, posti, seed)
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("""INSERT INTO studi (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, gruppi, blocco,
                        token_iscrizione, comitato_etico) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                     (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, ",".join(elenco), blocco, token, comitato_etico))
-        sid = cur.fetchone()[0]
-        cur.executemany("INSERT INTO studi_randomizzazione (studio_id, posizione, gruppo) VALUES (%s,%s,%s)",
-                        [(sid, i, g) for i, g in enumerate(lista)])
+        sid = _val(cur)
+        for i, g in enumerate(lista):
+            cur.execute("INSERT INTO studi_randomizzazione (studio_id, posizione, gruppo) VALUES (%s,%s,%s)", (sid, i, g))
         _log(cur, sid, None, f"studio creato (lista di randomizzazione: {posti} posti, blocchi da {blocco})", operatore)
+    finally:
+        _close(cur)
     conn.commit()
     return sid
 
 
 def elenco_studi(conn):
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("""SELECT s.id, s.titolo, s.sessioni, s.attesa_giorni, s.token_iscrizione, s.iscrizioni_aperte,
                        (SELECT count(*) FROM studi_partecipanti p WHERE p.studio_id = s.id) AS iscritti
                        FROM studi s ORDER BY s.creato DESC""")
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        return _rows(cur)
+    finally:
+        _close(cur)
 
 
 def studio(conn, sid=None, token=None):
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         if token is not None:
             cur.execute("SELECT * FROM studi WHERE token_iscrizione = %s", (token,))
         else:
             cur.execute("SELECT * FROM studi WHERE id = %s", (sid,))
-        r = cur.fetchone()
-        if r is None:
-            return None
-        return dict(zip([d[0] for d in cur.description], r))
+        return _one(cur)
+    finally:
+        _close(cur)
 
 
+@_rollback_su_errore
 def imposta_iscrizioni(conn, sid, aperte: bool, operatore=""):
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("UPDATE studi SET iscrizioni_aperte = %s WHERE id = %s", (aperte, sid))
         _log(cur, sid, None, "iscrizioni aperte" if aperte else "iscrizioni chiuse", operatore)
+    finally:
+        _close(cur)
     conn.commit()
 
 
@@ -186,6 +254,7 @@ def data_partenza(gruppo: str, primo_gruppo: str, attesa_giorni: int, ora: datet
     return datetime.combine(giorno, time(0, 0), ROMA)
 
 
+@_rollback_su_errore
 def iscrivi(conn, sid, nome, cognome, email, telefono, dati_base: dict, consensi: dict,
             modalita="online", operatore=""):
     """Iscrive un partecipante: verifica i consensi, crea il codice, assegna il gruppo, genera il codice Pegasis.
@@ -197,13 +266,14 @@ def iscrivi(conn, sid, nome, cognome, email, telefono, dati_base: dict, consensi
     if s is None or not s["iscrizioni_aperte"]:
         raise ValueError("Le iscrizioni a questo studio sono chiuse.")
     ora = datetime.now(ROMA)
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("""SELECT posizione, gruppo FROM studi_randomizzazione WHERE studio_id = %s AND NOT usato
                        ORDER BY posizione LIMIT 1 FOR UPDATE""", (sid,))
-        r = cur.fetchone()
+        r = _one(cur)
         if r is None:
             raise ValueError("Posti esauriti: allunga la lista di randomizzazione.")
-        pos, gruppo = r
+        pos, gruppo = r["posizione"], r["gruppo"]
         cur.execute("UPDATE studi_randomizzazione SET usato = TRUE WHERE studio_id = %s AND posizione = %s", (sid, pos))
         codice = nuovo_codice(cur, sid)
         primo = s["gruppi"].split(",")[0]
@@ -222,6 +292,8 @@ def iscrivi(conn, sid, nome, cognome, email, telefono, dati_base: dict, consensi
                     (sid, codice, gruppo, inizio, dati_base.get("fascia_eta"), dati_base.get("sesso"), dati_base.get("mano"),
                      dati_base.get("udito"), dati_base.get("acufene"), dati_base.get("cuffie"), cp))
         _log(cur, sid, codice, f"iscrizione ({modalita}), gruppo {gruppo}, privacy {PRIVACY_VERSIONE}", operatore)
+    finally:
+        _close(cur)
     conn.commit()
     return {"codice": codice, "gruppo": gruppo, "inizio": inizio, "codice_pegasis": cp}
 
@@ -258,9 +330,11 @@ def leggi_csv_pegasis(testo: str):
     return codice, righe
 
 
+@_rollback_su_errore
 def importa_dati(conn, sid, testo, operatore=""):
     codice, righe = leggi_csv_pegasis(testo)
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("SELECT 1 FROM studi_partecipanti WHERE studio_id = %s AND codice = %s", (sid, codice))
         if cur.fetchone() is None:
             raise ValueError(f"Il codice {codice} non è iscritto a questo studio.")
@@ -271,8 +345,10 @@ def importa_dati(conn, sid, testo, operatore=""):
             cur.execute("""INSERT INTO studi_dati (studio_id, codice, tipo, data, sessioni, punteggio, valori)
                            VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
                         (sid, codice, r["tipo"], r["data"], r["sessioni"], r["punteggio"], r["valori"]))
-            nuovi += cur.rowcount
+            nuovi += max(int(getattr(cur, "rowcount", 0) or 0), 0)
         _log(cur, sid, codice, f"importati {nuovi} dati nuovi", operatore)
+    finally:
+        _close(cur)
     conn.commit()
     return codice, nuovi
 
@@ -281,7 +357,8 @@ def importa_dati(conn, sid, testo, operatore=""):
 
 def avanzamento(conn, sid):
     """Una riga per partecipante, con nome (solo uso interno) e stato delle misure."""
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("""
             SELECT p.codice, i.nome || ' ' || i.cognome AS nome, p.gruppo, p.inizio,
                    COALESCE((SELECT max(sessioni) FROM studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
@@ -293,13 +370,15 @@ def avanzamento(conn, sid):
                    i.revocato
             FROM studi_partecipanti p JOIN studi_identita i ON i.studio_id = p.studio_id AND i.codice = p.codice
             WHERE p.studio_id = %s ORDER BY p.iscritto""", (sid,))
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        return _rows(cur)
+    finally:
+        _close(cur)
 
 
 def esporta_anonimo(conn, sid):
     """Dati per l'analisi SENZA nomi né contatti: codice, gruppo, dati di base e misure."""
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("""
             SELECT p.codice, p.gruppo, p.fascia_eta, p.sesso, p.mano, p.udito, p.acufene, p.cuffie,
                    d.tipo, d.data, d.sessioni, d.punteggio, d.valori
@@ -307,24 +386,31 @@ def esporta_anonimo(conn, sid):
             JOIN studi_identita i ON i.studio_id = p.studio_id AND i.codice = p.codice AND i.revocato IS NULL
             LEFT JOIN studi_dati d ON d.studio_id = p.studio_id AND d.codice = p.codice
             WHERE p.studio_id = %s ORDER BY p.codice, d.tipo, d.data""", (sid,))
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        return _rows(cur)
+    finally:
+        _close(cur)
 
 
+@_rollback_su_errore
 def revoca(conn, sid, codice, operatore=""):
     """Ritiro del partecipante: cancella i dati di ricerca e l'anagrafica; resta solo la traccia della revoca."""
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("DELETE FROM studi_dati WHERE studio_id = %s AND codice = %s", (sid, codice))
         cur.execute("DELETE FROM studi_partecipanti WHERE studio_id = %s AND codice = %s", (sid, codice))
         cur.execute("""UPDATE studi_identita SET nome = '(ritirato)', cognome = '', email = '', telefono = '',
                        revocato = now() WHERE studio_id = %s AND codice = %s""", (sid, codice))
         _log(cur, sid, codice, "ritiro: dati cancellati", operatore)
+    finally:
+        _close(cur)
     conn.commit()
 
 
 def registro(conn, sid, limite=200):
-    with conn.cursor() as cur:
+    cur = conn.cursor()
+    try:
         cur.execute("""SELECT quando, codice, azione, operatore FROM studi_registro WHERE studio_id = %s
                        ORDER BY quando DESC LIMIT %s""", (sid, limite))
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        return _rows(cur)
+    finally:
+        _close(cur)
