@@ -832,6 +832,12 @@ def main():
             azione_offerte_sale(conn)
             return
 
+        # Iscrizione a uno studio di ricerca (modules/studi): link ?azione=studio&s=TOKEN
+        if azione == "studio":
+            from modules.studi.ui_studi import render_iscrizione_pubblica
+            render_iscrizione_pubblica(lambda: conn, qp("s") or "")
+            return
+
         # Salvataggio delle prove touch di «Giochiamo imparando» (token proprio)
         if azione == "touch":
             from modules.grafomotricita.ui_grafomotricita import azione_touch
