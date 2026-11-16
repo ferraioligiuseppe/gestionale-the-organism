@@ -139,6 +139,12 @@ def _rollback_su_errore(fn):
 
     @functools.wraps(fn)
     def wrap(conn, *a, **k):
+        # «sveglia» la connessione prima di scrivere: se il server l'aveva chiusa, il gestionale la riapre ORA,
+        # e tutte le istruzioni che seguono girano sulla stessa connessione (niente righe «sparite» a metà)
+        try:
+            c = conn.cursor(); c.execute("SELECT 1"); c.fetchone(); _close(c)
+        except Exception:
+            pass
         try:
             return fn(conn, *a, **k)
         except Exception:
@@ -189,13 +195,24 @@ def crea_studio(conn, titolo, descrizione="", sessioni=20, minuti=30, attesa_gio
     lista = lista_blocchi(elenco, blocco, posti, seed)
     cur = conn.cursor()
     try:
-        cur.execute("""INSERT INTO ricerca_studi (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, gruppi, blocco,
-                       token_iscrizione, comitato_etico) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-                    (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, ",".join(elenco), blocco, token, comitato_etico))
+        # un'unica istruzione: studio, lista di randomizzazione e registro nascono insieme o per niente
+        cur.execute("""
+            WITH s AS (
+                INSERT INTO ricerca_studi (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, gruppi, blocco,
+                                           token_iscrizione, comitato_etico)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+            ), r AS (
+                INSERT INTO ricerca_studi_randomizzazione (studio_id, posizione, gruppo)
+                SELECT s.id, x.pos, x.gruppo FROM s, unnest(%s, %s) AS x(pos, gruppo)
+            ), l AS (
+                INSERT INTO ricerca_studi_registro (studio_id, codice, azione, operatore)
+                SELECT s.id, NULL, %s, %s FROM s
+            )
+            SELECT id FROM s""",
+                    (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, ",".join(elenco), blocco, token, comitato_etico,
+                     list(range(len(lista))), lista,
+                     f"studio creato (lista di randomizzazione: {posti} posti, blocchi da {blocco})", operatore))
         sid = _val(cur)
-        for i, g in enumerate(lista):
-            cur.execute("INSERT INTO ricerca_studi_randomizzazione (studio_id, posizione, gruppo) VALUES (%s,%s,%s)", (sid, i, g))
-        _log(cur, sid, None, f"studio creato (lista di randomizzazione: {posti} posti, blocchi da {blocco})", operatore)
     finally:
         _close(cur)
     conn.commit()
