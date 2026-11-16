@@ -1,9 +1,9 @@
 """Modulo «Studi e ricerca» — archivio degli studi con i partecipanti pseudonimizzati.
 
 Struttura (GDPR, pseudonimizzazione):
-  - studi_identita: nome, contatti, consensi → solo per il responsabile
-  - studi_partecipanti / studi_dati: dati di ricerca, legati SOLO al codice partecipante
-  - studi_registro: chi ha fatto cosa e quando (accountability)
+  - ricerca_studi_identita: nome, contatti, consensi → solo per il responsabile
+  - ricerca_studi_partecipanti / ricerca_studi_dati: dati di ricerca, legati SOLO al codice partecipante
+  - ricerca_studi_registro: chi ha fatto cosa e quando (accountability)
 Le funzioni ricevono una connessione PostgreSQL (psycopg2) e usano segnaposto %s.
 """
 import csv
@@ -61,7 +61,7 @@ def _close(cur):
 ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # senza 0/O, 1/I: si dettano senza errori
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS studi (
+CREATE TABLE IF NOT EXISTS ricerca_studi (
     id BIGSERIAL PRIMARY KEY,
     titolo TEXT NOT NULL,
     descrizione TEXT DEFAULT '',
@@ -76,16 +76,16 @@ CREATE TABLE IF NOT EXISTS studi (
     iscrizioni_aperte BOOLEAN NOT NULL DEFAULT TRUE,
     creato TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS studi_randomizzazione (
-    studio_id BIGINT NOT NULL REFERENCES studi(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS ricerca_studi_randomizzazione (
+    studio_id BIGINT NOT NULL REFERENCES ricerca_studi(id) ON DELETE CASCADE,
     posizione INT NOT NULL,
     gruppo TEXT NOT NULL,
     usato BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (studio_id, posizione)
 );
-CREATE TABLE IF NOT EXISTS studi_identita (
+CREATE TABLE IF NOT EXISTS ricerca_studi_identita (
     id BIGSERIAL PRIMARY KEY,
-    studio_id BIGINT NOT NULL REFERENCES studi(id) ON DELETE CASCADE,
+    studio_id BIGINT NOT NULL REFERENCES ricerca_studi(id) ON DELETE CASCADE,
     codice TEXT NOT NULL,
     nome TEXT NOT NULL,
     cognome TEXT NOT NULL,
@@ -99,9 +99,9 @@ CREATE TABLE IF NOT EXISTS studi_identita (
     revocato TIMESTAMPTZ,
     UNIQUE (studio_id, codice)
 );
-CREATE TABLE IF NOT EXISTS studi_partecipanti (
+CREATE TABLE IF NOT EXISTS ricerca_studi_partecipanti (
     id BIGSERIAL PRIMARY KEY,
-    studio_id BIGINT NOT NULL REFERENCES studi(id) ON DELETE CASCADE,
+    studio_id BIGINT NOT NULL REFERENCES ricerca_studi(id) ON DELETE CASCADE,
     codice TEXT NOT NULL,
     gruppo TEXT NOT NULL,
     inizio TIMESTAMPTZ NOT NULL,
@@ -110,9 +110,9 @@ CREATE TABLE IF NOT EXISTS studi_partecipanti (
     iscritto TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (studio_id, codice)
 );
-CREATE TABLE IF NOT EXISTS studi_dati (
+CREATE TABLE IF NOT EXISTS ricerca_studi_dati (
     id BIGSERIAL PRIMARY KEY,
-    studio_id BIGINT NOT NULL REFERENCES studi(id) ON DELETE CASCADE,
+    studio_id BIGINT NOT NULL REFERENCES ricerca_studi(id) ON DELETE CASCADE,
     codice TEXT NOT NULL,
     tipo TEXT NOT NULL,
     data DATE,
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS studi_dati (
     ricevuto TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (studio_id, codice, tipo, data, sessioni, valori)
 );
-CREATE TABLE IF NOT EXISTS studi_registro (
+CREATE TABLE IF NOT EXISTS ricerca_studi_registro (
     id BIGSERIAL PRIMARY KEY,
     studio_id BIGINT,
     codice TEXT,
@@ -161,7 +161,7 @@ def crea_tabelle(conn):
 
 
 def _log(cur, studio_id, codice, azione, operatore=""):
-    cur.execute("INSERT INTO studi_registro (studio_id, codice, azione, operatore) VALUES (%s,%s,%s,%s)",
+    cur.execute("INSERT INTO ricerca_studi_registro (studio_id, codice, azione, operatore) VALUES (%s,%s,%s,%s)",
                 (studio_id, codice, azione, operatore))
 
 
@@ -189,12 +189,12 @@ def crea_studio(conn, titolo, descrizione="", sessioni=20, minuti=30, attesa_gio
     lista = lista_blocchi(elenco, blocco, posti, seed)
     cur = conn.cursor()
     try:
-        cur.execute("""INSERT INTO studi (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, gruppi, blocco,
+        cur.execute("""INSERT INTO ricerca_studi (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, gruppi, blocco,
                        token_iscrizione, comitato_etico) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
                     (titolo, descrizione, sessioni, minuti, attesa_giorni, brani, ",".join(elenco), blocco, token, comitato_etico))
         sid = _val(cur)
         for i, g in enumerate(lista):
-            cur.execute("INSERT INTO studi_randomizzazione (studio_id, posizione, gruppo) VALUES (%s,%s,%s)", (sid, i, g))
+            cur.execute("INSERT INTO ricerca_studi_randomizzazione (studio_id, posizione, gruppo) VALUES (%s,%s,%s)", (sid, i, g))
         _log(cur, sid, None, f"studio creato (lista di randomizzazione: {posti} posti, blocchi da {blocco})", operatore)
     finally:
         _close(cur)
@@ -206,8 +206,8 @@ def elenco_studi(conn):
     cur = conn.cursor()
     try:
         cur.execute("""SELECT s.id, s.titolo, s.sessioni, s.attesa_giorni, s.token_iscrizione, s.iscrizioni_aperte,
-                       (SELECT count(*) FROM studi_partecipanti p WHERE p.studio_id = s.id) AS iscritti
-                       FROM studi s ORDER BY s.creato DESC""")
+                       (SELECT count(*) FROM ricerca_studi_partecipanti p WHERE p.studio_id = s.id) AS iscritti
+                       FROM ricerca_studi s ORDER BY s.creato DESC""")
         return _rows(cur)
     finally:
         _close(cur)
@@ -217,9 +217,9 @@ def studio(conn, sid=None, token=None):
     cur = conn.cursor()
     try:
         if token is not None:
-            cur.execute("SELECT * FROM studi WHERE token_iscrizione = %s", (token,))
+            cur.execute("SELECT * FROM ricerca_studi WHERE token_iscrizione = %s", (token,))
         else:
-            cur.execute("SELECT * FROM studi WHERE id = %s", (sid,))
+            cur.execute("SELECT * FROM ricerca_studi WHERE id = %s", (sid,))
         return _one(cur)
     finally:
         _close(cur)
@@ -229,7 +229,7 @@ def studio(conn, sid=None, token=None):
 def imposta_iscrizioni(conn, sid, aperte: bool, operatore=""):
     cur = conn.cursor()
     try:
-        cur.execute("UPDATE studi SET iscrizioni_aperte = %s WHERE id = %s", (aperte, sid))
+        cur.execute("UPDATE ricerca_studi SET iscrizioni_aperte = %s WHERE id = %s", (aperte, sid))
         _log(cur, sid, None, "iscrizioni aperte" if aperte else "iscrizioni chiuse", operatore)
     finally:
         _close(cur)
@@ -241,7 +241,7 @@ def imposta_iscrizioni(conn, sid, aperte: bool, operatore=""):
 def nuovo_codice(cur, sid) -> str:
     while True:
         c = "".join(secrets.choice(ALFABETO) for _ in range(6))
-        cur.execute("SELECT 1 FROM studi_identita WHERE studio_id = %s AND codice = %s", (sid, c))
+        cur.execute("SELECT 1 FROM ricerca_studi_identita WHERE studio_id = %s AND codice = %s", (sid, c))
         if cur.fetchone() is None:
             return c
 
@@ -268,13 +268,13 @@ def iscrivi(conn, sid, nome, cognome, email, telefono, dati_base: dict, consensi
     ora = datetime.now(ROMA)
     cur = conn.cursor()
     try:
-        cur.execute("""SELECT posizione, gruppo FROM studi_randomizzazione WHERE studio_id = %s AND NOT usato
+        cur.execute("""SELECT posizione, gruppo FROM ricerca_studi_randomizzazione WHERE studio_id = %s AND NOT usato
                        ORDER BY posizione LIMIT 1 FOR UPDATE""", (sid,))
         r = _one(cur)
         if r is None:
             raise ValueError("Posti esauriti: allunga la lista di randomizzazione.")
         pos, gruppo = r["posizione"], r["gruppo"]
-        cur.execute("UPDATE studi_randomizzazione SET usato = TRUE WHERE studio_id = %s AND posizione = %s", (sid, pos))
+        cur.execute("UPDATE ricerca_studi_randomizzazione SET usato = TRUE WHERE studio_id = %s AND posizione = %s", (sid, pos))
         codice = nuovo_codice(cur, sid)
         primo = s["gruppi"].split(",")[0]
         inizio = data_partenza(gruppo, primo, s["attesa_giorni"], ora)
@@ -283,11 +283,11 @@ def iscrivi(conn, sid, nome, cognome, email, telefono, dati_base: dict, consensi
         cp = pegasis_code.study_program(f"Studio Pegasis · gruppo {gruppo}", codice, gruppo, start_ms,
                                         s["sessioni"], s["minuti"], brani,
                                         "Una sessione al giorno, con le cuffie, in un posto tranquillo. Grazie per partecipare!")
-        cur.execute("""INSERT INTO studi_identita (studio_id, codice, nome, cognome, email, telefono, consenso_data,
+        cur.execute("""INSERT INTO ricerca_studi_identita (studio_id, codice, nome, cognome, email, telefono, consenso_data,
                        privacy_versione, consensi, ricontatto, modalita) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (sid, codice, nome.strip(), cognome.strip(), email.strip(), telefono.strip(), ora, PRIVACY_VERSIONE,
                      ",".join(k for k, v in consensi.items() if v), bool(consensi.get("ricontatto")), modalita))
-        cur.execute("""INSERT INTO studi_partecipanti (studio_id, codice, gruppo, inizio, fascia_eta, sesso, mano, udito,
+        cur.execute("""INSERT INTO ricerca_studi_partecipanti (studio_id, codice, gruppo, inizio, fascia_eta, sesso, mano, udito,
                        acufene, cuffie, codice_pegasis) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (sid, codice, gruppo, inizio, dati_base.get("fascia_eta"), dati_base.get("sesso"), dati_base.get("mano"),
                      dati_base.get("udito"), dati_base.get("acufene"), dati_base.get("cuffie"), cp))
@@ -340,14 +340,14 @@ def importa_dati(conn, sid, testo, operatore=""):
     codice, righe = leggi_csv_pegasis(testo)
     cur = conn.cursor()
     try:
-        cur.execute("SELECT 1 FROM studi_partecipanti WHERE studio_id = %s AND codice = %s", (sid, codice))
+        cur.execute("SELECT 1 FROM ricerca_studi_partecipanti WHERE studio_id = %s AND codice = %s", (sid, codice))
         if cur.fetchone() is None:
             raise ValueError(f"Il codice {codice} non è iscritto a questo studio.")
         nuovi = 0
         for r in righe:
             if r["tipo"] == "SESSIONI":
-                cur.execute("DELETE FROM studi_dati WHERE studio_id = %s AND codice = %s AND tipo = 'SESSIONI'", (sid, codice))
-            cur.execute("""INSERT INTO studi_dati (studio_id, codice, tipo, data, sessioni, punteggio, valori)
+                cur.execute("DELETE FROM ricerca_studi_dati WHERE studio_id = %s AND codice = %s AND tipo = 'SESSIONI'", (sid, codice))
+            cur.execute("""INSERT INTO ricerca_studi_dati (studio_id, codice, tipo, data, sessioni, punteggio, valori)
                            VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
                         (sid, codice, r["tipo"], r["data"], r["sessioni"], r["punteggio"], r["valori"]))
             nuovi += max(int(getattr(cur, "rowcount", 0) or 0), 0)
@@ -377,7 +377,7 @@ def importa_automatico(conn, d: str):
     codice, _ = leggi_csv_pegasis(testo)
     cur = conn.cursor()
     try:
-        cur.execute("""SELECT p.studio_id, s.titolo FROM studi_partecipanti p JOIN studi s ON s.id = p.studio_id
+        cur.execute("""SELECT p.studio_id, s.titolo FROM ricerca_studi_partecipanti p JOIN ricerca_studi s ON s.id = p.studio_id
                        WHERE p.codice = %s ORDER BY p.iscritto DESC LIMIT 1""", (codice,))
         r = _one(cur)
     finally:
@@ -396,14 +396,14 @@ def avanzamento(conn, sid):
     try:
         cur.execute("""
             SELECT p.codice, i.nome || ' ' || i.cognome AS nome, p.gruppo, p.inizio,
-                   COALESCE((SELECT max(sessioni) FROM studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
+                   COALESCE((SELECT max(sessioni) FROM ricerca_studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
                              AND d.tipo = 'SESSIONI'), 0) AS sessioni,
-                   (SELECT count(DISTINCT d.data) FROM studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
+                   (SELECT count(DISTINCT d.data) FROM ricerca_studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
                     AND d.tipo = 'WHO5') AS questionari,
-                   (SELECT count(*) FROM studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
+                   (SELECT count(*) FROM ricerca_studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
                     AND d.tipo = 'PROVE') AS prove,
                    i.revocato
-            FROM studi_partecipanti p JOIN studi_identita i ON i.studio_id = p.studio_id AND i.codice = p.codice
+            FROM ricerca_studi_partecipanti p JOIN ricerca_studi_identita i ON i.studio_id = p.studio_id AND i.codice = p.codice
             WHERE p.studio_id = %s ORDER BY p.iscritto""", (sid,))
         return _rows(cur)
     finally:
@@ -417,9 +417,9 @@ def esporta_anonimo(conn, sid):
         cur.execute("""
             SELECT p.codice, p.gruppo, p.fascia_eta, p.sesso, p.mano, p.udito, p.acufene, p.cuffie,
                    d.tipo, d.data, d.sessioni, d.punteggio, d.valori
-            FROM studi_partecipanti p
-            JOIN studi_identita i ON i.studio_id = p.studio_id AND i.codice = p.codice AND i.revocato IS NULL
-            LEFT JOIN studi_dati d ON d.studio_id = p.studio_id AND d.codice = p.codice
+            FROM ricerca_studi_partecipanti p
+            JOIN ricerca_studi_identita i ON i.studio_id = p.studio_id AND i.codice = p.codice AND i.revocato IS NULL
+            LEFT JOIN ricerca_studi_dati d ON d.studio_id = p.studio_id AND d.codice = p.codice
             WHERE p.studio_id = %s ORDER BY p.codice, d.tipo, d.data""", (sid,))
         return _rows(cur)
     finally:
@@ -431,9 +431,9 @@ def revoca(conn, sid, codice, operatore=""):
     """Ritiro del partecipante: cancella i dati di ricerca e l'anagrafica; resta solo la traccia della revoca."""
     cur = conn.cursor()
     try:
-        cur.execute("DELETE FROM studi_dati WHERE studio_id = %s AND codice = %s", (sid, codice))
-        cur.execute("DELETE FROM studi_partecipanti WHERE studio_id = %s AND codice = %s", (sid, codice))
-        cur.execute("""UPDATE studi_identita SET nome = '(ritirato)', cognome = '', email = '', telefono = '',
+        cur.execute("DELETE FROM ricerca_studi_dati WHERE studio_id = %s AND codice = %s", (sid, codice))
+        cur.execute("DELETE FROM ricerca_studi_partecipanti WHERE studio_id = %s AND codice = %s", (sid, codice))
+        cur.execute("""UPDATE ricerca_studi_identita SET nome = '(ritirato)', cognome = '', email = '', telefono = '',
                        revocato = now() WHERE studio_id = %s AND codice = %s""", (sid, codice))
         _log(cur, sid, codice, "ritiro: dati cancellati", operatore)
     finally:
@@ -444,7 +444,7 @@ def revoca(conn, sid, codice, operatore=""):
 def registro(conn, sid, limite=200):
     cur = conn.cursor()
     try:
-        cur.execute("""SELECT quando, codice, azione, operatore FROM studi_registro WHERE studio_id = %s
+        cur.execute("""SELECT quando, codice, azione, operatore FROM ricerca_studi_registro WHERE studio_id = %s
                        ORDER BY quando DESC LIMIT %s""", (sid, limite))
         return _rows(cur)
     finally:
