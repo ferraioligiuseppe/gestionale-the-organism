@@ -669,6 +669,23 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         if not paz_id:
             return True  # header mostrato, in attesa di selezione paziente
 
+    # ── STUDI E RICERCA (modules/studi) ── senza paziente: i partecipanti
+    # sono pseudonimizzati e stanno nelle tabelle del modulo, non in Pazienti.
+    if sotto == "🔬 Studi e ricerca":
+        try:
+            from .studi.ui_studi import render as render_studi
+            render_studi(lambda: conn, operatore=str(st.session_state.get("username") or st.session_state.get("user") or ""))
+        except Exception as e:
+            import traceback
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            st.error(f"Errore Studi e ricerca: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
+        return True
+
     # ── PAZIENTI ──────────────────────────────────────────────────────
     if sotto == "🏠 Dashboard":
         _render_dashboard(conn); return True
