@@ -353,6 +353,36 @@ def importa_dati(conn, sid, testo, operatore=""):
     return codice, nuovi
 
 
+def decodifica_pacchetto(d: str) -> str:
+    """Testo dei dati inviato da Pegasis con il link (deflate senza intestazione + base64 URL)."""
+    import base64
+    import zlib
+    d = (d or "").strip()
+    raw = base64.urlsafe_b64decode(d + "=" * (-len(d) % 4))
+    if len(raw) > 200_000:
+        raise ValueError("Pacchetto troppo grande.")
+    return zlib.decompress(raw, -15).decode("utf-8")
+
+
+@_rollback_su_errore
+def importa_automatico(conn, d: str):
+    """Riceve i dati dal link dell'app: trova lo studio dal codice partecipante e li salva.
+    Restituisce (codice, nuovi, titolo_studio). Accetta solo codici iscritti (e non ritirati)."""
+    testo = decodifica_pacchetto(d)
+    codice, _ = leggi_csv_pegasis(testo)
+    cur = conn.cursor()
+    try:
+        cur.execute("""SELECT p.studio_id, s.titolo FROM studi_partecipanti p JOIN studi s ON s.id = p.studio_id
+                       WHERE p.codice = %s ORDER BY p.iscritto DESC LIMIT 1""", (codice,))
+        r = _one(cur)
+    finally:
+        _close(cur)
+    if r is None:
+        raise ValueError("Codice partecipante non iscritto a nessuno studio.")
+    codice, nuovi = importa_dati(conn, r["studio_id"], testo, "invio dall'app")
+    return codice, nuovi, r["titolo"]
+
+
 # ---------------- Avanzamento ed esportazione ----------------
 
 def avanzamento(conn, sid):
