@@ -315,6 +315,8 @@ SOTTOSEZIONI = {
         "📄 Report PDF con grafici",
         "📊 Export statistici",
         "🧪 Caso demo",
+        # Studi di ricerca con i partecipanti pseudonimizzati (modules/studi)
+        "🔬 Studi e ricerca",
     ],
     # Metodo Buteyko: valutazione, questionari, programma, dispense (app HTML)
     # e diario della Pausa Controllo che il paziente compila da casa.
