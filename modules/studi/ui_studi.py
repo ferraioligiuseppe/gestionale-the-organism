@@ -17,7 +17,7 @@ except ImportError:
     import db_studi as db
     import testi_privacy as tp
 
-# indirizzo dell'area pubblica dove si apre il link di iscrizione (?studio=<token>)
+# indirizzo dell'area pubblica dove si apre il link di iscrizione (?azione=studio&s=<token>)
 URL_PUBBLICO = "https://pnev-eventi-prova.streamlit.app"
 
 
@@ -90,7 +90,7 @@ def render(get_conn, operatore: str = ""):
     scelto = st.selectbox("Studio", studi, format_func=lambda s: f"{s['titolo']} · {s['iscritti']} iscritti")
     sid = scelto["id"]
     s = db.studio(conn, sid)
-    link = f"{URL_PUBBLICO}/?studio={s['token_iscrizione']}"
+    link = f"{URL_PUBBLICO}/?azione=studio&s={s['token_iscrizione']}"
 
     t_iscr, t_part, t_imp, t_esp, t_priv = st.tabs(["Iscrizione", "Partecipanti", "Importa dati", "Esporta", "Privacy e registro"])
 
