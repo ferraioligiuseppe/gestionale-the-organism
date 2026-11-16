@@ -191,3 +191,23 @@ def render_iscrizione_pubblica(get_conn, token: str):
                     st.rerun()
                 except ValueError as e:
                     st.error(str(e))
+
+# ---------------- Pagina pubblica: ricezione dei dati dall'app ----------------
+
+def render_ricezione_dati(get_conn, d: str):
+    """Aperta dal pulsante «Invia i dati allo studio» di Pegasis: salva i dati e conferma."""
+    conn = get_conn()
+    db.crea_tabelle(conn)
+    st.title("Pegasis · invio dei dati")
+    if not d:
+        st.error("Link incompleto: riprova dal pulsante dell'app.")
+        return
+    try:
+        codice, nuovi, titolo = db.importa_automatico(conn, d)
+    except Exception as e:
+        st.error(f"Non è stato possibile salvare i dati: {e}")
+        st.caption("Puoi riprovare più tardi, oppure usare «Non funziona? Invia per email» nell'app.")
+        return
+    st.success(f"Dati ricevuti, grazie! Codice {codice} · {titolo}")
+    st.write("Nuovi dati salvati: %d. Se li avevi già inviati, quelli uguali non vengono duplicati." % nuovi)
+    st.caption("Puoi chiudere questa pagina e tornare a Pegasis.")
