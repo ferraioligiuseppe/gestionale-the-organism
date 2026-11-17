@@ -469,10 +469,11 @@ def elimina_studio(conn, sid, operatore=""):
     """Cancella uno studio senza iscritti (per esempio creato due volte per errore). Con iscritti non si può."""
     cur = conn.cursor()
     try:
-        cur.execute("SELECT count(*) FROM ricerca_studi_identita WHERE studio_id = %s", (sid,))
+        # si può cancellare se non ha iscritti attivi: nessuno, oppure tutti già ritirati (dati già cancellati)
+        cur.execute("SELECT count(*) FROM ricerca_studi_identita WHERE studio_id = %s AND revocato IS NULL", (sid,))
         if (_val(cur) or 0) > 0:
-            raise ValueError("Lo studio ha già degli iscritti: non si può cancellare.")
-        for t in ("ricerca_studi_dati", "ricerca_studi_partecipanti", "ricerca_studi_randomizzazione"):
+            raise ValueError("Lo studio ha ancora iscritti attivi: ritirali prima (scheda Partecipanti) e poi cancellalo.")
+        for t in ("ricerca_studi_dati", "ricerca_studi_partecipanti", "ricerca_studi_identita", "ricerca_studi_randomizzazione"):
             cur.execute(f"DELETE FROM {t} WHERE studio_id = %s", (sid,))
         cur.execute("DELETE FROM ricerca_studi WHERE id = %s", (sid,))
         _log(cur, sid, None, "studio cancellato (senza iscritti)", operatore)
