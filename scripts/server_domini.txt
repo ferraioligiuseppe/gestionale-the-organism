@@ -1,0 +1,5 @@
+# Domini veri del server OVH (uno per riga: dominio porta).
+# Toglie il «#» solo quando il dominio punta già all'indirizzo del server (91.134.106.98).
+# 8501 = gestionale, 8502 = area pubblica (iscrizioni)
+# gestionale.theorganism.it 8501
+# iscrizioni.pnev.it 8502
