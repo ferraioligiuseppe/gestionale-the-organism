@@ -1,0 +1,37 @@
+name: "Server OVH: crea la chiave di accesso (una volta sola)"
+
+# Crea la coppia di chiavi con cui GitHub entra nel server OVH.
+# - La chiave PUBBLICA compare nel riepilogo dell'azione: si incolla su OVH quando si crea l'istanza.
+# - La chiave PRIVATA si scarica una volta (file allegato, cancellato dopo 1 giorno)
+#   e si incolla nel segreto SERVER_SSH_KEY del repository. Non va mandata a nessuno.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  chiave:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Crea la chiave
+        run: |
+          ssh-keygen -t ed25519 -N "" -C "github-theorganism" -f server_key -q
+          {
+            echo "## 1) Chiave PUBBLICA da incollare su OVH"
+            echo "Copia tutta la riga qui sotto (inizia con ssh-ed25519):"
+            echo ""
+            echo '```'
+            cat server_key.pub
+            echo '```'
+            echo ""
+            echo "## 2) Chiave PRIVATA"
+            echo "Scarica il file **chiave-privata-server** in fondo a questa pagina, aprilo con il Blocco note"
+            echo "e incolla tutto il contenuto nel segreto **SERVER_SSH_KEY** (Settings → Secrets and variables → Actions)."
+            echo "Non mandarla a nessuno. Il file si cancella da solo domani."
+          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir out
+          cp server_key out/SERVER_SSH_KEY.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chiave-privata-server
+          path: out/
+          retention-days: 1
