@@ -1,6 +1,7 @@
 # Domini veri del server OVH (uno per riga: dominio porta).
-# Si toglie il «#» solo quando il dominio punta già all'indirizzo del server (91.134.106.98).
 # 8501 = gestionale, 8502 = area pubblica (iscrizioni)
+# Un dominio che non punta ancora al server (91.134.106.98) non blocca gli altri:
+# il server riprova da solo a ottenere il lucchetto HTTPS finché il DNS è pronto.
 gestionale.theorganism.it 8501
 iscrizioni.theorganism.it 8502
-# iscrizioni.pnev.it 8502   (quando Rossi Web aggiunge il record A su Aruba)
+iscrizioni.pnev.it 8502
