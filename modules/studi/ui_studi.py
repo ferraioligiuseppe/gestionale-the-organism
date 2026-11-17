@@ -94,6 +94,24 @@ def render(get_conn, operatore: str = ""):
     s = db.studio(conn, sid)
     link = f"{URL_PUBBLICO}/?azione=studio&s={s['token_iscrizione']}"
 
+    # dati inviati da soli da Pegasis: si prendono dalla cassetta postale ogni volta che si apre la pagina
+    if eeg.configurato():
+        try:
+            codici_studio = {r["codice"] for r in db.avanzamento(conn, sid)}
+            visti = st.session_state.setdefault("studi_dati_visti", {})
+            nuovi_tot = 0
+            for f in eeg.elenco_dati():
+                cod = f["chiave"].split("/")[-1][:-4]
+                if cod not in codici_studio or visti.get(f["chiave"]) == f["caricato"]:
+                    continue
+                _, n = db.importa_dati(conn, sid, eeg.scarica_dati(f["chiave"]), operatore)
+                visti[f["chiave"]] = f["caricato"]
+                nuovi_tot += n
+            if nuovi_tot:
+                st.success(f"Arrivati da Pegasis {nuovi_tot} dati nuovi.")
+        except Exception as e:
+            st.caption(f"Sincronizzazione con Pegasis non riuscita ({e}): riprova ricaricando la pagina.")
+
     t_iscr, t_part, t_imp, t_eeg, t_esp, t_priv = st.tabs(
         ["Iscrizione", "Partecipanti", "Importa dati", "Registri EEG", "Esporta", "Privacy e registro"])
 
