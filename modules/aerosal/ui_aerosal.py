@@ -21,7 +21,7 @@ from modules.crediti import db_crediti as dbc
 
 from . import db_aerosal as db
 
-URL_PUBBLICA = "https://pnev-eventi-prova.streamlit.app"
+URL_PUBBLICA = "https://iscrizioni.theorganism.it"
 SOGLIA_PM10 = "Erogazione nei primi minuti · max ~40 µg/m³ PM10 (soglia 50 µg/m³)"
 
 
