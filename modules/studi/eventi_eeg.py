@@ -32,7 +32,10 @@ def configurato() -> bool:
 
 def _richiesta(percorso: str, metodo: str = "GET", timeout: int = 20) -> bytes:
     url, token = _config()
-    req = urllib.request.Request(url + percorso, method=metodo, headers={"Authorization": f"Bearer {token}"})
+    req = urllib.request.Request(url + percorso, method=metodo, headers={"Authorization": f"Bearer {token}",
+                                 # Cloudflare respinge (403) il nome predefinito «Python-urllib»: ci presentiamo
+                                 "User-Agent": "GestionaleTheOrganism/1.0 (+https://www.pnev.it)",
+                                 "Accept": "application/json, text/csv"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
