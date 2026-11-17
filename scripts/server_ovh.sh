@@ -58,8 +58,10 @@ IPD=$(echo "$SERVER_IP" | tr . -)
   printf 'iscrizioni.%s.sslip.io {\n  reverse_proxy 127.0.0.1:8502\n}\n' "$IPD"
   # domini veri, quando i DNS puntano qui: righe «dominio porta» in scripts/server_domini.txt
   if [ -f "$DOMINI_FILE" ]; then
-    grep -v '^\s*#' "$DOMINI_FILE" | while read -r dominio porta; do
-      [ -n "${dominio:-}" ] && printf '%s {\n  reverse_proxy 127.0.0.1:%s\n}\n' "$dominio" "$porta"
+    { grep -v '^\s*#' "$DOMINI_FILE" || true; } | while read -r dominio porta; do
+      if [ -n "${dominio:-}" ] && [ -n "${porta:-}" ]; then
+        printf '%s {\n  reverse_proxy 127.0.0.1:%s\n}\n' "$dominio" "$porta"
+      fi
     done
   fi
 } | sudo tee /etc/caddy/Caddyfile >/dev/null
