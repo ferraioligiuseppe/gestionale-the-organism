@@ -215,7 +215,8 @@ def render(get_conn, operatore: str = ""):
 
     with t_priv:
         with st.expander("Cancella questo studio"):
-            st.caption("Solo per uno studio creato per errore e senza iscritti. Scrivi il numero dello studio per confermare.")
+            st.caption("Per uno studio di prova o creato per errore: si può cancellare se non ha iscritti attivi "
+                       "(nessuno, oppure tutti ritirati dalla scheda Partecipanti). Scrivi il numero dello studio per confermare.")
             conferma = st.text_input(f"Numero dello studio da cancellare ({sid})", key=f"canc_{sid}")
             if st.button("Cancella lo studio", type="primary", disabled=conferma.strip() != str(sid), key=f"btn_canc_{sid}"):
                 try:
