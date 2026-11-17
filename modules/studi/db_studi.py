@@ -328,7 +328,7 @@ def leggi_csv_pegasis(testo: str):
         k = row[0]
         if k == "partecipante":
             codice = row[1].strip().upper()
-        elif k in ("tipo", "prove", "ascolto"):
+        elif k in ("tipo", "prove", "ascolto", "aderenza"):
             intestazioni[k] = row
         elif k in ("WHO5", "PNEV"):
             righe.append({"tipo": k, "data": row[1], "sessioni": int(row[2] or 0), "punteggio": float(row[3] or 0), "valori": row[4]})
@@ -343,6 +343,14 @@ def leggi_csv_pegasis(testo: str):
             nomi = intestazioni.get("ascolto", [])[3:]
             valori = ";".join(f"{n}={v}" for n, v in zip(nomi, row[3:]))
             righe.append({"tipo": "ASCOLTO", "data": row[1], "sessioni": int(row[2] or 0), "punteggio": None, "valori": valori})
+        elif k == "ADERENZA":
+            # riepilogo dell'aderenza (serie, riposi, scudi, giorni saltati, promemoria): sostituisce il precedente
+            nomi = intestazioni.get("aderenza", [])[3:]
+            valori = ";".join(f"{n}={v}" for n, v in zip(nomi, row[3:]))
+            righe.append({"tipo": "ADERENZA", "data": row[1], "sessioni": int(row[2] or 0), "punteggio": None, "valori": valori})
+        elif k == "GIORNO":
+            # stato di ogni giorno del percorso: ASCOLTO, RIPOSO, SCUDO, SALTATO
+            righe.append({"tipo": "GIORNO", "data": row[1], "sessioni": None, "punteggio": None, "valori": row[4].strip()})
         elif k == "versione_app":
             righe.append({"tipo": "VERSIONE", "data": None, "sessioni": None, "punteggio": None, "valori": row[1].strip()})
         elif k == "sessioni_fatte":
@@ -362,8 +370,12 @@ def importa_dati(conn, sid, testo, operatore=""):
             raise ValueError(f"Il codice {codice} non è iscritto a questo studio.")
         nuovi = 0
         for r in righe:
-            if r["tipo"] == "SESSIONI":
-                cur.execute("DELETE FROM ricerca_studi_dati WHERE studio_id = %s AND codice = %s AND tipo = 'SESSIONI'", (sid, codice))
+            if r["tipo"] in ("SESSIONI", "ADERENZA"):
+                cur.execute("DELETE FROM ricerca_studi_dati WHERE studio_id = %s AND codice = %s AND tipo = %s", (sid, codice, r["tipo"]))
+            elif r["tipo"] == "GIORNO":
+                # un solo stato per giorno: se è cambiato si sostituisce
+                cur.execute("""DELETE FROM ricerca_studi_dati WHERE studio_id = %s AND codice = %s AND tipo = 'GIORNO'
+                               AND data = %s::date AND valori IS DISTINCT FROM %s::text""", (sid, codice, r["data"], r["valori"]))
             # niente doppioni anche quando qualche campo è vuoto (colori senza sessioni): l'invio automatico ripete tutto
             cur.execute("""INSERT INTO ricerca_studi_dati (studio_id, codice, tipo, data, sessioni, punteggio, valori)
                            SELECT %s,%s,%s,%s,%s,%s,%s
@@ -372,7 +384,7 @@ def importa_dati(conn, sid, testo, operatore=""):
                                  AND valori IS NOT DISTINCT FROM %s::text)""",
                         (sid, codice, r["tipo"], r["data"], r["sessioni"], r["punteggio"], r["valori"],
                          sid, codice, r["tipo"], r["data"], r["sessioni"], r["valori"]))
-            if r["tipo"] != "SESSIONI":
+            if r["tipo"] not in ("SESSIONI", "ADERENZA", "GIORNO"):
                 nuovi += max(int(getattr(cur, "rowcount", 0) or 0), 0)
         _log(cur, sid, codice, f"importati {nuovi} dati nuovi", operatore)
     finally:
@@ -425,6 +437,13 @@ def avanzamento(conn, sid):
                     AND d.tipo = 'WHO5') AS questionari,
                    (SELECT count(*) FROM ricerca_studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
                     AND d.tipo = 'PROVE') AS prove,
+                   (SELECT substring(d.valori from 'serie=([0-9]+)')::int FROM ricerca_studi_dati d WHERE d.studio_id = p.studio_id
+                    AND d.codice = p.codice AND d.tipo = 'ADERENZA' LIMIT 1) AS serie,
+                   (SELECT count(*) FROM ricerca_studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
+                    AND d.tipo = 'GIORNO' AND d.valori = 'SALTATO') AS giorni_saltati,
+                   (SELECT round(100.0 * count(*) FILTER (WHERE d.valori = 'ASCOLTO') / NULLIF(count(*), 0))::int
+                    FROM ricerca_studi_dati d WHERE d.studio_id = p.studio_id AND d.codice = p.codice
+                    AND d.tipo = 'GIORNO') AS aderenza_pct,
                    i.revocato
             FROM ricerca_studi_partecipanti p JOIN ricerca_studi_identita i ON i.studio_id = p.studio_id AND i.codice = p.codice
             WHERE p.studio_id = %s ORDER BY p.iscritto""", (sid,))
