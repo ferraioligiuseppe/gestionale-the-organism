@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 # URL dell'app pubblica dove gira la pagina di iscrizione (apps/pnev_pubblico.py).
 # Sovrascrivibile dai secrets con APP_URL_PUBBLICO se cambia il deploy.
-APP_URL_PUBBLICO_DEFAULT = "https://pnev-eventi-prova.streamlit.app"
+APP_URL_PUBBLICO_DEFAULT = "https://iscrizioni.theorganism.it"
 
 
 # =============================================================================
