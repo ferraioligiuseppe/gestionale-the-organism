@@ -6,7 +6,7 @@ import urllib.parse
 
 import streamlit as st
 
-NUOVO = "https://pnev-iscrizioni.streamlit.app/"
+NUOVO = "https://iscrizioni.theorganism.it/"
 
 st.set_page_config(page_title="Studio The Organism · PNEV", page_icon="➡️")
 parametri = st.query_params.to_dict()
