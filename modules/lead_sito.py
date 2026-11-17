@@ -755,7 +755,7 @@ def _cf_valido(cf):
 def _invia_email_conferma_sale(email, nome, token):
     try:
         from modules.ui_questionari import _invia_email
-        link = f"https://gestionale-the-organism.streamlit.app/?sale_conferma={token}"
+        link = f"https://gestionale.theorganism.it/?sale_conferma={token}"
         corpo = (f"Ciao {nome},\n\nPer confermare la richiesta di informazioni sulla Stanza del Sale, "
                  f"clicca su questo link:\n\n{link}\n\n"
                  f"Se non hai richiesto tu, ignora questa email.")

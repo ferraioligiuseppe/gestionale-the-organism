@@ -370,7 +370,7 @@ def render_photoref(conn, paz_id: int, paziente: dict = None) -> None:
         return
 
     st.markdown("##### 📱 Genera link cattura mobile (guidata, con flash/zoom)")
-    base_url = st.text_input("URL pubblico del gestionale", "https://gestionale-the-organism.streamlit.app", key="pr_base_url")
+    base_url = st.text_input("URL pubblico del gestionale", "https://gestionale.theorganism.it", key="pr_base_url")
     ttl = st.number_input("Validità link (minuti)", 5, 180, 30, 5, key="pr_ttl")
     if st.button("🔗 Genera link", key="pr_gen_link"):
         url = genera_link_cattura_mobile(conn, paz_id, base_url, int(ttl))

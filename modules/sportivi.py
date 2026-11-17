@@ -402,7 +402,7 @@ def _notifica_kit_richiesto(nome, cognome, indirizzo, codice, email=None, telefo
 def _invia_email_conferma(email, nome, token):
     try:
         from modules.ui_questionari import _invia_email
-        link = f"https://gestionale-the-organism.streamlit.app/?kit_conferma={token}"
+        link = f"https://gestionale.theorganism.it/?kit_conferma={token}"
         corpo = (f"Ciao {nome},\n\nPer confermare la richiesta del kit anaglifico gratuito PNEV Sport Vision, "
                  f"clicca su questo link:\n\n{link}\n\n"
                  f"Se non hai richiesto tu questo kit, ignora questa email.")

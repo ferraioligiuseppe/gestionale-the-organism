@@ -715,7 +715,7 @@ def render_protocollo_epilessia(conn=None, paz_id=None, paziente=None) -> None:
             utente_id = db_link.crea_utente(conn, nome=f"{nom} {cog}".strip() or f"Paziente {paz_id}", email=email_paz)
             token = db_link.crea_magic_link(conn, utente_id)
             st.session_state["pe_link_generato"] = (
-                f"https://gestionale-the-organism.streamlit.app/diario_crisi_pubblico?t={token}")
+                f"https://gestionale.theorganism.it/diario_crisi_pubblico?t={token}")
         except Exception as e:
             st.session_state["pe_link_generato"] = None
             st.session_state["pe_link_errore"] = str(e)
