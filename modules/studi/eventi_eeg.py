@@ -50,6 +50,15 @@ def scarica(chiave: str) -> str:
     return _richiesta("/" + urllib.parse.quote(chiave)).decode("utf-8")
 
 
+def elenco_dati() -> list[dict]:
+    """Dati dello studio inviati da soli dall'app (un file per codice, sempre aggiornato): chiave, byte, caricato."""
+    return json.loads(_richiesta("/dati")).get("file", [])
+
+
+def scarica_dati(chiave: str) -> str:
+    return _richiesta("/" + urllib.parse.quote(chiave)).decode("utf-8")
+
+
 def cancella_codice(codice: str) -> int:
     """Ritiro dallo studio: cancella tutti i registri del codice. Restituisce quanti file."""
     return int(json.loads(_richiesta("/eventi?codice=" + urllib.parse.quote(codice.upper()), "DELETE")).get("cancellati", 0))
