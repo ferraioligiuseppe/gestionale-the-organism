@@ -1,4 +1,4 @@
-"""Vecchio indirizzo pnev-eventi-prova.streamlit.app: porta al nuovo pnev-iscrizioni.streamlit.app
+"""Vecchio indirizzo pnev-eventi-prova.streamlit.app: porta al nuovo iscrizioni.theorganism.it
 mantenendo tutto quello che c'è dopo il «?», così i link già mandati continuano a funzionare.
 Cartella a parte con il suo requirements.txt: non installa le librerie del gestionale."""
 import html
@@ -7,7 +7,7 @@ import urllib.parse
 
 import streamlit as st
 
-NUOVO = "https://pnev-iscrizioni.streamlit.app/"
+NUOVO = "https://iscrizioni.theorganism.it/"
 
 st.set_page_config(page_title="Studio The Organism · PNEV", page_icon="➡️")
 parametri = st.query_params.to_dict()
