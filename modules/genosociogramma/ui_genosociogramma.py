@@ -17,7 +17,7 @@ from .render_genosociogramma import (TIPI_LEGAME_LABEL, anni_label, geometria, r
                                      testo_diario)
 
 SESSO_LABEL = {"M": "Maschio", "F": "Femmina", "?": "Non noto"}
-BASE_URL_DEFAULT = "https://gestionale-the-organism.streamlit.app"
+BASE_URL_DEFAULT = "https://gestionale.theorganism.it"
 
 
 def token_secret():
