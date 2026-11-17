@@ -1,0 +1,56 @@
+name: "Server OVH: installa e aggiorna il gestionale"
+
+# Copia il gestionale sul server OVH e lo (re)installa. Si lancia a mano da Actions.
+# Servono due segreti del repository:
+#   SERVER_SSH_KEY     – la chiave privata creata da «Server OVH: crea la chiave di accesso»
+#   STREAMLIT_SECRETS  – il testo dei Secrets del gestionale (copiato da Streamlit Cloud → Settings → Secrets)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: server-ovh
+  cancel-in-progress: false
+
+env:
+  SERVER_IP: 91.134.106.98
+  UTENTE: ubuntu
+
+jobs:
+  pubblica:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Controlla i segreti
+        env:
+          K: ${{ secrets.SERVER_SSH_KEY }}
+          S: ${{ secrets.STREAMLIT_SECRETS }}
+        run: |
+          [ -n "$K" ] || { echo "::error::Manca il segreto SERVER_SSH_KEY"; exit 1; }
+          [ -n "$S" ] || { echo "::error::Manca il segreto STREAMLIT_SECRETS (i Secrets del gestionale)"; exit 1; }
+
+      - name: Chiave di accesso
+        env:
+          K: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$K" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          for i in 1 2 3 4 5 6; do ssh-keyscan -T 10 -H "$SERVER_IP" >> ~/.ssh/known_hosts 2>/dev/null && break; sleep 10; done
+
+      - name: Segreti dell'app
+        env:
+          S: ${{ secrets.STREAMLIT_SECRETS }}
+        run: |
+          mkdir -p .streamlit
+          printf '%s\n' "$S" > .streamlit/secrets.toml
+
+      - name: Copia il gestionale sul server
+        run: |
+          rsync -az --delete --exclude '.git/' --exclude '__pycache__/' \
+            ./ "$UTENTE@$SERVER_IP:/home/ubuntu/app/"
+
+      - name: Installa e riavvia
+        run: |
+          ssh "$UTENTE@$SERVER_IP" "SERVER_IP=$SERVER_IP bash -s" < scripts/server_ovh.sh
