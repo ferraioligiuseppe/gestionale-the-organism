@@ -141,7 +141,9 @@ def render(get_conn, operatore: str = ""):
                 st.success(f"{cod}: dati cancellati."); st.rerun()
 
     with t_imp:
-        st.write("Incolla qui il testo ricevuto con «Invia i dati allo studio» (email o WhatsApp).")
+        st.info("Di solito non serve: con «Invia i dati allo studio» Pegasis salva i dati da solo (compaiono in «Partecipanti» "
+                "ed «Esporta»). Usa questa scheda solo se un partecipante ti ha mandato i dati per email con «Non funziona? Invia per email».")
+        st.write("Incolla qui il testo ricevuto per email:")
         testo = st.text_area("Testo ricevuto", height=220)
         if st.button("Importa", disabled=not testo.strip()):
             try:
