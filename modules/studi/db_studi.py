@@ -364,10 +364,16 @@ def importa_dati(conn, sid, testo, operatore=""):
         for r in righe:
             if r["tipo"] == "SESSIONI":
                 cur.execute("DELETE FROM ricerca_studi_dati WHERE studio_id = %s AND codice = %s AND tipo = 'SESSIONI'", (sid, codice))
+            # niente doppioni anche quando qualche campo è vuoto (colori senza sessioni): l'invio automatico ripete tutto
             cur.execute("""INSERT INTO ricerca_studi_dati (studio_id, codice, tipo, data, sessioni, punteggio, valori)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
-                        (sid, codice, r["tipo"], r["data"], r["sessioni"], r["punteggio"], r["valori"]))
-            nuovi += max(int(getattr(cur, "rowcount", 0) or 0), 0)
+                           SELECT %s,%s,%s,%s,%s,%s,%s
+                           WHERE NOT EXISTS (SELECT 1 FROM ricerca_studi_dati WHERE studio_id = %s AND codice = %s AND tipo = %s
+                                 AND data IS NOT DISTINCT FROM %s::date AND sessioni IS NOT DISTINCT FROM %s::int
+                                 AND valori IS NOT DISTINCT FROM %s::text)""",
+                        (sid, codice, r["tipo"], r["data"], r["sessioni"], r["punteggio"], r["valori"],
+                         sid, codice, r["tipo"], r["data"], r["sessioni"], r["valori"]))
+            if r["tipo"] != "SESSIONI":
+                nuovi += max(int(getattr(cur, "rowcount", 0) or 0), 0)
         _log(cur, sid, codice, f"importati {nuovi} dati nuovi", operatore)
     finally:
         _close(cur)
