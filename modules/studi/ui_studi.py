@@ -20,7 +20,7 @@ except ImportError:
     import eventi_eeg as eeg
 
 # indirizzo dell'area pubblica dove si apre il link di iscrizione (?azione=studio&s=<token>)
-URL_PUBBLICO = "https://pnev-iscrizioni.streamlit.app"
+URL_PUBBLICO = "https://iscrizioni.theorganism.it"
 
 
 def _csv(rows) -> bytes:
