@@ -407,7 +407,12 @@ def _render_genera_link_paziente(conn, paziente_id: int, paziente_nome: str, cod
                 operatore_username=op_username,
             )
             st.success("✅ Link generato:")
-            base_url = st.session_state.get("_app_base_url", "https://testgestionale.streamlit.app")
+            try:
+                _base_secrets = str(st.secrets.get("public_links", {}).get("BASE_URL", "")).strip().rstrip("/")
+            except Exception:
+                _base_secrets = ""
+            base_url = (st.session_state.get("_app_base_url") or _base_secrets
+                        or "https://gestionale.theorganism.it")
             full_url = f"{base_url}{ris['url_path']}"
             st.code(full_url, language=None)
             st.caption(f"Scade il: {ris['scadenza']}")

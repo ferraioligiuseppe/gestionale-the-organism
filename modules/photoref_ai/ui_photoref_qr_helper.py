@@ -3,7 +3,7 @@ import streamlit as st
 import qrcode
 
 
-def render_photoref_qr_block(token: str, base_url: str = "https://testgestionale.streamlit.app") -> str:
+def render_photoref_qr_block(token: str, base_url: str = "https://gestionale.theorganism.it") -> str:
     """
     Renderizza un blocco QR per il link mobile Photoref.
     Restituisce il link completo generato.

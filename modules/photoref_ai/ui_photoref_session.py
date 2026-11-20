@@ -16,7 +16,12 @@ from .photoref_db import create_capture_session, list_recent_sessions
 BASE_DIR = str(Path(__file__).resolve().parent)
 
 def _base_url_guess() -> str:
-    return "https://testgestionale.streamlit.app"
+    # indirizzo del gestionale: quello dei Secrets ([public_links] BASE_URL), altrimenti il dominio OVH
+    try:
+        b = str(st.secrets.get("public_links", {}).get("BASE_URL", "")).strip().rstrip("/")
+    except Exception:
+        b = ""
+    return b or "https://gestionale.theorganism.it"
 
 def _make_mobile_link(token: str) -> str:
     return f"{_base_url_guess()}/?{urlencode({'photoref_token': token})}"

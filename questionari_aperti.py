@@ -38,7 +38,12 @@ def _righe(conn, sql, par=()):
     try:
         c = conn.cursor(); c.execute(sql, par)
         nomi = [d[0] for d in c.description]
-        return [r if isinstance(r, dict) else dict(zip(nomi, r)) for r in c.fetchall()]
+        righe = [r if isinstance(r, dict) else dict(zip(nomi, r)) for r in c.fetchall()]
+        try:
+            conn.commit()  # chiude la lettura: una lettura lasciata aperta blocca le modifiche alle tabelle
+        except Exception:
+            pass
+        return righe
     except Exception:
         try:
             conn.rollback()
@@ -60,9 +65,17 @@ def _esegui(conn, sql, par=()):
 
 def assicura_tabelle(conn):
     if _righe(conn, "SELECT 1 AS ok FROM information_schema.tables WHERE table_name='questionari_arrivo'"):
-        # il link aperto non contiene dati: lo conserviamo per poterlo rivedere e rimandare
-        _esegui(conn, "ALTER TABLE questionari_link_aperti ADD COLUMN IF NOT EXISTS token TEXT")
-        _esegui(conn, "ALTER TABLE questionari_arrivo ADD COLUMN IF NOT EXISTS diario_token_hash TEXT")
+        # il link aperto non contiene dati: lo conserviamo per poterlo rivedere e rimandare.
+        # Le colonne si aggiungono solo se mancano davvero: un ALTER TABLE, anche a vuoto,
+        # resta in coda finché la tabella è in uso e teneva la pagina bianca per più di un minuto.
+        ci_sono = {(r.get("table_name"), r.get("column_name")) for r in _righe(conn,
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE (table_name='questionari_link_aperti' AND column_name='token') "
+            "OR (table_name='questionari_arrivo' AND column_name='diario_token_hash')")}
+        if ("questionari_link_aperti", "token") not in ci_sono:
+            _esegui(conn, "ALTER TABLE questionari_link_aperti ADD COLUMN IF NOT EXISTS token TEXT")
+        if ("questionari_arrivo", "diario_token_hash") not in ci_sono:
+            _esegui(conn, "ALTER TABLE questionari_arrivo ADD COLUMN IF NOT EXISTS diario_token_hash TEXT")
         return
     _esegui(conn, """CREATE TABLE IF NOT EXISTS questionari_link_aperti (
         id BIGSERIAL PRIMARY KEY, questionario TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL,
