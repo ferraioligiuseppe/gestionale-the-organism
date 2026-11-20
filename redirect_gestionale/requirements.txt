@@ -1,0 +1,2 @@
+# pagina di rinvio: le serve solo Streamlit (non le librerie del gestionale)
+streamlit>=1.40

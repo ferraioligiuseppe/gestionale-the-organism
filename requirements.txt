@@ -1,2 +1,63 @@
-# pagina di rinvio: le serve solo Streamlit (non le librerie del gestionale)
-streamlit>=1.40
+# The Organism – Gestionale Studio
+# Dipendenze con versioni minime pinned per riproducibilità
+
+# Core UI
+streamlit>=1.40.0,<1.46.0
+
+# Database
+psycopg2-binary>=2.9.9
+
+# Data
+pandas>=2.2.2
+# NB: numpy era pinnato a 1.26.4 (non supporta Python 3.13, causava un
+# Segmentation fault all'avvio). Lasciato libero: prende una versione
+# compatibile con l'ambiente corrente.
+numpy>=2.0.0
+# pyarrow (usato da Streamlit per le tabelle) pinnato a una versione
+# collaudata: quella auto-risolta (25.0.0) è sospettata di causare il
+# Segmentation fault persistente.
+pyarrow==17.0.0
+
+# PDF
+reportlab>=4.1.0
+pypdf>=4.2.0
+
+# Office documents
+openpyxl>=3.1.2
+docxtpl>=0.16.7
+python-docx>=1.1.0
+
+# Google APIs
+google-api-python-client>=2.120.0
+google-auth>=2.28.0
+
+# AWS S3
+boto3>=1.34.0
+
+# Streamlit components
+streamlit-drawable-canvas>=0.9.3
+streamlit-aggrid>=1.0.5
+
+# Visualizzazione
+matplotlib>=3.8.0
+Pillow>=10.3.0
+
+# AI
+openai>=1.30.0
+# NB: google-generativeai (Gemini) rimosso in via sperimentale: porta con sé
+# grpcio/google-ai-generativelanguage (librerie C pesanti, sospette per il
+# Segmentation fault). Gemini era comunque bloccato dalla quota gratuita;
+# l'AI oggi passa da OpenAI. Se serve Gemini in futuro, si aggiunge di nuovo.
+
+# Audio
+soundfile==0.12.1
+pydub==0.25.1
+# Codifica MP3 delle registrazioni di seduta (32 kbps, mono 16 kHz), senza
+# bisogno di ffmpeg. Se manca, l'audio si salva in WAV 16 kHz.
+lameenc>=1.7.0
+# NB: streamlit-webrtc + aiortc RIMOSSI (non usati nel codice, trascinavano
+# PyAV/av e appesantivano l'avvio causando il loop "Connecting"). L'eye-tracking
+# gira su pnev.it nel browser, non serve webrtc lato app.
+
+streamlit-javascript
+qrcode[pil]
