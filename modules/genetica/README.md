@@ -9,8 +9,9 @@ Confronta il profilo PNEV di un paziente con le **8.512 sindromi genetiche** del
 | File | Contenuto |
 |---|---|
 | `engine_genetica.py` | Motore di calcolo: somiglianza HPO (Resnik pesato per frequenza, nelle due direzioni), penalità per i segni assenti, p empirico, apprendimento bayesiano dai casi confermati |
-| `db_genetica.py` | Tabelle PostgreSQL `genetica_profilo`, `genetica_esito`, `genetica_analisi` e relative funzioni |
-| `ui_genetica.py` | Interfaccia Streamlit in 4 schede: Segni PNEV · Altri segni HPO · Analisi · Esiti genetici |
+| `db_genetica.py` | Tabelle PostgreSQL `genetica_profilo`, `genetica_esito`, `genetica_analisi`, `genetica_foto`, `genetica_funzionamento` e relative funzioni |
+| `ui_genetica.py` | Interfaccia Streamlit in 6 schede: Segni PNEV · Volto e foto · Altri segni HPO · Analisi · Profilo di funzionamento · Esiti genetici |
+| `profili_funzionamento.py` | Le 30 schede del manuale «Sindromi genetiche e profilo di funzionamento» e l'incrocio volto × funzionamento |
 | `ponte_pnev.py` | Tabella ponte: 79 reperti PNEV → codici HPO (la stessa dell'Atlante) |
 | `data/hpo_genetica.json.gz` | Dati HPO compressi (1,1 MB): 19.178 termini, 8.512 sindromi |
 | `../../apps/demo_genetica.py` | Demo autonoma, senza database |
@@ -35,6 +36,14 @@ Le tabelle vengono create in automatico al primo accesso (`CREATE TABLE IF NOT E
 
 - Foto del volto salvate nella tabella `genetica_foto`, solo con la spunta del consenso dei genitori/tutore. Vengono ridimensionate a 1600 px e salvate in JPEG senza dati EXIF, quindi senza GPS. Non vengono mai inviate a servizi esterni o all'AI.
 - Contiene 54 segni del volto (`volto.py`), divisi in 6 gruppi. I segni li valuta il clinico: non c'è nessun riconoscimento automatico.
+
+## Scheda «Profilo di funzionamento» (`profili_funzionamento.py`)
+
+- **A · Incrocio volto × funzionamento**: per le 26 sindromi che hanno una scheda e un codice HPO, la somiglianza è calcolata tre volte: solo con i segni del volto, solo con i segni funzionali (visione, udito, motricità, linguaggio, altri), con tutti. La lettura dice «concordano» quando la sindrome è fra le prime 50 su 8.512 in entrambi i confronti (soglia `PRIME`). Servono almeno 2 segni presenti per gruppo (`MIN_SEGNI`).
+- **B · Scheda attesa**: le 30 schede del manuale (punti di forza, fragilità, sensoriale e motorio, regolazione, salute, leve di intervento, lettura PNEV). Per la sindrome scelta mostra i segni del paziente che coincidono, quelli tipici ancora **da guardare sulla foto** o **da misurare**, e quelli assenti che vanno contro l'ipotesi. «Tipico» = frequenza ≥ 0,55 (`SOGLIA_TIPICO`).
+- **C · Griglia individuale**: 11 dimensioni con osservato, qualificatore ICF 0-4, facilitatori e barriere. Salvataggio automatico nella tabella `genetica_funzionamento`; scarico in testo per la relazione.
+- Turner, Klinefelter, tripla X e XYY non hanno un codice nei dati HPO (solo OMIM e DECIPHER): la scheda si consulta, ma non entra nell'incrocio.
+- Le schede sono tendenze di gruppo, scritte da conoscenza clinica generale e da rileggere su GeneReviews/Orphanet; la riga «Lettura PNEV» è un'ipotesi di lavoro, non una raccomandazione validata.
 
 ## Proposte dal gestionale (`import_gestionale.py`)
 

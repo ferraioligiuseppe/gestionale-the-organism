@@ -20,6 +20,7 @@ from .engine_genetica import MotoreGenetica
 from .ponte_pnev import AREE, BRIDGE
 from .volto import GRUPPI, VISTE, VOLTO
 from .import_gestionale import raccogli_proposte
+from . import profili_funzionamento as pf
 from . import db_genetica as db
 
 AVVISO = ("Strumento di **orientamento** all'invio al genetista, basato sui profili della "
@@ -30,6 +31,9 @@ STATI = ["—", "Presente", "Assente"]
 AVVISO_FOTO = ("Le foto restano nel database dello Studio e **non vengono inviate a nessun servizio esterno "
                "o AI**: servono solo a te per valutare il volto. Non c'è riconoscimento automatico: "
                "i segni li scegli tu. Si salvano solo con il **consenso dei genitori/tutore**.")
+AVVISO_FUNZ = ("Le schede descrivono **tendenze di gruppo** della letteratura, non il profilo del singolo "
+               "bambino. L'incrocio fra volto e funzionamento è un'**indicazione per orientare l'osservazione**, "
+               "non una diagnosi. La riga «Lettura PNEV» è un'ipotesi di lavoro clinica.")
 _LATO_MAX = 1600   # px: basta per la valutazione e tiene leggero il database
 
 
@@ -88,6 +92,8 @@ class _Mem:
         f = self.get_foto()
         f.insert(0, {"id": max([x["id"] for x in f] or [0]) + 1, "created_at": None, **kw})
     def del_foto(self, foto_id): self.s["foto"] = [x for x in self.get_foto() if x["id"] != foto_id]
+    def get_funz(self): return dict(self.s.setdefault("funz", {}))
+    def set_funz(self, dimensione, **kw): self.s.setdefault("funz", {})[dimensione] = kw
 
 
 class _DB:
@@ -103,6 +109,8 @@ class _DB:
     def get_foto(self): return db.get_foto(self.c, self.pid)
     def add_foto(self, **kw): db.add_foto(self.c, self.pid, studio_id=self.sid, **kw)
     def del_foto(self, foto_id): db.del_foto(self.c, foto_id, self.pid)
+    def get_funz(self): return db.get_funzionamento(self.c, self.pid)
+    def set_funz(self, dimensione, **kw): db.set_funzionamento(self.c, self.pid, dimensione, studio_id=self.sid, **kw)
 
 
 # --------------------------------------------------------------------------- UI
@@ -116,8 +124,8 @@ def render_genetica(conn, paziente_id: int, paziente_nome: str = "", studio_id: 
     st.caption(AVVISO)
 
     profilo = store.get_profilo()
-    t1, tv, t2, t3, t4 = st.tabs(["1 · Segni PNEV", "2 · Volto e foto", "3 · Altri segni HPO",
-                                  "4 · Analisi", "5 · Esiti genetici"])
+    t1, tv, t2, t3, tf, t4 = st.tabs(["1 · Segni PNEV", "2 · Volto e foto", "3 · Altri segni HPO",
+                                      "4 · Analisi", "5 · Profilo di funzionamento", "6 · Esiti genetici"])
 
     # 1 · tabella ponte
     with t1:
@@ -213,7 +221,11 @@ def render_genetica(conn, paziente_id: int, paziente_nome: str = "", studio_id: 
                 st.caption("*p = confronto con 300 profili casuali della stessa dimensione, non corretto "
                            "per i confronti multipli: usalo come indicazione, non come prova.")
 
-    # 5 · esiti genetici
+    # 5 · profilo di funzionamento (incrocio volto x funzionamento)
+    with tf:
+        _render_funzionamento(store, paziente_id, paziente_nome, store.get_profilo(), m)
+
+    # 6 · esiti genetici
     with t4:
         st.markdown("Registra qui gli esiti dei test genetici. Le **diagnosi confermate con consenso alla "
                     "ricerca** servono al sistema per imparare (livello 3 dell'Atlante).")
@@ -341,3 +353,147 @@ def _render_proposte(conn, store, paziente_id: int, profilo: dict, m) -> dict:
         if gia:
             st.caption(f"Già nel profilo: {len(gia)} segni proposti dal gestionale.")
     return profilo
+
+
+# --------------------------------------------------------------------------- profilo di funzionamento
+def _salva_funz(store, paziente_id, dimensione):
+    """Salvataggio automatico di una riga della griglia, a ogni modifica."""
+    b = f"genf_{paziente_id}_{dimensione}"
+    q = st.session_state.get(b + "_q", pf.QUALIFICATORI[0])
+    store.set_funz(dimensione,
+                   osservato=st.session_state.get(b + "_o", ""),
+                   qualificatore=None if q == pf.QUALIFICATORI[0] else int(q[0]),
+                   contesto=st.session_state.get(b + "_c", ""),
+                   sindrome_rif=st.session_state.get(f"genf_rif_{paziente_id}") or None)
+
+
+def _salva_rif(store, paziente_id):
+    store.set_funz("_rif", osservato="", qualificatore=None, contesto="",
+                   sindrome_rif=st.session_state.get(f"genf_rif_{paziente_id}") or None)
+
+
+def _pos(n):
+    return "—" if n is None else f"{n}ª"
+
+
+def _render_funzionamento(store, paziente_id: int, paziente_nome: str, profilo: dict, m) -> None:
+    st.caption(AVVISO_FUNZ)
+    griglia = store.get_funz()
+    g = pf.dividi_segni(profilo)
+    n_v, n_f = len(g["volto"]["presenti"]), len(g["funzionamento"]["presenti"])
+
+    # ---- A · incrocio volto x funzionamento
+    st.markdown("#### A · Incrocio volto × funzionamento")
+    st.markdown(f"Segni presenti nel profilo: **{n_v} del volto** (scheda «Volto e foto») e "
+                f"**{n_f} funzionali** (visione, udito, motricità, linguaggio, altri).")
+    righe = []
+    if n_v < pf.MIN_SEGNI and n_f < pf.MIN_SEGNI:
+        st.warning(f"Servono almeno {pf.MIN_SEGNI} segni presenti del volto o {pf.MIN_SEGNI} funzionali "
+                   "per calcolare l'incrocio. Le schede qui sotto si possono comunque consultare.")
+    else:
+        if n_v < pf.MIN_SEGNI:
+            st.info("Volto non ancora valutato: segna i segni nella scheda «2 · Volto e foto» per avere l'incrocio.")
+        if n_f < pf.MIN_SEGNI:
+            st.info("Pochi segni funzionali: completa la scheda «1 · Segni PNEV» per avere l'incrocio.")
+        # ricalcolo solo quando cambiano i segni: la pagina si ridisegna a ogni clic
+        firma = tuple(sorted((h, v.get("stato")) for h, v in profilo.items()))
+        k_inc = f"genf_inc_{paziente_id}"
+        if st.session_state.get(k_inc, (None,))[0] != firma:
+            casi = store.casi_confermati()
+            if casi:
+                m.carica_casi_confermati(casi)
+            st.session_state[k_inc] = (firma, pf.incrocio(m, profilo))
+        righe = st.session_state[k_inc][1]
+        df = pd.DataFrame([{
+            "Sindrome": r["nome"], "Dal volto": r["volto"], "Posizione volto": _pos(r["pos_volto"]),
+            "Dal funzionamento": r["funzionamento"], "Posizione funz.": _pos(r["pos_funzionamento"]),
+            "Insieme": r["insieme"], "Posizione": _pos(r["pos_insieme"]), "Lettura": r["lettura"]} for r in righe])
+        barra = lambda: st.column_config.ProgressColumn(min_value=0, max_value=1, format="%.2f")
+        st.dataframe(df, hide_index=True, use_container_width=True,
+                     column_config={"Dal volto": barra(), "Dal funzionamento": barra(), "Insieme": barra()})
+        st.caption(f"Somiglianza da 0 a 1, calcolata tre volte: solo con i segni del volto, solo con quelli "
+                   f"funzionali, con tutti. «Posizione» è il posto fra le {m.N:,} sindromi HPO".replace(",", ".") +
+                   f"; la lettura dice «concordano» quando la sindrome è fra le prime {pf.PRIME} in entrambi i "
+                   "confronti. Sono confrontate solo le 26 sindromi che hanno una scheda e un codice HPO.")
+
+    # ---- B · sindrome di riferimento e scheda attesa
+    st.markdown("#### B · Scheda di funzionamento attesa")
+    slugs = [""] + [p["slug"] for p in pf.PROFILI]
+    confermate = [pf.per_codice(e.get("disease_id")) for e in store.get_esiti()
+                  if e.get("esito") == "diagnosi_confermata"]
+    confermate = [p for p in confermate if p]
+    salvato = (griglia.get("_rif") or {}).get("sindrome_rif") or ""
+    k_rif = f"genf_rif_{paziente_id}"
+    if k_rif not in st.session_state:
+        st.session_state[k_rif] = salvato if salvato in slugs else (confermate[0]["slug"] if confermate else "")
+    if confermate:
+        st.success("Diagnosi genetica confermata con scheda disponibile: " +
+                   ", ".join(dict.fromkeys(p["nome"] for p in confermate)) + ".")
+    elif righe and righe[0]["lettura"] == "volto e funzionamento concordano":
+        st.info(f"Volto e funzionamento concordano su: **{righe[0]['nome']}**. Puoi sceglierla come riferimento "
+                "per l'osservazione; resta un'ipotesi da verificare con il genetista.")
+    st.selectbox("Sindrome di riferimento", slugs, key=k_rif, on_change=_salva_rif, args=(store, paziente_id),
+                 format_func=lambda s: pf.PER_SLUG[s]["nome"] if s else "— nessuna (profilo libero) —")
+    rif = st.session_state.get(k_rif) or ""
+    p = pf.PER_SLUG.get(rif)
+    if p:
+        with st.expander(f"Scheda · {p['nome']}", expanded=True):
+            for campo, etichetta in pf.CAMPI:
+                st.markdown(f"**{etichetta}** — {p[campo]}")
+            st.caption("Quadro sinottico: " + " · ".join(
+                f"{pf.SINOSSI_ETICHETTE[k]}: {pf.SINOSSI_VALORI[v]}" for k, v in p["sinossi"].items()))
+        if not p["codici"]:
+            st.caption("Questa sindrome non ha un codice nei dati HPO del modulo: la scheda si consulta, "
+                       "ma non entra nell'incrocio con i segni.")
+        else:
+            d = pf.dettaglio_segni(m, profilo, rif)
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown(f"**🙂 Volto** · {len(d['volto_ok'])} segni del paziente coincidono")
+                for h in d["volto_ok"]:
+                    st.markdown(f"- ✅ {m.label(h)}")
+                if d["volto_da_guardare"]:
+                    st.markdown("*Da guardare sulla foto (tipici della sindrome, non ancora valutati):*")
+                    for h, etichetta, f in d["volto_da_guardare"][:12]:
+                        st.markdown(f"- 🔎 {etichetta}")
+            with c2:
+                st.markdown(f"**🧠 Funzionamento** · {len(d['funz_ok'])} segni del paziente coincidono")
+                for h in d["funz_ok"]:
+                    st.markdown(f"- ✅ {m.label(h)}")
+                if d["funz_da_misurare"]:
+                    st.markdown("*Da misurare (tipici della sindrome, non ancora valutati):*")
+                    for h, etichetta, f in d["funz_da_misurare"][:12]:
+                        st.markdown(f"- 🔎 {etichetta}")
+            if d["contrari"]:
+                st.warning("Segni **assenti** nel paziente ma tipici della sindrome: " +
+                           "; ".join(m.label(h) for h in d["contrari"]) + ".")
+
+    # ---- C · griglia individuale
+    st.markdown("#### C · Profilo di funzionamento del paziente")
+    st.caption("Scrivi ciò che osservi; il salvataggio è automatico a ogni modifica. Qualificatori ICF: "
+               "0 nessuna difficoltà, 1 lieve, 2 media, 3 grave, 4 completa.")
+    for chiave, etichetta, campi in pf.DIMENSIONI:
+        v = griglia.get(chiave) or {}
+        b = f"genf_{paziente_id}_{chiave}"
+        st.session_state[b + "_o"] = v.get("osservato") or ""
+        st.session_state[b + "_c"] = v.get("contesto") or ""
+        q = v.get("qualificatore")
+        st.session_state[b + "_q"] = pf.QUALIFICATORI[0] if q is None else pf.QUALIFICATORI[int(q) + 1]
+        fatto = "✍️ " if (v.get("osservato") or q is not None) else ""
+        with st.expander(f"{fatto}{etichetta}", expanded=False):
+            if p:
+                st.markdown("<span style='color:#7F8C8D;font-size:0.9em'>Atteso per la sindrome: " +
+                            " ".join(dict.fromkeys(p[c] for c in campi)) + "</span>", unsafe_allow_html=True)
+            c1, c2 = st.columns([3, 2])
+            c1.text_area("Osservato nel paziente", key=b + "_o", height=110,
+                         on_change=_salva_funz, args=(store, paziente_id, chiave))
+            c2.selectbox("Qualificatore", pf.QUALIFICATORI, key=b + "_q",
+                         on_change=_salva_funz, args=(store, paziente_id, chiave))
+            c2.text_input("Facilitatori (+) / barriere (−)", key=b + "_c",
+                          on_change=_salva_funz, args=(store, paziente_id, chiave))
+    compilate = sum(1 for k, _, _ in pf.DIMENSIONI
+                    if (griglia.get(k) or {}).get("osservato") or (griglia.get(k) or {}).get("qualificatore") is not None)
+    st.caption(f"{compilate}/{len(pf.DIMENSIONI)} dimensioni compilate.")
+    st.download_button("⬇️ Profilo di funzionamento (testo per la relazione)",
+                       pf.testo_profilo(paziente_nome, rif, griglia),
+                       file_name=f"profilo_funzionamento_{paziente_id}.txt", key=f"genf_dl_{paziente_id}")

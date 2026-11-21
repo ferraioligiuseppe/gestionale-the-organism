@@ -21,7 +21,8 @@ from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Europe/Rome")
 
-_TABELLE = ("genetica_profilo", "genetica_esito", "genetica_analisi", "genetica_foto")
+_TABELLE = ("genetica_profilo", "genetica_esito", "genetica_analisi", "genetica_foto",
+            "genetica_funzionamento")
 _tabelle_pronte = False   # ensure_tables una sola volta per processo
 
 
@@ -106,6 +107,23 @@ CREATE TABLE IF NOT EXISTS genetica_foto (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ix_genetica_foto_paz ON genetica_foto (paziente_id);
+
+-- Profilo di funzionamento individuale: una riga per dimensione della griglia.
+-- La riga con dimensione '_rif' conserva solo la sindrome di riferimento scelta.
+CREATE TABLE IF NOT EXISTS genetica_funzionamento (
+    id             BIGSERIAL PRIMARY KEY,
+    studio_id      BIGINT NOT NULL DEFAULT current_setting('app.current_studio', true)::bigint,
+    paziente_id    BIGINT NOT NULL,
+    dimensione     TEXT NOT NULL,     -- chiave di profili_funzionamento.DIMENSIONI, oppure '_rif'
+    sindrome_rif   TEXT,              -- slug della scheda di riferimento (profili_funzionamento.PROFILI)
+    osservato      TEXT,
+    qualificatore  SMALLINT CHECK (qualificatore BETWEEN 0 AND 4),
+    contesto       TEXT,              -- facilitatori / barriere
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (paziente_id, dimensione)
+);
+CREATE INDEX IF NOT EXISTS ix_genetica_funzionamento_paz ON genetica_funzionamento (paziente_id);
 """
 
 # Policy RLS: stessa convenzione di audiometrie_tonali, lead_sito, sportivi.
@@ -275,4 +293,34 @@ def get_foto(conn, paziente_id: int) -> list[dict]:
 def del_foto(conn, foto_id: int, paziente_id: int) -> None:
     with _cur(conn) as cur:
         cur.execute("DELETE FROM genetica_foto WHERE id = %s AND paziente_id = %s", (foto_id, paziente_id))
+    conn.commit()
+
+
+# ------------------------------------------------------------------ profilo di funzionamento
+def get_funzionamento(conn, paziente_id: int) -> dict[str, dict]:
+    """{dimensione: {'sindrome_rif','osservato','qualificatore','contesto'}}; la chiave '_rif'
+    porta la sindrome di riferimento scelta."""
+    with _cur(conn) as cur:
+        cur.execute(
+            """SELECT dimensione, sindrome_rif, osservato, qualificatore, contesto
+               FROM genetica_funzionamento WHERE paziente_id = %s""", (paziente_id,))
+        return {r[0]: {"sindrome_rif": r[1], "osservato": r[2], "qualificatore": r[3], "contesto": r[4]}
+                for r in cur.fetchall()}
+
+
+def set_funzionamento(conn, paziente_id: int, dimensione: str, osservato: str = "",
+                      qualificatore: int | None = None, contesto: str = "", sindrome_rif: str | None = None,
+                      studio_id: str | None = None) -> None:
+    """Salva (o aggiorna) una riga della griglia. qualificatore: 0-4 oppure None."""
+    with _cur(conn) as cur:
+        cur.execute(
+            """INSERT INTO genetica_funzionamento
+                   (studio_id, paziente_id, dimensione, sindrome_rif, osservato, qualificatore, contesto)
+               VALUES (COALESCE(%s::bigint, current_setting('app.current_studio', true)::bigint),
+                       %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (paziente_id, dimensione)
+               DO UPDATE SET sindrome_rif = EXCLUDED.sindrome_rif, osservato = EXCLUDED.osservato,
+                             qualificatore = EXCLUDED.qualificatore, contesto = EXCLUDED.contesto,
+                             updated_at = now()""",
+            (_sid(studio_id), paziente_id, dimensione, sindrome_rif, osservato, qualificatore, contesto))
     conn.commit()
