@@ -265,14 +265,22 @@ def _render_volto(store, paziente_id: int, profilo: dict) -> dict:
     with col_foto:
         st.markdown("**📷 Foto del volto**")
         with st.expander("➕ Aggiungi una foto", expanded=False):
+            # La webcam si accende solo se richiesta: altrimenti il browser chiederebbe il permesso
+            # a ogni apertura della scheda.
+            usa_cam = st.toggle("📸 Scatta con la webcam del computer", key=f"genv_cam_{paziente_id}")
             with st.form(f"genv_up_{paziente_id}", clear_on_submit=True):
-                file = st.file_uploader("Foto (JPG, PNG, WEBP)", type=["jpg", "jpeg", "png", "webp"])
+                if usa_cam:
+                    file = st.camera_input("Inquadra il volto e premi il pulsante per scattare",
+                                           key=f"genv_camin_{paziente_id}")
+                    st.caption("Se non vedi l'immagine, consenti l'uso della fotocamera quando il browser lo chiede.")
+                else:
+                    file = st.file_uploader("Foto (JPG, PNG, WEBP)", type=["jpg", "jpeg", "png", "webp"])
                 vista = st.selectbox("Vista", VISTE)
                 note = st.text_input("Note (facoltative)")
                 consenso = st.checkbox("I genitori/il tutore hanno firmato il consenso alla foto per uso clinico")
                 if st.form_submit_button("Salva foto"):
                     if not file:
-                        st.error("Scegli prima una foto.")
+                        st.error("Scatta prima la foto." if usa_cam else "Scegli prima una foto.")
                     elif not consenso:
                         st.error("Senza consenso dei genitori/tutore la foto non si salva.")
                     else:
