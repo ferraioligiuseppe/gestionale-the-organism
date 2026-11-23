@@ -5,6 +5,9 @@ name: "Server OVH: installa e aggiorna il gestionale"
 # Servono due segreti del repository:
 #   SERVER_SSH_KEY     – la chiave privata creata da «Server OVH: crea la chiave di accesso»
 #   STREAMLIT_SECRETS  – il testo dei Secrets del gestionale (copiato da Streamlit Cloud → Settings → Secrets)
+# Facoltativi, per accendere sul server anche il gestionale oculistica (senza, resta spento):
+#   OCULISTICA_SECRETS  – il testo dei Secrets dell'app oculistica su Streamlit Cloud
+#   OCULISTICA_PASSWORD – la password che l'oculistica chiede all'ingresso (almeno 8 caratteri)
 
 on:
   workflow_dispatch:
@@ -51,6 +54,22 @@ jobs:
         run: |
           mkdir -p .streamlit
           printf '%s\n' "$S" > .streamlit/secrets.toml
+
+      - name: Impostazioni dell'oculistica (facoltative)
+        env:
+          O: ${{ secrets.OCULISTICA_SECRETS }}
+          OCULISTICA_PASSWORD: ${{ secrets.OCULISTICA_PASSWORD }}
+        run: |
+          rm -f .streamlit/oculistica_secrets.toml .streamlit/oculistica.env
+          if [ -z "$O" ] || [ -z "$OCULISTICA_PASSWORD" ]; then
+            echo "Oculistica: segreti non impostati, sul server resta spenta."
+            exit 0
+          fi
+          ( umask 077; printf '%s\n' "$O" > .streamlit/oculistica_secrets.toml )
+          if ! python3 scripts/oculistica_env.py crea .streamlit/oculistica_secrets.toml .streamlit/oculistica.env; then
+            echo "::warning::Oculistica: impostazioni non valide, sul server resta spenta. Il gestionale prosegue."
+            rm -f .streamlit/oculistica_secrets.toml .streamlit/oculistica.env
+          fi
 
       - name: Copia il gestionale sul server
         run: |

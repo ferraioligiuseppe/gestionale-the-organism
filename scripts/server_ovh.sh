@@ -50,15 +50,24 @@ EOF
 crea_servizio gestionale app.py 8501
 crea_servizio iscrizioni apps/pnev_pubblico.py 8502
 
+echo "== 3b. Oculistica (solo se configurata)"
+# Script a parte: se qualcosa non va l'oculistica resta spenta e il gestionale prosegue.
+bash "$APP/scripts/server_oculistica.sh" </dev/null \
+  || echo "ATTENZIONE: oculistica non avviata (vedi sopra). Il gestionale non è toccato."
+
 echo "== 4. Indirizzi e HTTPS (Caddy)"
 IPD=$(echo "$SERVER_IP" | tr . -)
 {
   # indirizzi provvisori, funzionano subito senza toccare i DNS
   printf 'gestionale.%s.sslip.io {\n  reverse_proxy 127.0.0.1:8501\n}\n' "$IPD"
   printf 'iscrizioni.%s.sslip.io {\n  reverse_proxy 127.0.0.1:8502\n}\n' "$IPD"
+  if [ -f /home/ubuntu/oculistica.attiva ]; then
+    printf 'oculistica.%s.sslip.io {\n  reverse_proxy 127.0.0.1:8503\n}\n' "$IPD"
+  fi
   # domini veri, quando i DNS puntano qui: righe «dominio porta» in scripts/server_domini.txt
   if [ -f "$DOMINI_FILE" ]; then
     { grep -v '^\s*#' "$DOMINI_FILE" || true; } | while read -r dominio porta; do
+      if [ "${porta:-}" = "8503" ] && [ ! -f /home/ubuntu/oculistica.attiva ]; then continue; fi
       if [ -n "${dominio:-}" ] && [ -n "${porta:-}" ]; then
         printf '%s {\n  reverse_proxy 127.0.0.1:%s\n}\n' "$dominio" "$porta"
       fi
@@ -87,3 +96,8 @@ done
 echo "Indirizzi provvisori:"
 echo "  https://gestionale.$IPD.sslip.io"
 echo "  https://iscrizioni.$IPD.sslip.io"
+if [ -f /home/ubuntu/oculistica.attiva ]; then
+  printf 'oculistica   %s · porta 8503 → HTTP %s\n' "$(systemctl is-active oculistica)" \
+    "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8503/_stcore/health || echo errore)"
+  echo "  https://oculistica.$IPD.sslip.io   (chiede la password)"
+fi
