@@ -519,9 +519,16 @@ _QUESTIONARI_PUBBLICI = {
     "MELILLO_ADULTI":  "Questionario Melillo – Stile Cognitivo (Adulti)",
     "MELILLO_BAMBINI": "Questionario Melillo – Checklist Bambini",
     "FISHER":          "Questionario Fisher – Problemi Uditivi (Bambini)",
+    "FISHER_ADULTI":   "Questionario Fisher – Problemi Uditivi (Adulti)",
+    "SCAP_A":          "Questionario sull'ascolto – Adulti (SCAP-A)",
     "VISIONE_BAMBINI": "Questionario Visione – Bambino/a",
     "VISIONE_ADULTI":  "Questionario Visione – Adulto",
     "DIARIO_ALIM":     "Diario alimentare di 7 giorni",
+    # Scale del modulo ADHD (modules/adhd/): attive solo se lo studio ha caricato il testo degli item
+    "ADHD_VAND_GEN":   "Questionario attenzione e comportamento – Genitori (Vanderbilt)",
+    "ADHD_VAND_INS":   "Questionario attenzione e comportamento – Insegnanti (Vanderbilt)",
+    "ADHD_SCARED_B":   "Questionario sulle paure e le preoccupazioni – Ragazzo/a (SCARED)",
+    "ADHD_SCARED_G":   "Questionario sulle paure e le preoccupazioni – Genitori (SCARED)",
 }
 
 def maybe_handle_public_questionario(get_conn) -> bool:
@@ -683,12 +690,38 @@ def maybe_handle_public_questionario(get_conn) -> bool:
         st.markdown("---")
         submitted = st.button("📤 INVIA QUESTIONARIO", type="primary")
 
-    elif q in ("MELILLO_ADULTI", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI", "VISIONE_ADULTI"):
+    elif q.startswith("ADHD_"):
+        try:
+            from modules.adhd.ui_pubblico_adhd import scala_pubblica_ui, CODICI_LINK
+        except Exception as _imp_err:
+            st.error(f"Questionario non disponibile: {_imp_err}")
+            return True
+        chiave_json = CODICI_LINK[q][1]
+        motivo_label = titolo
+        _pub_key = f"pub_q_{(t or qa)[:16]}"
+        try:
+            q_data, q_summary = scala_pubblica_ui(q, conn, prefix=f"pub_{q.lower()}",
+                                                  existing=st.session_state.get(_pub_key))
+        except Exception as _render_err:
+            st.error(f"Errore rendering questionario: {_render_err}")
+            return True
+        if q_data is None:
+            return True
+        st.session_state[_pub_key] = q_data
+        st.markdown("---")
+        submitted = st.button("📤 INVIA QUESTIONARIO", type="primary")
+        if submitted and not q_data.get("completo"):
+            st.error("Mancano ancora delle risposte: completa il questionario prima di inviarlo.")
+            submitted = False
+
+    elif q in ("MELILLO_ADULTI", "MELILLO_BAMBINI", "FISHER", "FISHER_ADULTI", "SCAP_A", "VISIONE_BAMBINI", "VISIONE_ADULTI"):
         try:
             from modules.pnev.ui_questionari_pnev import (
                 melillo_adulti_ui,
                 melillo_bambini_ui,
                 fisher_auditivo_bambini_ui,
+                fisher_auditivo_adulti_ui,
+                scap_a_ui,
                 visione_bambini_ui,
                 visione_adulti_ui,
             )
@@ -700,6 +733,8 @@ def maybe_handle_public_questionario(get_conn) -> bool:
             "MELILLO_ADULTI":  (melillo_adulti_ui,         "melillo_adulti"),
             "MELILLO_BAMBINI": (melillo_bambini_ui,        "melillo_bambini"),
             "FISHER":          (fisher_auditivo_bambini_ui,"fisher_auditivo_bambini"),
+            "FISHER_ADULTI":   (fisher_auditivo_adulti_ui, "fisher_auditivo_adulti"),
+            "SCAP_A":          (scap_a_ui,                 "scap_a"),
             "VISIONE_BAMBINI": (visione_bambini_ui,        "visione_bambini"),
             "VISIONE_ADULTI":  (visione_adulti_ui,         "visione_adulti"),
         }
@@ -6010,10 +6045,16 @@ def ui_anamnesi():
                 ("INPPS_ADULTI",    "📋 Questionario Neurosviluppo INPP – Adulti",  "gen_link_inpps_ad"),
                 ("MELILLO_BAMBINI", "🧒 Melillo Bambini (Genitori)",          "gen_link_melb"),
                 ("MELILLO_ADULTI",  "🧠 Melillo Adulti (Paziente)",           "gen_link_mela"),
-                ("FISHER",          "👂 Fisher Auditivo (Genitori/Paziente)", "gen_link_fish"),
+                ("FISHER",          "👂 Fisher Auditivo Bambini (Genitori)",  "gen_link_fish"),
+                ("FISHER_ADULTI",   "👂 Fisher Auditivo Adulti (Paziente)",   "gen_link_fish_ad"),
+                ("SCAP_A",          "👂 SCAP-A Ascolto Adulti (Paziente)",    "gen_link_scapa"),
                 ("VISIONE_BAMBINI", "👁️ Visione Bambini (Genitori)",          "gen_link_visb"),
                 ("VISIONE_ADULTI",  "👁️ Visione Adulti (Paziente)",           "gen_link_visa"),
                 ("DIARIO_ALIM",     "🍽️ Diario alimentare (7 giorni)",        "gen_link_dial"),
+                ("ADHD_VAND_GEN",   "🎯 Attenzione e comportamento (Genitori)",   "gen_link_adhd_vg"),
+                ("ADHD_VAND_INS",   "🎯 Attenzione e comportamento (Insegnanti)", "gen_link_adhd_vi"),
+                ("ADHD_SCARED_B",   "🎯 Paure e preoccupazioni (Ragazzo/a)",      "gen_link_adhd_sb"),
+                ("ADHD_SCARED_G",   "🎯 Paure e preoccupazioni (Genitori)",       "gen_link_adhd_sg"),
             ]
 
             cols = st.columns(2)

@@ -407,12 +407,34 @@ def _pdf_visione_adulti():
     return _pdf_bytes("Questionario per la Visione dell'Adulto", "", b)
 
 
+def _pdf_fisher_adulti():
+    try:
+        from modules.pnev.ui_questionari_pnev import FISHER_ITEMS_ADULTI
+    except Exception:
+        return _pdf_bytes("Fisher Auditivo Adulti", "", [("label", "Domande non disponibili.")])
+    b = [("label", "Metta un segno accanto a ogni frase che descrive un suo problema. Lasci vuote le altre.")]
+    b.append(("item", [f"{n}. {label}" for n, label in FISHER_ITEMS_ADULTI]))
+    return _pdf_bytes("Elenco di Controllo dei Problemi Uditivi di Fisher — Adulti", "", b)
+
+
+def _pdf_scap_a():
+    try:
+        from modules.ui_diagnostica_uditiva import SCAPA_ITEMS
+    except Exception:
+        return _pdf_bytes("SCAP-A", "", [("label", "Domande non disponibili.")])
+    b = [("label", "Risponda a ogni domanda con una crocetta su Sì oppure su No.")]
+    b.append(("item", [f"{n}. {q_auto}     Sì [   ]     No [   ]" for n, _inv, q_auto, _f in SCAPA_ITEMS]))
+    return _pdf_bytes("Questionario sull'ascolto — Adulti (SCAP-A)", "", b)
+
+
 _GENERATORI = {
     "ANAMNESI_PNEV":   ("📋 Anamnesi PNEV", _pdf_anamnesi_pnev),
     "INPPS":           ("📋 INPP-R Screening (genitori)", _pdf_inpps),
     "MELILLO_ADULTI":  ("🧠 Melillo Adulti", _pdf_melillo_adulti),
     "MELILLO_BAMBINI": ("🧒 Melillo Bambini", _pdf_melillo_bambini),
-    "FISHER":          ("👂 Fisher Auditivo", _pdf_fisher),
+    "FISHER":          ("👂 Fisher Auditivo Bambini", _pdf_fisher),
+    "FISHER_ADULTI":   ("👂 Fisher Auditivo Adulti", _pdf_fisher_adulti),
+    "SCAP_A":          ("👂 SCAP-A Ascolto Adulti", _pdf_scap_a),
     "VISIONE_BAMBINI": ("👁️ Visione Bambini", _pdf_visione_bambini),
     "VISIONE_ADULTI":  ("👁️ Visione Adulti", _pdf_visione_adulti),
     "DIARIO_ALIM":     ("🍽️ Diario alimentare (7 giorni)", lambda: _pdf_diario_alimentare()),
@@ -425,7 +447,7 @@ except Exception:
     pass
 
 _PER_BAMBINI = {"ANAMNESI_PNEV", "INPPS", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI", "DIARIO_ALIM"}
-_PER_ADULTI = {"MELILLO_ADULTI", "VISIONE_ADULTI", "INPPS_ADULTI", "DIARIO_ALIM"}
+_PER_ADULTI = {"MELILLO_ADULTI", "VISIONE_ADULTI", "INPPS_ADULTI", "FISHER_ADULTI", "SCAP_A", "DIARIO_ALIM"}
 
 
 def _pdf_diario_alimentare():

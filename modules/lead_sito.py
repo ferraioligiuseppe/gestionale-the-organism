@@ -42,6 +42,7 @@ QUESTIONARI = {
     "MELILLO_BAMBINI": "Questionario neuro-evolutivo \u2014 bambini",
     "MELILLO_ADULTI": "Questionario neuro-evolutivo — adulti",
     "FISHER": "Questionario uditivo — bambini",
+    "FISHER_ADULTI": "Questionario uditivo — adulti",
     "LINGUAGGIO_PNEV": "Screening linguaggio PNEV (3–6 anni)",
     "VISIONE_BAMBINI": "Questionario visivo — bambini",
     "VISIONE_ADULTI": "Questionario visivo — adulti",
@@ -641,6 +642,7 @@ def ui_public_lead_page(get_conn):
         try:
             from modules.pnev.ui_questionari_pnev import (
                 melillo_adulti_ui, melillo_bambini_ui, fisher_auditivo_bambini_ui,
+                fisher_auditivo_adulti_ui,
                 visione_bambini_ui, visione_adulti_ui,
             )
         except Exception as e:
@@ -649,6 +651,7 @@ def ui_public_lead_page(get_conn):
         fn = {"MELILLO_ADULTI": melillo_adulti_ui,
               "MELILLO_BAMBINI": melillo_bambini_ui,
               "FISHER": fisher_auditivo_bambini_ui,
+              "FISHER_ADULTI": fisher_auditivo_adulti_ui,
               "VISIONE_BAMBINI": visione_bambini_ui,
               "VISIONE_ADULTI": visione_adulti_ui}.get(tipo)
         if fn is None:

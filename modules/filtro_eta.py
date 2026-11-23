@@ -39,6 +39,7 @@ REGOLE_ETA: dict[str, tuple[int | None, int | None]] = {
 
     # Questionari tarati su adulti
     "🌐 WHODAS 2.0":                    (18, None),
+    "🎯 ADHD — Valutazione":            (5, None),    # scale 6-12 anni; scheda criteri e prove anche oltre
 
     # Materiali per bambini
     "🕹️ PNEV Game Center":              (None, 16),
@@ -112,8 +113,9 @@ def percorso_valutazione(eta: int | None) -> list[tuple[str, str, str]]:
 # ── Questionari per età ────────────────────────────────────────────────
 # Codici dei questionari (link e cartacei). I cartacei aggiuntivi usano i
 # prefissi B_ (bambini) e A_ (adulti). Quelli non elencati valgono per tutti.
-QUESTIONARI_BAMBINI = {"INPPS", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI"}
-QUESTIONARI_ADULTI = {"INPPS_ADULTI", "MELILLO_ADULTI", "VISIONE_ADULTI"}
+QUESTIONARI_BAMBINI = {"INPPS", "MELILLO_BAMBINI", "FISHER", "VISIONE_BAMBINI",
+                       "ADHD_VAND_GEN", "ADHD_VAND_INS", "ADHD_SCARED_B", "ADHD_SCARED_G"}
+QUESTIONARI_ADULTI = {"INPPS_ADULTI", "MELILLO_ADULTI", "VISIONE_ADULTI", "FISHER_ADULTI", "SCAP_A"}
 
 
 def questionario_pertinente(codice: str, eta: int | None) -> bool:

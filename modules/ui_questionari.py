@@ -68,10 +68,16 @@ _Q_LABELS = {
     "INPPS_ADULTI":    "📋 Questionario Neurosviluppo INPP – Adulti",
     "MELILLO_BAMBINI": "🧒 Melillo Bambini (Genitori)",
     "MELILLO_ADULTI":  "🧠 Melillo Adulti (Paziente)",
-    "FISHER":          "👂 Fisher Auditivo",
+    "FISHER":          "👂 Fisher Auditivo Bambini (Genitori)",
+    "FISHER_ADULTI":   "👂 Fisher Auditivo Adulti (Paziente)",
+    "SCAP_A":          "👂 SCAP-A Ascolto Adulti (Paziente)",
     "VISIONE_BAMBINI": "👁️ Visione Bambini (Genitori)",
     "VISIONE_ADULTI":  "👁️ Visione Adulti (Paziente)",
     "DIARIO_ALIM":     "🍽️ Diario alimentare (7 giorni)",
+    "ADHD_VAND_GEN":   "🎯 Attenzione e comportamento – Genitori (Vanderbilt)",
+    "ADHD_VAND_INS":   "🎯 Attenzione e comportamento – Insegnanti (Vanderbilt)",
+    "ADHD_SCARED_B":   "🎯 Paure e preoccupazioni – Ragazzo/a (SCARED)",
+    "ADHD_SCARED_G":   "🎯 Paure e preoccupazioni – Genitori (SCARED)",
 }
 
 _CORPO_EMAIL = """\
@@ -682,6 +688,18 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
         with st.expander("👂 Fisher Auditivo (compilato)", expanded=False):
             _mostra_questionario_generico(fisher, "fisher")
 
+    fisher_a = questionari.get("fisher_auditivo_adulti", {})
+    if fisher_a:
+        with st.expander("👂 Fisher Auditivo Adulti (compilato dal paziente)", expanded=False):
+            _mostra_questionario_generico(fisher_a, "fisher_adulti")
+
+    scap = questionari.get("scap_a", {})
+    if scap:
+        with st.expander("👂 SCAP-A Ascolto Adulti (compilato)", expanded=False):
+            _sc = scap.get("scoring", {})
+            st.markdown(f"**{_sc.get('punteggio', '—')}/12 — {_sc.get('livello', '—')}** · {scap.get('chi', '')}")
+            _mostra_questionario_generico(scap, "scap_a")
+
     # ── VISIONE BAMBINI ───────────────────────────────────────────────
     vis_b = questionari.get("visione_bambini", {})
     if vis_b:
@@ -696,8 +714,8 @@ def render_questionari_viewer(conn, paziente_id: int) -> None:
 
     # ── ALTRI QUESTIONARI (senza un riquadro dedicato) ────────────────
     _gia_mostrati = {"anamnesi_pnev", "inpps_screening_genitori", "inpps_screening_adulti", "melillo_bambini",
-                     "melillo_adulti", "fisher_auditivo_bambini", "visione_bambini",
-                     "visione_adulti"}
+                     "melillo_adulti", "fisher_auditivo_bambini", "fisher_auditivo_adulti", "scap_a",
+                     "visione_bambini", "visione_adulti"}
     for _k, _v in questionari.items():
         if _k in _gia_mostrati or not isinstance(_v, dict) or not _v:
             continue
@@ -790,6 +808,11 @@ _NOMI_PER_AI = {
     "anamnesi_pnev": "Anamnesi PNEV compilata a casa (gravidanza, sviluppo, familiarità)",
     "melillo_bambini": "Melillo Bambini", "melillo_adulti": "Melillo Adulti",
     "fisher_auditivo_bambini": "Fisher – problemi uditivi (bambini)",
+    "fisher_auditivo_adulti": "Fisher – problemi uditivi (adulti, autovalutazione; soglia 72% solo indicativa)",
+    "scap_a": "SCAP-A – screening del funzionamento uditivo dell'adulto (12 domande; 0-3 norma, 4-6 lieve, 7-9 moderato, 10-12 significativo)",
+    "adhd_vand_gen": "Vanderbilt genitori (sintomi ADHD, oppositività, condotta, ansia/umore, rendimento)",
+    "adhd_vand_ins": "Vanderbilt insegnanti (sintomi ADHD, oppositività/condotta, ansia/umore, rendimento)",
+    "adhd_scared_b": "SCARED ragazzo/a (ansia)", "adhd_scared_g": "SCARED genitori (ansia)",
     "visione_bambini": "Visione Bambini", "visione_adulti": "Visione Adulti",
 }
 _MAX_PER_QUESTIONARIO = 3500      # caratteri: un questionario non deve coprire tutto il resto

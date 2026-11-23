@@ -123,6 +123,9 @@ PNEV_RAMI = {
     "🔬 Test psicologici": [
         "🧠 NPS — Neuropsicologica",
         "🌐 WHODAS 2.0",
+        # Scale genitori/insegnanti, scheda criteri, prove a schermo e punteggi
+        # dei test esterni, con quadro d'insieme e report PDF (modules/adhd/).
+        "🎯 ADHD — Valutazione",
     ],
 }
 

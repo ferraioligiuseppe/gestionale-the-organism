@@ -707,6 +707,149 @@ def fisher_auditivo_bambini_ui(prefix: str, existing: dict | None = None) -> tup
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 3b. FISHER AUDITIVO ADULTI — gli stessi 25 item, in prima persona
+#     Adattamento PNEV per l'autovalutazione dell'adulto: stesso punteggio
+#     (4% per item non segnato) e stesso profilo di Katz. Le medie per classe
+#     e il cut-off 72% vengono dai bambini: per l'adulto sono solo indicativi.
+# ─────────────────────────────────────────────────────────────────────────────
+
+FISHER_ITEMS_ADULTI = [
+    (1,  "Ho avuto in passato una perdita dell'udito"),
+    (2,  "Ho avuto in passato infezioni all'orecchio (otiti)"),
+    (3,  "Metà delle volte, o più, non presto attenzione a quello che mi viene detto"),
+    (4,  "Non ascolto con attenzione le indicazioni: spesso bisogna ripetermele"),
+    (5,  "Dico «eh?» o «cosa?» almeno 5 volte al giorno"),
+    (6,  "Non riesco a seguire quello che ascolto per più di pochi secondi"),
+    (7,  "Ho tempi di attenzione brevi"),
+    (8,  "Sogno a occhi aperti, l'attenzione mi scappa"),
+    (9,  "I rumori di sottofondo mi distraggono facilmente"),
+    (10, "Ho, o ho avuto, difficoltà con i suoni delle parole (leggere parole nuove, fare lo spelling)"),
+    (11, "Faccio fatica a distinguere suoni o parole che si somigliano"),
+    (12, "Dimentico in pochi minuti quello che mi è stato detto"),
+    (13, "Non ricordo le cose semplici di tutti i giorni"),
+    (14, "Faccio fatica a ricordare quello che ho ascoltato settimane o mesi fa"),
+    (15, "Faccio fatica a ricordare una sequenza ascoltata (numeri di telefono, elenchi, passaggi)"),
+    (16, "Faccio fatica a seguire le indicazioni date a voce"),
+    (17, "Capisco spesso male quello che mi viene detto"),
+    (18, "Non capisco molte parole o concetti che sento, più di quanto ci si aspetterebbe"),
+    (19, "Imparo male ascoltando: ho bisogno di leggere o di vedere"),
+    (20, "Ho difficoltà di linguaggio (trovare le parole, costruire le frasi)"),
+    (21, "Ho difficoltà a pronunciare bene alcuni suoni"),
+    (22, "Non sempre riesco a collegare quello che sento con quello che vedo"),
+    (23, "Mi manca la motivazione per imparare cose nuove"),
+    (24, "Rispondo lentamente o in ritardo quando mi parlano"),
+    (25, "Ho, o ho avuto, risultati sotto la media nello studio o difficoltà sul lavoro legate all'ascolto"),
+]
+
+
+def fisher_auditivo_adulti_ui(prefix: str, existing: dict | None = None) -> tuple[dict, str]:
+    """Elenco di controllo dei problemi uditivi di Fisher — autovalutazione dell'adulto (25 item)."""
+    existing = existing or {}
+    items_prec = existing.get("items", {})
+
+    st.markdown("### 👂 Elenco di Controllo dei Problemi Uditivi di Fisher – Adulti")
+    st.caption("Metti un segno di spunta accanto a ogni frase che descrive un tuo problema. "
+               "Lascia vuote le altre.")
+
+    nuovi_items: dict[str, bool] = {}
+    with st.expander("📋 25 frasi — ascolto e udito", expanded=True):
+        for num, label in FISHER_ITEMS_ADULTI:
+            nuovi_items[f"F{num:02d}"] = _cb(f"**{num}** · {label}",
+                                             bool(items_prec.get(f"F{num:02d}", False)),
+                                             f"{prefix}_F{num:02d}")
+    selezionati = sum(1 for v in nuovi_items.values() if v)
+    non_sel = 25 - selezionati
+    punteggio = non_sel * 4
+    cutoff = 72.0          # riferimento dei bambini: per l'adulto è solo indicativo
+
+    # Profilo di Katz: stessi item della versione bambini
+    gruppi = {"DIC": [5, 10, 11, 17, 18, 21, 24], "TFM": [6, 7, 9, 12],
+              "ORGANIZZAZIONE": [15], "INT": [22]}
+    apd = {g: sum(1 for n in nn if nuovi_items.get(f"F{n:02d}")) for g, nn in gruppi.items()}
+
+    result = {
+        "version": "fisher_adulti_v1",
+        "date": date.today().isoformat(),
+        "items": nuovi_items,
+        "scoring": {
+            "selezionati": selezionati,
+            "non_selezionati": non_sel,
+            "punteggio_pct": punteggio,
+            "cutoff": cutoff,
+            "cutoff_indicativo": True,
+            "flag_valutazione": punteggio < cutoff,
+        },
+        "apd": apd,
+    }
+    flag = punteggio < cutoff
+    summary = (
+        f"Fisher Auditivo Adulti: {selezionati}/25 problemi, punteggio {punteggio}%"
+        + (" → sotto il riferimento del 72% (soglia dei bambini, indicativa): da approfondire" if flag
+           else " → sopra il riferimento del 72% (soglia dei bambini, indicativa)")
+    )
+    return result, summary
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3c. SCAP-A — screening del funzionamento uditivo dell'adulto (12 domande)
+#     Stesse domande e stesso punteggio della scheda SCAP-A di Diagnostica
+#     uditiva (modules/ui_diagnostica_uditiva.py): l'elenco è uno solo.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def scap_a_livello(score: int) -> str:
+    return ("Nella norma" if score <= 3 else "Lieve" if score <= 6
+            else "Moderato" if score <= 9 else "Significativo")
+
+
+def scap_a_ui(prefix: str, existing: dict | None = None) -> tuple[dict, str]:
+    """SCAP-A compilato dalla persona o da un familiare. Non mostra il punteggio a chi compila."""
+    from ..ui_diagnostica_uditiva import SCAPA_ITEMS
+    existing = existing or {}
+    prec = existing.get("risposte") or {}
+
+    st.markdown("### 👂 Questionario sull'ascolto – Adulti (SCAP-A)")
+    modi = ["Rispondo per me", "Rispondo per un familiare"]
+    chi = st.radio("Chi compila?", modi, horizontal=True, key=f"{prefix}_chi",
+                   index=1 if existing.get("chi") == "Familiare / Caregiver" else 0)
+    familiare = chi == modi[1]
+    st.caption("12 domande. Rispondi Sì o No pensando a come vanno le cose di solito.")
+
+    risposte: dict[str, str | None] = {}
+    for n, _inv, q_auto, q_fam in SCAPA_ITEMS:
+        p = prec.get(f"Q{n}")
+        v = st.radio(f"**{n}** · {q_fam if familiare else q_auto}", ["Sì", "No"],
+                     index={"Presente": 0, "Assente": 1}.get(p), horizontal=True,
+                     key=f"{prefix}_Q{n}")
+        risposte[f"Q{n}"] = {"Sì": "Presente", "No": "Assente"}.get(v)
+
+    date_r = sum(1 for v in risposte.values() if v is not None)
+    score = sum(1 for n, inv, _a, _f in SCAPA_ITEMS
+                if risposte[f"Q{n}"] == ("Assente" if inv else "Presente"))
+    completo = date_r == len(SCAPA_ITEMS)
+    livello = scap_a_livello(score) if completo else "—"
+    if not completo:
+        st.caption(f"Risposte date: {date_r} su {len(SCAPA_ITEMS)}")
+
+    result = {
+        "version": "scap_a_v1",
+        "date": date.today().isoformat(),
+        "chi": "Familiare / Caregiver" if familiare else "Autovalutazione",
+        "risposte": risposte,
+        "scoring": {
+            "punteggio": score,
+            "su": len(SCAPA_ITEMS),
+            "percentuale": round(score / len(SCAPA_ITEMS) * 100) if completo else None,
+            "livello": livello,
+            "risposte_date": date_r,
+            "completo": completo,
+        },
+    }
+    summary = (f"SCAP-A ({'familiare' if familiare else 'autovalutazione'}): {score}/12 → {livello}"
+               if completo else f"SCAP-A incompleto: {date_r}/12 risposte, punteggio parziale {score}")
+    return result, summary
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 4. VISIONE BAMBINI
 # ─────────────────────────────────────────────────────────────────────────────
 

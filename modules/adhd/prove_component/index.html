@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prove di attenzione PNEV</title>
+<!--
+  Prove a schermo del modulo ADHD — Metodo PNEV · www.pnev.it
+  © 2026 Giuseppe Ferraioli. File unico, offline: nessuna richiesta di rete.
+  Quattro prove: attenzione sostenuta, go/no-go, Stroop colori, span di cifre.
+  Dentro il gestionale restituisce le singole prove (i calcoli li fa Python);
+  aperto da solo mostra il riepilogo a schermo.
+-->
+<style>
+  :root{--verde:#1D6B44;--chiaro:#E8F1EC;--testo:#1c2a22;--grigio:#6b7a72}
+  *{box-sizing:border-box}
+  html,body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--testo);background:#fff}
+  #app{max-width:820px;margin:0 auto;padding:10px 12px}
+  h2{color:var(--verde);font-size:20px;margin:6px 0 4px}
+  p{line-height:1.45;margin:6px 0}
+  .nota{color:var(--grigio);font-size:13px}
+  .palco{height:330px;border:2px solid var(--chiaro);border-radius:14px;display:flex;align-items:center;
+         justify-content:center;background:#fafcfb;user-select:none;-webkit-user-select:none;touch-action:manipulation;position:relative}
+  .stim{font-size:120px;font-weight:700;line-height:1}
+  .forma{width:150px;height:150px}
+  .cerchio{border-radius:50%;background:#1f9d55}
+  .quadrato{background:#d23b3b}
+  .parola{font-size:72px;font-weight:800;letter-spacing:2px}
+  .croce{font-size:54px;color:#9aa8a0}
+  button{font:inherit;border:0;border-radius:12px;padding:14px 22px;font-size:18px;font-weight:600;cursor:pointer;touch-action:manipulation}
+  .pri{background:var(--verde);color:#fff}
+  .sec{background:var(--chiaro);color:var(--verde)}
+  .riga{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  #tasto{width:100%;margin-top:10px;padding:26px;font-size:22px}
+  .colori{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+  .colori button{height:74px;border:3px solid #fff;box-shadow:0 0 0 2px #cfd8d3}
+  .tastiera{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px}
+  .tastiera button{background:var(--chiaro);color:var(--testo);padding:16px 0;font-size:24px}
+  .campo{font-size:44px;letter-spacing:10px;min-height:56px;font-weight:700}
+  .barra{height:6px;background:var(--chiaro);border-radius:3px;margin:8px 0;overflow:hidden}
+  .barra i{display:block;height:100%;background:var(--verde);width:0}
+  .riscontro{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:18px;font-weight:600}
+  .ok{color:#1f9d55}.no{color:#d23b3b}
+  table{border-collapse:collapse;margin-top:8px}td,th{border:1px solid #cfd8d3;padding:5px 9px;text-align:left;font-size:14px}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const app = $("#app");
+const adesso = () => performance.now();
+const attesa = ms => new Promise(r => setTimeout(r, ms));
+const quadro = () => new Promise(r => requestAnimationFrame(() => r(adesso())));
+const mescola = a => { for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+
+// ═══ Collegamento con il gestionale (componente Streamlit) ═══
+const dentro = window.parent !== window;
+const verso = (type, extra={}) => window.parent.postMessage(Object.assign({isStreamlitMessage:true, type}, extra), "*");
+const altezza = () => dentro && verso("streamlit:setFrameHeight", {height: Math.ceil(document.documentElement.scrollHeight)+20});
+let richiesta = null, avviata = false;
+
+const NOMI = {attenzione:"Attenzione sostenuta", gonogo:"Go / No-Go", stroop:"Stroop colori", span:"Span di cifre"};
+const PREDEF = {
+  attenzione:{n_prove:120, p_target:0.2, stim_ms:250, isi_ms:1500},
+  gonogo:{n_prove:100, p_target:0.75, stim_ms:400, isi_ms:1200},
+  stroop:{n_prove:32, p_incongruente:0.5, limite_ms:4000},
+  span:{cifra_ms:800, pausa_ms:300, partenza:2, massimo:9}
+};
+
+function schermo(html){ app.innerHTML = html; altezza(); }
+
+// ═══ Istruzioni ═══
+const ISTR = {
+  attenzione:`<p>Compariranno delle <b>lettere</b>, una alla volta.</p>
+    <p>Premi il tasto grande (o la <b>barra spaziatrice</b>) <b>solo quando vedi la X</b>. Per tutte le altre lettere non fare niente.</p>`,
+  gonogo:`<p>Compariranno delle <b>figure</b>, una alla volta.</p>
+    <p>Premi il tasto grande (o la <b>barra spaziatrice</b>) ogni volta che vedi il <b style="color:#1f9d55">cerchio verde</b>.</p>
+    <p><b>Non premere</b> quando vedi il <b style="color:#d23b3b">quadrato rosso</b>.</p>`,
+  stroop:`<p>Comparirà il <b>nome di un colore</b>, scritto con un inchiostro colorato.</p>
+    <p>Tocca il riquadro del <b>colore dell'inchiostro</b>, non quello che la parola dice. Fai più in fretta che puoi senza sbagliare.</p>`,
+  span:`<p>Vedrai delle <b>cifre</b>, una alla volta. Guardale senza scrivere.</p>
+    <p>Quando sono finite, scrivile <b>nello stesso ordine</b>. Nella seconda parte dovrai scriverle <b>al contrario</b>.</p>`
+};
+
+function inizio(prova, cfg){
+  avviata = false;
+  schermo(`<h2>${NOMI[prova]}</h2>${ISTR[prova]}
+    <p class="nota">Prima c'è una breve prova di riscaldamento, che non viene contata.</p>
+    <div class="riga"><button class="pri" id="vai">Inizia il riscaldamento</button>
+    <button class="sec" id="salta">Salta e comincia subito</button></div>`);
+  $("#vai").onclick = () => esegui(prova, cfg, true);
+  $("#salta").onclick = () => esegui(prova, cfg, false);
+}
+
+async function esegui(prova, cfg, riscaldamento){
+  if (avviata) return; avviata = true;
+  const motore = {attenzione:provaBersaglio, gonogo:provaBersaglio, stroop:provaStroop, span:provaSpan}[prova];
+  if (riscaldamento){
+    await motore(prova, cfg, true);
+    await new Promise(r => {
+      schermo(`<h2>Riscaldamento finito</h2><p>Adesso comincia la prova vera. Niente più indicazioni sugli errori.</p>
+        <div class="riga"><button class="pri" id="vai">Comincia</button></div>`);
+      $("#vai").onclick = r;
+    });
+  }
+  const t0 = new Date();
+  const trials = await motore(prova, cfg, false);
+  fine(prova, cfg, trials, t0);
+}
+
+// ═══ Attenzione sostenuta e Go/No-Go ═══
+function sequenza(n, p){
+  const nb = Math.round(n*p), s = [];
+  for (let i=0;i<n;i++) s.push(i<nb);
+  return mescola(s);
+}
+async function provaBersaglio(prova, cfg, risc){
+  const n = risc ? 10 : cfg.n_prove;
+  const seq = sequenza(n, cfg.p_target);
+  const LETTERE = "ABCDEFHKLMNPRST".split("");
+  schermo(`<div class="barra"><i id="av"></i></div>
+    <div class="palco" id="palco"><div id="stim"></div><div class="riscontro" id="ris"></div></div>
+    <button class="pri" id="tasto">PREMI</button>`);
+  const stim = $("#stim"), ris = $("#ris"), av = $("#av");
+  let aperta = false, t_on = 0, corrente = null;
+  const premi = ev => {
+    if (ev.type === "keydown"){ if (ev.code !== "Space" || ev.repeat) return; ev.preventDefault(); }
+    if (!aperta || corrente.risposta) return;
+    corrente.risposta = true; corrente.rt = Math.round(adesso() - t_on);
+  };
+  const tasto = $("#tasto");
+  tasto.addEventListener("pointerdown", premi);
+  $("#palco").addEventListener("pointerdown", premi);
+  document.addEventListener("keydown", premi);
+  const trials = [];
+  await attesa(1000);
+  for (let i=0;i<n;i++){
+    const bers = seq[i];
+    corrente = {i, bersaglio:bers, risposta:false, rt:null};
+    if (prova === "attenzione"){
+      corrente.stimolo = bers ? "X" : LETTERE[Math.floor(Math.random()*LETTERE.length)];
+      stim.className = "stim"; stim.textContent = corrente.stimolo;
+    } else {
+      corrente.stimolo = bers ? "cerchio" : "quadrato";
+      stim.className = "forma " + corrente.stimolo; stim.textContent = "";
+    }
+    stim.style.visibility = "visible";
+    t_on = await quadro(); aperta = true;
+    await attesa(cfg.stim_ms);
+    stim.style.visibility = "hidden";
+    await attesa(cfg.isi_ms - cfg.stim_ms);
+    aperta = false;
+    if (risc){
+      const giusta = corrente.risposta === bers;
+      ris.className = "riscontro " + (giusta ? "ok" : "no");
+      ris.textContent = giusta ? "Giusto" : (bers ? "Qui dovevi premere" : "Qui non dovevi premere");
+      await attesa(700); ris.textContent = "";
+    }
+    trials.push(corrente);
+    av.style.width = (100*(i+1)/n) + "%";
+  }
+  document.removeEventListener("keydown", premi);
+  return trials;
+}
+
+// ═══ Stroop colori ═══
+const COLORI = [["ROSSO","#d23b3b"],["VERDE","#1f9d55"],["BLU","#2563c9"],["GIALLO","#d9a400"]];
+async function provaStroop(prova, cfg, risc){
+  const n = risc ? 6 : cfg.n_prove;
+  const tipo = sequenza(n, 1 - cfg.p_incongruente);            // true = coerente
+  schermo(`<div class="barra"><i id="av"></i></div>
+    <div class="palco"><div id="stim" class="parola"></div><div class="riscontro" id="ris"></div></div>
+    <div class="colori">${COLORI.map((c,k)=>`<button data-k="${k}" style="background:${c[1]}" aria-label="${c[0]}"></button>`).join("")}</div>
+    <p class="nota">Tocca il colore dell'inchiostro. Da tastiera: 1 rosso · 2 verde · 3 blu · 4 giallo.</p>`);
+  const stim = $("#stim"), ris = $("#ris"), av = $("#av");
+  let scelta = null;
+  const tocca = k => { if (scelta) scelta(k); };
+  document.querySelectorAll(".colori button").forEach(b => b.addEventListener("pointerdown", () => tocca(+b.dataset.k)));
+  const tasti = ev => { const k = "1234".indexOf(ev.key); if (k >= 0) tocca(k); };
+  document.addEventListener("keydown", tasti);
+  const trials = [];
+  for (let i=0;i<n;i++){
+    const ink = Math.floor(Math.random()*4);
+    let parola = ink;
+    if (!tipo[i]) { do { parola = Math.floor(Math.random()*4); } while (parola === ink); }
+    stim.className = "croce"; stim.style.color = ""; stim.textContent = "+";
+    await attesa(500);
+    stim.className = "parola"; stim.textContent = COLORI[parola][0]; stim.style.color = COLORI[ink][1];
+    const t_on = await quadro();
+    const k = await new Promise(r => { const to = setTimeout(() => { scelta = null; r(null); }, cfg.limite_ms);
+                                       scelta = v => { clearTimeout(to); scelta = null; r(v); }; });
+    const t = {i, congruente:tipo[i], parola:COLORI[parola][0], inchiostro:COLORI[ink][0],
+               scelta: k === null ? null : COLORI[k][0], corretta: k === ink,
+               rt: k === null ? null : Math.round(adesso() - t_on)};
+    stim.textContent = "";
+    if (risc){
+      ris.className = "riscontro " + (t.corretta ? "ok" : "no");
+      ris.textContent = t.corretta ? "Giusto" : "Era " + COLORI[ink][0].toLowerCase();
+      await attesa(700); ris.textContent = "";
+    } else await attesa(250);
+    trials.push(t);
+    av.style.width = (100*(i+1)/n) + "%";
+  }
+  document.removeEventListener("keydown", tasti);
+  return trials;
+}
+
+// ═══ Span di cifre ═══
+function cifre(n){
+  const s = []; let u = -1;
+  for (let i=0;i<n;i++){ let c; do { c = Math.floor(Math.random()*10); } while (c === u); s.push(c); u = c; }
+  return s;
+}
+async function unaSequenza(cfg, verso, lung){
+  schermo(`<p class="nota">${verso === "avanti" ? "Stesso ordine" : "<b>Al contrario</b>"} · ${lung} cifre</p>
+    <div class="palco"><div id="stim" class="stim"></div></div>`);
+  const stim = $("#stim"), seq = cifre(lung);
+  await attesa(900);
+  for (const c of seq){ stim.textContent = c; await attesa(cfg.cifra_ms); stim.textContent = ""; await attesa(cfg.pausa_ms); }
+  const data = await new Promise(r => {
+    let v = "";
+    schermo(`<p>${verso === "avanti" ? "Scrivi le cifre <b>nello stesso ordine</b>." : "Scrivi le cifre <b>al contrario</b>, dall'ultima alla prima."}</p>
+      <div class="campo" id="campo">&nbsp;</div>
+      <div class="tastiera">${[1,2,3,4,5,6,7,8,9,0].map(c=>`<button data-c="${c}">${c}</button>`).join("")}</div>
+      <div class="riga"><button class="sec" id="canc">Cancella</button><button class="pri" id="ok">Fatto</button></div>`);
+    const campo = $("#campo"), agg = () => campo.innerHTML = v || "&nbsp;";
+    const metti = c => { if (v.length < 12){ v += c; agg(); } };
+    const togli = () => { v = v.slice(0,-1); agg(); };
+    const chiudi = () => { document.removeEventListener("keydown", tk); r(v); };
+    const tk = ev => { if (/^[0-9]$/.test(ev.key)) metti(ev.key); else if (ev.key === "Backspace") togli(); else if (ev.key === "Enter" && v) chiudi(); };
+    document.querySelectorAll(".tastiera button").forEach(b => b.onclick = () => metti(b.dataset.c));
+    $("#canc").onclick = togli; $("#ok").onclick = () => { if (v) chiudi(); };
+    document.addEventListener("keydown", tk);
+  });
+  const attesa_giusta = (verso === "avanti" ? seq : seq.slice().reverse()).join("");
+  return {verso, lunghezza:lung, sequenza:seq.join(""), risposta:data, corretta: data === attesa_giusta};
+}
+async function provaSpan(prova, cfg, risc){
+  const trials = [];
+  for (const verso of ["avanti","indietro"]){
+    if (risc){
+      const t = await unaSequenza(cfg, verso, 2);
+      await new Promise(r => { schermo(`<h2 class="${t.corretta?"ok":"no"}">${t.corretta ? "Giusto" : "Non era quella: era " + (verso==="avanti" ? t.sequenza : t.sequenza.split("").reverse().join(""))}</h2>
+        <div class="riga"><button class="pri" id="vai">Avanti</button></div>`); $("#vai").onclick = r; });
+      continue;
+    }
+    await new Promise(r => { schermo(`<h2>${verso === "avanti" ? "Prima parte: stesso ordine" : "Seconda parte: al contrario"}</h2>
+      <p>${verso === "avanti" ? "Scriverai le cifre nello stesso ordine in cui le vedi." : "Adesso scriverai le cifre dall'ultima alla prima. Esempio: vedi 3 – 8, scrivi 8 3."}</p>
+      <div class="riga"><button class="pri" id="vai">Comincia</button></div>`); $("#vai").onclick = r; });
+    for (let lung = cfg.partenza; lung <= cfg.massimo; lung++){
+      const a = await unaSequenza(cfg, verso, lung); a.i = trials.length; trials.push(a);
+      const b = await unaSequenza(cfg, verso, lung); b.i = trials.length; trials.push(b);
+      if (!a.corretta && !b.corretta) break;
+    }
+  }
+  return trials;
+}
+
+// ═══ Fine: consegna dei dati ═══
+function fine(prova, cfg, trials, t0){
+  const rec = {azione:"salva", id: prova + "-" + Date.now() + "-" + Math.floor(Math.random()*1e6), prova,
+               config: cfg, inizio: t0.toISOString(), durata_s: Math.round((Date.now()-t0.getTime())/1000),
+               schermo: {w: window.innerWidth, h: window.innerHeight, tocco: navigator.maxTouchPoints > 0}, trials};
+  if (dentro){
+    verso("streamlit:setComponentValue", {value: rec, dataType: "json"});
+    schermo(`<h2>Prova finita</h2><p>Bravo, hai finito. I risultati sono stati consegnati al gestionale.</p>`);
+  } else {
+    schermo(`<h2>Prova finita</h2><p class="nota">Aperta fuori dal gestionale: i dati non vengono salvati.</p>
+      <table><tr><th>Prove</th><td>${trials.length}</td></tr><tr><th>Durata</th><td>${rec.durata_s} s</td></tr></table>
+      <div class="riga"><button class="sec" id="rifai">Ripeti</button></div>`);
+    $("#rifai").onclick = () => inizio(prova, cfg);
+  }
+}
+
+// ═══ Avvio ═══
+function avvia(args){
+  const prova = (args && args.prova) || new URLSearchParams(location.search).get("prova") || "attenzione";
+  const cfg = Object.assign({}, PREDEF[prova] || {}, (args && args.config) || {});
+  const firma = JSON.stringify([prova, cfg, args && args.giro]);
+  if (firma === richiesta) return;         // stesso ordine: non ricominciare a metà prova
+  richiesta = firma;
+  inizio(NOMI[prova] ? prova : "attenzione", cfg);
+}
+if (dentro){
+  window.addEventListener("message", ev => { const d = ev.data; if (d && d.type === "streamlit:render") avvia(d.args || {}); });
+  verso("streamlit:componentReady", {apiVersion:1});
+} else avvia(null);
+</script>
+</body>
+</html>
