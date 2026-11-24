@@ -97,6 +97,43 @@ GRADINI = ("Settimane 1–2: solo ciò che accetta già, più l'olio.\n"
            "Settimane 3–4: si aggiunge il cereale, macinato fine.\n"
            "Settimane 5–6: semi oleosi.\n"
            "Settimane 7–8: frutta a pezzi.")
+# ── Lista alimenti da consegnare (metodo Kousmine) ────────────────────
+# BOZZA da rivedere dal professionista: indicazioni generali, uguali per
+# tutti, da stampare e dare alla famiglia. Non dipende dal paziente, quindi
+# si apre anche senza averne scelto uno. Per correggerla basta cambiare le
+# righe qui sotto: schermata e PDF si aggiornano da soli.
+LISTA_ALIMENTI = [
+    ("✅ Da preferire, ogni giorno", [
+        ("Cereali integrali", "riso integrale, farro, orzo, avena, miglio, grano saraceno, "
+                              "pane e pasta integrali; uno per pasto"),
+        ("Verdura", "cruda a inizio pasto e cotta al vapore o stufata, di stagione"),
+        ("Frutta fresca", "di stagione, intera più che in succo"),
+        ("Legumi", "lenticchie, ceci, fagioli, piselli: 3 o più volte a settimana"),
+        ("Oli spremuti a freddo, a crudo", "olio di lino o di girasole, olio extravergine d'oliva"),
+        ("Semi oleosi", "mandorle, noci, nocciole, semi di lino, girasole, sesamo"),
+        ("Acqua", "lontano dai pasti, tisane non zuccherate"),
+    ]),
+    ("🟡 Con moderazione", [
+        ("Pesce", "2–3 volte a settimana, meglio pesce azzurro"),
+        ("Uova", "2–3 a settimana, alla coque o in camicia"),
+        ("Carni bianche", "1–2 volte a settimana"),
+        ("Latticini freschi", "yogurt bianco intero, ricotta, formaggi freschi"),
+        ("Dolcificanti", "poco miele o frutta essiccata al posto dello zucchero"),
+        ("Sale", "poco, meglio integrale; erbe aromatiche e spezie per insaporire"),
+    ]),
+    ("⛔ Da limitare o evitare", [
+        ("Zucchero e dolci industriali", "merendine, biscotti, caramelle, creme spalmabili: solo nei giorni di festa"),
+        ("Bevande zuccherate", "bibite, succhi con zuccheri aggiunti, tè freddo confezionato"),
+        ("Farine e cereali raffinati", "pane bianco, pasta bianca, cereali zuccherati da colazione"),
+        ("Grassi cotti e raffinati", "fritture, margarine, oli di semi raffinati, grassi idrogenati"),
+        ("Carni rosse e salumi", "insaccati, carni conservate"),
+        ("Formaggi stagionati e fusi", "in quantità ridotta"),
+        ("Cibi pronti industriali", "snack salati, piatti pronti, prodotti con additivi e conservanti"),
+    ]),
+]
+NOTA_LISTA = ("Indicazioni generali del metodo Kousmine. Non sostituiscono un piano alimentare "
+              "personalizzato né il parere del medico: allergie, intolleranze e terapie in corso "
+              "vanno sempre valutate con il professionista.")
 QUALIFICHE = ["Medico", "Biologo nutrizionista", "Dietista"]
 MISURE = ["Scala comportamentale (punteggio totale)", "Alimenti accettati", "Evacuazioni a settimana",
           "pH urine, media", "Risvegli notturni a settimana"]
@@ -637,6 +674,72 @@ def _pdf_piano(conn, paz_id, p, riga) -> bytes:
     return buf.getvalue()
 
 
+# ── Lista alimenti (materiale da consegnare, senza paziente) ──────────
+def pdf_lista_alimenti(nome: str = "") -> bytes:
+    """La lista alimenti su carta intestata. `nome` è facoltativo."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from xml.sax.saxutils import escape
+    from .pdf_templates import draw_intestazione, draw_footer
+
+    verde = colors.HexColor("#1D6B44")
+    tit = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=14, leading=18, spaceAfter=4)
+    h = ParagraphStyle("h", fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=verde,
+                       spaceBefore=6, spaceAfter=2)
+    b = ParagraphStyle("b", fontName="Helvetica", fontSize=9.5, leading=12)
+    g = ParagraphStyle("g", parent=b, fontName="Helvetica-Bold")
+    nota = ParagraphStyle("n", fontName="Helvetica-Oblique", fontSize=8.5, leading=11,
+                          textColor=colors.HexColor("#555555"))
+
+    def _senza_simbolo(t):   # Helvetica non ha le emoji: resterebbero quadratini
+        return re.sub(r"^[^A-Za-zÀ-ÿ]+", "", t)
+
+    storia = [Paragraph("Lista alimenti — metodo Kousmine", tit)]
+    if nome.strip():
+        storia.append(Paragraph(escape(nome.strip()), b))
+    storia.append(Spacer(1, 4))
+    for titolo, righe in LISTA_ALIMENTI:
+        storia.append(Paragraph(escape(_senza_simbolo(titolo)), h))
+        t = Table([[Paragraph(escape(a), g), Paragraph(escape(d), b)] for a, d in righe],
+                  colWidths=[5 * cm, 12 * cm])
+        t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
+                               ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#C9D1CC")),
+                               ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
+        storia.append(t)
+    storia += [Spacer(1, 6), Paragraph(escape(NOTA_LISTA), nota)]
+
+    def _pagina(c, doc):
+        draw_intestazione(c)
+        draw_footer(c)
+
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm, topMargin=5.7 * cm,
+                      bottomMargin=4.9 * cm, title="Lista alimenti").build(
+        storia, onFirstPage=_pagina, onLaterPages=_pagina)
+    return buf.getvalue()
+
+
+def _tab_lista_alimenti(px, nome_paziente: str = "") -> None:
+    """Lista alimenti a schermo + PDF. Non legge e non salva nulla."""
+    import pandas as pd
+    st.caption("Materiale da consegnare alla famiglia: indicazioni generali, uguali per tutti. "
+               "Bozza da rivedere dal professionista prima dell'uso.")
+    for titolo, righe in LISTA_ALIMENTI:
+        st.markdown(f"**{titolo}**")
+        st.dataframe(pd.DataFrame(righe, columns=["Alimento", "Indicazioni"]),
+                     use_container_width=True, hide_index=True)
+    st.caption(NOTA_LISTA)
+    nome = st.text_input("Nome da stampare sul foglio (facoltativo)", nome_paziente, key=f"{px}_nome")
+    try:
+        st.download_button("🖨️ Lista alimenti (PDF)", pdf_lista_alimenti(nome),
+                           file_name="lista_alimenti.pdf", mime="application/pdf", key=f"{px}_pdf")
+    except Exception as e:
+        st.caption(f"PDF non disponibile: {e}")
+
+
 # ── 4 · Diario ────────────────────────────────────────────────────────
 
 def _diario(conn, paz_id):
@@ -879,7 +982,10 @@ def _tab_esiti(conn, paz_id, px):
 def render_alimentazione(conn, paz_id) -> None:
     st.subheader("🥗 Alimentazione — metodo Kousmine")
     if conn is None or not paz_id:
-        st.info("Seleziona un paziente.")
+        # Senza paziente: resta disponibile ciò che non dipende da lui.
+        st.info("Senza paziente puoi consultare e stampare la lista alimenti. "
+                "Valutazione, esami, piano, diario ed esiti si aprono scegliendo un paziente.")
+        _tab_lista_alimenti("alim_nopaz_l")
         return
     _assicura_tabelle(conn)
     avvio, sett = settimana_corrente(conn, paz_id)
@@ -887,7 +993,17 @@ def render_alimentazione(conn, paz_id) -> None:
                "Piano e integrazione sono firmati dal professionista abilitato."
                + (f" · Percorso avviato il {_fmt_d(avvio)}, settimana {sett}" if avvio else ""))
     px = f"alim_{paz_id}"
-    t1, t2, t3, t4, t5 = st.tabs(["1 · Valutazione", "2 · Esami", "3 · Piano", "4 · Diario", "5 · Esiti"])
+    t1, t2, t3, t4, t5, t6 = st.tabs(["1 · Valutazione", "2 · Esami", "3 · Piano", "4 · Diario",
+                                      "5 · Esiti", "📋 Lista alimenti"])
+    with t6:
+        _nome = ""
+        try:
+            _r = _q(conn, "SELECT cognome, nome FROM pazienti WHERE id=%s", (int(paz_id),))
+            if _r:
+                _nome = f"{_r[0].get('cognome') or ''} {_r[0].get('nome') or ''}".strip()
+        except Exception:
+            pass
+        _tab_lista_alimenti(px + "_l", _nome)
     with t1:
         _tab_valutazione(conn, paz_id, px + "_v")
     with t2:

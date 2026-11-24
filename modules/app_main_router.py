@@ -7,6 +7,15 @@ from __future__ import annotations
 from typing import Callable, Any
 import streamlit as st
 
+def _senza_paziente() -> bool:
+    """L'utente ha scelto «Apri senza paziente» (vedi paziente_attivo.py)."""
+    try:
+        from .paziente_attivo import senza_paziente
+        return senza_paziente()
+    except Exception:
+        return False
+
+
 from .app_menu import (
     AREE_ORDINE, SOTTOSEZIONI,
     AREA_PAZIENTI, AREA_VALUTAZIONE, AREA_VALUTAZIONE_VISIVA, AREA_TEST_NEUROEVOL, AREA_TEST_LIVE,
@@ -666,7 +675,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
     paz_id = None
     if sotto in VOCI_CON_PAZIENTE:
         paz_id = header_paziente_attivo(conn)
-        if not paz_id:
+        if not paz_id and not _senza_paziente():
             return True  # header mostrato, in attesa di selezione paziente
 
     # ── STUDI E RICERCA (modules/studi) ── senza paziente: i partecipanti
@@ -1256,6 +1265,8 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         try:
             from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
             pid = header_paziente_attivo(conn)
+            if not pid and _senza_paziente():
+                st.caption("Questa sezione lavora solo su un paziente: selezionalo qui sopra.")
             if pid:
                 from .photoref_ai.ui_photoref import render_photoref
                 render_photoref(conn, pid, paziente_attivo_record())
@@ -1350,6 +1361,8 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         try:
             from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
             pid = header_paziente_attivo(conn)
+            if not pid and _senza_paziente():
+                st.caption("Questa sezione lavora solo su un paziente: selezionalo qui sopra.")
             if pid:
                 from .ui_oculistica import render_oculistica
                 render_oculistica(conn, pid, paziente_attivo_record())
@@ -1635,7 +1648,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "🎟️ Coupon OF / SDS":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
-            if not paz_id:
+            if not paz_id and not _senza_paziente():
                 return
             try:
                 from modules import app_core
@@ -1658,14 +1671,14 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📅 Sedute / Terapie":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
-            if not paz_id:
+            if not paz_id and not _senza_paziente():
                 return
             from .sections.ui_cliniche import render_sedute_section
             render_sedute_section(); return
         if sotto == "🔒 Privacy & Consensi":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
-            if not paz_id:
+            if not paz_id and not _senza_paziente():
                 return
             from .privacy.ui_privacy_section import render_privacy_section
             render_privacy_section(); return
@@ -1699,7 +1712,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     elif area == AREA_VALUTAZIONE:
         from .paziente_attivo import header_paziente_attivo
         paz_id = header_paziente_attivo(conn)
-        if not paz_id:
+        if not paz_id and not _senza_paziente():
             return
         if sotto == "🔬 PNEV":
             from .pnev.ui_pnev import render_pnev_section
@@ -1781,7 +1794,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     elif area == AREA_VALUTAZIONE_VISIVA:
         from .paziente_attivo import header_paziente_attivo
         paz_id = header_paziente_attivo(conn)
-        if not paz_id:
+        if not paz_id and not _senza_paziente():
             return
         if sotto == "👁️ Anamnesi visiva":
             try:
@@ -1891,7 +1904,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     elif area == AREA_TEST_NEUROEVOL:
         from .paziente_attivo import header_paziente_attivo
         paz_id = header_paziente_attivo(conn)
-        if not paz_id:
+        if not paz_id and not _senza_paziente():
             return
         if sotto == "👁️ Valutazione visuo-percettiva":
             try:
@@ -1927,7 +1940,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
     elif area == AREA_TEST_LIVE:
         from .paziente_attivo import header_paziente_attivo
         paz_id = header_paziente_attivo(conn)
-        if not paz_id:
+        if not paz_id and not _senza_paziente():
             return
         if sotto == "🔢 DEM interattivo":
             try:
@@ -1973,6 +1986,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto == "📋 Questionari remoti":
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
+            if not paz_id and _senza_paziente():
+                st.caption("Questa sezione lavora solo su un paziente: selezionalo qui sopra.")
             if paz_id:
                 try:
                     from .ui_questionari import render_questionari_section
@@ -1986,6 +2001,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 from .ui_wordwall import render_wordwall
                 render_wordwall(conn, None); return
             paz_id = header_paziente_attivo(conn)
+            if not paz_id and _senza_paziente():
+                st.caption("Questa sezione lavora solo su un paziente: selezionalo qui sopra.")
             if paz_id:
                 try:
                     from .ui_wordwall import render_wordwall
@@ -2008,6 +2025,8 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
             try:
                 from .paziente_attivo import header_paziente_attivo, paziente_attivo_record
                 pid = header_paziente_attivo(conn)
+                if not pid and _senza_paziente():
+                    st.caption("Questa sezione lavora solo su un paziente: selezionalo qui sopra.")
                 if pid:
                     from .photoref_ai.ui_photoref import render_photoref
                     render_photoref(conn, pid, paziente_attivo_record())
@@ -2020,7 +2039,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         if sotto in ("🤖 Relazioni cliniche (AI)", "📝 Relazione clinica"):
             from .paziente_attivo import header_paziente_attivo
             paz_id = header_paziente_attivo(conn)
-            if not paz_id:
+            if not paz_id and not _senza_paziente():
                 return
             try:
                 from .ui_relazione_clinica import render_relazione_clinica
@@ -2042,7 +2061,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 if sotto in ("🎯 Piano Vision Therapy", "📄 Report PDF con grafici"):
                     from .paziente_attivo import header_paziente_attivo
                     paz_id = header_paziente_attivo(conn)
-                    if not paz_id:
+                    if not paz_id and not _senza_paziente():
                         return
                 render_nuovi_moduli(conn, mappa[sotto], paziente_id=paz_id)
             except ImportError as e:
@@ -2066,7 +2085,7 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
         }
         if sotto in _audio_map:
             paz_id = header_paziente_attivo(conn)
-            if not paz_id:
+            if not paz_id and not _senza_paziente():
                 return
             mod_name, fn_name = _audio_map[sotto]
             try:

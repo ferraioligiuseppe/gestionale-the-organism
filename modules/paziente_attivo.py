@@ -20,6 +20,14 @@ import streamlit as st
 
 KEY_ID = "paziente_attivo_id"
 KEY_REC = "paziente_attivo_record"
+# Modalità «senza paziente»: l'utente ha scelto di aprire le sezioni senza
+# selezionare nessuno (consultare, stampare materiali). Vale per la sessione.
+KEY_SENZA = "lavora_senza_paziente"
+
+
+def senza_paziente() -> bool:
+    """True se si sta lavorando senza paziente per scelta dell'utente."""
+    return bool(st.session_state.get(KEY_SENZA)) and not st.session_state.get(KEY_ID)
 
 # Flag di sessione per le colonne aggiunte al volo. Senza questo, ogni
 # cambio paziente e ogni scadenza della cache lanciavano quattro ALTER
@@ -733,14 +741,35 @@ def header_paziente_attivo(conn) -> int | None:
             pid = None
 
     if not pid or not rec:
-        # Nessun paziente attivo: bottone per selezionarne uno
-        c1, c2 = st.columns([3, 1])
+        if st.session_state.get(KEY_SENZA):
+            # Modalità «senza paziente»: la sezione resta aperta per consultare
+            # e stampare; il paziente si può scegliere qui in qualsiasi momento.
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                st.info("👁️ Stai lavorando **senza paziente**: puoi consultare e stampare. "
+                        "Per salvare dati scegli un paziente. Se una sezione mostra un "
+                        "errore o resta vuota, è perché le serve il paziente.")
+            with c2:
+                if st.button("👤 Seleziona paziente", key=f"nopid_apri_sel_{_hpa_n}",
+                             type="primary", use_container_width=True):
+                    _dialog_seleziona(conn)
+            return None
+        # Nessun paziente attivo: si sceglie, oppure si apre la sezione senza.
+        c1, c2, c3 = st.columns([3, 1, 1])
         with c1:
-            st.warning("⚠️ Nessun paziente selezionato. Selezionane uno per continuare.")
+            st.warning("⚠️ Nessun paziente selezionato. Selezionane uno, "
+                       "oppure apri la sezione senza paziente.")
         with c2:
             if st.button("👤 Seleziona paziente", key=f"nopid_apri_sel_{_hpa_n}",
                          type="primary", use_container_width=True):
                 _dialog_seleziona(conn)
+        with c3:
+            if st.button("👁️ Apri senza paziente", key=f"nopid_senza_{_hpa_n}",
+                         use_container_width=True,
+                         help="Apre le sezioni senza scegliere un paziente, per consultare "
+                              "e stampare. Vale finché non ne selezioni uno."):
+                st.session_state[KEY_SENZA] = True
+                st.rerun()
         return None
 
     # Banner paziente attivo
