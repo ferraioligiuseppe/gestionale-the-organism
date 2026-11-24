@@ -2293,6 +2293,14 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
                           and "Debug" not in v and "demo" not in v.lower()]
         return filtra_per_eta(voci_lista, _eta_paz)
 
+    # 🔎 Cerca nel gestionale: scrivi una parola («alimentazione», «fattura»…)
+    # e ti porta alla sezione giusta, dicendo in che area si trova.
+    try:
+        from .cerca_menu import casella_ricerca
+        casella_ricerca(AREE_ORDINE, SOTTOSEZIONI, RAMI_PER_AREA, filtra=_filtra)
+    except Exception:
+        pass
+
     for _a in AREE_ORDINE:
         _aperta = (_a == area)
         # Intestazione area: cliccabile, apre/chiude le sue voci
