@@ -179,20 +179,20 @@ def _nuova(conn, studio_id, paziente, operatore):
         st.error(str(e))
         return
 
-    with st.expander("Percentile dal manuale e osservazioni", expanded=False):
-        c1, c2 = st.columns(2)
-        perc = c1.number_input(
-            "Percentile esatto letto sul manuale", min_value=0.0, max_value=99.9, value=0.0, step=1.0,
-            key=k("perc"), help="Facoltativo. Se lo scrivi, vale al posto della tabella dello studio. "
-                                "Lascia 0 per usare la tabella.")
-        altro = c2.text_input("Altro punteggio dal manuale", key=k("altro"),
-                              placeholder="es. punteggio standard 95",
-                              help="Facoltativo: finisce nella relazione così come lo scrivi.")
-        c1, c2, c3 = st.columns(3)
-        coll = c1.selectbox("Collaborazione", COLLABORAZIONE, key=k("coll"))
-        att = c2.selectbox("Attenzione", ATTENZIONE, key=k("att"))
-        stile = c3.selectbox("Stile di risposta", STILE, key=k("stile"))
-        note = st.text_area("Osservazioni libere (entrano nella relazione)", key=k("note"), height=80)
+    st.markdown("**Percentile dal manuale e osservazioni** (facoltativi)")
+    c1, c2 = st.columns(2)
+    perc = c1.number_input(
+        "Percentile esatto letto sul manuale", min_value=0.0, max_value=99.9, value=0.0, step=1.0,
+        key=k("perc"), help="Facoltativo. Se lo scrivi, vale al posto della tabella dello studio. "
+                            "Lascia 0 per usare la tabella.")
+    altro = c2.text_input("Altro punteggio dal manuale", key=k("altro"),
+                          placeholder="es. punteggio standard 95",
+                          help="Facoltativo: finisce nella relazione così come lo scrivi.")
+    c1, c2, c3 = st.columns(3)
+    coll = c1.selectbox("Collaborazione", COLLABORAZIONE, key=k("coll"))
+    att = c2.selectbox("Attenzione", ATTENZIONE, key=k("att"))
+    stile = c3.selectbox("Stile di risposta", STILE, key=k("stile"))
+    note = st.text_area("Osservazioni libere (entrano nella relazione)", key=k("note"), height=80)
 
     ris = sc.valuta(forma, punteggi, mesi, norme, attese, perc or None, fonte)
     if ris["totale"] == 0:
