@@ -139,12 +139,14 @@ def _nuova(conn, studio_id, paziente, operatore):
     st.caption("Età alla prova: %s · %s: %s." % (sc.eta_testo(mesi), f["breve"], f["uso"]))
 
     norme, fonte, attese, chiave = _tabelle(conn, studio_id, forma)
-    modi = ["totali", "esiti"] + (["risposte"] if chiave else [])
+    # il foglio item per item e' il modo predefinito; i soli totali restano come scorciatoia
+    modi = (["risposte"] if chiave else []) + ["esiti", "totali"]
     modo = st.radio("Come inserisci i risultati", modi, format_func=MODI.get, horizontal=True,
                     key=k("modo_" + forma))
     if not chiave:
-        st.caption("Per scrivere l'alternativa scelta e far correggere al gestionale, carica una volta "
-                   "la chiave dal tuo manuale nella scheda «Norme e chiave».")
+        st.caption("Per scrivere nel foglio il numero della risposta data (1, 2, 3…) e far correggere al "
+                   "gestionale, carica una volta la chiave dal tuo manuale nella scheda «Norme e chiave». "
+                   "Fino ad allora nel foglio spunti giusto / sbagliato.")
 
     righe = ["Item %d" % i for i in range(1, f["item"] + 1)]
     griglia = None
