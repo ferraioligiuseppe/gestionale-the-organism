@@ -628,7 +628,7 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
         "🎯 Piano di trattamento",
         "🧘 Percorsi terapeutici", "🧩 Programma PNEV",
         "📋 Anamnesi PNEV", "👁️ Anamnesi visiva",
-        "🧠 NPS — Neuropsicologica", "🌐 WHODAS 2.0", "🎯 ADHD — Valutazione", "🖼️ PECS — CAA", "📚 DSA — Apprendimento", "📚 Strumenti open",
+        "🧠 NPS — Neuropsicologica", "🌐 WHODAS 2.0", "🎯 ADHD — Valutazione", "🧩 Matrici di Raven (CPM · SPM)", "🖼️ PECS — CAA", "📚 DSA — Apprendimento", "📚 Strumenti open",
         "👁️ Valutazione visuo-percettiva", "🔢 DEM interattivo",
         "👁️ Getman (manipolazione visiva)",
         "👁️ Groffman (visual tracing)",
@@ -1053,6 +1053,16 @@ def _dispatch_sotto(sotto: str, conn, is_admin: bool) -> bool:
             render_whodas(conn, paz_id)
         except ImportError as e:
             st.error(f"Modulo WHODAS non disponibile: {e}")
+        return True
+    if sotto == "🧩 Matrici di Raven (CPM · SPM)":
+        try:
+            from .raven.ui_raven import render_raven
+            render_raven(conn, paz_id)
+        except Exception as e:
+            import traceback
+            st.error(f"Errore modulo Matrici di Raven: {e}")
+            with st.expander("Dettagli tecnici"):
+                st.code(traceback.format_exc())
         return True
     if sotto == "🎯 ADHD — Valutazione":
         try:
@@ -1744,6 +1754,16 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
                 render_whodas(conn, paz_id)
             except ImportError as e:
                 st.error(f"Modulo WHODAS non disponibile: {e}")
+            return
+        if sotto == "🧩 Matrici di Raven (CPM · SPM)":
+            try:
+                from .raven.ui_raven import render_raven
+                render_raven(conn, paz_id)
+            except Exception as e:
+                import traceback
+                st.error(f"Errore modulo Matrici di Raven: {e}")
+                with st.expander("Dettagli tecnici"):
+                    st.code(traceback.format_exc())
             return
         if sotto == "🎯 ADHD — Valutazione":
             try:

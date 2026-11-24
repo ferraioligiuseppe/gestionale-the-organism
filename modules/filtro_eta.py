@@ -39,6 +39,7 @@ REGOLE_ETA: dict[str, tuple[int | None, int | None]] = {
 
     # Questionari tarati su adulti
     "🌐 WHODAS 2.0":                    (18, None),
+    "🧩 Matrici di Raven (CPM · SPM)":   (3, None),    # CPM dai 3 anni, SPM dai 6 in su
     "🎯 ADHD — Valutazione":            (5, None),    # scale 6-12 anni; scheda criteri e prove anche oltre
 
     # Materiali per bambini

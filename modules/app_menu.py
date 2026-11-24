@@ -126,6 +126,9 @@ PNEV_RAMI = {
         # Scale genitori/insegnanti, scheda criteri, prove a schermo e punteggi
         # dei test esterni, con quadro d'insieme e report PDF (modules/adhd/).
         "🎯 ADHD — Valutazione",
+        # Foglio di inserimento, punteggio, collocazione normativa e relazione
+        # (modules/raven/). Norme e chiave le carica lo studio dal manuale.
+        "🧩 Matrici di Raven (CPM · SPM)",
     ],
 }
 

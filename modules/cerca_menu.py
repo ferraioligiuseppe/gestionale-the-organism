@@ -89,6 +89,7 @@ PAROLE_CHIAVE: dict[str, str] = {
     "📖 Lettura avanzata": "lettura velocita testo leggio",
     "🧠 NPS — Neuropsicologica": "neuropsicologia test cognitivi memoria attenzione funzioni esecutive qi",
     "🌐 WHODAS 2.0": "whodas disabilita oms funzionamento",
+    "🧩 Matrici di Raven (CPM · SPM)": "raven matrici progressive cpm spm colorate intelligenza ragionamento non verbale qi",
     "🎯 ADHD — Valutazione": "adhd attenzione iperattivita conners scale genitori insegnanti",
     "🧪 Laboratorio PNEV": "laboratorio sperimentale prove",
     # Terapia
