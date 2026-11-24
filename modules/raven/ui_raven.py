@@ -22,8 +22,8 @@ from .catalogo_raven import (FORME, PUNTI, SCARTO_MAX, COLLABORAZIONE, ATTENZION
 
 TZ = ZoneInfo("Europe/Rome")
 MODI = {"totali": "Solo i totali per serie",
-        "esiti": "Item per item: giusto / sbagliato",
-        "risposte": "Item per item: risposta scelta (corregge da solo)"}
+        "esiti": "Foglio: giusto / sbagliato",
+        "risposte": "Foglio: risposte date dal paziente"}
 
 
 # ------------------------------------------------------------------ utilita
@@ -121,6 +121,27 @@ def render(conn, studio_id, paziente, carta_intestata=None, operatore=None):
 
 
 # ------------------------------------------------------------ nuova prova
+def _chiave_nel_foglio(conn, studio_id, forma):
+    """Prima volta: le risposte corrette si scrivono qui, sotto il foglio, e restano memorizzate."""
+    f = FORME[forma]
+    st.warning("Per calcolare il punteggio mi servono, **una volta sola**, le risposte corrette delle "
+               "%s. Copiale dal manuale qui sotto: restano memorizzate per tutte le prove future. "
+               "Le risposte del paziente che hai scritto nel foglio non si perdono." % f["breve"])
+    col = st.columns(len(f["serie"]))
+    testi = {s: c.text_input("Corrette serie %s" % s, key="raven_chf_%s_%s" % (forma, s),
+                             placeholder="%d cifre di seguito" % f["item"])
+             for c, s in zip(col, f["serie"])}
+    if st.button("Memorizza le risposte corrette", type="primary", key="raven_chf_s_%s" % forma):
+        letta, errori = sc.leggi_chiave(forma, testi)
+        if errori:
+            for e in errori:
+                st.error(e)
+        else:
+            db.salva_tabella(conn, studio_id, forma, "chiave", letta)
+            st.rerun()
+    return None
+
+
 def _nuova(conn, studio_id, paziente, operatore):
     pid, n = paziente["id"], _nonce()
     k = lambda nome: "raven_%s_%s_%s" % (nome, pid, n)
@@ -139,14 +160,10 @@ def _nuova(conn, studio_id, paziente, operatore):
     st.caption("Età alla prova: %s · %s: %s." % (sc.eta_testo(mesi), f["breve"], f["uso"]))
 
     norme, fonte, attese, chiave = _tabelle(conn, studio_id, forma)
-    # il foglio item per item e' il modo predefinito; i soli totali restano come scorciatoia
-    modi = (["risposte"] if chiave else []) + ["esiti", "totali"]
+    # il foglio con le risposte date dal paziente e' sempre il modo predefinito
+    modi = ["risposte", "esiti", "totali"]
     modo = st.radio("Come inserisci i risultati", modi, format_func=MODI.get, horizontal=True,
                     key=k("modo_" + forma))
-    if not chiave:
-        st.caption("Per scrivere nel foglio il numero della risposta data (1, 2, 3…) e far correggere al "
-                   "gestionale, carica una volta la chiave dal tuo manuale nella scheda «Norme e chiave». "
-                   "Fino ad allora nel foglio spunti giusto / sbagliato.")
 
     righe = ["Item %d" % i for i in range(1, f["item"] + 1)]
     griglia = None
@@ -166,8 +183,8 @@ def _nuova(conn, studio_id, paziente, operatore):
             griglia = {s: [bool(v) for v in out[s].tolist()] for s in f["serie"]}
             punteggi = sc.punteggi_da_esiti(forma, griglia)
         else:
-            st.caption("Scrivi il numero dell'alternativa scelta. Cella vuota = nessuna risposta. "
-                       "Puoi incollare una colonna da Excel.")
+            st.caption("In ogni cella scrivi il numero della risposta data dal paziente. Cella vuota = "
+                       "nessuna risposta. Ti sposti con Tab e Invio; puoi incollare una colonna da Excel.")
             base = pd.DataFrame({s: pd.Series([None] * f["item"], dtype="float") for s in f["serie"]})
             base.index = righe
             out = st.data_editor(
@@ -176,6 +193,10 @@ def _nuova(conn, studio_id, paziente, operatore):
                     "Serie %s" % s, min_value=1, max_value=f["alternative"][s], step=1, format="%d")
                     for s in f["serie"]})
             griglia = {s: [_num(v) for v in out[s].tolist()] for s in f["serie"]}
+            if not chiave:
+                chiave = _chiave_nel_foglio(conn, studio_id, forma)
+            if not chiave:
+                return
             punteggi = sc.punteggi_da_risposte(forma, griglia, chiave)
     except ValueError as e:
         st.error(str(e))
@@ -203,6 +224,9 @@ def _nuova(conn, studio_id, paziente, operatore):
         _mostra_esito(forma, ris)
 
     if st.button("Salva e prepara la relazione", type="primary", key=k("salva")):
+        if modo == "risposte" and ris.get("omessi") == ris["massimo"]:
+            st.warning("Il foglio è vuoto: scrivi le risposte del paziente prima di salvare.")
+            return
         oss = {"collaborazione": coll, "attenzione": att, "stile": stile, "minuti": int(minuti) or None,
                "note": note.strip() or None, "altro_punteggio": altro.strip() or None}
         testo = sc.relazione(paziente.get("nome_completo"), forma, giorno, ris, oss)
