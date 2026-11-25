@@ -61,3 +61,8 @@ lameenc>=1.7.0
 
 streamlit-javascript
 qrcode[pil]
+
+# Servizio dati PNEV Academy · Ricerca scuola (apps/ricerca_api.py)
+fastapi>=0.110.0
+uvicorn>=0.29.0
+tomli>=2.0.1; python_version < "3.11"

@@ -2129,6 +2129,13 @@ def _render_area(area: str, sotto: str, conn, is_admin: bool) -> None:
 
     # ── AREA MARKETING ────────────────────────────────────────────────
     elif area == AREA_MARKETING:
+        if sotto == "🏫 Ricerca scuola (giochi)":
+            try:
+                from .ricerca_scuola.ui_ricerca import render_ricerca_scuola
+                render_ricerca_scuola(conn)
+            except ImportError as e:
+                st.error(f"Modulo Ricerca scuola non disponibile: {e}")
+            return
         if sotto == "🎬 Animazioni dei riflessi":
             from .ui_riflessi_animazioni import render_riflessi_animazioni
             render_riflessi_animazioni(); return

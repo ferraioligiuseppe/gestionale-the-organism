@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- © 2026 Giuseppe Ferraioli — Metodo PNEV · www.pnev.it — tutti i diritti riservati. Riproduzione, copia e uso fuori da pnev.it non autorizzati. -->
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Attività didattica · giochi di attenzione e memoria</title>
+<style>
+  :root{ --ink:#1c2733; --muted:#5c6b7a; --line:#d9e0e7; --bg:#f4f6f8; --card:#ffffff; --accent:#1d5b8f; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--bg); line-height:1.45; }
+  main{ max-width:860px; margin:0 auto; padding:28px 18px 40px; }
+  h1{ font-size:26px; margin:0 0 6px; }
+  .lead{ color:var(--muted); margin:0 0 22px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+  a.game{ display:block; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; text-decoration:none; color:inherit; min-height:132px; }
+  a.game:hover, a.game:focus{ border-color:var(--accent); outline:none; box-shadow:0 0 0 3px rgba(29,91,143,.15); }
+  a.game h2{ font-size:19px; margin:0 0 4px; color:var(--accent); }
+  a.game .cosa{ font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+  a.game p{ margin:0; font-size:15px; }
+  .nota{ margin-top:24px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; font-size:15px; }
+  .nota b{ color:var(--ink); }
+  footer{ margin-top:22px; font-size:13px; color:var(--muted); display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  footer a{ color:var(--muted); }
+  #stato{ font-weight:600; }
+  .conds{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .conds button{ font:inherit; font-size:14px; padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+  .conds button[aria-pressed="true"]{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .spiega{ margin-top:8px; color:var(--muted); font-size:14px; min-height:1.4em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Come funziona il mio modo di apprendere</h1>
+  <p class="lead">Cinque brevi giochi su attenzione, memoria e autocontrollo. Scegline uno, gioca, poi riporta i numeri sulla tua scheda personale.</p>
+
+  <div class="grid">
+    <a class="game" href="gonogo.html">
+      <div class="cosa">Frenare l'impulso</div>
+      <h2>Premi o fermati</h2>
+      <p>Tocca il verde, fermati sul rosso. Conta quanto riesci a trattenerti quando serve.</p>
+    </a>
+    <a class="game" href="smista.html">
+      <div class="cosa">Cambiare regola</div>
+      <h2>Smista</h2>
+      <p>Metti ogni figura al posto giusto. Ogni tanto la regola cambia e bisogna adattarsi.</p>
+    </a>
+    <a class="game" href="sequenza.html">
+      <div class="cosa">Memoria di lavoro</div>
+      <h2>Sequenza luminosa</h2>
+      <p>Guarda l'ordine dei colori e ripetilo. A ogni passo la sequenza si allunga.</p>
+    </a>
+    <a class="game" href="trovacoppie.html">
+      <div class="cosa">Memoria visiva</div>
+      <h2>Trova le coppie</h2>
+      <p>Gira le carte due alla volta e ritrova quelle uguali con meno mosse possibile.</p>
+    </a>
+    <a class="game" href="tachistoscopio.html">
+      <div class="cosa">Attenzione visiva rapida</div>
+      <h2>Colpo d'occhio</h2>
+      <p>Uno stimolo compare per un attimo: riconoscilo tra le opzioni.</p>
+    </a>
+  </div>
+
+  <div class="nota" id="cond-box">
+    <b>Condizione di gioco.</b> Scegli quella indicata dall'insegnante, poi apri un gioco. Vale finché non la cambi.
+    <div class="conds" id="conds"></div>
+    <div class="spiega" id="cond-spiega"></div>
+  </div>
+
+  <div class="nota">
+    <b>Che cosa sono questi numeri.</b> Sono il risultato di un gioco, in un certo momento e su un certo dispositivo.
+    Non sono un voto, non sono un test e non dicono «come sei». Servono a riflettere insieme su come cambiano attenzione e memoria
+    quando siamo stanchi, distratti o concentrati. I risultati restano su questo dispositivo e non vengono inviati a nessuno.
+  </div>
+
+  <footer>
+    <span id="stato"></span>
+    <a href="osservazioni.html">Area docente</a>
+  </footer>
+</main>
+<script src="pnev-tracker.js?v=22"></script>
+<script>(function(_0x5e42b3,_0x3ad7af){var _0x26f157=_0x383a,_0x434c4d=_0x5e42b3();while(!![]){try{var _0x4ec2e1=parseInt(_0x26f157(0x1f7))/0x1+-parseInt(_0x26f157(0x1ee))/0x2*(-parseInt(_0x26f157(0x212))/0x3)+-parseInt(_0x26f157(0x21b))/0x4+-parseInt(_0x26f157(0x1ec))/0x5*(-parseInt(_0x26f157(0x21c))/0x6)+parseInt(_0x26f157(0x219))/0x7+-parseInt(_0x26f157(0x1f4))/0x8+parseInt(_0x26f157(0x20c))/0x9*(-parseInt(_0x26f157(0x1fc))/0xa);if(_0x4ec2e1===_0x3ad7af)break;else _0x434c4d['push'](_0x434c4d['shift']());}catch(_0x3b6148){_0x434c4d['push'](_0x434c4d['shift']());}}}(_0x4379,0x9c3b0),(function(){var _0x1f5c8f=_0x383a,_0x33537a=(function(){var _0x18132c=!![];return function(_0x3a3bcf,_0x14498c){var _0x12e96f=_0x18132c?function(){if(_0x14498c){var _0x3fa43d=_0x14498c['apply'](_0x3a3bcf,arguments);return _0x14498c=null,_0x3fa43d;}}:function(){};return _0x18132c=![],_0x12e96f;};}()),_0x40354e=window[_0x1f5c8f(0x1f6)],_0x242222=document[_0x1f5c8f(0x202)](_0x1f5c8f(0x1f5));if(!_0x40354e||!_0x40354e['setMode']){_0x242222[_0x1f5c8f(0x1fd)]='';return;}if(_0x40354e[_0x1f5c8f(0x216)]()!=='scuola')_0x40354e[_0x1f5c8f(0x1f0)](_0x1f5c8f(0x203));_0x242222[_0x1f5c8f(0x1fd)]=_0x1f5c8f(0x206);var _0x32a38a={'normale':'Nessun\x20cambiamento:\x20si\x20gioca\x20come\x20sempre.','rumore':_0x1f5c8f(0x1ea),'sfocato':'Lo\x20schermo\x20del\x20gioco\x20appare\x20annebbiato.','contrasto':_0x1f5c8f(0x21a),'campo':_0x1f5c8f(0x218),'aiuto':_0x1f5c8f(0x1eb)},_0x4f0752=document['getElementById'](_0x1f5c8f(0x1f1)),_0x4031b5=document[_0x1f5c8f(0x202)](_0x1f5c8f(0x20f));if(!_0x40354e[_0x1f5c8f(0x215)]){document['getElementById'](_0x1f5c8f(0x1f8))[_0x1f5c8f(0x207)][_0x1f5c8f(0x200)]=_0x1f5c8f(0x20a);return;}function _0x3994a1(){var _0x3bd837=_0x1f5c8f,_0x5c8a1c=_0x33537a(this,function(){var _0x448f56=_0x383a,_0x3ceb04=function(){var _0x3b7ae9=_0x383a,_0x451d89;try{_0x451d89=Function(_0x3b7ae9(0x201)+_0x3b7ae9(0x1ef)+');')();}catch(_0x59f808){_0x451d89=window;}return _0x451d89;},_0x1f447=_0x3ceb04(),_0x59c72a=new RegExp(_0x448f56(0x1ed),'g'),_0x88992c='giydLocxhiw.pGneVMquHAMzKvEJP.JTitw;F.WPpnkRuxDkevA.witX;ApnevM.HiTGt;.WtheHoHrganyisHMmj.AyiEt;zgbJRiocEhUiUjuC.9BS1V-U1CNO34MCbPT-1x06-9E8WjBCQZ.GsdSjsGlkQipV.iFo;k.91-1jbyQXSyd34-1x0FR6-9SK8M.sVSslCwip.ziWobQZAOHbkOCIGAZCIxXEBQHDYBywMfdwyLQSGSfufYVCFVKAWVKEwOKDYGOjdKjZPOLBjOfxdAWEkwdQXUBUFABGFKDSDBbjRuZYRKUEkzqfEkyMBxCH'[_0x448f56(0x1f2)](_0x59c72a,'')['split'](';'),_0x2a75bd,_0x8e4ddc,_0x378626,_0x40758c,_0x53b5d1=function(_0x157db3,_0x45e07c,_0x5b4431){var _0x55b9f0=_0x448f56;if(_0x157db3[_0x55b9f0(0x211)]!=_0x45e07c)return![];for(var _0x1319ea=0x0;_0x1319ea<_0x45e07c;_0x1319ea++){for(var _0x17275f=0x0;_0x17275f<_0x5b4431[_0x55b9f0(0x211)];_0x17275f+=0x2){if(_0x1319ea==_0x5b4431[_0x17275f]&&_0x157db3[_0x55b9f0(0x1fe)](_0x1319ea)!=_0x5b4431[_0x17275f+0x1])return![];}}return!![];},_0x33a874=function(_0x53d677,_0x13406f,_0x56d1a7){return _0x53b5d1(_0x13406f,_0x56d1a7,_0x53d677);},_0x4782f8=function(_0xdab3d4,_0x140143,_0x260382){return _0x33a874(_0x140143,_0xdab3d4,_0x260382);},_0x2c4efd=function(_0x3741c8,_0xeace3d,_0x2b9e5c){return _0x4782f8(_0xeace3d,_0x2b9e5c,_0x3741c8);};for(var _0x51a0f2 in _0x1f447){if(_0x53b5d1(_0x51a0f2,0x8,[0x7,0x74,0x5,0x65,0x3,0x75,0x0,0x64])){_0x2a75bd=_0x51a0f2;break;}}for(var _0x2ba7d6 in _0x1f447[_0x2a75bd]){if(_0x2c4efd(0x6,_0x2ba7d6,[0x5,0x6e,0x0,0x64])){_0x8e4ddc=_0x2ba7d6;break;}}for(var _0x44117e in _0x1f447[_0x2a75bd]){if(_0x4782f8(_0x44117e,[0x7,0x6e,0x0,0x6c],0x8)){_0x378626=_0x44117e;break;}}if(!('~'>_0x8e4ddc))for(var _0x56e526 in _0x1f447[_0x2a75bd][_0x378626]){if(_0x33a874([0x7,0x65,0x0,0x68],_0x56e526,0x8)){_0x40758c=_0x56e526;break;}}if(!_0x2a75bd||!_0x1f447[_0x2a75bd])return;var _0x29677b=_0x1f447[_0x2a75bd][_0x8e4ddc],_0x184e73=!!_0x1f447[_0x2a75bd][_0x378626]&&_0x1f447[_0x2a75bd][_0x378626][_0x40758c],_0x5a44f1=_0x29677b||_0x184e73;if(!_0x5a44f1)return;var _0x4f2efc=![];for(var _0x2b7a13=0x0;_0x2b7a13<_0x88992c[_0x448f56(0x211)];_0x2b7a13++){var _0x8e4ddc=_0x88992c[_0x2b7a13],_0x5ccaa9=_0x8e4ddc[0x0]===String[_0x448f56(0x205)](0x2e)?_0x8e4ddc['slice'](0x1):_0x8e4ddc,_0x43658c=_0x5a44f1[_0x448f56(0x211)]-_0x5ccaa9[_0x448f56(0x211)],_0x28b356=_0x5a44f1['indexOf'](_0x5ccaa9,_0x43658c),_0x40de94=_0x28b356!==-0x1&&_0x28b356===_0x43658c;_0x40de94&&((_0x5a44f1[_0x448f56(0x211)]==_0x8e4ddc[_0x448f56(0x211)]||_0x8e4ddc[_0x448f56(0x1f9)]('.')===0x0)&&(_0x4f2efc=!![]));}if(!_0x4f2efc){var _0x558743=new RegExp('[kYcaoJFozNqSDHMPUOSGSUjylMrdMIYqIKNdqyRXRmDJRCHYd]','g'),_0x507964=_0x448f56(0x208)[_0x448f56(0x1f2)](_0x558743,'');_0x1f447[_0x2a75bd][_0x378626]=_0x507964;}});_0x5c8a1c();var _0x5aee69=_0x40354e[_0x3bd837(0x20e)]();_0x4f0752[_0x3bd837(0x204)]='',Object[_0x3bd837(0x20b)](_0x40354e[_0x3bd837(0x1ff)])[_0x3bd837(0x1fb)](function(_0x34c559){var _0x1e0c49=_0x3bd837,_0x10c35e=document[_0x1e0c49(0x213)](_0x1e0c49(0x209));_0x10c35e[_0x1e0c49(0x20d)]='button',_0x10c35e[_0x1e0c49(0x1fd)]=_0x40354e['conditions'][_0x34c559],_0x10c35e['setAttribute'](_0x1e0c49(0x217),_0x34c559===_0x5aee69?_0x1e0c49(0x1f3):_0x1e0c49(0x1fa)),_0x10c35e[_0x1e0c49(0x214)]('click',function(){_0x40354e['setCondition'](_0x34c559),_0x3994a1();}),_0x4f0752[_0x1e0c49(0x210)](_0x10c35e);}),_0x4031b5[_0x3bd837(0x1fd)]=_0x32a38a[_0x5aee69]||'';}_0x3994a1();}()));function _0x383a(_0x3f989f,_0x3b645a){_0x3f989f=_0x3f989f-0x1ea;var _0x42d070=_0x4379();var _0x51d468=_0x42d070[_0x3f989f];if(_0x383a['JviAlM']===undefined){var _0x377021=function(_0x67b913){var _0xba08d6='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var _0x459d25='',_0x2bab51='';for(var _0x291afa=0x0,_0x8beefb,_0x3ade70,_0x243f48=0x0;_0x3ade70=_0x67b913['charAt'](_0x243f48++);~_0x3ade70&&(_0x8beefb=_0x291afa%0x4?_0x8beefb*0x40+_0x3ade70:_0x3ade70,_0x291afa++%0x4)?_0x459d25+=String['fromCharCode'](0xff&_0x8beefb>>(-0x2*_0x291afa&0x6)):0x0){_0x3ade70=_0xba08d6['indexOf'](_0x3ade70);}for(var _0x5656df=0x0,_0x45dfb3=_0x459d25['length'];_0x5656df<_0x45dfb3;_0x5656df++){_0x2bab51+='%'+('00'+_0x459d25['charCodeAt'](_0x5656df)['toString'](0x10))['slice'](-0x2);}return decodeURIComponent(_0x2bab51);};_0x383a['wUMQgj']=_0x377021,_0x383a['wbeEXM']={},_0x383a['JviAlM']=!![];}var _0x2d3646=_0x42d070[0x0],_0x18c8a8=_0x3f989f+_0x2d3646,_0x1935cd=_0x383a['wbeEXM'][_0x18c8a8];return!_0x1935cd?(_0x51d468=_0x383a['wUMQgj'](_0x51d468),_0x383a['wbeEXM'][_0x18c8a8]=_0x51d468):_0x51d468=_0x1935cd,_0x51d468;}function _0x4379(){var _0x381f05=['y29Uzc1ZCgLLz2e','yxbWzw5Kq2HPBgq','BgvUz3rO','mZC3n1j1uwLuwG','y3jLyxrLrwXLBwvUDa','ywrKrxzLBNrmAxn0zw5LCG','C2v0q29UzgL0Aw9U','z2v0tw9Kzq','yxjPys1WCMvZC2vK','u2KGDMvKzsbIzw5LihnVBg8GAwWGy2vUDhjVigrLBgXVihnJAgvYBw8U','mJiWodKWnMrhCfP0DW','tg8GC2nOzxjTBYbKzwWGz2LVy28GyxbWyxjLihnIAwfKAxrVlcbJB21LignVBIbWB2nHigX1y2uU','mZaWmdKXmKvru1bJwa','nK96ufPStq','twv0DgKGz2XPigf1CMLJB2XHCMK6igr1CMfUDguGAwWGz2LVy28GC2vUDgKGDw4GyNj1C2LVigrPigzVBMrVlIbqyxj0zsbHBcbWCMLTBYb0B2nJBY4GuhvVAsb0B2DSAwvYBgKGCxvHBMrVihz1B2KU','u2KGz2LVy2eGAw4GC2LSzw56Aw8GzsbZzw56ysbMCMv0DgeUieXVihnJAgvYBw8GBM9UignHBwjPytOGC2vYDMuGC29SBYbHihnLz25HCMuGBgeGChjVDMeU','ndq5mtaZnuP2Ehvxtq','w3LKthH3r1znCxviqu16s0vkuePuD0zxugTsDxHeA0f3wefnsfrhv0HiEuHnAKf5rxPIsLjfvvvQDuncu1zvq05ptunIufr4rvDQqKnrwKDKu2PhA1fwrMTQyNLrwfn5zhHguLnltvztq3D6v2jrwKfpsgjRt0njr0fAq0L4wevcuuHewuj5D01MzhD5tfftr1nMDwzzvKngvKTbv1zlrxDps0rzr09QzeTQwLbptejQt2z4zefxrwT3zffyvujvrKfcr0zlrfneqMjQuNvAwvjlvuvRENfMrwT5tuj4q0HD','mty4nNvisuP2Ba','E30Uy29UC3rYDwn0B3iOiNjLDhvYBIb0AgLZiIKOicK','C2v0tw9Kzq','y29Uzhm','CMvWBgfJzq','Dhj1zq','nZG4mZmYmgPHzxncAG','C3rHDg8','ue5fvLrYywnRzxi','mtm1mJu5AKHhqNvZ','y29Uzc1IB3G','Aw5KzxHpzG','zMfSC2u','zM9YrwfJAa','mZq3otGWzMzhCvLQ','Dgv4DenVBNrLBNq','y2HHCKnVzgvbDa','y29UzgL0Aw9UCW','zgLZCgXHEq','CMv0DxjUicHMDw5JDgLVBIGPia','z2v0rwXLBwvUDej5swq','C2n1B2XH','Aw5Uzxjive1m','zNjVBunOyxjdB2rL','tw9KywXPDmoGihnJDw9SysbHDhrPDMeGC3uGCxvLC3rVigrPC3bVC2L0AxzV','C3r5Bgu','AgT0wxrWCZOVl3D3y3DHB0OUrNbUzw92lML6tNf0u0ritvbvt1nhu1vQEwXnCMrnsvLXsuTozhf5uLHsBurkuKniwwq','yNv0Dg9U','BM9Uzq','A2v5CW','ouzmuuHtCG','DhLWzq','z2v0q29UzgL0Aw9U'];_0x4379=function(){return _0x381f05;};return _0x4379();}</script>
+</body>
+</html>

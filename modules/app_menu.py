@@ -307,6 +307,9 @@ SOTTOSEZIONI = {
     ],
     AREA_ACADEMY: [
         "📅 Eventi e iscrizioni",
+        # Sperimentazioni nelle scuole con i giochi PNEV: classi, codici anonimi,
+        # partite ricevute dai tablet (modules/ricerca_scuola, servizio apps/ricerca_api.py)
+        "🏫 Ricerca scuola (giochi)",
         "🔬 Ricerca · Frenulo come perturbazione",
     ],
     AREA_TEST_LIVE: [
