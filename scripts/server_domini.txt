@@ -5,3 +5,7 @@
 gestionale.theorganism.it 8501
 iscrizioni.theorganism.it 8502
 iscrizioni.pnev.it 8502
+# PNEV Academy · Ricerca scuola: «giochi» = file statici dei giochi, 8504 = servizio dati.
+# Funzionano appena i record DNS A di giochi.pnev.it e dati.pnev.it puntano a 91.134.106.98.
+giochi.pnev.it giochi
+dati.pnev.it 8504

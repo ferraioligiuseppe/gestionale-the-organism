@@ -1,0 +1,9 @@
+Giochi PNEV pubblicati su giochi.pnev.it — SOLO versione protetta.
+
+Questa cartella contiene i giochi offuscati e bloccati sul dominio (giochi.pnev.it, pnev.it,
+server del gestionale). Il repository è pubblico: qui non vanno MAI messi i file in chiaro.
+
+I file in chiaro (master) stanno su Dropbox: /the_organism/PNEV giochi/1 - non offuscati (master).
+Per aggiornare un gioco: si modifica il master, poi
+    node scripts/offusca_giochi.mjs "<cartella master>" static_giochi
+e si pubblica. © 2026 Giuseppe Ferraioli — Metodo PNEV · www.pnev.it
