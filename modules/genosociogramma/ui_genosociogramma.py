@@ -325,10 +325,14 @@ def _sezione_a_casa(conn, studio_id, paziente_id, paziente_label, on_page):
     st.divider()
     st.markdown("**Scheda cartacea**")
     st.caption("Da stampare e consegnare: istruzioni, simboli, spazio per il disegno, tabella delle persone.")
-    st.download_button("Scarica la scheda da stampare",
-                       genera_scheda_cartacea(paziente_label=paziente_label, on_page=on_page),
-                       file_name=f"genosociogramma_scheda_{paziente_id}.pdf", mime="application/pdf",
-                       key=f"geno_carta_{paziente_id}")
+    # Scheda vuota da compilare a mano: dipende solo dal nome stampato in
+    # cima. Prima veniva rigenerata a ogni clic sulla pagina (circa 250 ms).
+    from ..pdf_memo import scarica_pdf
+    scarica_pdf("Scarica la scheda da stampare",
+                lambda: genera_scheda_cartacea(paziente_label=paziente_label, on_page=on_page),
+                firma=(paziente_id, paziente_label),
+                file_name=f"genosociogramma_scheda_{paziente_id}.pdf",
+                key=f"geno_carta_{paziente_id}")
 
 
 def render_genosociogramma_router(conn, paz_id):

@@ -2489,6 +2489,13 @@ def _con_utente(sql2, params):
         return sql2, params
 
 
+try:
+    from modules.cronometro import conta_sql as _crono_conta
+except Exception:      # il cronometro non deve mai impedire l'avvio
+    def _crono_conta():
+        return None
+
+
 class _PgCursor:
 
     """Cursor wrapper to:
@@ -2530,6 +2537,7 @@ class _PgCursor:
         return self._cur.execute(sql3, params3)
 
     def execute(self, sql, params=None):
+        _crono_conta()   # cronometro dei clic: conta le richieste (modules/cronometro.py)
         sql2 = self._adapt_sql(str(sql))
         self._clear_if_aborted()
         try:
@@ -12220,13 +12228,29 @@ def main():
 
     # ── NUOVO MENU A 7 AREE ──────────────────────────────────────────
     from modules.app_main_router import build_smart_menu, dispatch_smart_section
-    area, sotto = build_smart_menu(is_admin=is_admin())
-    dispatch_smart_section(
-        area=area,
-        sotto=sotto,
-        get_connection=get_connection,
-        is_admin=is_admin(),
-    )
+    # Cronometro dei clic (modules/cronometro.py): misura il lavoro del server
+    # e le richieste al database di questo clic. Il «finally» serve perché
+    # st.rerun() e st.stop() escono dalla pagina con un'eccezione.
+    try:
+        from modules import cronometro as _crono
+        _crono.avvia()
+    except Exception:
+        _crono = None
+    try:
+        area, sotto = build_smart_menu(is_admin=is_admin())
+        try:
+            st.session_state["_crono_voce"] = sotto or ""
+        except Exception:
+            pass
+        dispatch_smart_section(
+            area=area,
+            sotto=sotto,
+            get_connection=get_connection,
+            is_admin=is_admin(),
+        )
+    finally:
+        if _crono is not None:
+            _crono.chiudi(get_connection)
     return
 
 

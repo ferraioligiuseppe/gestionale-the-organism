@@ -26,6 +26,7 @@ autonoma e funziona anche a Internet spento.
 from __future__ import annotations
 
 import base64
+import functools
 import io
 
 # Geometria della carta intestata, identica a quella usata per il Word in
@@ -110,15 +111,31 @@ def _timbro_data_uri() -> str:
     usano i PDF. Prima, senza timbro caricato, la relazione usciva senza
     firma e senza data."""
     try:
-        import streamlit as st
-        from .app_core import get_connection
-        from .ui_intestazione_studio import get_intestazione_studio
-        sid = int(st.session_state.get("studio_id") or 1)
-        b64 = (get_intestazione_studio(get_connection(), sid) or {}).get("timbro_base64")
+        b64 = (_dati_studio() or {}).get("timbro_base64")
         if b64:
             return "data:image/png;base64," + b64
     except Exception:
         pass
+    return _timbro_default_uri()
+
+
+def _dati_studio() -> dict:
+    """Intestazione dello studio attivo, dalla copia tenuta in sessione (la
+    stessa dei PDF, modules/pdf_templates.py). Prima timbro e luogo
+    rileggevano dal database, a ogni clic, la riga dello studio con le tre
+    immagini in base64: due letture pesanti per pagina."""
+    try:
+        from .pdf_templates import _intestazione_studio
+        return _intestazione_studio() or {}
+    except Exception:
+        return {}
+
+
+@functools.lru_cache(maxsize=1)
+def _timbro_default_uri() -> str:
+    """Timbro di default del gestionale, ridotto e codificato UNA volta sola
+    per processo: il file non cambia, e ridurlo a ogni clic costava circa
+    270 ms (misura del 26/11/2026)."""
     try:
         import os
         p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "timbro.png")
@@ -143,11 +160,7 @@ def _timbro_data_uri() -> str:
 def _luogo() -> str:
     """Il comune dall'indirizzo dello studio («Via De Rosa, 46 – Pagani Salerno» → Pagani)."""
     try:
-        import streamlit as st
-        from .app_core import get_connection
-        from .ui_intestazione_studio import get_intestazione_studio
-        sid = int(st.session_state.get("studio_id") or 1)
-        ind = (get_intestazione_studio(get_connection(), sid) or {}).get("indirizzo") or ""
+        ind = (_dati_studio() or {}).get("indirizzo") or ""
         for sep in ("–", "-", ","):
             if sep in ind:
                 coda = ind.split(sep)[-1].strip()

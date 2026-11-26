@@ -112,7 +112,18 @@ def _draw_bg_carta(c):
         return False
     try:
         from reportlab.lib.utils import ImageReader
-        img = ImageReader(io.BytesIO(data))
+        # Il lettore dell'immagine si tiene sul PDF in costruzione: in un
+        # documento di più pagine la carta intestata si decodifica una volta
+        # sola invece che a ogni pagina (circa 50 ms l'una).
+        tenuto = getattr(c, "_pnev_carta", None)
+        if tenuto is not None and tenuto[0] == len(data):
+            img = tenuto[1]
+        else:
+            img = ImageReader(io.BytesIO(data))
+            try:
+                c._pnev_carta = (len(data), img)
+            except Exception:
+                pass
         c.drawImage(img, 0, 0, width=W, height=H,
                     preserveAspectRatio=False, mask="auto")
         return True

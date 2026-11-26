@@ -2462,6 +2462,14 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     except Exception:
         pass
 
+    # Cronometro dei clic: solo per l'amministratore, in fondo al menu.
+    try:
+        from .cronometro import riquadro as _crono_riquadro
+        from .app_core import get_connection as _gc_crono
+        _crono_riquadro(_gc_crono, is_admin)
+    except Exception:
+        pass
+
     return area, sotto
 
 

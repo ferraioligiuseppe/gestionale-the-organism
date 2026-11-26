@@ -734,8 +734,10 @@ def _tab_lista_alimenti(px, nome_paziente: str = "") -> None:
     st.caption(NOTA_LISTA)
     nome = st.text_input("Nome da stampare sul foglio (facoltativo)", nome_paziente, key=f"{px}_nome")
     try:
-        st.download_button("🖨️ Lista alimenti (PDF)", pdf_lista_alimenti(nome),
-                           file_name="lista_alimenti.pdf", mime="application/pdf", key=f"{px}_pdf")
+        # La lista è uguale per tutti: cambia solo il nome stampato.
+        from .pdf_memo import scarica_pdf
+        scarica_pdf("🖨️ Lista alimenti (PDF)", lambda: pdf_lista_alimenti(nome),
+                    firma=(nome,), file_name="lista_alimenti.pdf", key=f"{px}_pdf")
     except Exception as e:
         st.caption(f"PDF non disponibile: {e}")
 
@@ -849,9 +851,12 @@ def _tab_diario(conn, paz_id, px):
                             format="DD/MM/YYYY", key=f"{px}_lun")
         lun = lun - datetime.timedelta(days=lun.weekday())
         try:
-            st.download_button("Scarica la scheda di 7 giorni (PDF)", pdf_scheda_settimana(conn, paz_id, lun),
-                               file_name=f"diario_alimentare_{lun:%Y%m%d}.pdf", mime="application/pdf",
-                               key=f"{px}_pdf", use_container_width=True)
+            # Scheda vuota di 7 giorni: dipende solo da paziente e settimana.
+            from .pdf_memo import scarica_pdf
+            scarica_pdf("Scarica la scheda di 7 giorni (PDF)", lambda: pdf_scheda_settimana(conn, paz_id, lun),
+                        firma=(paz_id, str(lun)),
+                        file_name=f"diario_alimentare_{lun:%Y%m%d}.pdf",
+                        key=f"{px}_pdf", use_container_width=True)
         except Exception as e:
             st.caption(f"PDF non disponibile: {e}")
         st.caption("🏠 La famiglia può compilarlo anche da casa, dal Portale famiglia (scheda «Diario alimentare»). "
