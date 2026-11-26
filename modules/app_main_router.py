@@ -2312,6 +2312,37 @@ def build_smart_menu(is_admin: bool) -> tuple[str, str]:
     section[data-testid="stSidebar"] .stButton > button:hover{
         background:#dbe8f6 !important; border-color:#2563a8 !important;
     }
+    /* Ingrandimento al passaggio del mouse (stile Dock del Mac): il tasto
+       sotto il puntatore cresce e torna morbido. Nel menu cresce da
+       sinistra, cosi' non esce dal bordo; z-index lo tiene sopra i vicini.
+       «.stApp … button[kind]» serve solo a vincere sulle regole dei temi
+       (assets/ui.css sposta i tasti di 1px con !important).
+       Per spegnerlo basta togliere questo blocco. */
+    .stApp .stButton > button[kind], .stApp .stDownloadButton > button[kind],
+    .stApp .stFormSubmitButton > button[kind]{
+        transition:transform .16s cubic-bezier(.2,.8,.2,1), box-shadow .16s ease,
+                   background .12s ease !important;
+        transform-origin:center center;
+    }
+    .stApp .stButton > button[kind]:hover, .stApp .stDownloadButton > button[kind]:hover,
+    .stApp .stFormSubmitButton > button[kind]:hover{
+        transform:scale(1.06) !important; position:relative; z-index:20;
+        box-shadow:0 6px 16px rgba(15,23,42,.18) !important;
+    }
+    .stApp .stButton > button[kind]:active, .stApp .stDownloadButton > button[kind]:active,
+    .stApp .stFormSubmitButton > button[kind]:active{ transform:scale(.99) !important; }
+    .stApp section[data-testid="stSidebar"] .stButton > button[kind]{ transform-origin:left center; }
+    .stApp section[data-testid="stSidebar"] .stButton > button[kind]:hover{
+        transform:scale(1.10) !important;
+    }
+    @media (prefers-reduced-motion: reduce){
+        .stApp .stButton > button[kind], .stApp .stDownloadButton > button[kind],
+        .stApp .stFormSubmitButton > button[kind]{ transition:none !important; }
+        .stApp .stButton > button[kind]:hover, .stApp .stDownloadButton > button[kind]:hover,
+        .stApp .stFormSubmitButton > button[kind]:hover,
+        .stApp section[data-testid="stSidebar"] .stButton > button[kind]:hover{
+            transform:none !important; }
+    }
     section[data-testid="stSidebar"] [data-testid="stElementContainer"]{margin:0 !important;padding:0 !important}
     section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:2px !important}
     section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]{gap:0 !important;margin:0 !important}

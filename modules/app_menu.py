@@ -50,6 +50,7 @@ AREA_TERAPIA       = "📄 Relazioni & studio clinico"
 AREA_STUDIO        = "⚙️ Studio"
 AREA_AEROSAL       = "🌬️ Aerosal"
 AREA_RESPIRAZIONE  = "🫁 Respirazione"
+AREA_ALIMENTAZIONE = "🥗 Alimentazione"
 
 # ── Alias legacy (mantengono validi gli import esistenti in
 #    app_main_router.py e app_main.py) — puntano all'area più coerente
@@ -72,6 +73,7 @@ AREE_ORDINE = [
     AREA_PNEV,
     AREA_TERAPIA_PNEV,
     AREA_RESPIRAZIONE,
+    AREA_ALIMENTAZIONE,
     AREA_OCULISTICA,
     AREA_TNPEE,
     AREA_PECS,
@@ -167,8 +169,8 @@ PAZIENTI_RAMI = {
         # Genosociogramma (Schützenberger): albero familiare su più
         # generazioni, legami affettivi e ripetizioni da esplorare.
         "🌳 Genosociogramma",
-        # Metodo Kousmine: valutazione, esami, piano firmato, diario, esiti.
-        "🥗 Alimentazione",
+        # «🥗 Alimentazione» non sta più qui: dal 26/11/2026 è un'area a sé
+        # nel menu principale (AREA_ALIMENTAZIONE), accanto a Respirazione.
         # Genetica PNEV: confronto del profilo PNEV con le sindromi HPO.
         # Orientamento all'invio al genetista, non diagnostico.
         "🧬 Genetica PNEV",
@@ -332,6 +334,12 @@ SOTTOSEZIONI = {
     AREA_RESPIRAZIONE: [
         "🫁 Valutazione e programma Buteyko",
         "📈 Diario Pausa Controllo",
+    ],
+    # Metodo Kousmine: valutazione, esami, piano firmato, diario, esiti.
+    # Area a sé perché nella Scheda clinica si perdeva tra le altre voci.
+    # L'etichetta della voce resta identica: il router aggancia quella.
+    AREA_ALIMENTAZIONE: [
+        "🥗 Alimentazione",
     ],
     AREA_AEROSAL: [
         "🌬️ Aerosal · Haloterapia",
